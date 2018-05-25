@@ -29,21 +29,21 @@ import com.intellij.openapi.projectRoots.ex.PathUtilEx
 import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.ui.EditorNotifications
 import org.jetbrains.kotlin.idea.caches.project.SdkInfo
 import org.jetbrains.kotlin.idea.caches.project.getScriptRelatedModuleInfo
-import org.jetbrains.kotlin.script.*
-import org.jetbrains.kotlin.scripting.compiler.plugin.KotlinScriptDefinitionAdapterFromNewAPI
 import org.jetbrains.kotlin.idea.util.ProjectRootsUtil.isInContent
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
 import org.jetbrains.kotlin.script.KotlinScriptDefinitionFromAnnotatedTemplate
+import org.jetbrains.kotlin.script.LazyScriptDefinitionProvider
 import org.jetbrains.kotlin.script.ScriptDefinitionProvider
 import org.jetbrains.kotlin.script.ScriptTemplatesProvider
+import org.jetbrains.kotlin.scripting.compiler.plugin.KotlinScriptDefinitionAdapterFromNewAPI
 import org.jetbrains.kotlin.utils.PathUtil
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 import org.jetbrains.kotlin.utils.addToStdlib.flattenTo
 import java.io.File
-import java.lang.reflect.InvocationTargetException
 import java.net.URLClassLoader
 import kotlin.concurrent.write
 import kotlin.script.dependencies.Environment
@@ -106,6 +106,8 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
         updateDefinitions()
     }
 
+    fun getAllDefinitions() = currentDefinitions
+
     fun isInExpectedLocation(ktFile: KtFile, scriptDefinition: KotlinScriptDefinition): Boolean {
         if (ScratchFileService.isInScratchRoot(ktFile.virtualFile)) return true
 
@@ -131,6 +133,8 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
         clearCache()
         // TODO: clear by script type/definition
         ServiceManager.getService(project, ScriptDependenciesCache::class.java).clear()
+
+        EditorNotifications.getInstance(project).updateAllNotifications()
     }
 
     private fun ScriptDefinitionContributor.safeGetDefinitions(): List<KotlinScriptDefinition> {
