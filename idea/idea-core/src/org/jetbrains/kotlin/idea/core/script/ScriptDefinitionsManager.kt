@@ -106,7 +106,7 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
         updateDefinitions()
     }
 
-    fun getAllDefinitions() = currentDefinitions
+    fun getAllDefinitions() = currentDefinitions.toList()
 
     fun isInExpectedLocation(ktFile: KtFile, scriptDefinition: KotlinScriptDefinition): Boolean {
         if (ScratchFileService.isInScratchRoot(ktFile.virtualFile)) return true
