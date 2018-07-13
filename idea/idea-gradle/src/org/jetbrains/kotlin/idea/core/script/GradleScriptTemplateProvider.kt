@@ -33,6 +33,8 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtScript
 import org.jetbrains.kotlin.script.KotlinScriptDefinition
 import org.jetbrains.kotlin.script.KotlinScriptDefinitionFromAnnotatedTemplate
+import org.jetbrains.kotlin.scripting.compiler.plugin.InvalidScriptDefinition
+import org.jetbrains.kotlin.scripting.compiler.plugin.KotlinScriptDefinitionAdapterFromNewAPIBase
 import org.jetbrains.plugins.gradle.config.GradleSettingsListenerAdapter
 import org.jetbrains.plugins.gradle.service.execution.GradleExecutionHelper
 import org.jetbrains.plugins.gradle.settings.DistributionType
@@ -47,6 +49,7 @@ import kotlin.collections.LinkedHashSet
 import kotlin.reflect.KClass
 import kotlin.script.dependencies.Environment
 import kotlin.script.dependencies.ScriptContents
+import kotlin.script.experimental.api.ScriptDefinition
 import kotlin.script.experimental.dependencies.DependenciesResolver
 import kotlin.script.experimental.dependencies.DependenciesResolver.ResolveResult
 import kotlin.script.experimental.dependencies.ScriptReport
@@ -234,15 +237,18 @@ class GradleScriptDefinitionsContributor(private val project: Project) : ScriptD
         ScriptDefinitionsManager.getInstance(project).reloadDefinitionsBy(this)
     }
 
-    private class ErrorGradleScriptDefinition(message: String? = null) : KotlinScriptDefinition(ScriptTemplateWithArgs::class) {
+    private class ErrorGradleScriptDefinition(message: String? = null) : KotlinScriptDefinitionAdapterFromNewAPIBase() {
         companion object {
             private const val KOTLIN_DSL_SCRIPT_EXTENSION = ".gradle.kts"
         }
 
         override val name: String = "Default Kotlin Gradle Script"
+        override val scriptFileExtensionWithDot: String = KOTLIN_DSL_SCRIPT_EXTENSION
+        override val scriptDefinition: ScriptDefinition = InvalidScriptDefinition
         override val fileType: LanguageFileType = KotlinFileType.INSTANCE
         override val annotationsForSamWithReceivers: List<String> = emptyList()
         override val acceptedAnnotations: List<KClass<out Annotation>> = emptyList()
+        override val baseClass: KClass<*> = ScriptTemplateWithArgs::class
 
         override val dependencyResolver: DependenciesResolver = ErrorScriptDependenciesResolver(message)
 
