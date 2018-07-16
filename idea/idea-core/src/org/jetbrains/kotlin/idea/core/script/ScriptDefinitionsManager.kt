@@ -32,6 +32,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.EditorNotifications
 import org.jetbrains.kotlin.idea.caches.project.SdkInfo
 import org.jetbrains.kotlin.idea.caches.project.getScriptRelatedModuleInfo
+import org.jetbrains.kotlin.idea.core.script.settings.KotlinScriptingSettings
 import org.jetbrains.kotlin.idea.util.ProjectRootsUtil.isInContent
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.script.*
@@ -67,6 +68,8 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
 
         definitionsByContributor[contributor] = contributor.safeGetDefinitions()
 
+        definitions = definitionsByContributor.values.flattenTo(mutableListOf())
+
         updateDefinitions()
     }
 
@@ -99,15 +102,13 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
             definitionsByContributor[contributor] = definitions
         }
 
+        definitions = definitionsByContributor.values.flattenTo(mutableListOf())
+
         updateDefinitions()
     }
 
-    fun saveNewDefinitions(newDefinitions: List<KotlinScriptDefinition>) = lock.write {
-        definitions = newDefinitions
-
-        clearCache()
-        ServiceManager.getService(project, ScriptDependenciesCache::class.java).clear()
-        EditorNotifications.getInstance(project).updateAllNotifications()
+    fun reorderScriptDefinitions() = lock.write {
+        updateDefinitions()
     }
 
     fun getAllDefinitions() = currentDefinitions.toList()
@@ -135,8 +136,8 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
     private fun updateDefinitions() {
         assert(lock.isWriteLocked) { "updateDefinitions should only be called under the write lock" }
 
-        definitions = definitionsByContributor.values.flattenTo(mutableListOf()).sortedBy {
-            definitions?.indexOf(it) ?: 1000
+        definitions = definitions?.sortedBy {
+            KotlinScriptingSettings.getInstance(project).getScriptDefinitionOrder(it)
         }
 
         clearCache()
