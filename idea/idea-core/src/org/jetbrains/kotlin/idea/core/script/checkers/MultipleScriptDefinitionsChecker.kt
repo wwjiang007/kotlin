@@ -45,7 +45,11 @@ class MultipleScriptDefinitionsChecker(private val project: Project) : EditorNot
 
         val allApplicableDefinitions = ScriptDefinitionsManager.getInstance(project)
             .getAllDefinitions()
-            .filter { it !is StandardIdeScriptDefinition && it.isScript(psiFile.name) }
+            .filter {
+                it !is StandardIdeScriptDefinition &&
+                        it.isScript(psiFile.name) &&
+                        KotlinScriptingSettings.getInstance(project).isScriptDefinitionEnabled(it)
+            }
             .toList()
         if (allApplicableDefinitions.size < 2) return null
 

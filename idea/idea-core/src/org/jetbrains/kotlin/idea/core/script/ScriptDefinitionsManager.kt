@@ -86,7 +86,7 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
             (definitions ?: kotlin.run {
                 reloadScriptDefinitions()
                 definitions!!
-            }).asSequence()
+            }).asSequence().filter { KotlinScriptingSettings.getInstance(project).isScriptDefinitionEnabled(it) }
 
     private fun getContributors(): List<ScriptDefinitionContributor> {
         @Suppress("DEPRECATION")
@@ -111,7 +111,12 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
         updateDefinitions()
     }
 
-    fun getAllDefinitions() = currentDefinitions.toList()
+    fun getAllDefinitions(): List<KotlinScriptDefinition> {
+        return definitions ?: kotlin.run {
+            reloadScriptDefinitions()
+            definitions!!
+        }
+    }
 
     @Suppress("DEPRECATION")
     fun isInExpectedLocation(ktFile: KtFile, scriptDefinition: KotlinScriptDefinition): Boolean {
