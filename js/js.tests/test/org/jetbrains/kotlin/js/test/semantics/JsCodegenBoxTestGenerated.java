@@ -10804,6 +10804,11 @@ public class JsCodegenBoxTestGenerated extends AbstractJsCodegenBoxTest {
             runTest("compiler/testData/codegen/box/inlineClasses/createInlineClassInArgumentPosition.kt");
         }
 
+        @TestMetadata("crossinlineWithInlineClassInParameter.kt")
+        public void testCrossinlineWithInlineClassInParameter() throws Exception {
+            runTest("compiler/testData/codegen/box/inlineClasses/crossinlineWithInlineClassInParameter.kt");
+        }
+
         @TestMetadata("elvisWithInlineClassAndNullConstant.kt")
         public void testElvisWithInlineClassAndNullConstant() throws Exception {
             runTest("compiler/testData/codegen/box/inlineClasses/elvisWithInlineClassAndNullConstant.kt");
