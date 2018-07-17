@@ -109,6 +109,9 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
 
     fun reorderScriptDefinitions() = lock.write {
         updateDefinitions()
+
+        // TODO exception from resolve (cache for script it self isn't dropped instead
+        ProjectRootManager.getInstance(project).incModificationCount()
     }
 
     fun getAllDefinitions(): List<KotlinScriptDefinition> {
