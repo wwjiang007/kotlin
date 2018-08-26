@@ -263,7 +263,7 @@ fun <T, E : PsiElement> getPsiElementPopup(
         }
     }
 
-    return with(PopupChooserBuilder(list)) {
+    return with(PopupChooserBuilder<E>(list)) {
         title?.let { setTitle(it) }
         renderer.installSpeedSearch(this, true)
         setItemChoosenCallback {
@@ -316,7 +316,7 @@ class SelectionAwareScopeHighlighter(val editor: Editor) {
 }
 
 fun PsiFile.getLineStartOffset(line: Int): Int? {
-    val doc = PsiDocumentManager.getInstance(project).getDocument(this)
+    val doc = viewProvider.document ?: PsiDocumentManager.getInstance(project).getDocument(this)
     if (doc != null && line >= 0 && line < doc.lineCount) {
         val startOffset = doc.getLineStartOffset(line)
         val element = findElementAt(startOffset) ?: return startOffset
@@ -331,11 +331,13 @@ fun PsiFile.getLineStartOffset(line: Int): Int? {
 }
 
 fun PsiFile.getLineEndOffset(line: Int): Int? {
-    return PsiDocumentManager.getInstance(project).getDocument(this)?.getLineEndOffset(line)
+    val document = viewProvider.document ?: PsiDocumentManager.getInstance(project).getDocument(this)
+    return document?.getLineEndOffset(line)
 }
 
 fun PsiElement.getLineNumber(start: Boolean = true): Int {
-    return PsiDocumentManager.getInstance(project).getDocument(this.containingFile)?.getLineNumber(if (start) this.startOffset else this.endOffset) ?: 0
+    val document = containingFile.viewProvider.document ?: PsiDocumentManager.getInstance(project).getDocument(containingFile)
+    return document?.getLineNumber(if (start) this.startOffset else this.endOffset) ?: 0
 }
 
 fun PsiElement.getLineCount(): Int {
@@ -724,7 +726,7 @@ internal abstract class CompositeRefactoringRunner(
 fun invokeOnceOnCommandFinish(action: () -> Unit) {
     val commandProcessor = CommandProcessor.getInstance()
     val listener = object : CommandAdapter() {
-        override fun beforeCommandFinished(event: CommandEvent?) {
+        override fun beforeCommandFinished(event: CommandEvent) {
             action()
             commandProcessor.removeCommandListener(this)
         }

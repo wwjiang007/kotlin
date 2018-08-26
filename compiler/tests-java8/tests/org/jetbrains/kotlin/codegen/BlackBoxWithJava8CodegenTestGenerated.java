@@ -133,6 +133,29 @@ public class BlackBoxWithJava8CodegenTestGenerated extends AbstractBlackBoxCodeg
         runTest("compiler/testData/codegen/java8/box/useStream.kt");
     }
 
+    @TestMetadata("compiler/testData/codegen/java8/box/annotations")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class Annotations extends AbstractBlackBoxCodegenTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInAnnotations() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/codegen/java8/box/annotations"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+        }
+
+        @TestMetadata("useTypeParameterAnnotationFromJava.kt")
+        public void testUseTypeParameterAnnotationFromJava() throws Exception {
+            runTest("compiler/testData/codegen/java8/box/annotations/useTypeParameterAnnotationFromJava.kt");
+        }
+
+        @TestMetadata("useTypeUseAnnotationFromJava.kt")
+        public void testUseTypeUseAnnotationFromJava() throws Exception {
+            runTest("compiler/testData/codegen/java8/box/annotations/useTypeUseAnnotationFromJava.kt");
+        }
+    }
+
     @TestMetadata("compiler/testData/codegen/java8/box/builtinStubMethods")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -711,6 +734,11 @@ public class BlackBoxWithJava8CodegenTestGenerated extends AbstractBlackBoxCodeg
             runTest("compiler/testData/codegen/java8/box/parametersMetadata/defaultImpls.kt");
         }
 
+        @TestMetadata("delegation.kt")
+        public void testDelegation() throws Exception {
+            runTest("compiler/testData/codegen/java8/box/parametersMetadata/delegation.kt");
+        }
+
         @TestMetadata("enum.kt")
         public void testEnum() throws Exception {
             runTest("compiler/testData/codegen/java8/box/parametersMetadata/enum.kt");
@@ -749,16 +777,6 @@ public class BlackBoxWithJava8CodegenTestGenerated extends AbstractBlackBoxCodeg
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/codegen/java8/box/reflection"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
         }
 
-        @TestMetadata("realParameterNames.kt")
-        public void testRealParameterNames() throws Exception {
-            runTest("compiler/testData/codegen/java8/box/reflection/realParameterNames.kt");
-        }
-
-        @TestMetadata("synthesizedParameterNames.kt")
-        public void testSynthesizedParameterNames() throws Exception {
-            runTest("compiler/testData/codegen/java8/box/reflection/synthesizedParameterNames.kt");
-        }
-
         @TestMetadata("compiler/testData/codegen/java8/box/reflection/parameters")
         @TestDataPath("$PROJECT_ROOT")
         @RunWith(JUnit3RunnerWithInners.class)
@@ -771,9 +789,14 @@ public class BlackBoxWithJava8CodegenTestGenerated extends AbstractBlackBoxCodeg
                 KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/codegen/java8/box/reflection/parameters"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
             }
 
-            @TestMetadata("javaParametersHaveDefaultNames.kt")
-            public void testJavaParametersHaveDefaultNames() throws Exception {
-                runTest("compiler/testData/codegen/java8/box/reflection/parameters/javaParametersHaveDefaultNames.kt");
+            @TestMetadata("realParameterNames.kt")
+            public void testRealParameterNames() throws Exception {
+                runTest("compiler/testData/codegen/java8/box/reflection/parameters/realParameterNames.kt");
+            }
+
+            @TestMetadata("synthesizedParameterNames.kt")
+            public void testSynthesizedParameterNames() throws Exception {
+                runTest("compiler/testData/codegen/java8/box/reflection/parameters/synthesizedParameterNames.kt");
             }
         }
     }

@@ -27,29 +27,35 @@ import org.jetbrains.kotlin.ir.expressions.putTypeArguments
 import org.jetbrains.kotlin.ir.expressions.typeParametersCount
 import org.jetbrains.kotlin.ir.util.StableDescriptorsComparator
 import org.jetbrains.kotlin.ir.util.declareSimpleFunctionWithOverrides
+import org.jetbrains.kotlin.ir.util.referenceFunction
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtDelegatedSuperTypeEntry
 import org.jetbrains.kotlin.psi.KtEnumEntry
+import org.jetbrains.kotlin.psi.KtPureClassOrObject
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
+import org.jetbrains.kotlin.psi.psiUtil.pureEndOffset
+import org.jetbrains.kotlin.psi.psiUtil.pureStartOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
+import org.jetbrains.kotlin.psi.synthetics.SyntheticClassOrObjectDescriptor
+import org.jetbrains.kotlin.psi.synthetics.findClassDescriptor
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
+import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.TypeProjectionImpl
 import org.jetbrains.kotlin.types.TypeSubstitutor
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.jetbrains.kotlin.utils.newHashMapWithExpectedSize
-import java.lang.AssertionError
 
 class ClassGenerator(
     declarationGenerator: DeclarationGenerator
 ) : DeclarationGeneratorExtension(declarationGenerator) {
 
-    fun generateClass(ktClassOrObject: KtClassOrObject): IrClass {
-        val classDescriptor = getOrFail(BindingContext.CLASS, ktClassOrObject)
-        val startOffset = ktClassOrObject.startOffset
-        val endOffset = ktClassOrObject.endOffset
+    fun generateClass(ktClassOrObject: KtPureClassOrObject): IrClass {
+        val classDescriptor = ktClassOrObject.findClassDescriptor(this.context.bindingContext)
+        val startOffset = ktClassOrObject.pureStartOffset
+        val endOffset = ktClassOrObject.pureEndOffset
 
         return context.symbolTable.declareClass(
             startOffset, endOffset, IrDeclarationOrigin.DEFINED, classDescriptor
@@ -72,13 +78,18 @@ class ClassGenerator(
                 generateDeclarationsForPrimaryConstructorParameters(irClass, irPrimaryConstructor, ktClassOrObject)
             }
 
-            generateMembersDeclaredInSupertypeList(irClass, ktClassOrObject)
+            if (ktClassOrObject is KtClassOrObject) //todo: supertype list for synthetic declarations
+                generateMembersDeclaredInSupertypeList(irClass, ktClassOrObject)
 
             generateMembersDeclaredInClassBody(irClass, ktClassOrObject)
 
             generateFakeOverrideMemberDeclarations(irClass, ktClassOrObject)
 
-            if (irClass.isData) {
+            if (irClass.isInline && ktClassOrObject is KtClassOrObject) {
+                generateAdditionalMembersForInlineClasses(irClass, ktClassOrObject)
+            }
+
+            if (irClass.isData && ktClassOrObject is KtClassOrObject) {
                 generateAdditionalMembersForDataClass(irClass, ktClassOrObject)
             }
 
@@ -88,7 +99,7 @@ class ClassGenerator(
         }
     }
 
-    private fun generateFakeOverrideMemberDeclarations(irClass: IrClass, ktClassOrObject: KtClassOrObject) {
+    private fun generateFakeOverrideMemberDeclarations(irClass: IrClass, ktClassOrObject: KtPureClassOrObject) {
         irClass.descriptor.unsubstitutedMemberScope.getContributedDescriptors()
             .mapNotNull {
                 it.safeAs<CallableMemberDescriptor>().takeIf {
@@ -308,15 +319,19 @@ class ClassGenerator(
         return typeArguments
     }
 
+    private fun generateAdditionalMembersForInlineClasses(irClass: IrClass, ktClassOrObject: KtClassOrObject) {
+        DataClassMembersGenerator(declarationGenerator).generateInlineClassMembers(ktClassOrObject, irClass)
+    }
+
     private fun generateAdditionalMembersForDataClass(irClass: IrClass, ktClassOrObject: KtClassOrObject) {
-        DataClassMembersGenerator(declarationGenerator).generate(ktClassOrObject, irClass)
+        DataClassMembersGenerator(declarationGenerator).generateDataClassMembers(ktClassOrObject, irClass)
     }
 
     private fun generateAdditionalMembersForEnumClass(irClass: IrClass) {
         EnumClassMembersGenerator(declarationGenerator).generateSpecialMembers(irClass)
     }
 
-    private fun generatePrimaryConstructor(irClass: IrClass, ktClassOrObject: KtClassOrObject): IrConstructor? {
+    private fun generatePrimaryConstructor(irClass: IrClass, ktClassOrObject: KtPureClassOrObject): IrConstructor? {
         val classDescriptor = irClass.descriptor
         val primaryConstructorDescriptor = classDescriptor.unsubstitutedPrimaryConstructor ?: return null
 
@@ -330,7 +345,7 @@ class ClassGenerator(
     private fun generateDeclarationsForPrimaryConstructorParameters(
         irClass: IrClass,
         irPrimaryConstructor: IrConstructor,
-        ktClassOrObject: KtClassOrObject
+        ktClassOrObject: KtPureClassOrObject
     ) {
         ktClassOrObject.primaryConstructor?.let { ktPrimaryConstructor ->
             irPrimaryConstructor.valueParameters.forEach {
@@ -348,12 +363,23 @@ class ClassGenerator(
         }
     }
 
-    private fun generateMembersDeclaredInClassBody(irClass: IrClass, ktClassOrObject: KtClassOrObject) {
+    private fun generateMembersDeclaredInClassBody(irClass: IrClass, ktClassOrObject: KtPureClassOrObject) {
+        // generate real body declarations
         ktClassOrObject.getBody()?.let { ktClassBody ->
             ktClassBody.declarations.mapTo(irClass.declarations) { ktDeclaration ->
                 declarationGenerator.generateClassMemberDeclaration(ktDeclaration, irClass.descriptor)
             }
         }
+
+        // generate synthetic nested classes (including companion)
+        irClass.descriptor
+            .unsubstitutedMemberScope
+            .getContributedDescriptors(DescriptorKindFilter.CLASSIFIERS, MemberScope.ALL_NAME_FILTER)
+            .asSequence()
+            .filterIsInstance<SyntheticClassOrObjectDescriptor>()
+            .mapTo(irClass.declarations) { declarationGenerator.generateSyntheticClassOrObject(it.syntheticDeclaration) }
+
+        // synthetic functions and properties to classes must be contributed by corresponding lowering
     }
 
     fun generateEnumEntry(ktEnumEntry: KtEnumEntry): IrEnumEntry {

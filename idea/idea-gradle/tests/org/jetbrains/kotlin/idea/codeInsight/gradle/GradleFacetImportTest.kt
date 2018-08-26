@@ -1399,7 +1399,11 @@ compileTestKotlin {
         }
 
         val rootManager = ModuleRootManager.getInstance(getModule("js-module"))
-        val stdlib = rootManager.orderEntries.filterIsInstance<LibraryOrderEntry>().single().library!!
+        val stdlib = rootManager
+            .orderEntries
+            .filterIsInstance<LibraryOrderEntry>()
+            .first { it.libraryName?.startsWith("Gradle: kotlin-stdlib-js-") ?: false }
+            .library!!
         assertTrue(stdlib.getFiles(OrderRootType.CLASSES).isNotEmpty())
         assertEquals(JSLibraryKind, (stdlib as LibraryEx).kind)
     }
@@ -2224,6 +2228,47 @@ compileTestKotlin {
 
         checkStableModuleName("project_main", "project", JvmPlatform, isProduction = true)
         checkStableModuleName("project_test", "project", JvmPlatform, isProduction = false)
+
+        assertAllModulesConfigured()
+    }
+
+    @Test
+    fun testNoFriendPathsAreShown() {
+        createProjectSubFile(
+            "build.gradle", """
+            buildscript {
+                repositories {
+                    mavenCentral()
+                    maven {
+                        url 'http://dl.bintray.com/kotlin/kotlin-dev'
+                    }
+                }
+
+                dependencies {
+                    classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.2.70-eap-4")
+                }
+            }
+
+            apply plugin: 'kotlin'
+
+            repositories {
+                mavenCentral()
+                maven {
+                    url 'http://dl.bintray.com/kotlin/kotlin-dev'
+                }
+            }
+
+            dependencies {
+                compile "org.jetbrains.kotlin:kotlin-stdlib:1.2.70-eap-4"
+            }
+        """
+        )
+        importProject()
+
+        Assert.assertEquals(
+            "-version",
+            testFacetSettings.compilerSettings!!.additionalArguments
+        )
 
         assertAllModulesConfigured()
     }

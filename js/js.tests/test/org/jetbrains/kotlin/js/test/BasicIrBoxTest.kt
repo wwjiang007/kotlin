@@ -5,10 +5,7 @@
 
 package org.jetbrains.kotlin.js.test
 
-import org.jetbrains.kotlin.config.ApiVersion
-import org.jetbrains.kotlin.config.LanguageVersion
-import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
-import org.jetbrains.kotlin.config.languageVersionSettings
+import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.ir.backend.js.Result
 import org.jetbrains.kotlin.ir.backend.js.compile
 import org.jetbrains.kotlin.js.config.JsConfig
@@ -20,8 +17,37 @@ import java.io.File
 
 private val runtimeSources = listOfKtFilesFrom(
     "libraries/stdlib/js/src/kotlin/core.kt",
+    "libraries/stdlib/js/src/kotlin/js.core.kt",
+    "libraries/stdlib/js/src/kotlin/jsTypeOf.kt",
+    "libraries/stdlib/js/src/kotlin/dynamic.kt",
+    "libraries/stdlib/js/src/kotlin/annotations.kt",
+    "libraries/stdlib/js/src/kotlin/reflect",
+    "libraries/stdlib/js/src/kotlin/annotationsJVM.kt",
+
+    "libraries/stdlib/js/runtime/primitiveCompanionObjects.kt",
+
+    "libraries/stdlib/src/kotlin/internal",
+    "libraries/stdlib/src/kotlin/util/Standard.kt",
+    "core/builtins/native/kotlin/Annotation.kt",
     "core/builtins/native/kotlin/Number.kt",
     "core/builtins/native/kotlin/Comparable.kt",
+    "core/builtins/src/kotlin/Annotations.kt",
+    "core/builtins/src/kotlin/internal/InternalAnnotations.kt",
+    "core/builtins/src/kotlin/internal/progressionUtil.kt",
+    "core/builtins/src/kotlin/Iterators.kt",
+    "core/builtins/src/kotlin/ProgressionIterators.kt",
+    "core/builtins/src/kotlin/Progressions.kt",
+    "core/builtins/src/kotlin/Range.kt",
+    "core/builtins/src/kotlin/Ranges.kt",
+    "core/builtins/src/kotlin/Unit.kt",
+    "core/builtins/src/kotlin/reflect",
+    "core/builtins/src/kotlin/Function.kt",
+
+    "core/builtins/native/kotlin/Collections.kt",
+    "core/builtins/native/kotlin/Iterator.kt",
+
+    "libraries/stdlib/common/src/kotlin/JvmAnnotationsH.kt",
+
     "libraries/stdlib/js/irRuntime",
     BasicBoxTest.COMMON_FILES_DIR_PATH
 )
@@ -57,29 +83,47 @@ abstract class BasicIrBoxTest(
         incrementalData: IncrementalData,
         remap: Boolean,
         testPackage: String?,
-        testFunction: String
+        testFunction: String,
+        doNotCache: Boolean
     ) {
         val filesToCompile = units
             .map { (it as TranslationUnit.SourceFile).file }
             // TODO: split input files to some parts (global common, local common, test)
             .filterNot { it.virtualFilePath.contains(BasicBoxTest.COMMON_FILES_DIR_PATH) }
 
+        val runtimeConfiguration = config.configuration.copy()
+
+        // TODO: is it right in general? Maybe sometimes we need to compile with newer versions or with additional language features.
+        runtimeConfiguration.languageVersionSettings = LanguageVersionSettingsImpl(
+            LanguageVersion.LATEST_STABLE, ApiVersion.LATEST_STABLE,
+            specificFeatures = mapOf(
+                LanguageFeature.AllowContractsForCustomFunctions to LanguageFeature.State.ENABLED,
+                LanguageFeature.MultiPlatformProjects to LanguageFeature.State.ENABLED
+            )
+        )
+
+
         if (runtimeResult == null) {
-            val myConfiguration = config.configuration.copy()
-
-            // TODO: is it right in general? Maybe sometimes we need to compile with newer versions or with additional language features.
-            myConfiguration.languageVersionSettings = LanguageVersionSettingsImpl(LanguageVersion.LATEST_STABLE, ApiVersion.LATEST_STABLE)
-
-            runtimeResult = compile(config.project, runtimeSources.map(::createPsiFile), myConfiguration)
+            runtimeResult = compile(config.project, runtimeSources.map(::createPsiFile), runtimeConfiguration)
             runtimeFile.write(runtimeResult!!.generatedCode)
         }
 
-        val result = compile(
-            config.project,
-            filesToCompile,
-            config.configuration,
-            FqName((testPackage?.let { "$it." } ?: "") + testFunction),
-            listOf(runtimeResult!!.moduleDescriptor))
+        val result = if (doNotCache) {
+            val runtimeFiles = runtimeSources.map(::createPsiFile)
+            val allFiles = runtimeFiles + filesToCompile
+            compile(
+                config.project,
+                allFiles,
+                runtimeConfiguration,
+                FqName((testPackage?.let { "$it." } ?: "") + testFunction))
+        } else {
+            compile(
+                config.project,
+                filesToCompile,
+                config.configuration,
+                FqName((testPackage?.let { "$it." } ?: "") + testFunction),
+                listOf(runtimeResult!!.moduleDescriptor))
+        }
 
         outputFile.write(result.generatedCode)
     }
@@ -94,8 +138,7 @@ abstract class BasicIrBoxTest(
     ) {
         // TODO: should we do anything special for module systems?
         // TODO: return list of js from translateFiles and provide then to this function with other js files
-        // TODO: cache runtime.js and don't cache kotlin.js for IR BE tests
-        super.runGeneratedCode(listOf(runtimeFile.path) + jsFiles, null, null, testFunction, expectedResult, false)
+        NashornIrJsTestChecker.check(jsFiles, null, null, testFunction, expectedResult, false)
     }
 }
 

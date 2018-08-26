@@ -233,7 +233,7 @@ class InsertImplicitCasts(context: GeneratorContext) : IrElementTransformerVoid(
     }
 
     private fun IrExpression.coerceToUnit(): IrExpression {
-        val valueType = this.type.originalKotlinType!!
+        val valueType = getKotlinType(this)
 
         return if (KotlinTypeChecker.DEFAULT.isSubtypeOf(valueType, builtIns.unitType))
             this
@@ -247,10 +247,19 @@ class InsertImplicitCasts(context: GeneratorContext) : IrElementTransformerVoid(
             )
     }
 
+    private fun getKotlinType(irExpression: IrExpression) =
+        if (irExpression is IrCall)
+            irExpression.symbol.descriptor.original.returnType!!
+        else irExpression.type.originalKotlinType!!
+
     private fun KotlinType.isBuiltInIntegerType(): Boolean =
         KotlinBuiltIns.isByte(this) ||
                 KotlinBuiltIns.isShort(this) ||
                 KotlinBuiltIns.isInt(this) ||
-                KotlinBuiltIns.isLong(this)
+                KotlinBuiltIns.isLong(this) ||
+                KotlinBuiltIns.isUByte(this) ||
+                KotlinBuiltIns.isUShort(this) ||
+                KotlinBuiltIns.isUInt(this) ||
+                KotlinBuiltIns.isULong(this)
 }
 

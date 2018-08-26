@@ -167,15 +167,13 @@ fun JsFunction.fillCoroutineMetadata(
         .memberScope
         .getContributedVariables(COROUTINE_SUSPENDED_NAME, NoLookupLocation.FROM_BACKEND).first()
 
-    val coroutineBaseClassRef = ReferenceTranslator.translateAsTypeReference(TranslationUtils.getCoroutineBaseClass(context), context)
-
     fun getCoroutinePropertyName(id: String) =
         context.getNameForDescriptor(TranslationUtils.getCoroutineProperty(context, id))
 
     coroutineMetadata = CoroutineMetadata(
         doResumeName = context.getNameForDescriptor(TranslationUtils.getCoroutineDoResumeFunction(context)),
         suspendObjectRef = ReferenceTranslator.translateAsValueReference(suspendPropertyDescriptor, context),
-        baseClassRef = coroutineBaseClassRef,
+        baseClassRef = ReferenceTranslator.translateAsTypeReference(TranslationUtils.getCoroutineBaseClass(context), context),
         stateName = getCoroutinePropertyName("state"),
         exceptionStateName = getCoroutinePropertyName("exceptionState"),
         finallyPathName = getCoroutinePropertyName("finallyPath"),
@@ -244,6 +242,9 @@ fun TranslationContext.createCoroutineResult(resolvedCall: ResolvedCall<*>): JsE
     }
 }
 
+fun KotlinType.refineType() =
+    TypeUtils.getAllSupertypes(this).find(KotlinBuiltIns::isPrimitiveTypeOrNullablePrimitiveType) ?: this
+
 /**
  * Tries to get precise statically known primitive type. Takes generic supertypes into account. Doesn't handle smart-casts.
  * This is needed to be compatible with JVM NaN behaviour:
@@ -258,7 +259,7 @@ fun TranslationContext.getPrecisePrimitiveType(expression: KtExpression): Kotlin
     val bindingContext = bindingContext()
     val ktType = bindingContext.getType(expression) ?: return null
 
-    return TypeUtils.getAllSupertypes(ktType).find(KotlinBuiltIns::isPrimitiveTypeOrNullablePrimitiveType) ?: ktType
+    return ktType.refineType()
 }
 
 fun TranslationContext.getPrecisePrimitiveTypeNotNull(expression: KtExpression): KotlinType {

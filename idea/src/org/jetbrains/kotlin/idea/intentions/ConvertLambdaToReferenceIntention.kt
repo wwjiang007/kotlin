@@ -36,6 +36,9 @@ import org.jetbrains.kotlin.resolve.BindingContext.FUNCTION
 import org.jetbrains.kotlin.resolve.BindingContext.REFERENCE_TARGET
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.components.hasDefaultValue
+import org.jetbrains.kotlin.resolve.calls.model.VarargValueArgument
+import org.jetbrains.kotlin.resolve.descriptorUtil.isCompanionObject
+import org.jetbrains.kotlin.resolve.scopes.receivers.ExtensionReceiver
 import org.jetbrains.kotlin.resolve.scopes.utils.getImplicitReceiversHierarchy
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
 import org.jetbrains.kotlin.types.isDynamic
@@ -126,8 +129,9 @@ open class ConvertLambdaToReferenceIntention(text: String) :
             if (lambdaValueParameterDescriptors.size < explicitReceiverShift + callableExpression.valueArguments.size) return false
             val resolvedCall = callableExpression.getResolvedCall(context) ?: return false
             resolvedCall.valueArguments.entries.forEach { (valueParameter, resolvedArgument) ->
-                val argumentExpression =
-                    resolvedArgument.arguments.singleOrNull()?.getArgumentExpression() as? KtNameReferenceExpression ?: return false
+                val argument = resolvedArgument.arguments.singleOrNull() ?: return false
+                if (resolvedArgument is VarargValueArgument && argument.getSpreadElement() == null) return false
+                val argumentExpression = argument.getArgumentExpression() as? KtNameReferenceExpression ?: return false
                 val argumentTarget = context[REFERENCE_TARGET, argumentExpression] as? ValueParameterDescriptor ?: return false
                 if (argumentTarget != lambdaValueParameterDescriptors[valueParameter.index + explicitReceiverShift]) return false
             }
@@ -230,10 +234,11 @@ open class ConvertLambdaToReferenceIntention(text: String) :
                     val calleeReferenceExpression = singleStatement.calleeExpression as? KtNameReferenceExpression ?: return null
                     val resolvedCall = calleeReferenceExpression.resolveToCall() ?: return null
                     val receiver = resolvedCall.dispatchReceiver ?: resolvedCall.extensionReceiver
+                    val descriptor by lazy { receiver?.type?.constructor?.declarationDescriptor }
                     val receiverText = when {
-                        receiver == null -> ""
-                        lambdaExpression.getResolutionScope().getImplicitReceiversHierarchy().size == 1 -> "this"
-                        else -> receiver.type.constructor.declarationDescriptor?.name?.let { "this@$it" } ?: return null
+                        receiver == null || descriptor?.isCompanionObject() == true -> ""
+                        receiver is ExtensionReceiver || lambdaExpression.getResolutionScope().getImplicitReceiversHierarchy().size == 1 -> "this"
+                        else -> descriptor?.name?.let { "this@$it" } ?: return null
                     }
                     "$receiverText::${singleStatement.getCallReferencedName()}"
                 }

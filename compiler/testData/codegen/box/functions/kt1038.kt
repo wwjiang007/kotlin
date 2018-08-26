@@ -1,5 +1,3 @@
-// IGNORE_BACKEND: JVM_IR
-// IGNORE_BACKEND: JS_IR
 //KT-1038 Cannot compile lazy iterators
 
 class YieldingIterator<T>(val yieldingFunction : ()->T?) : Iterator<T>

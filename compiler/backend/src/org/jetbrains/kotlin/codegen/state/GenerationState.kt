@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.descriptors.ScriptDescriptor
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.DiagnosticSink
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCache
+import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmMetadataVersion
 import org.jetbrains.kotlin.modules.TargetId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtClassOrObject
@@ -171,7 +172,6 @@ class GenerationState private constructor(
     val languageVersionSettings = configuration.languageVersionSettings
 
     val target = configuration.get(JVMConfigurationKeys.JVM_TARGET) ?: JvmTarget.DEFAULT
-    val isJvm8Target: Boolean = target == JvmTarget.JVM_1_8
 
     val moduleName: String = moduleName ?: JvmCodegenUtil.getModuleName(module)
     val classBuilderMode: ClassBuilderMode = builderFactory.classBuilderMode
@@ -180,13 +180,15 @@ class GenerationState private constructor(
         filter = if (wantsDiagnostics) BindingTraceFilter.ACCEPT_ALL else BindingTraceFilter.NO_DIAGNOSTICS
     )
     val bindingContext: BindingContext = bindingTrace.bindingContext
+    private val isIrBackend = configuration.get(JVMConfigurationKeys.IR) ?: false
     val typeMapper: KotlinTypeMapper = KotlinTypeMapper(
         this.bindingContext,
         classBuilderMode,
         IncompatibleClassTrackerImpl(extraJvmDiagnosticsTrace),
         this.moduleName,
-        isJvm8Target,
-        configuration.languageVersionSettings.supportsFeature(LanguageFeature.ReleaseCoroutines)
+        target,
+        configuration.languageVersionSettings.supportsFeature(LanguageFeature.ReleaseCoroutines),
+        isIrBackend
     )
     val intrinsics: IntrinsicMethods = run {
         val shouldUseConsistentEquals = languageVersionSettings.supportsFeature(LanguageFeature.ThrowNpeOnExplicitEqualsForBoxedNull) &&
@@ -228,14 +230,19 @@ class GenerationState private constructor(
 
     val shouldInlineConstVals = languageVersionSettings.supportsFeature(LanguageFeature.InlineConstVals)
 
-    val constructorCallNormalizationMode = configuration.get(
-        JVMConfigurationKeys.CONSTRUCTOR_CALL_NORMALIZATION_MODE,
-        JVMConstructorCallNormalizationMode.DEFAULT
-    )
+    val constructorCallNormalizationMode =
+        configuration.get(JVMConfigurationKeys.CONSTRUCTOR_CALL_NORMALIZATION_MODE) ?: run {
+            if (languageVersionSettings.supportsFeature(LanguageFeature.NormalizeConstructorCalls))
+                JVMConstructorCallNormalizationMode.ENABLE
+            else
+                JVMConstructorCallNormalizationMode.DISABLE
+        }
 
     val jvmDefaultMode = languageVersionSettings.getFlag(AnalysisFlag.jvmDefaultMode)
 
     val disableOptimization = configuration.get(JVMConfigurationKeys.DISABLE_OPTIMIZATION, false)
+
+    val metadataVersion = configuration.get(CommonConfigurationKeys.METADATA_VERSION) ?: JvmMetadataVersion.INSTANCE
 
     init {
         this.interceptedBuilderFactory = builderFactory
@@ -245,7 +252,8 @@ class GenerationState private constructor(
                     BuilderFactoryForDuplicateSignatureDiagnostics(
                         it, this.bindingContext, diagnostics, this.moduleName,
                         isReleaseCoroutines = languageVersionSettings.supportsFeature(LanguageFeature.ReleaseCoroutines),
-                        shouldGenerate = { !shouldOnlyCollectSignatures(it) }
+                        shouldGenerate = { !shouldOnlyCollectSignatures(it) },
+                        isIrBackend = isIrBackend
                     ).apply { duplicateSignatureFactory = this }
                 },
                 { BuilderFactoryForDuplicateClassNameDiagnostics(it, diagnostics) },

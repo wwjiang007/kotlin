@@ -76,11 +76,9 @@ import org.jetbrains.kotlin.idea.conversion.copy.AbstractLiteralKotlinToKotlinCo
 import org.jetbrains.kotlin.idea.conversion.copy.AbstractLiteralTextToKotlinCopyPasteTest
 import org.jetbrains.kotlin.idea.conversion.copy.AbstractTextJavaToKotlinCopyPasteConversionTest
 import org.jetbrains.kotlin.idea.coverage.AbstractKotlinCoverageOutputFilesTest
-import org.jetbrains.kotlin.idea.debugger.AbstractBeforeExtractFunctionInsertionTest
-import org.jetbrains.kotlin.idea.debugger.AbstractKotlinSteppingTest
-import org.jetbrains.kotlin.idea.debugger.AbstractPositionManagerTest
-import org.jetbrains.kotlin.idea.debugger.AbstractSmartStepIntoTest
+import org.jetbrains.kotlin.idea.debugger.*
 import org.jetbrains.kotlin.idea.debugger.evaluate.*
+import org.jetbrains.kotlin.idea.debugger.sequence.exec.AbstractSequenceTraceTestCase
 import org.jetbrains.kotlin.idea.decompiler.navigation.AbstractNavigateToDecompiledLibraryTest
 import org.jetbrains.kotlin.idea.decompiler.navigation.AbstractNavigateToLibrarySourceTest
 import org.jetbrains.kotlin.idea.decompiler.stubBuilder.AbstractClsStubBuilderTest
@@ -229,7 +227,11 @@ fun main(args: Array<String>) {
         }
 
         testClass<AbstractParameterInfoTest> {
-            model("parameterInfo", recursive = true, excludeDirs = listOf("withLib1/sharedLib", "withLib2/sharedLib", "withLib3/sharedLib"))
+            model(
+                "parameterInfo",
+                pattern = "^([\\w\\-_]+)\\.kt$", recursive = true,
+                excludeDirs = listOf("withLib1/sharedLib", "withLib2/sharedLib", "withLib3/sharedLib")
+            )
         }
 
         testClass<AbstractKotlinGotoTest> {
@@ -393,7 +395,7 @@ fun main(args: Array<String>) {
         }
 
         testClass<AbstractQuickDocProviderTest> {
-            model("editor/quickDoc", pattern = """^([^_]+)\.[^\.]*$""")
+            model("editor/quickDoc", pattern = """^([^_]+)\.(kt|java)$""")
         }
 
         testClass<AbstractSafeDeleteTest> {
@@ -640,6 +642,15 @@ fun main(args: Array<String>) {
             model("debugger/tinyApp/src/evaluate/multipleBreakpoints", testMethod = "doMultipleBreakpointsTest")
         }
 
+        testClass<AbstractFileRankingTest> {
+            model("debugger/fileRanking")
+        }
+
+        testClass<AbstractSequenceTraceTestCase> {
+            // We need to implement mapping logic for terminal operations
+            model("debugger/tinyApp/src/streams/sequence", excludeDirs = listOf("terminal"))
+        }
+
         testClass<AbstractStubBuilderTest> {
             model("stubs", extension = "kt")
         }
@@ -828,7 +839,7 @@ fun main(args: Array<String>) {
         }
 
         testClass<AbstractBasicCompletionWeigherTest> {
-            model("weighers/basic", pattern = KT_WITHOUT_DOTS_IN_NAME)
+            model("weighers/basic", pattern = KT_OR_KTS_WITHOUT_DOTS_IN_NAME)
         }
 
         testClass<AbstractSmartCompletionWeigherTest> {
@@ -927,7 +938,8 @@ fun main(args: Array<String>) {
 
     testGroup("jps-plugin/jps-tests/test", "jps-plugin/testData") {
         testClass<AbstractIncrementalJpsTest> {
-            model("incremental/multiModule", extension = null, excludeParentDirs = true)
+            model("incremental/multiModule/common", extension = null, excludeParentDirs = true)
+            model("incremental/multiModule/jvm", extension = null, excludeParentDirs = true)
             model("incremental/pureKotlin", extension = null, recursive = false)
             model("incremental/withJava", extension = null, excludeParentDirs = true)
             model("incremental/inlineFunCallSite", extension = null, excludeParentDirs = true)
@@ -935,6 +947,10 @@ fun main(args: Array<String>) {
         }
 
         actualizeMppJpsIncTestCaseDirs(testDataRoot, "incremental/multiplatform/multiModule")
+
+        testClass<AbstractIncrementalJsJpsTest> {
+            model("incremental/multiModule/common", extension = null, excludeParentDirs = true)
+        }
 
         testClass<AbstractMultiplatformJpsTest> {
             model(

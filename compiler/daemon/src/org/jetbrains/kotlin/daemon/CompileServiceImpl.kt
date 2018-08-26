@@ -49,9 +49,10 @@ import org.jetbrains.kotlin.incremental.components.ExpectActualTracker
 import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.incremental.js.IncrementalDataProvider
 import org.jetbrains.kotlin.incremental.js.IncrementalResultsConsumer
-import org.jetbrains.kotlin.incremental.parsing.classesFqNames
 import org.jetbrains.kotlin.incremental.multiproject.ModulesApiHistoryAndroid
+import org.jetbrains.kotlin.incremental.multiproject.ModulesApiHistoryJs
 import org.jetbrains.kotlin.incremental.multiproject.ModulesApiHistoryJvm
+import org.jetbrains.kotlin.incremental.parsing.classesFqNames
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCompilationComponents
 import org.jetbrains.kotlin.modules.Module
 import org.jetbrains.kotlin.progress.CompilationCanceledStatus
@@ -469,13 +470,19 @@ class CompileServiceImpl(
         }
 
         val workingDir = incrementalCompilationOptions.workingDir
-        val versions = commonCacheVersions(workingDir) +
+        val versions = commonCacheVersions(workingDir, enabled = true) +
                        customCacheVersion(incrementalCompilationOptions.customCacheVersion,
                                           incrementalCompilationOptions.customCacheVersionFileName,
                                           workingDir,
                                           enabled = true)
-
-        val compiler = IncrementalJsCompilerRunner(workingDir, versions, reporter)
+        val modulesApiHistory = ModulesApiHistoryJs(incrementalCompilationOptions.modulesInfo)
+        val compiler = IncrementalJsCompilerRunner(
+            workingDir = workingDir,
+            cacheVersions = versions,
+            reporter = reporter,
+            buildHistoryFile = incrementalCompilationOptions.multiModuleICSettings.buildHistoryFile,
+            modulesApiHistory = modulesApiHistory
+        )
         return compiler.compile(allKotlinFiles, args, compilerMessageCollector, changedFiles)
     }
 
@@ -508,6 +515,8 @@ class CompileServiceImpl(
             it.getJavaSourceRoots().map { JvmSourceRoot(File(it.path), it.packagePrefix) }
         }
 
+        k2jvmArgs.commonSources = parsedModule.modules.flatMap { it.getCommonSourceFiles() }.toTypedArray().takeUnless { it.isEmpty() }
+
         val allKotlinFiles = parsedModule.modules.flatMap { it.getSourceFiles().map(::File) }
         k2jvmArgs.friendPaths = parsedModule.modules.flatMap(Module::getFriendPaths).toTypedArray()
 
@@ -519,7 +528,7 @@ class CompileServiceImpl(
         }
 
         val workingDir = incrementalCompilationOptions.workingDir
-        val versions = commonCacheVersions(workingDir) +
+        val versions = commonCacheVersions(workingDir, enabled = true) +
                        customCacheVersion(incrementalCompilationOptions.customCacheVersion,
                                           incrementalCompilationOptions.customCacheVersionFileName,
                                           workingDir,

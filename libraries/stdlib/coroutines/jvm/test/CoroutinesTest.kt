@@ -29,8 +29,7 @@ class CoroutinesTest {
                 val ref = switcher::run // callable reference
                 ref.startCoroutine(Continuation(contextDispatcher) { result ->
                     contextDispatcher.assertThread()
-                    // todo: below does not work due to a bug in inline classes
-//                    assertEquals(42, result.getOrThrow())
+                    assertEquals(42, result.getOrThrow())
                     done.release()
                 })
                 done.acquire()
@@ -52,35 +51,3 @@ class DispatcherSwitcher(
         }
     }
 }
-
-class TestDispatcher(
-    private val name: String
-) : AbstractCoroutineContextElement(ContinuationInterceptor), ContinuationInterceptor, Closeable {
-    private lateinit var thread: Thread
-
-    val executor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, name).also { thread = it }
-    }
-
-    fun assertThread() {
-        assertEquals(thread, Thread.currentThread())
-    }
-
-    override fun <T> interceptContinuation(continuation: Continuation<T>): Continuation<T> =
-        DispatchedContinuation(continuation)
-
-    override fun close() {
-        executor.shutdown()
-    }
-
-    inner class DispatchedContinuation<T>(val delegate: Continuation<T>) : Continuation<T> {
-        override val context: CoroutineContext = delegate.context
-
-        override fun resumeWith(result: SuccessOrFailure<T>) {
-            executor.execute {
-                delegate.resumeWith(result)
-            }
-        }
-    }
-}
-

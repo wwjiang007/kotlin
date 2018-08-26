@@ -85,7 +85,7 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
 
     protected abstract fun analyzeAndCheck(testDataFile: File, files: List<TestFile>)
 
-    protected fun getKtFiles(testFiles: List<TestFile>, includeExtras: Boolean): List<KtFile> {
+    protected open fun getKtFiles(testFiles: List<TestFile>, includeExtras: Boolean): List<KtFile> {
         var declareFlexibleType = false
         var declareCheckType = false
         val ktFiles = arrayListOf<KtFile>()
@@ -108,6 +108,8 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
     }
 
     class TestModule(val name: String) : Comparable<TestModule> {
+        lateinit var languageVersionSettings: LanguageVersionSettings
+
         private val dependencies = ArrayList<TestModule>()
 
         fun getDependencies(): MutableList<TestModule> = dependencies
@@ -121,9 +123,10 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
             val module: TestModule?,
             fileName: String,
             textWithMarkers: String,
-            directives: Map<String, String>
+            val directives: Map<String, String>
     ) {
         private val diagnosedRanges: List<CheckerTestUtil.DiagnosedRange> = ArrayList()
+        val actualDiagnostics: MutableList<ActualDiagnostic> = ArrayList()
         val expectedText: String
         private val clearText: String
         private val createKtFile: Lazy<KtFile?>
@@ -237,6 +240,8 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
                     ) + jvmSignatureDiagnostics,
                     { whatDiagnosticsToConsider.value(it.diagnostic) }
             )
+
+            actualDiagnostics.addAll(diagnostics)
 
             val uncheckedDiagnostics = mutableListOf<PositionalTextDiagnostic>()
             val inferenceCompatibilityOfTest = asInferenceCompatibility(withNewInference)

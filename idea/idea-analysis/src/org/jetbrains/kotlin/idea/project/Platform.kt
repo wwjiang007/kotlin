@@ -18,7 +18,6 @@ package org.jetbrains.kotlin.idea.project
 
 import com.intellij.openapi.components.ServiceManager
 import com.intellij.openapi.module.Module
-import com.intellij.openapi.module.ModuleUtilCore
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ProjectFileIndex
@@ -32,7 +31,9 @@ import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.cli.common.arguments.*
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.config.*
+import org.jetbrains.kotlin.idea.caches.project.getModuleInfo
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
+import org.jetbrains.kotlin.idea.compiler.IDELanguageSettingsProvider
 import org.jetbrains.kotlin.idea.compiler.configuration.Kotlin2JvmCompilerArgumentsHolder
 import org.jetbrains.kotlin.idea.compiler.configuration.KotlinCommonCompilerArgumentsHolder
 import org.jetbrains.kotlin.idea.compiler.configuration.KotlinCompilerSettings
@@ -110,13 +111,14 @@ fun Module.getStableName(): Name {
 @JvmOverloads
 fun Project.getLanguageVersionSettings(
     contextModule: Module? = null,
-    jsr305State: Jsr305State? = null // this is a temporary hack until we'll have a sane way to configure libraries analysis
+    jsr305State: Jsr305State? = null,
+    isReleaseCoroutines: Boolean? = null
 ): LanguageVersionSettings {
     val arguments = KotlinCommonCompilerArgumentsHolder.getInstance(this).settings
     val languageVersion =
         LanguageVersion.fromVersionString(arguments.languageVersion)
-                ?: contextModule?.getAndCacheLanguageLevelByDependencies()
-                ?: LanguageVersion.LATEST_STABLE
+            ?: contextModule?.getAndCacheLanguageLevelByDependencies()
+            ?: LanguageVersion.LATEST_STABLE
     val apiVersion = ApiVersion.createByLanguageVersion(LanguageVersion.fromVersionString(arguments.apiVersion) ?: languageVersion)
     val compilerSettings = KotlinCompilerSettings.getInstance(this).settings
 
@@ -127,6 +129,12 @@ fun Project.getLanguageVersionSettings(
 
     val extraLanguageFeatures = additionalArguments.configureLanguageFeatures(MessageCollector.NONE).apply {
         configureCoroutinesSupport(CoroutineSupport.byCompilerArguments(KotlinCommonCompilerArgumentsHolder.getInstance(this@getLanguageVersionSettings).settings))
+        if (isReleaseCoroutines != null) {
+            put(
+                LanguageFeature.ReleaseCoroutines,
+                if (isReleaseCoroutines) LanguageFeature.State.ENABLED else LanguageFeature.State.DISABLED
+            )
+        }
     }
 
     val extraAnalysisFlags = additionalArguments.configureAnalysisFlags(MessageCollector.NONE).apply {
@@ -146,7 +154,7 @@ val Module.languageVersionSettings: LanguageVersionSettings
     get() {
         val cachedValue =
             getUserData(LANGUAGE_VERSION_SETTINGS)
-                    ?: createCachedValueForLanguageVersionSettings().also { putUserData(LANGUAGE_VERSION_SETTINGS, it) }
+                ?: createCachedValueForLanguageVersionSettings().also { putUserData(LANGUAGE_VERSION_SETTINGS, it) }
 
         return cachedValue.value
     }
@@ -237,7 +245,7 @@ val KtElement.languageVersionSettings: LanguageVersionSettings
         if (ServiceManager.getService(project, ProjectFileIndex::class.java) == null) {
             return LanguageVersionSettingsImpl.DEFAULT
         }
-        return ModuleUtilCore.findModuleForPsiElement(this)?.languageVersionSettings ?: LanguageVersionSettingsImpl.DEFAULT
+        return IDELanguageSettingsProvider.getLanguageVersionSettings(this.getModuleInfo(), project)
     }
 
 val KtElement.jvmTarget: JvmTarget
@@ -245,5 +253,5 @@ val KtElement.jvmTarget: JvmTarget
         if (ServiceManager.getService(project, ProjectFileIndex::class.java) == null) {
             return JvmTarget.DEFAULT
         }
-        return ModuleUtilCore.findModuleForPsiElement(this)?.targetPlatform?.version as? JvmTarget ?: JvmTarget.DEFAULT
+        return IDELanguageSettingsProvider.getTargetPlatform(this.getModuleInfo(), project) as? JvmTarget ?: JvmTarget.DEFAULT
     }

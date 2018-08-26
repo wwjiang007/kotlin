@@ -13,7 +13,7 @@ import proguard.gradle.ProGuardTask
 buildscript {
     extra["defaultSnapshotVersion"] = "1.2-SNAPSHOT"
 
-    kotlinBootstrapFrom(BootstrapOption.TeamCity("1.2.70-dev-415", onlySuccessBootstrap = false))
+    kotlinBootstrapFrom(BootstrapOption.TeamCity("1.2.70-dev-491", onlySuccessBootstrap = false))
 
     val mirrorRepo: String? = findProperty("maven.repository.mirror")?.toString()
 
@@ -372,19 +372,24 @@ allprojects {
     }
 }
 
-if (!isTeamcityBuild) {
-    gradle.taskGraph.whenReady {
-        for (project in allprojects) {
-            for (task in project.tasks) {
-                 when (task) {
-                     is AbstractKotlinCompile<*> -> task.incremental = true
-                     is JavaCompile -> task.options.isIncremental = true
-                     is org.gradle.jvm.tasks.Jar -> task.entryCompression = ZipEntryCompression.STORED
-                 }
+gradle.taskGraph.whenReady {
+    if (isTeamcityBuild) {
+        logger.warn("CI build profile is active (IC is off, proguard is on). Use -Pteamcity=false to reproduce local build")
+        for (task in allTasks) {
+            when (task) {
+                is AbstractKotlinCompile<*> -> task.incremental = false
+                is JavaCompile -> task.options.isIncremental = false
             }
         }
-
+    } else {
         logger.warn("Local build profile is active (IC is on, proguard is off). Use -Pteamcity=true to reproduce TC build")
+        for (task in allTasks) {
+            when (task) {
+                // todo: remove when Gradle 4.10+ is used (Java IC on by default)
+                is JavaCompile -> task.options.isIncremental = true
+                is org.gradle.jvm.tasks.Jar -> task.entryCompression = ZipEntryCompression.STORED
+            }
+        }
     }
 }
 
@@ -488,6 +493,11 @@ tasks {
         dependsOn("toolsTest")
         dependsOn("gradlePluginTest")
         dependsOn("examplesTest")
+    }
+
+    "specTest" {
+        dependsOn("dist")
+        dependsOn(":compiler:tests-spec:test")
     }
 
     "androidCodegenTest" {

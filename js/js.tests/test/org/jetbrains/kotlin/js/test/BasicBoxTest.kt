@@ -17,7 +17,7 @@ import org.jetbrains.kotlin.checkers.parseLanguageVersionSettings
 import org.jetbrains.kotlin.cli.common.messages.AnalyzerWithCompilerReport
 import org.jetbrains.kotlin.cli.common.messages.MessageRenderer
 import org.jetbrains.kotlin.cli.common.messages.PrintingMessageCollector
-import org.jetbrains.kotlin.cli.common.output.outputUtils.writeAllTo
+import org.jetbrains.kotlin.cli.common.output.writeAllTo
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.config.*
@@ -49,6 +49,7 @@ import org.jetbrains.kotlin.metadata.DebugProtoBuf
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtPsiFactory
+import org.jetbrains.kotlin.serialization.js.JsModuleDescriptor
 import org.jetbrains.kotlin.serialization.js.JsSerializerProtocol
 import org.jetbrains.kotlin.serialization.js.KotlinJavascriptSerializationUtil
 import org.jetbrains.kotlin.serialization.js.ModuleKind
@@ -58,6 +59,7 @@ import org.jetbrains.kotlin.test.KotlinTestUtils.TestFileFactory
 import org.jetbrains.kotlin.test.KotlinTestWithEnvironment
 import org.jetbrains.kotlin.test.TargetBackend
 import org.jetbrains.kotlin.utils.DFS
+import org.jetbrains.kotlin.utils.JsMetadataVersion
 import org.jetbrains.kotlin.utils.KotlinJavascriptMetadata
 import org.jetbrains.kotlin.utils.KotlinJavascriptMetadataUtils
 import java.io.*
@@ -122,7 +124,7 @@ abstract class BasicBoxTest(
                 generateJavaScriptFile(
                     file.parent, module, outputFileName, dependencies, friends, modules.size > 1,
                     !SKIP_SOURCEMAP_REMAPPING.matcher(fileContent).find(),
-                    outputPrefixFile, outputPostfixFile, mainCallParameters, testPackage, testFunction
+                    outputPrefixFile, outputPostfixFile, mainCallParameters, testPackage, testFunction, coroutinesPackage.isNotEmpty()
                 )
 
                 if (!module.name.endsWith(OLD_MODULE_SUFFIX)) Pair(outputFileName, module) else null
@@ -289,18 +291,19 @@ abstract class BasicBoxTest(
     private fun TestModule.outputFileName(directory: File) = directory.absolutePath + "/" + outputFileSimpleName() + "_v5"
 
     private fun generateJavaScriptFile(
-            directory: String,
-            module: TestModule,
-            outputFileName: String,
-            dependencies: List<String>,
-            friends: List<String>,
-            multiModule: Boolean,
-            remap: Boolean,
-            outputPrefixFile: File?,
-            outputPostfixFile: File?,
-            mainCallParameters: MainCallParameters,
-            testPackage: String?,
-            testFunction: String
+        directory: String,
+        module: TestModule,
+        outputFileName: String,
+        dependencies: List<String>,
+        friends: List<String>,
+        multiModule: Boolean,
+        remap: Boolean,
+        outputPrefixFile: File?,
+        outputPostfixFile: File?,
+        mainCallParameters: MainCallParameters,
+        testPackage: String?,
+        testFunction: String,
+        doNotCache: Boolean
     ) {
         val kotlinFiles =  module.files.filter { it.fileName.endsWith(".kt") }
         val testFiles = kotlinFiles.map { it.fileName }
@@ -322,7 +325,7 @@ abstract class BasicBoxTest(
         val incrementalData = IncrementalData()
         translateFiles(
             psiFiles.map(TranslationUnit::SourceFile), outputFile, config, outputPrefixFile, outputPostfixFile,
-            mainCallParameters, incrementalData, remap, testPackage, testFunction
+            mainCallParameters, incrementalData, remap, testPackage, testFunction, doNotCache
         )
 
         if (module.hasFilesToRecompile) {
@@ -369,7 +372,7 @@ abstract class BasicBoxTest(
 
         translateFiles(
             translationUnits, recompiledOutputFile, recompiledConfig, outputPrefixFile, outputPostfixFile,
-            mainCallParameters, incrementalData, remap, testPackage, testFunction
+            mainCallParameters, incrementalData, remap, testPackage, testFunction, false
         )
 
         val originalOutput = FileUtil.loadFile(outputFile)
@@ -394,9 +397,11 @@ abstract class BasicBoxTest(
             val originalMetadata = FileUtil.loadFile(File(outputFile.parentFile, outputFile.nameWithoutExtension + ".meta.js"))
             val recompiledMetadata = removeRecompiledSuffix(
                     FileUtil.loadFile(File(recompiledOutputFile.parentFile, recompiledOutputFile.nameWithoutExtension + ".meta.js")))
-            assertEquals("Metadata file changed after recompilation",
-                                  metadataAsString(originalMetadata, module.name),
-                                  metadataAsString(recompiledMetadata, module.name))
+            assertEquals(
+                "Metadata file changed after recompilation",
+                metadataAsString(originalMetadata),
+                metadataAsString(recompiledMetadata)
+            )
         }
     }
 
@@ -406,10 +411,11 @@ abstract class BasicBoxTest(
         return String(out.toByteArray(), Charset.forName("UTF-8"))
     }
 
-    private fun metadataAsString(metadata: String, moduleName: String): String {
-        val containers = mutableListOf<KotlinJavascriptMetadata>()
-        KotlinJavascriptMetadataUtils.parseMetadata(metadata, containers)
-        val metadataParts = KotlinJavascriptSerializationUtil.readModuleAsProto(containers.single().body, moduleName).data.body
+    private fun metadataAsString(metadataText: String): String {
+        val metadata = mutableListOf<KotlinJavascriptMetadata>().apply {
+            KotlinJavascriptMetadataUtils.parseMetadata(metadataText, this)
+        }.single()
+        val metadataParts = KotlinJavascriptSerializationUtil.readModuleAsProto(metadata.body, metadata.version).body
         return metadataParts.joinToString("-----\n") {
             val binary = it.toByteArray()
             DebugProtoBuf.PackageFragment.parseFrom(binary, JsSerializerProtocol.extensionRegistry).toString()
@@ -430,7 +436,8 @@ abstract class BasicBoxTest(
         incrementalData: IncrementalData,
         remap: Boolean,
         testPackage: String?,
-        testFunction: String
+        testFunction: String,
+        doNotCache: Boolean
     ) {
         val translator = K2JSTranslator(config)
         val translationResult = translator.translateUnits(ExceptionThrowingReporter, units, mainCallParameters)
@@ -573,8 +580,10 @@ abstract class BasicBoxTest(
         if (hasFilesToRecompile) {
             val header = incrementalData?.header
             if (header != null) {
-                configuration.put(JSConfigurationKeys.INCREMENTAL_DATA_PROVIDER,
-                                  IncrementalDataProviderImpl(header, incrementalData.translatedFiles))
+                configuration.put(
+                    JSConfigurationKeys.INCREMENTAL_DATA_PROVIDER,
+                    IncrementalDataProviderImpl(header, incrementalData.translatedFiles, JsMetadataVersion.INSTANCE.toArray())
+                )
             }
 
             configuration.put(JSConfigurationKeys.INCREMENTAL_RESULTS_CONSUMER, IncrementalResultsConsumerImpl())
@@ -738,13 +747,12 @@ abstract class BasicBoxTest(
             KotlinCoreEnvironment.createForTests(testRootDisposable, CompilerConfiguration(), EnvironmentConfigFiles.JS_CONFIG_FILES)
 
     companion object {
-        val METADATA_CACHE = (JsConfig.JS_STDLIB.asSequence() + JsConfig.JS_KOTLIN_TEST)
-                .flatMap {
-                    KotlinJavascriptMetadataUtils
-                            .loadMetadata(it).asSequence()
-                            .map { KotlinJavascriptSerializationUtil.readModuleAsProto(it.body, it.moduleName) }
-                }
-                .toList()
+        val METADATA_CACHE = (JsConfig.JS_STDLIB + JsConfig.JS_KOTLIN_TEST).flatMap { path ->
+            KotlinJavascriptMetadataUtils.loadMetadata(path).map { metadata ->
+                val parts = KotlinJavascriptSerializationUtil.readModuleAsProto(metadata.body, metadata.version)
+                JsModuleDescriptor(metadata.moduleName, parts.kind, parts.importedModules, parts)
+            }
+        }
 
         const val TEST_DATA_DIR_PATH = "js/js.translator/testData/"
         const val DIST_DIR_JS_PATH = "dist/js/"

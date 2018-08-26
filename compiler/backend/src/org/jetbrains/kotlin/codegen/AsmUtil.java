@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -15,7 +15,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
 import org.jetbrains.kotlin.builtins.PrimitiveType;
-import org.jetbrains.kotlin.builtins.UnsignedTypes;
 import org.jetbrains.kotlin.codegen.binding.CalculatedClosure;
 import org.jetbrains.kotlin.codegen.context.CodegenContext;
 import org.jetbrains.kotlin.codegen.intrinsics.HashCode;
@@ -38,6 +37,7 @@ import org.jetbrains.kotlin.resolve.InlineClassesUtilsKt;
 import org.jetbrains.kotlin.resolve.annotations.AnnotationUtilKt;
 import org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker;
 import org.jetbrains.kotlin.resolve.inline.InlineUtil;
+import org.jetbrains.kotlin.resolve.jvm.AsmTypes;
 import org.jetbrains.kotlin.resolve.jvm.JvmClassName;
 import org.jetbrains.kotlin.resolve.jvm.JvmPrimitiveType;
 import org.jetbrains.kotlin.resolve.jvm.RuntimeAssertionInfo;
@@ -45,6 +45,7 @@ import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin;
 import org.jetbrains.kotlin.serialization.DescriptorSerializer;
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor;
 import org.jetbrains.kotlin.types.KotlinType;
+import org.jetbrains.kotlin.types.SimpleType;
 import org.jetbrains.org.objectweb.asm.*;
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter;
 import org.jetbrains.org.objectweb.asm.commons.Method;
@@ -146,6 +147,10 @@ public class AsmUtil {
     @Nullable
     public static Type unboxPrimitiveTypeOrNull(@NotNull Type boxedType) {
         return primitiveTypeByBoxedType.get(boxedType);
+    }
+
+    public static boolean isBoxedPrimitiveType(@NotNull Type boxedType) {
+        return primitiveTypeByBoxedType.get(boxedType) != null;
     }
 
     @NotNull
@@ -500,19 +505,25 @@ public class AsmUtil {
     }
 
     public static int genAssignInstanceFieldFromParam(FieldInfo info, int index, InstructionAdapter iv) {
-        return genAssignInstanceFieldFromParam(info, index, iv, 0);
+        return genAssignInstanceFieldFromParam(info, index, iv, 0, false);
     }
 
     public static int genAssignInstanceFieldFromParam(
             FieldInfo info,
             int index,
             InstructionAdapter iv,
-            int ownerIndex
+            int ownerIndex,
+            boolean cast
     ) {
         assert !info.isStatic();
         Type fieldType = info.getFieldType();
         iv.load(ownerIndex, info.getOwnerType());//this
-        iv.load(index, fieldType); //param
+        if (cast) {
+            iv.load(index, AsmTypes.OBJECT_TYPE); //param
+            StackValue.coerce(AsmTypes.OBJECT_TYPE, fieldType, iv);
+        } else {
+            iv.load(index, fieldType); //param
+        }
         iv.visitFieldInsn(PUTFIELD, info.getOwnerInternalName(), info.getFieldName(), fieldType.getDescriptor());
         index += fieldType.getSize();
         return index;
@@ -524,15 +535,38 @@ public class AsmUtil {
         v.invokespecial("java/lang/StringBuilder", "<init>", "()V", false);
     }
 
-    public static void genInvokeAppendMethod(InstructionAdapter v, Type type) {
-        type = stringBuilderAppendType(type);
-        v.invokevirtual("java/lang/StringBuilder", "append", "(" + type.getDescriptor() + ")Ljava/lang/StringBuilder;", false);
+    public static void genInvokeAppendMethod(@NotNull InstructionAdapter v, @NotNull Type type, @Nullable KotlinType kotlinType) {
+        Type appendParameterType;
+        if (kotlinType != null && InlineClassesUtilsKt.isInlineClassType(kotlinType)) {
+            appendParameterType = OBJECT_TYPE;
+            SimpleType nullableAnyType = kotlinType.getConstructor().getBuiltIns().getNullableAnyType();
+            StackValue.coerce(type, kotlinType, appendParameterType, nullableAnyType, v);
+        }
+        else {
+            appendParameterType = stringBuilderAppendType(type);
+        }
+
+        v.invokevirtual("java/lang/StringBuilder", "append", "(" + appendParameterType.getDescriptor() + ")Ljava/lang/StringBuilder;", false);
     }
 
-    public static StackValue genToString(StackValue receiver, Type receiverType) {
+    public static StackValue genToString(
+            @NotNull StackValue receiver,
+            @NotNull Type receiverType,
+            @Nullable KotlinType receiverKotlinType
+    ) {
         return StackValue.operation(JAVA_STRING_TYPE, v -> {
-            Type type = stringValueOfType(receiverType);
-            receiver.put(type, v);
+            Type type;
+            KotlinType kotlinType;
+            if (receiverKotlinType != null && InlineClassesUtilsKt.isInlineClassType(receiverKotlinType)) {
+                type = OBJECT_TYPE;
+                kotlinType = receiverKotlinType.getConstructor().getBuiltIns().getNullableAnyType();
+            }
+            else {
+                type = stringValueOfType(receiverType);
+                kotlinType = null;
+            }
+
+            receiver.put(type, kotlinType, v);
             v.invokestatic("java/lang/String", "valueOf", "(" + type.getDescriptor() + ")Ljava/lang/String;", false);
             return null;
         });

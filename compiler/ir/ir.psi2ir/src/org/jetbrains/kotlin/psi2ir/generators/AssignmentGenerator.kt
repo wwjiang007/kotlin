@@ -25,10 +25,13 @@ import org.jetbrains.kotlin.ir.builders.irTemporary
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
 import org.jetbrains.kotlin.ir.expressions.impl.IrGetValueImpl
+import org.jetbrains.kotlin.ir.util.referenceFunction
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import org.jetbrains.kotlin.psi2ir.intermediate.*
+import org.jetbrains.kotlin.psi2ir.unwrappedGetMethod
+import org.jetbrains.kotlin.psi2ir.unwrappedSetMethod
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.callUtil.isSafeCall
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
@@ -102,7 +105,7 @@ class AssignmentGenerator(statementGenerator: StatementGenerator) : StatementGen
         }
     }
 
-    fun generateAssignmentReceiver(ktLeft: KtExpression, origin: IrStatementOrigin): AssignmentReceiver {
+    private fun generateAssignmentReceiver(ktLeft: KtExpression, origin: IrStatementOrigin): AssignmentReceiver {
         if (ktLeft is KtArrayAccessExpression) {
             return generateArrayAccessAssignmentReceiver(ktLeft, origin)
         }
@@ -204,10 +207,10 @@ class AssignmentGenerator(statementGenerator: StatementGenerator) : StatementGen
     ): PropertyLValueBase {
         val superQualifierSymbol = superQualifier?.let { context.symbolTable.referenceClass(it) }
 
-        val getterDescriptor = descriptor.getter
-        val getterSymbol = getterDescriptor?.let { context.symbolTable.referenceFunction(it.original) }
+        val getterDescriptor = descriptor.unwrappedGetMethod
+        val setterDescriptor = descriptor.unwrappedSetMethod
 
-        val setterDescriptor = descriptor.setter
+        val getterSymbol = getterDescriptor?.let { context.symbolTable.referenceFunction(it.original) }
         val setterSymbol = setterDescriptor?.let { context.symbolTable.referenceFunction(it.original) }
 
         val propertyIrType = descriptor.type.toIrType()

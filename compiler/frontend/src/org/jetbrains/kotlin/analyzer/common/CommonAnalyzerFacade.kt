@@ -87,8 +87,16 @@ object CommonAnalyzerFacade : ResolverForModuleFactory() {
             modulesContent = { ModuleContent(it, files, GlobalSearchScope.allScope(project)) },
             modulePlatforms = { MultiTargetPlatform.Common },
             moduleLanguageSettingsProvider = object : LanguageSettingsProvider {
-                override fun getLanguageVersionSettings(moduleInfo: ModuleInfo, project: Project) = multiplatformLanguageSettings
-                override fun getTargetPlatform(moduleInfo: ModuleInfo) = TargetPlatformVersion.NoVersion
+                override fun getLanguageVersionSettings(
+                    moduleInfo: ModuleInfo,
+                    project: Project,
+                    isReleaseCoroutines: Boolean?
+                ) = multiplatformLanguageSettings
+
+                override fun getTargetPlatform(
+                    moduleInfo: ModuleInfo,
+                    project: Project
+                ) = TargetPlatformVersion.NoVersion
             },
             resolverForModuleFactoryByPlatform = { CommonAnalyzerFacade },
             platformParameters = { _ -> CommonAnalysisParameters(metadataPartProviderFactory) }

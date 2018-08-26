@@ -27,6 +27,8 @@ import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.types.impl.originalKotlinType
 import org.jetbrains.kotlin.ir.types.makeNotNull
+import org.jetbrains.kotlin.ir.util.referenceClassifier
+import org.jetbrains.kotlin.ir.util.referenceFunction
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
@@ -236,7 +238,7 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
         val comparisonType = comparisonInfo?.comparisonType
 
         val eqeqSymbol = context.irBuiltIns.ieee754equalsFunByOperandType[comparisonType]?.symbol
-                ?: context.irBuiltIns.eqeqSymbol
+            ?: context.irBuiltIns.eqeqSymbol
 
         val irEquals = IrBinaryPrimitiveImpl(
             expression.startOffset, expression.endOffset,
@@ -275,7 +277,7 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
             val comparisonType = comparisonInfo.comparisonType
             val eqeqSymbol =
                 context.irBuiltIns.ieee754equalsFunByOperandType[comparisonType]?.symbol
-                        ?: context.irBuiltIns.eqeqSymbol
+                    ?: context.irBuiltIns.eqeqSymbol
             IrBinaryPrimitiveImpl(
                 startOffset, endOffset,
                 context.irBuiltIns.booleanType,

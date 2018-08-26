@@ -4,6 +4,12 @@
  */
 package kotlin
 
+open class Error(override val message: String?, override val cause: Throwable?) : Throwable() {
+    constructor() : this(null, null)
+    constructor(_message: String?) : this(_message, null)
+    constructor(_cause: Throwable?) : this(null, _cause)
+}
+
 open class Exception(override val message: String?, override val cause: Throwable?) : Throwable() {
     constructor() : this(null, null)
     constructor(_message: String?) : this(_message, null)
@@ -55,7 +61,15 @@ open class UnsupportedOperationException(message: String?, cause: Throwable?) : 
     constructor(cause: Throwable?) : this(null, cause)
 }
 
+open class NoSuchElementException(message: String?, cause: Throwable?) : RuntimeException(message, cause) {
+    constructor() : this(null, null)
+    constructor(message: String?) : this(message, null)
+}
+
 // TODO: fix function names to satisfy style convention (depends on built-in names)
+fun THROW_ISE() {
+    throw IllegalStateException()
+}
 fun THROW_CCE() {
     throw ClassCastException()
 }

@@ -1,4 +1,4 @@
-// IGNORE_BACKEND: JVM_IR
+// !LANGUAGE: -NormalizeConstructorCalls
 // TARGET_BACKEND: JVM
 // WITH_RUNTIME
 // FILE: test.kt

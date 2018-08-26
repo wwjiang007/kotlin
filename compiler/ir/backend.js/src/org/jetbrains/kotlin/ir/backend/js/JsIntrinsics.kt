@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.ir.backend.js
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.PrimitiveType
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.SimpleFunctionDescriptorImpl
@@ -28,7 +29,9 @@ class JsIntrinsics(
     val context: JsIrBackendContext
 ) {
 
-    private val stubBuilder = DeclarationStubGenerator(module, context.symbolTable, JsLoweredDeclarationOrigin.JS_INTRINSICS_STUB)
+    private val stubBuilder = DeclarationStubGenerator(
+        module, context.symbolTable, JsLoweredDeclarationOrigin.JS_INTRINSICS_STUB, irBuiltIns.languageVersionSettings
+    )
 
     // Equality operations:
 
@@ -63,6 +66,12 @@ class JsIntrinsics(
     val jsDiv = binOp("jsDiv")
     val jsMod = binOp("jsMod")
 
+    val jsPlusAssign = binOp("jsPlusAssign")
+    val jsMinusAssign = binOp("jsMinusAssign")
+    val jsMultAssign = binOp("jsMultAssign")
+    val jsDivAssign = binOp("jsDivAssign")
+    val jsModAssign = binOp("jsModAssign")
+
     val jsAnd = binOp("jsAnd")
     val jsOr = binOp("jsOr")
 
@@ -91,7 +100,6 @@ class JsIntrinsics(
     val jsInstanceOf = binOpBool("jsInstanceOf")
     val jsTypeOf = unOp("jsTypeOf", irBuiltIns.string)
 
-
     // Number conversions:
 
     val jsNumberToByte = getInternalFunction("numberToByte")
@@ -111,17 +119,43 @@ class JsIntrinsics(
     //    val isCharSymbol = getInternalFunction("isChar")
     val isObjectSymbol = getInternalFunction("isObject")
 
+    val isPrimitiveArray = mapOf(
+        PrimitiveType.BOOLEAN to getInternalFunction("isBooleanArray"),
+        PrimitiveType.BYTE to getInternalFunction("isByteArray"),
+        PrimitiveType.SHORT to getInternalFunction("isShortArray"),
+        PrimitiveType.CHAR to getInternalFunction("isCharArray"),
+        PrimitiveType.INT to getInternalFunction("isIntArray"),
+        PrimitiveType.FLOAT to getInternalFunction("isFloatArray"),
+        PrimitiveType.LONG to getInternalFunction("isLongArray"),
+        PrimitiveType.DOUBLE to getInternalFunction("isLongArray")
+    )
+
     // Other:
 
     val jsObjectCreate = defineObjectCreateIntrinsic() // Object.create
     val jsSetJSField = defineSetJSPropertyIntrinsic() // till we don't have dynamic type we use intrinsic which sets a field with any name
-    val jsToJsType = defineToJsType() // creates name reference to KotlinType
     val jsCode = getInternalFunction("js") // js("<code>")
     val jsHashCode = getInternalFunction("hashCode")
+    val jsGetObjectHashCode = getInternalFunction("getObjectHashCode")
     val jsToString = getInternalFunction("toString")
+    val jsAnyToString = getInternalFunction("anyToString")
     val jsCompareTo = getInternalFunction("compareTo")
     val jsEquals = getInternalFunction("equals")
 
+    // Coroutines
+
+    val jsCoroutineContext = context.symbolTable.referenceSimpleFunction(context.coroutineContextProperty.getter!!)
+
+    val jsGetContinuation = context.run {
+        val f = getInternalFunctions("getContinuation")
+        symbolTable.referenceSimpleFunction(f.single())
+    }
+    val jsGetKClass = getInternalWithoutPackage("getKClass")
+    val jsGetKClassFromExpression = getInternalWithoutPackage("getKClassFromExpression")
+    val jsClass = getInternalFunction("jsClass")
+
+    val jsNumberRangeToNumber = getInternalFunction("numberRangeToNumber")
+    val jsNumberRangeToLong = getInternalFunction("numberRangeToLong")
 
     val longConstructor =
         context.symbolTable.referenceConstructor(context.getClass(FqName("kotlin.Long")).constructors.single())
@@ -143,28 +177,9 @@ class JsIntrinsics(
     private fun getInternalFunction(name: String) =
         context.symbolTable.referenceSimpleFunction(context.getInternalFunctions(name).single())
 
-    private fun defineToJsType(): IrSimpleFunction {
-        val desc = SimpleFunctionDescriptorImpl.create(
-            module,
-            Annotations.EMPTY,
-            Name.identifier("\$toJSType\$"),
-            CallableMemberDescriptor.Kind.SYNTHESIZED,
-            SourceElement.NO_SOURCE
-        ).apply {
+    private fun getInternalWithoutPackage(name: String) =
+        context.symbolTable.referenceSimpleFunction(context.getFunctions(FqName(name)).single())
 
-            val typeParameter = TypeParameterDescriptorImpl.createWithDefaultBound(
-                this,
-                Annotations.EMPTY,
-                false,
-                Variance.INVARIANT,
-                Name.identifier("T"),
-                0
-            )
-            initialize(null, null, listOf(typeParameter), emptyList(), builtIns.anyType, Modality.FINAL, Visibilities.PUBLIC)
-        }
-
-        return stubBuilder.generateFunctionStub(desc)
-    }
 
     // TODO: unify how we create intrinsic symbols
     private fun defineObjectCreateIntrinsic(): IrSimpleFunction {

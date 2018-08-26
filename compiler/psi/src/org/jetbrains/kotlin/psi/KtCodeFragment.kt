@@ -87,7 +87,8 @@ abstract class KtCodeFragment(
     override fun getContext(): PsiElement? {
         if (fakeContextForJavaFile != null) return fakeContextForJavaFile
         if (context !is KtElement) {
-            LOG.warn("CodeFragment with non-kotlin context should have fakeContextForJavaFile set: \noriginalContext = ${context?.getElementTextWithContext()}")
+            val logInfoForContextElement = (context as? PsiFile)?.virtualFile?.path ?: context?.getElementTextWithContext()
+            LOG.warn("CodeFragment with non-kotlin context should have fakeContextForJavaFile set: \noriginalContext = $logInfoForContextElement")
             return null
         }
 
@@ -166,7 +167,7 @@ abstract class KtCodeFragment(
 
     override fun getExceptionHandler() = exceptionHandler
 
-    override fun importClass(aClass: PsiClass?): Boolean {
+    override fun importClass(aClass: PsiClass): Boolean {
         return true
     }
 

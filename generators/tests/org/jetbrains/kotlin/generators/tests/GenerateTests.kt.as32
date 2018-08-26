@@ -225,7 +225,11 @@ fun main(args: Array<String>) {
         }
 
         testClass<AbstractParameterInfoTest> {
-            model("parameterInfo", recursive = true, excludeDirs = listOf("withLib1/sharedLib", "withLib2/sharedLib", "withLib3/sharedLib"))
+            model(
+                "parameterInfo",
+                pattern = "^([\\w\\-_]+)\\.kt$", recursive = true,
+                excludeDirs = listOf("withLib1/sharedLib", "withLib2/sharedLib", "withLib3/sharedLib")
+            )
         }
 
         testClass<AbstractKotlinGotoTest> {
@@ -389,7 +393,7 @@ fun main(args: Array<String>) {
         }
 
         testClass<AbstractQuickDocProviderTest> {
-            model("editor/quickDoc", pattern = """^([^_]+)\.[^\.]*$""")
+            model("editor/quickDoc", pattern = """^([^_]+)\.(kt|java)$""")
         }
 
         testClass<AbstractSafeDeleteTest> {
@@ -829,7 +833,7 @@ fun main(args: Array<String>) {
         }
 
         testClass<AbstractBasicCompletionWeigherTest> {
-            model("weighers/basic", pattern = KT_WITHOUT_DOTS_IN_NAME)
+            model("weighers/basic", pattern = KT_OR_KTS_WITHOUT_DOTS_IN_NAME)
         }
 
         testClass<AbstractSmartCompletionWeigherTest> {
@@ -928,11 +932,25 @@ fun main(args: Array<String>) {
 /*  There is no jps in AS
     testGroup("jps-plugin/jps-tests/test", "jps-plugin/testData") {
         testClass<AbstractIncrementalJpsTest> {
-            model("incremental/multiModule", extension = null, excludeParentDirs = true)
+            model("incremental/multiModule/common", extension = null, excludeParentDirs = true)
+            model("incremental/multiModule/jvm", extension = null, excludeParentDirs = true)
             model("incremental/pureKotlin", extension = null, recursive = false)
             model("incremental/withJava", extension = null, excludeParentDirs = true)
             model("incremental/inlineFunCallSite", extension = null, excludeParentDirs = true)
             model("incremental/classHierarchyAffected", extension = null, excludeParentDirs = true)
+        }
+
+        actualizeMppJpsIncTestCaseDirs(testDataRoot, "incremental/multiplatform/multiModule")
+
+        testClass<AbstractIncrementalJsJpsTest> {
+            model("incremental/multiModule/common", extension = null, excludeParentDirs = true)
+        }
+
+        testClass<AbstractMultiplatformJpsTest> {
+            model(
+                "incremental/multiplatform/multiModule", extension = null, excludeParentDirs = true,
+                testClassName = "MultiplatformMultiModule", recursive = true
+            )
         }
 
         testClass<AbstractJvmLookupTrackerTest> {

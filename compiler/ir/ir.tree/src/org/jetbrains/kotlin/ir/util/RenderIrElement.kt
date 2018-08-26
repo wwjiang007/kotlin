@@ -122,7 +122,8 @@ class RenderIrElementVisitor : IrElementVisitor<String, Nothing?> {
     private fun IrField.renderFieldFlags() =
         renderFlagsList(
             "final".takeIf { isFinal },
-            "external".takeIf { isExternal }
+            "external".takeIf { isExternal },
+            "static".takeIf { isStatic }
         )
 
     override fun visitClass(declaration: IrClass, data: Nothing?): String =
@@ -138,7 +139,8 @@ class RenderIrElementVisitor : IrElementVisitor<String, Nothing?> {
             "companion".takeIf { isCompanion },
             "inner".takeIf { isInner },
             "data".takeIf { isData },
-            "external".takeIf { isExternal }
+            "external".takeIf { isExternal },
+            "inline".takeIf { isInline }
         )
 
     override fun visitTypeAlias(declaration: IrTypeAlias, data: Nothing?): String =

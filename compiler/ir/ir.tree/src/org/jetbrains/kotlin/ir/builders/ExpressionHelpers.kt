@@ -8,18 +8,13 @@ package org.jetbrains.kotlin.ir.builders
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.VariableDescriptor
 import org.jetbrains.kotlin.ir.IrElement
-import org.jetbrains.kotlin.ir.declarations.IrField
-import org.jetbrains.kotlin.ir.declarations.IrFunction
-import org.jetbrains.kotlin.ir.declarations.IrValueDeclaration
-import org.jetbrains.kotlin.ir.declarations.IrVariable
+import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.*
-import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
-import org.jetbrains.kotlin.ir.symbols.IrReturnTargetSymbol
-import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
-import org.jetbrains.kotlin.ir.symbols.IrVariableSymbol
+import org.jetbrains.kotlin.ir.symbols.*
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classifierOrFail
+import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.utils.addToStdlib.assertedCast
 
 
@@ -52,8 +47,12 @@ inline fun IrBuilderWithScope.irLetS(
 }
 
 
-fun <T : IrElement> IrStatementsBuilder<T>.irTemporary(value: IrExpression, nameHint: String? = null): IrVariable {
-    val temporary = scope.createTemporaryVariable(value, nameHint)
+fun <T : IrElement> IrStatementsBuilder<T>.irTemporary(
+    value: IrExpression,
+    nameHint: String? = null,
+    typeHint: KotlinType? = null
+): IrVariable {
+    val temporary = scope.createTemporaryVariable(value, nameHint, type = typeHint)
     +temporary
     return temporary
 }
@@ -64,8 +63,14 @@ fun <T : IrElement> IrStatementsBuilder<T>.defineTemporary(value: IrExpression, 
     return temporary.descriptor
 }
 
-fun <T : IrElement> IrStatementsBuilder<T>.irTemporaryVar(value: IrExpression, nameHint: String? = null): IrVariable {
-    val temporary = scope.createTemporaryVariable(value, nameHint, isMutable = true)
+fun <T : IrElement> IrStatementsBuilder<T>.irTemporaryVar(
+    value: IrExpression,
+    nameHint: String? = null,
+    typeHint: KotlinType? = null,
+    parent: IrDeclarationParent? = null
+): IrVariable {
+    val temporary = scope.createTemporaryVariable(value, nameHint, isMutable = true, type = typeHint)
+    parent?.let { temporary.parent = it }
     +temporary
     return temporary
 }
@@ -80,6 +85,9 @@ fun <T : IrElement> IrStatementsBuilder<T>.defineTemporaryVar(value: IrExpressio
 fun IrBuilderWithScope.irExprBody(value: IrExpression) =
     IrExpressionBodyImpl(startOffset, endOffset, value)
 
+fun IrBuilderWithScope.irWhen(type: IrType, branches: List<IrBranch>) =
+    IrWhenImpl(startOffset, endOffset, type, null, branches)
+
 fun IrBuilderWithScope.irReturn(value: IrExpression) =
     IrReturnImpl(
         startOffset, endOffset,
@@ -93,10 +101,17 @@ fun IrBuilderWithScope.irReturn(value: IrExpression) =
 fun IrBuilderWithScope.irBoolean(value: Boolean) =
     IrConstImpl(startOffset, endOffset, context.irBuiltIns.booleanType, IrConstKind.Boolean, value)
 
+fun IrBuilderWithScope.irUnit() =
+    irGetObjectValue(context.irBuiltIns.unitType, context.irBuiltIns.unitClass)
+
 fun IrBuilderWithScope.irTrue() = irBoolean(true)
 fun IrBuilderWithScope.irFalse() = irBoolean(false)
 fun IrBuilderWithScope.irReturnTrue() = irReturn(irTrue())
 fun IrBuilderWithScope.irReturnFalse() = irReturn(irFalse())
+fun IrBuilderWithScope.irReturnUnit() = irReturn(irUnit())
+
+fun IrBuilderWithScope.irBranch(condition: IrExpression, result: IrExpression) =
+    IrBranchImpl(startOffset, endOffset, condition, result)
 
 fun IrBuilderWithScope.irElseBranch(expression: IrExpression) =
     IrElseBranchImpl(startOffset, endOffset, irTrue(), expression)
@@ -121,7 +136,7 @@ fun IrBuilderWithScope.irIfThenMaybeElse(type: IrType, condition: IrExpression, 
 fun IrBuilderWithScope.irIfNull(type: IrType, subject: IrExpression, thenPart: IrExpression, elsePart: IrExpression) =
     irIfThenElse(type, irEqualsNull(subject), thenPart, elsePart)
 
-fun IrBuilderWithScope.irThrowNpe(origin: IrStatementOrigin) =
+fun IrBuilderWithScope.irThrowNpe(origin: IrStatementOrigin? = null) =
     IrNullaryPrimitiveImpl(startOffset, endOffset, context.irBuiltIns.nothingType, origin, context.irBuiltIns.throwNpeSymbol)
 
 fun IrBuilderWithScope.irIfThenReturnTrue(condition: IrExpression) =
@@ -141,6 +156,12 @@ fun IrBuilderWithScope.irSetVar(variable: IrVariableSymbol, value: IrExpression)
 fun IrBuilderWithScope.irGetField(receiver: IrExpression?, field: IrField) =
     IrGetFieldImpl(startOffset, endOffset, field.symbol, field.type, receiver)
 
+fun IrBuilderWithScope.irSetField(receiver: IrExpression?, field: IrField, value: IrExpression) =
+    IrSetFieldImpl(startOffset, endOffset, field.symbol, receiver, value, field.type)
+
+fun IrBuilderWithScope.irGetObjectValue(type: IrType, classSymbol: IrClassSymbol) =
+    IrGetObjectValueImpl(startOffset, endOffset, type, classSymbol)
+
 fun IrBuilderWithScope.irEqeqeq(arg1: IrExpression, arg2: IrExpression) =
     context.eqeqeq(startOffset, endOffset, arg1, arg2)
 
@@ -153,13 +174,16 @@ fun IrBuilderWithScope.irEqualsNull(argument: IrExpression) =
         argument, irNull()
     )
 
+fun IrBuilderWithScope.irEquals(arg1: IrExpression, arg2: IrExpression, origin: IrStatementOrigin = IrStatementOrigin.EQEQ) =
+    primitiveOp2(
+        startOffset, endOffset, context.irBuiltIns.eqeqSymbol, origin,
+        arg1, arg2
+    )
+
 fun IrBuilderWithScope.irNotEquals(arg1: IrExpression, arg2: IrExpression) =
     primitiveOp1(
         startOffset, endOffset, context.irBuiltIns.booleanNotSymbol, IrStatementOrigin.EXCLEQ,
-        primitiveOp2(
-            startOffset, endOffset, context.irBuiltIns.eqeqSymbol, IrStatementOrigin.EXCLEQ,
-            arg1, arg2
-        )
+        irEquals(arg1, arg2, origin = IrStatementOrigin.EXCLEQ)
     )
 
 fun IrBuilderWithScope.irGet(type: IrType, receiver: IrExpression, getterSymbol: IrFunctionSymbol): IrCall =
@@ -173,8 +197,12 @@ fun IrBuilderWithScope.irGet(type: IrType, receiver: IrExpression, getterSymbol:
         origin = IrStatementOrigin.GET_PROPERTY
     )
 
-fun IrBuilderWithScope.irCall(callee: IrFunctionSymbol, type: IrType): IrCall =
-    IrCallImpl(startOffset, endOffset, type, callee, callee.descriptor)
+fun IrBuilderWithScope.irCall(callee: IrFunctionSymbol, type: IrType, typeArguments: List<IrType> = emptyList()): IrCall =
+    IrCallImpl(startOffset, endOffset, type, callee, callee.descriptor).apply {
+        typeArguments.forEachIndexed { index, irType ->
+            this.putTypeArgument(index, irType)
+        }
+    }
 
 fun IrBuilderWithScope.irCall(callee: IrFunctionSymbol): IrCall =
     IrCallImpl(startOffset, endOffset, callee.owner.returnType, callee, callee.descriptor)
@@ -185,6 +213,8 @@ fun IrBuilderWithScope.irCall(callee: IrFunctionSymbol, descriptor: FunctionDesc
 fun IrBuilderWithScope.irCall(callee: IrFunction): IrCall =
     irCall(callee.symbol, callee.descriptor, callee.returnType)
 
+fun IrBuilderWithScope.irDelegatingConstructorCall(callee: IrConstructor): IrDelegatingConstructorCall =
+    IrDelegatingConstructorCallImpl(startOffset, endOffset, callee.returnType, callee.symbol, callee.descriptor, callee.typeParameters.size)
 
 fun IrBuilderWithScope.irCallOp(
     callee: IrFunctionSymbol,
@@ -225,3 +255,14 @@ fun IrBuilderWithScope.irString(value: String) =
 
 fun IrBuilderWithScope.irConcat() =
     IrStringConcatenationImpl(startOffset, endOffset, context.irBuiltIns.stringType)
+
+
+fun IrBuilderWithScope.irSetField(receiver: IrExpression, irField: IrField, value: IrExpression): IrExpression =
+    IrSetFieldImpl(
+        startOffset,
+        endOffset,
+        irField.symbol,
+        receiver = receiver,
+        value = value,
+        type = context.irBuiltIns.unitType
+    )
