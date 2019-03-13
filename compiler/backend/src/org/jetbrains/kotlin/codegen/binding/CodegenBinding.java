@@ -6,6 +6,8 @@
 package org.jetbrains.kotlin.codegen.binding;
 
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiFile;
 import kotlin.collections.CollectionsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -55,7 +57,10 @@ public class CodegenBinding {
     public static final WritableSlice<FunctionDescriptor, FunctionDescriptor> SUSPEND_FUNCTION_TO_JVM_VIEW =
             Slices.createSimpleSlice();
 
-    public static final WritableSlice<FunctionDescriptor, Boolean> CAPTURES_CROSSINLINE_SUSPEND_LAMBDA =
+    public static final WritableSlice<FunctionDescriptor, Boolean> CAPTURES_CROSSINLINE_LAMBDA =
+            Slices.createSimpleSlice();
+
+    public static final WritableSlice<ClassDescriptor, Boolean> RECURSIVE_SUSPEND_CALLABLE_REFERENCE =
             Slices.createSimpleSlice();
 
     public static final WritableSlice<ValueParameterDescriptor, ValueParameterDescriptor> PARAMETER_SYNONYM =
@@ -67,6 +72,8 @@ public class CodegenBinding {
             Slices.createSimpleSlice();
     public static final WritableSlice<VariableDescriptor, VariableDescriptor> LOCAL_VARIABLE_PROPERTY_METADATA =
             Slices.createSimpleSlice();
+
+    public static final WritableSlice<FunctionDescriptor, String> CALL_LABEL_FOR_LAMBDA_ARGUMENT = Slices.createSimpleSlice();
 
     static {
         BasicWritableSlice.initSliceDebugNames(CodegenBinding.class);
@@ -85,6 +92,15 @@ public class CodegenBinding {
         CodegenAnnotatingVisitor visitor = new CodegenAnnotatingVisitor(state);
         for (KtFile file : allFilesInPackages(state.getBindingContext(), state.getFiles())) {
             file.accept(visitor);
+            if (file instanceof KtCodeFragment) {
+                PsiElement context = file.getContext();
+                if (context != null) {
+                    PsiFile contextFile = context.getContainingFile();
+                    if (contextFile != null) {
+                        contextFile.accept(visitor);
+                    }
+                }
+            }
         }
     }
 
@@ -184,7 +200,7 @@ public class CodegenBinding {
         MutableClosure closure = new MutableClosure(classDescriptor, enclosing);
 
         if (classDescriptor.isInner()) {
-            closure.setCaptureThis();
+            closure.setNeedsCaptureOuterClass();
         }
 
         trace.record(ASM_TYPE, classDescriptor, asmType);

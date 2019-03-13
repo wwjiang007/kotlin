@@ -25,9 +25,10 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.protobuf.GeneratedMessageLite
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils.isInterface
-import org.jetbrains.kotlin.resolve.annotations.hasJvmDefaultAnnotation
 import org.jetbrains.kotlin.resolve.descriptorUtil.classId
+import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyPrivateApi
 import org.jetbrains.kotlin.resolve.descriptorUtil.nonSourceAnnotations
+import org.jetbrains.kotlin.resolve.jvm.annotations.hasJvmDefaultAnnotation
 import org.jetbrains.kotlin.serialization.DescriptorSerializer
 import org.jetbrains.kotlin.serialization.DescriptorSerializer.Companion.writeVersionRequirement
 import org.jetbrains.kotlin.serialization.SerializerExtension
@@ -47,11 +48,27 @@ class JvmSerializerExtension(private val bindings: JvmSerializationBindings, sta
     override val metadataVersion = state.metadataVersion
 
     override fun shouldUseTypeTable(): Boolean = useTypeTable
+    override fun shouldSerializeFunction(descriptor: FunctionDescriptor): Boolean {
+        return classBuilderMode != ClassBuilderMode.ABI || descriptor.visibility != Visibilities.PRIVATE
+    }
+
+    override fun shouldSerializeProperty(descriptor: PropertyDescriptor): Boolean {
+        return classBuilderMode != ClassBuilderMode.ABI || descriptor.visibility != Visibilities.PRIVATE
+    }
+
+    override fun shouldSerializeTypeAlias(descriptor: TypeAliasDescriptor): Boolean {
+        return classBuilderMode != ClassBuilderMode.ABI || descriptor.visibility != Visibilities.PRIVATE
+    }
+
+    override fun shouldSerializeNestedClass(descriptor: ClassDescriptor): Boolean {
+        return classBuilderMode != ClassBuilderMode.ABI || !descriptor.isEffectivelyPrivateApi
+    }
 
     override fun serializeClass(
-        descriptor: ClassDescriptor,
-        proto: ProtoBuf.Class.Builder,
-        versionRequirementTable: MutableVersionRequirementTable
+            descriptor: ClassDescriptor,
+            proto: ProtoBuf.Class.Builder,
+            versionRequirementTable: MutableVersionRequirementTable,
+            childSerializer: DescriptorSerializer
     ) {
         if (moduleName != JvmAbi.DEFAULT_MODULE_NAME) {
             proto.setExtension(JvmProtoBuf.classModuleName, stringTable.getStringIndex(moduleName))
@@ -102,7 +119,7 @@ class JvmSerializerExtension(private val bindings: JvmSerializationBindings, sta
         for (localVariable in localVariables) {
             val propertyDescriptor = createFreeFakeLocalPropertyDescriptor(localVariable)
             val serializer = DescriptorSerializer.createForLambda(this)
-            proto.addExtension(extension, serializer.propertyProto(propertyDescriptor).build())
+            proto.addExtension(extension, serializer.propertyProto(propertyDescriptor)?.build() ?: continue)
         }
     }
 
@@ -134,7 +151,9 @@ class JvmSerializerExtension(private val bindings: JvmSerializationBindings, sta
         }
     }
 
-    override fun serializeConstructor(descriptor: ConstructorDescriptor, proto: ProtoBuf.Constructor.Builder) {
+    override fun serializeConstructor(descriptor: ConstructorDescriptor,
+                                      proto: ProtoBuf.Constructor.Builder,
+                                      childSerializer: DescriptorSerializer) {
         val method = bindings.get(METHOD_FOR_FUNCTION, descriptor)
         if (method != null) {
             val signature = SignatureSerializer().methodSignature(descriptor, method)
@@ -144,7 +163,9 @@ class JvmSerializerExtension(private val bindings: JvmSerializationBindings, sta
         }
     }
 
-    override fun serializeFunction(descriptor: FunctionDescriptor, proto: ProtoBuf.Function.Builder) {
+    override fun serializeFunction(descriptor: FunctionDescriptor,
+                                   proto: ProtoBuf.Function.Builder,
+                                   childSerializer: DescriptorSerializer) {
         val method = bindings.get(METHOD_FOR_FUNCTION, descriptor)
         if (method != null) {
             val signature = SignatureSerializer().methodSignature(descriptor, method)
@@ -155,9 +176,10 @@ class JvmSerializerExtension(private val bindings: JvmSerializationBindings, sta
     }
 
     override fun serializeProperty(
-        descriptor: PropertyDescriptor,
-        proto: ProtoBuf.Property.Builder,
-        versionRequirementTable: MutableVersionRequirementTable
+            descriptor: PropertyDescriptor,
+            proto: ProtoBuf.Property.Builder,
+            versionRequirementTable: MutableVersionRequirementTable?,
+            childSerializer: DescriptorSerializer
     ) {
         val signatureSerializer = SignatureSerializer()
 
@@ -182,7 +204,7 @@ class JvmSerializerExtension(private val bindings: JvmSerializationBindings, sta
             proto.setExtension(JvmProtoBuf.propertySignature, signature)
         }
 
-        if (descriptor.isJvmFieldPropertyInInterfaceCompanion()) {
+        if (descriptor.isJvmFieldPropertyInInterfaceCompanion() && versionRequirementTable != null) {
             proto.setExtension(JvmProtoBuf.flags, JvmFlags.getPropertyFlags(true))
 
             proto.addVersionRequirement(

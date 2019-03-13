@@ -76,18 +76,18 @@ class DeserializedSimpleFunctionDescriptor(
         private set
 
     fun initialize(
-        receiverParameterType: KotlinType?,
+        extensionReceiverParameter: ReceiverParameterDescriptor?,
         dispatchReceiverParameter: ReceiverParameterDescriptor?,
         typeParameters: List<TypeParameterDescriptor>,
         unsubstitutedValueParameters: List<ValueParameterDescriptor>,
         unsubstitutedReturnType: KotlinType?,
         modality: Modality?,
         visibility: Visibility,
-        userDataMap: Map<out FunctionDescriptor.UserDataKey<*>, *>,
+        userDataMap: Map<out CallableDescriptor.UserDataKey<*>, *>,
         isExperimentalCoroutineInReleaseEnvironment: DeserializedMemberDescriptor.CoroutinesCompatibilityMode
     ): SimpleFunctionDescriptorImpl {
         return super.initialize(
-            receiverParameterType,
+            extensionReceiverParameter,
             dispatchReceiverParameter,
             typeParameters,
             unsubstitutedValueParameters,
@@ -146,9 +146,11 @@ class DeserializedPropertyDescriptor(
     fun initialize(
         getter: PropertyGetterDescriptorImpl?,
         setter: PropertySetterDescriptor?,
+        backingField: FieldDescriptor?,
+        delegateField: FieldDescriptor?,
         isExperimentalCoroutineInReleaseEnvironment: DeserializedMemberDescriptor.CoroutinesCompatibilityMode
     ) {
-        super.initialize(getter, setter)
+        super.initialize(getter, setter, backingField, delegateField)
             .also { this.coroutinesExperimentalCompatibilityMode = isExperimentalCoroutineInReleaseEnvironment }
     }
 

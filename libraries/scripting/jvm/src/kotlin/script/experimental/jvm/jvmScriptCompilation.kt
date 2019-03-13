@@ -5,10 +5,11 @@
 
 package kotlin.script.experimental.jvm
 
-import org.jetbrains.kotlin.script.util.scriptCompilationClasspathFromContext
 import java.io.File
+import kotlin.reflect.KClass
 import kotlin.script.experimental.api.*
 import kotlin.script.experimental.host.ScriptingHostConfiguration
+import kotlin.script.experimental.jvm.util.scriptCompilationClasspathFromContext
 import kotlin.script.experimental.util.PropertiesCollection
 
 data class JvmDependency(val classpath: List<File>) : ScriptDependency {
@@ -22,6 +23,12 @@ open class JvmScriptCompilationConfigurationBuilder : PropertiesCollection.Build
     companion object : JvmScriptCompilationConfigurationKeys
 }
 
+fun JvmScriptCompilationConfigurationBuilder.dependenciesFromClassContext(
+    contextClass: KClass<*>, vararg libraries: String, wholeClasspath: Boolean = false
+) {
+    dependenciesFromClassloader(*libraries, classLoader = contextClass.java.classLoader, wholeClasspath = wholeClasspath)
+}
+
 fun JvmScriptCompilationConfigurationBuilder.dependenciesFromCurrentContext(vararg libraries: String, wholeClasspath: Boolean = false) {
     dependenciesFromClassloader(*libraries, wholeClasspath = wholeClasspath)
 }
@@ -31,12 +38,46 @@ fun JvmScriptCompilationConfigurationBuilder.dependenciesFromClassloader(
     classLoader: ClassLoader = Thread.currentThread().contextClassLoader,
     wholeClasspath: Boolean = false
 ) {
-    ScriptCompilationConfiguration.dependencies.append(
-        JvmDependency(scriptCompilationClasspathFromContext(*libraries, classLoader = classLoader, wholeClasspath = wholeClasspath))
+    updateClasspath(
+        scriptCompilationClasspathFromContext(*libraries, classLoader = classLoader, wholeClasspath = wholeClasspath)
     )
 }
 
+fun ScriptCompilationConfiguration.withUpdatedClasspath(classpath: Collection<File>): ScriptCompilationConfiguration {
+
+    val newClasspath = classpath.filterNewClasspath(this[ScriptCompilationConfiguration.dependencies])
+        ?: return this
+
+    return ScriptCompilationConfiguration(this) {
+        dependencies.append(JvmDependency(newClasspath))
+    }
+}
+
+fun ScriptCompilationConfiguration.Builder.updateClasspath(classpath: Collection<File>) = updateClasspathImpl(classpath)
+
+fun JvmScriptCompilationConfigurationBuilder.updateClasspath(classpath: Collection<File>) = updateClasspathImpl(classpath)
+
+private fun PropertiesCollection.Builder.updateClasspathImpl(classpath: Collection<File>) {
+    val newClasspath = classpath.filterNewClasspath(this[ScriptCompilationConfiguration.dependencies])
+        ?: return
+
+    ScriptCompilationConfiguration.dependencies.append(JvmDependency(newClasspath))
+}
+
+private fun Collection<File>.filterNewClasspath(known: Collection<ScriptDependency>?): List<File>? {
+
+    if (isEmpty()) return null
+
+    val knownClasspath = known?.flatMapTo(hashSetOf<File>()) {
+        (it as? JvmDependency)?.classpath ?: emptyList()
+    }
+    return filterNot { knownClasspath?.contains(it) == true }.takeIf { it.isNotEmpty() }
+}
+
+@Deprecated("Unused")
 val JvmScriptCompilationConfigurationKeys.javaHome by PropertiesCollection.keyCopy(ScriptingHostConfiguration.jvm.javaHome)
+
+val JvmScriptCompilationConfigurationKeys.jdkHome by PropertiesCollection.keyCopy(ScriptingHostConfiguration.jvm.jdkHome)
 
 @Suppress("unused")
 val ScriptCompilationConfigurationKeys.jvm

@@ -16,9 +16,28 @@ projectTest {
     workingDir = rootDir
 }
 
-val generateTests by generator("org.jetbrains.kotlin.generators.tests.GenerateCompilerSpecTestsKt")
+val generateSpecTests by generator("org.jetbrains.kotlin.spec.tasks.GenerateSpecTestsKt")
 
-val printSpecTestsStatistic by smartJavaExec {
-    classpath = javaPluginConvention().sourceSets.getByName("test").runtimeClasspath
-    main = "org.jetbrains.kotlin.spec.tasks.PrintSpecTestsStatisticKt"
+val generateFeatureInteractionSpecTestData by generator("org.jetbrains.kotlin.spec.tasks.GenerateFeatureInteractionSpecTestDataKt")
+
+val printSpecTestsStatistic by generator("org.jetbrains.kotlin.spec.tasks.PrintSpecTestsStatisticKt")
+
+val generateJsonTestsMap by generator("org.jetbrains.kotlin.spec.tasks.GenerateJsonTestsMapKt")
+
+val remoteRunTests by task<Test> {
+    val packagePrefix = "org.jetbrains.kotlin."
+    val includeTests = setOf(
+        "checkers.DiagnosticsTestSpecGenerated\$NotLinked\$Contracts*",
+        "checkers.DiagnosticsTestSpecGenerated\$NotLinked\$Annotations*",
+        "checkers.DiagnosticsTestSpecGenerated\$NotLinked\$Local_variables\$Type_parameters*",
+        "checkers.DiagnosticsTestSpecGenerated\$Linked\$Type_inference*",
+        "codegen.BlackBoxCodegenTestSpecGenerated\$NotLinked\$Annotations\$Type_annotations*",
+        "codegen.BlackBoxCodegenTestSpecGenerated\$NotLinked\$Objects\$Inheritance*"
+    )
+
+    workingDir = rootDir
+
+    filter {
+        includeTests.forEach { includeTestsMatching(packagePrefix + it) }
+    }
 }

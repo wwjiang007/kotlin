@@ -27,13 +27,13 @@ class KotlinJavascriptMetadata(val version: JsMetadataVersion, val moduleName: S
 // TODO: move to JS modules
 class JsMetadataVersion(vararg numbers: Int) : BinaryVersion(*numbers) {
     override fun isCompatible(): Boolean =
-        isMetadataVersionCompatible()
+        this.isCompatibleTo(INSTANCE)
 
     fun toInteger() = (patch shl 16) + (minOf(minor, 255) shl 8) + minOf(major, 255)
 
     companion object {
         @JvmField
-        val INSTANCE = JsMetadataVersion(1, 2, 4)
+        val INSTANCE = JsMetadataVersion(1, 2, 6)
 
         @JvmField
         val INVALID_VERSION = JsMetadataVersion()

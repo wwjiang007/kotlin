@@ -16,7 +16,8 @@ import org.jetbrains.kotlin.analyzer.AnalysisResult
 import org.jetbrains.kotlin.analyzer.ModuleInfo
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.idea.caches.project.getModuleInfo
+import org.jetbrains.kotlin.idea.caches.project.IdeaModuleInfo
+import org.jetbrains.kotlin.idea.caches.project.getNullableModuleInfo
 import org.jetbrains.kotlin.idea.resolve.ResolutionFacade
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtElement
@@ -29,7 +30,11 @@ import org.jetbrains.kotlin.utils.KotlinExceptionWithAttachments
 private class ResolutionFacadeWithDebugInfo(
     private val delegate: ResolutionFacade,
     private val creationPlace: CreationPlace
-) : ResolutionFacade {
+) : ResolutionFacade, ResolutionFacadeModuleDescriptorProvider {
+    override fun findModuleDescriptor(ideaModuleInfo: IdeaModuleInfo): ModuleDescriptor {
+        return delegate.findModuleDescriptor(ideaModuleInfo)
+    }
+
     override val project: Project
         get() = delegate.project
 
@@ -94,7 +99,7 @@ private class ResolutionFacadeWithDebugInfo(
         try {
             return body()
         } catch (e: Throwable) {
-            if (e is ControlFlowException) {
+            if (e is ControlFlowException || e is IndexNotReadyException) {
                 throw e
             }
             throw KotlinIdeaResolutionException(e, resolvingWhat(), creationPlace)
@@ -182,21 +187,29 @@ private fun StringBuilder.appendElement(element: PsiElement) {
     if (element is PsiFile) {
         info("containingFile.name", element.containingFile.name)
     }
-    val moduleInfo = ifIndexReady { element.getModuleInfo() }
-    info("moduleInfo", moduleInfo?.toString() ?: "<index not ready>")
+    val moduleInfoResult = ifIndexReady { element.getNullableModuleInfo() }
+    info("moduleInfo", moduleInfoResult?.let { it.result?.toString() ?: "null" } ?: "<index not ready>")
+
+    val moduleInfo = moduleInfoResult?.result
     if (moduleInfo != null) {
         info("moduleInfo.platform", moduleInfo.platform?.toString())
     }
+
     val virtualFile = element.containingFile?.virtualFile
+    info("virtualFile", virtualFile?.name)
+
     if (virtualFile != null) {
+        val moduleName = ifIndexReady { ModuleUtil.findModuleForFile(virtualFile, element.project)?.name ?: "null" }?.result
         info(
             "ideaModule",
-            ifIndexReady { ModuleUtil.findModuleForFile(virtualFile, element.project)?.name ?: "null" } ?: "<index not ready>")
+            moduleName ?: "<index not ready>")
     }
 }
 
-private fun <T : Any> ifIndexReady(body: () -> T): T? = try {
-    body()
+private class IndexResult<T>(val result: T)
+
+private fun <T> ifIndexReady(body: () -> T): IndexResult<T>? = try {
+    IndexResult(body())
 } catch (e: IndexNotReadyException) {
     null
 }

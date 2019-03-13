@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -154,6 +154,11 @@ public class JsLegacyPrimitiveArraysBoxTestGenerated extends AbstractJsLegacyPri
         runTest("compiler/testData/codegen/box/arrays/indicesChar.kt");
     }
 
+    @TestMetadata("inlineInitializer.kt")
+    public void testInlineInitializer() throws Exception {
+        runTest("compiler/testData/codegen/box/arrays/inlineInitializer.kt");
+    }
+
     @TestMetadata("iterator.kt")
     public void testIterator() throws Exception {
         runTest("compiler/testData/codegen/box/arrays/iterator.kt");
@@ -214,11 +219,6 @@ public class JsLegacyPrimitiveArraysBoxTestGenerated extends AbstractJsLegacyPri
         runTest("compiler/testData/codegen/box/arrays/kt1291.kt");
     }
 
-    @TestMetadata("kt17134.kt")
-    public void testKt17134() throws Exception {
-        runTest("compiler/testData/codegen/box/arrays/kt17134.kt");
-    }
-
     @TestMetadata("kt238.kt")
     public void testKt238() throws Exception {
         runTest("compiler/testData/codegen/box/arrays/kt238.kt");
@@ -262,11 +262,6 @@ public class JsLegacyPrimitiveArraysBoxTestGenerated extends AbstractJsLegacyPri
     @TestMetadata("kt594.kt")
     public void testKt594() throws Exception {
         runTest("compiler/testData/codegen/box/arrays/kt594.kt");
-    }
-
-    @TestMetadata("kt602.kt")
-    public void testKt602() throws Exception {
-        runTest("compiler/testData/codegen/box/arrays/kt602.kt");
     }
 
     @TestMetadata("kt7009.kt")

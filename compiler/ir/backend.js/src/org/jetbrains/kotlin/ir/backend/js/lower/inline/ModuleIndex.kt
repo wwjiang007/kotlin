@@ -18,23 +18,24 @@ import org.jetbrains.kotlin.ir.visitors.acceptVoid
 class ModuleIndex(val module: IrModuleFragment) {
 
     var currentFile: IrFile? = null
+
     /**
      * Contains all classes declared in [module]
      */
-    val classes: Map<ClassDescriptor, IrClass>
+    val classes = mutableMapOf<ClassDescriptor, IrClass>()
 
-    val enumEntries: Map<ClassDescriptor, IrEnumEntry>
+    val enumEntries = mutableMapOf<ClassDescriptor, IrEnumEntry>()
 
     /**
      * Contains all functions declared in [module]
      */
     val functions = mutableMapOf<FunctionDescriptor, IrFunction>()
-    val declarationToFile = mutableMapOf<DeclarationDescriptor, String>()
 
     init {
-        val map = mutableMapOf<ClassDescriptor, IrClass>()
-        enumEntries = mutableMapOf()
+        addModule(module)
+    }
 
+    fun addModule(module: IrModuleFragment) {
         module.acceptVoid(object : IrElementVisitorVoid {
             override fun visitElement(element: IrElement) {
                 element.acceptChildrenVoid(this)
@@ -48,7 +49,7 @@ class ModuleIndex(val module: IrModuleFragment) {
             override fun visitClass(declaration: IrClass) {
                 super.visitClass(declaration)
 
-                map[declaration.descriptor] = declaration
+                classes[declaration.descriptor] = declaration
             }
 
             override fun visitEnumEntry(declaration: IrEnumEntry) {
@@ -61,13 +62,6 @@ class ModuleIndex(val module: IrModuleFragment) {
                 super.visitFunction(declaration)
                 functions[declaration.descriptor] = declaration
             }
-
-            override fun visitDeclaration(declaration: IrDeclaration) {
-                super.visitDeclaration(declaration)
-                declarationToFile[declaration.descriptor] = currentFile!!.name
-            }
         })
-
-        classes = map
     }
 }

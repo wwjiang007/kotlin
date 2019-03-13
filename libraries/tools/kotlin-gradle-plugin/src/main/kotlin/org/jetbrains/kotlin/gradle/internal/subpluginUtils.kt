@@ -16,9 +16,9 @@
 
 package org.jetbrains.kotlin.gradle.internal
 
-import org.jetbrains.kotlin.gradle.plugin.SubpluginOption
 import org.jetbrains.kotlin.gradle.plugin.CompositeSubpluginOption
 import org.jetbrains.kotlin.gradle.plugin.FilesSubpluginOption
+import org.jetbrains.kotlin.gradle.plugin.SubpluginOption
 import org.jetbrains.kotlin.gradle.tasks.CompilerPluginOptions
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -62,8 +62,12 @@ internal fun CompilerPluginOptions.withWrappedKaptOptions(withApClasspath: Itera
 }
 
 fun wrapPluginOptions(options: List<SubpluginOption>, newOptionName: String): List<SubpluginOption> {
-    val groupedOptions = options.groupBy { it.key }.mapValues { opt -> opt.value.map { it.value } }
-    val encodedOptions = encodePluginOptions(groupedOptions)
+    val encodedOptions = lazy {
+        val groupedOptions = options
+            .groupBy { it.key }
+            .mapValues { (_, options) -> options.map { it.value } }
+        encodePluginOptions(groupedOptions)
+    }
     val singleOption = CompositeSubpluginOption(newOptionName, encodedOptions, options)
     return listOf(singleOption)
 }

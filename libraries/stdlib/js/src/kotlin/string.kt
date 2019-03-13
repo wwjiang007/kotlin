@@ -11,17 +11,29 @@ import kotlin.js.RegExp
  * Converts the characters in the specified array to a string.
  */
 @SinceKotlin("1.2")
-@kotlin.internal.InlineOnly
-public actual inline fun String(chars: CharArray): String {
-    return js("String.fromCharCode").apply(null, chars)
+public actual fun String(chars: CharArray): String {
+    var result = ""
+    for (char in chars) {
+        result += char
+    }
+    return result
 }
 
 /**
  * Converts the characters from a portion of the specified array to a string.
+ *
+ * @throws IndexOutOfBoundsException if either [offset] or [length] are less than zero
+ * or `offset + length` is out of [chars] array bounds.
  */
 @SinceKotlin("1.2")
 public actual fun String(chars: CharArray, offset: Int, length: Int): String {
-    return String(chars.copyOfRange(offset, offset + length))
+    if (offset < 0 || length < 0 || chars.size - offset < length)
+        throw IndexOutOfBoundsException("size: ${chars.size}; offset: $offset; length: $length")
+    var result = ""
+    for (index in offset until offset + length) {
+        result += chars[index]
+    }
+    return result
 }
 
 /**
@@ -66,10 +78,6 @@ public inline fun String.match(regex: String): Array<String>? = asDynamic().matc
 
 //native public fun String.trim(): String
 //TODO: String.replace to implement effective trimLeading and trimTrailing
-
-@Deprecated("Use length property instead.", ReplaceWith("length"), level = DeprecationLevel.ERROR)
-@kotlin.internal.InlineOnly
-public inline val CharSequence.size: Int get() = length
 
 @kotlin.internal.InlineOnly
 internal inline fun String.nativeReplace(pattern: RegExp, replacement: String): String = asDynamic().replace(pattern, replacement)

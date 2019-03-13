@@ -18,16 +18,15 @@ import kotlin.script.experimental.jvm.compat.mapLegacyDiagnosticSeverity
 import kotlin.script.experimental.jvm.compat.mapLegacyScriptPosition
 import kotlin.script.experimental.jvm.dependenciesFromCurrentContext
 import kotlin.script.experimental.jvm.jvm
+import kotlin.script.experimental.jvm.withUpdatedClasspath
 
 @KotlinScript(
-    extension = "scriptwithdeps.kts",
-    compilationConfiguration = MyScriptCompilationConfiguration::class
+    fileExtension = "scriptwithdeps.kts",
+    compilationConfiguration = ScriptWithMavenDepsConfiguration::class
 )
-abstract class MyScriptWithMavenDeps {
-//    abstract fun body(vararg args: String): Int
-}
+abstract class ScriptWithMavenDeps
 
-object MyScriptCompilationConfiguration : ScriptCompilationConfiguration(
+object ScriptWithMavenDepsConfiguration : ScriptCompilationConfiguration(
     {
         defaultImports(DependsOn::class, Repository::class)
         jvm {
@@ -36,19 +35,15 @@ object MyScriptCompilationConfiguration : ScriptCompilationConfiguration(
                 "kotlin-script-util" // DependsOn annotation is taken from script-util
             )
         }
-        // variant: dependencies(collectDependenciesFromCurrentContext(...
         refineConfiguration {
-            // variant ^: dynamicConfiguration
-            onAnnotations(DependsOn::class, Repository::class, handler = ::myConfigureOnAnnotations)
-            // variants: onAnnotations, refineOnAnnotations (esp. for dynamicConfiguration), updateOnAnnotations
-            // other triggers: beforeParsing, onSections
+            onAnnotations(DependsOn::class, Repository::class, handler = ::configureMavenDepsOnAnnotations)
         }
     }
 )
 
 private val resolver = FilesAndMavenResolver()
 
-fun myConfigureOnAnnotations(context: ScriptConfigurationRefinementContext): ResultWithDiagnostics<ScriptCompilationConfiguration> {
+fun configureMavenDepsOnAnnotations(context: ScriptConfigurationRefinementContext): ResultWithDiagnostics<ScriptCompilationConfiguration> {
     val annotations = context.collectedData?.get(ScriptCollectedData.foundAnnotations)?.takeIf { it.isNotEmpty() }
         ?: return context.compilationConfiguration.asSuccess()
     val scriptContents = object : ScriptContents {
@@ -58,18 +53,23 @@ fun myConfigureOnAnnotations(context: ScriptConfigurationRefinementContext): Res
     }
     val diagnostics = arrayListOf<ScriptDiagnostic>()
     fun report(severity: ScriptDependenciesResolver.ReportSeverity, message: String, position: ScriptContents.Position?) {
-        diagnostics.add(ScriptDiagnostic(message, mapLegacyDiagnosticSeverity(severity), mapLegacyScriptPosition(position)))
+        diagnostics.add(
+            ScriptDiagnostic(
+                message,
+                mapLegacyDiagnosticSeverity(severity),
+                context.script.locationId,
+                mapLegacyScriptPosition(position)
+            )
+        )
     }
     return try {
         val newDepsFromResolver = resolver.resolve(scriptContents, emptyMap(), ::report, null).get()
             ?: return context.compilationConfiguration.asSuccess(diagnostics)
         val resolvedClasspath = newDepsFromResolver.classpath.toList().takeIf { it.isNotEmpty() }
             ?: return context.compilationConfiguration.asSuccess(diagnostics)
-        ScriptCompilationConfiguration(context.compilationConfiguration) {
-            dependencies.append(JvmDependency(resolvedClasspath))
-        }.asSuccess(diagnostics)
+        context.compilationConfiguration.withUpdatedClasspath(resolvedClasspath).asSuccess(diagnostics)
     } catch (e: Throwable) {
-        ResultWithDiagnostics.Failure(*diagnostics.toTypedArray(), e.asDiagnostics())
+        ResultWithDiagnostics.Failure(*diagnostics.toTypedArray(), e.asDiagnostics(path = context.script.locationId))
     }
 }
 

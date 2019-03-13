@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.quickfix
@@ -19,15 +8,14 @@ package org.jetbrains.kotlin.idea.quickfix
 import com.intellij.codeInsight.intention.IntentionAction
 import com.intellij.lang.jvm.JvmClass
 import com.intellij.lang.jvm.JvmElement
+import com.intellij.lang.jvm.JvmMethod
 import com.intellij.lang.jvm.JvmModifier
 import com.intellij.lang.jvm.actions.*
 import com.intellij.lang.jvm.types.JvmSubstitutor
+import com.intellij.lang.jvm.types.JvmType
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Pair.pair
-import com.intellij.psi.PsiJvmSubstitutor
-import com.intellij.psi.PsiMethod
-import com.intellij.psi.PsiSubstitutor
-import com.intellij.psi.PsiType
+import com.intellij.psi.*
 import com.intellij.psi.codeStyle.SuggestedNameInfo
 import com.intellij.testFramework.fixtures.CodeInsightTestFixture
 import com.intellij.testFramework.fixtures.LightPlatformCodeInsightFixtureTestCase
@@ -35,6 +23,9 @@ import org.jetbrains.kotlin.asJava.toLightElements
 import org.jetbrains.kotlin.idea.search.allScope
 import org.jetbrains.kotlin.idea.test.KotlinWithJdkAndRuntimeLightProjectDescriptor
 import org.jetbrains.kotlin.psi.KtModifierListOwner
+import org.jetbrains.uast.UMethod
+import org.jetbrains.uast.UParameter
+import org.jetbrains.uast.UastContext
 import org.jetbrains.uast.toUElement
 import org.junit.Assert
 
@@ -401,15 +392,15 @@ class CommonIntentionActionsTest : LightPlatformCodeInsightFixtureTestCase() {
 
         myFixture.launchAction(
             createMethodActions(
-                myFixture.atCaret(),
+                        myFixture.atCaret(),
                 SimpleMethodRequest(
                     project,
                     methodName = "setBaz",
                     modifiers = listOf(JvmModifier.PUBLIC),
                     returnType = expectedTypes(),
                     parameters = expectedParams(PsiType.getTypeByName("java.lang.String", project, project.allScope()))
-                )
-            ).findWithText("Add 'var' property 'baz' to 'Foo'")
+                        )
+                ).findWithText("Add 'var' property 'baz' to 'Foo'")
         )
         myFixture.checkResult("""
         |class Foo {
@@ -429,15 +420,15 @@ class CommonIntentionActionsTest : LightPlatformCodeInsightFixtureTestCase() {
 
         myFixture.launchAction(
             createMethodActions(
-                myFixture.atCaret(),
+                        myFixture.atCaret(),
                 SimpleMethodRequest(
                     project,
                     methodName = "setBaz",
                     modifiers = listOf(JvmModifier.PUBLIC),
                     returnType = expectedTypes(),
                     parameters = expectedParams(PsiType.getTypeByName("java.lang.String", project, project.allScope()))
-                )
-            ).findWithText("Add 'lateinit var' property 'baz' to 'Foo'")
+                        )
+                ).findWithText("Add 'lateinit var' property 'baz' to 'Foo'")
         )
         myFixture.checkResult("""
         |class Foo {
@@ -515,15 +506,15 @@ class CommonIntentionActionsTest : LightPlatformCodeInsightFixtureTestCase() {
 
         myFixture.launchAction(
             createMethodActions(
-                myFixture.atCaret(),
+                        myFixture.atCaret(),
                 SimpleMethodRequest(
                     project,
                     methodName = "getBaz",
                     modifiers = listOf(JvmModifier.PUBLIC),
                     returnType = expectedTypes(PsiType.getTypeByName("java.lang.String", project, project.allScope())),
                     parameters = expectedParams()
-                )
-            ).findWithText("Add 'val' property 'baz' to 'Foo'")
+                        )
+                ).findWithText("Add 'val' property 'baz' to 'Foo'")
         )
         myFixture.checkResult("""
         |class Foo {
@@ -532,6 +523,45 @@ class CommonIntentionActionsTest : LightPlatformCodeInsightFixtureTestCase() {
         |    fun bar() {}
         |}
         """.trim().trimMargin(), true)
+    }
+
+    fun testSetParameters() {
+        myFixture.configureByText(
+            "foo.kt", """
+        |class Foo {
+        |    fun ba<caret>r() {}
+        |}
+        """.trim().trimMargin()
+        )
+
+
+        myFixture.launchAction(
+            com.intellij.lang.jvm.actions.createChangeParametersActions(
+                myFixture.atCaret<UMethod>().javaPsi,
+                setMethodParametersRequest(
+                    linkedMapOf<String, JvmType>(
+                        "i" to PsiType.INT,
+                        "file" to PsiType.getTypeByName("java.io.File", project, myFixture.file.resolveScope)
+                    ).entries
+                )
+            ).findWithText("Change method parameters to '(i: Int, file: File)'")
+        )
+        myFixture.checkResult(
+            """
+        import java.io.File
+
+        class Foo {
+            fun bar(i: Int, file: File) {}
+        }
+        """.trimIndent(), true
+        )
+    }
+
+    private fun makeParams(vararg psyTypes: PsiType): List<UParameter> {
+        val uastContext = UastContext(myFixture.project)
+        val factory = JavaPsiFacade.getElementFactory(myFixture.project)
+        val parameters = psyTypes.mapIndexed { index, psiType -> factory.createParameter("param$index", psiType) }
+        return parameters.map { uastContext.convertElement(it, null, UParameter::class.java) as UParameter }
     }
 
     private fun expectedTypes(vararg psiTypes: PsiType) = psiTypes.map { expectedType(it) }

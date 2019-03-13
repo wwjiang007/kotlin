@@ -93,11 +93,7 @@ fun createIntegerValueTypeConstant(
     module: ModuleDescriptor,
     parameters: CompileTimeConstant.Parameters
 ): CompileTimeConstant<*> {
-    return if (parameters.isUnsignedNumberLiteral && !hasUnsignedTypesInModuleDependencies(module)) {
-        UnsignedErrorValueTypeConstant(value, parameters)
-    } else {
-        IntegerValueTypeConstant(value, module, parameters)
-    }
+    return IntegerValueTypeConstant(value, module, parameters)
 }
 
 fun hasUnsignedTypesInModuleDependencies(module: ModuleDescriptor): Boolean {
@@ -134,6 +130,20 @@ class IntegerValueTypeConstant(
                 parameters.canBeUsedInAnnotation,
                 parameters.isPure,
                 isUnsignedNumberLiteral = true,
+                isUnsignedLongNumberLiteral = parameters.isUnsignedLongNumberLiteral,
+                usesVariableAsConstant = parameters.usesVariableAsConstant,
+                usesNonConstValAsConstant = parameters.usesNonConstValAsConstant,
+                isConvertableConstVal = parameters.isConvertableConstVal
+            )
+
+            return IntegerValueTypeConstant(value, module, newParameters, convertedFromSigned = true)
+        }
+
+        fun IntegerValueTypeConstant.convertToSignedConstant(module: ModuleDescriptor): IntegerValueTypeConstant {
+            val newParameters = CompileTimeConstant.Parameters(
+                parameters.canBeUsedInAnnotation,
+                parameters.isPure,
+                isUnsignedNumberLiteral = false,
                 isUnsignedLongNumberLiteral = parameters.isUnsignedLongNumberLiteral,
                 usesVariableAsConstant = parameters.usesVariableAsConstant,
                 usesNonConstValAsConstant = parameters.usesNonConstValAsConstant,

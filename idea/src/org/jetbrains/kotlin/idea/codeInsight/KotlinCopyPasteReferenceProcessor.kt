@@ -128,7 +128,7 @@ class KotlinCopyPasteReferenceProcessor : CopyPastePostProcessor<KotlinReference
             file.elementsInRange(it).filter { it is KtElement || it is KDocElement }
         })
 
-        val allElementsToResolve = elementsByRange.values.flatMap { it }.flatMap { it.collectDescendantsOfType<KtElement>() }
+        val allElementsToResolve = elementsByRange.values.flatten().flatMap { it.collectDescendantsOfType<KtElement>() }
         val bindingContext = file.getResolutionFacade().analyze(allElementsToResolve, BodyResolveMode.PARTIAL)
 
         val result = ArrayList<KotlinReferenceData>()
@@ -376,6 +376,6 @@ class KotlinCopyPasteReferenceProcessor : CopyPastePostProcessor<KotlinReference
     }
 
     companion object {
-        @TestOnly var declarationsToImportSuggested: Collection<String> = emptyList()
+        @get:TestOnly var declarationsToImportSuggested: Collection<String> = emptyList()
     }
 }

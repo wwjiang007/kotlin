@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -289,6 +289,11 @@ public class IncrementalJvmCompilerRunnerTestGenerated extends AbstractIncrement
         @TestMetadata("inlinePropertyOnTopLevel")
         public void testInlinePropertyOnTopLevel() throws Exception {
             runTest("jps-plugin/testData/incremental/pureKotlin/inlinePropertyOnTopLevel/");
+        }
+
+        @TestMetadata("inlineSuspendFunctionChanged")
+        public void testInlineSuspendFunctionChanged() throws Exception {
+            runTest("jps-plugin/testData/incremental/pureKotlin/inlineSuspendFunctionChanged/");
         }
 
         @TestMetadata("inlineTwoFunctionsOneChanged")

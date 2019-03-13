@@ -191,7 +191,8 @@ public actual inline fun String.substring(startIndex: Int, endIndex: Int): Strin
 /**
  * Returns `true` if this string starts with the specified prefix.
  */
-public fun String.startsWith(prefix: String, ignoreCase: Boolean = false): Boolean {
+@Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
+public actual fun String.startsWith(prefix: String, ignoreCase: Boolean = false): Boolean {
     if (!ignoreCase)
         return (this as java.lang.String).startsWith(prefix)
     else
@@ -201,7 +202,8 @@ public fun String.startsWith(prefix: String, ignoreCase: Boolean = false): Boole
 /**
  * Returns `true` if a substring of this string starting at the specified offset [startIndex] starts with the specified prefix.
  */
-public fun String.startsWith(prefix: String, startIndex: Int, ignoreCase: Boolean = false): Boolean {
+@Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
+public actual fun String.startsWith(prefix: String, startIndex: Int, ignoreCase: Boolean = false): Boolean {
     if (!ignoreCase)
         return (this as java.lang.String).startsWith(prefix, startIndex)
     else
@@ -211,7 +213,8 @@ public fun String.startsWith(prefix: String, startIndex: Int, ignoreCase: Boolea
 /**
  * Returns `true` if this string ends with the specified suffix.
  */
-public fun String.endsWith(suffix: String, ignoreCase: Boolean = false): Boolean {
+@Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
+public actual fun String.endsWith(suffix: String, ignoreCase: Boolean = false): Boolean {
     if (!ignoreCase)
         return (this as java.lang.String).endsWith(suffix)
     else
@@ -269,6 +272,9 @@ public actual inline fun String(chars: CharArray): String =
 
 /**
  * Converts the characters from a portion of the specified array to a string.
+ *
+ * @throws IndexOutOfBoundsException if either [offset] or [length] are less than zero
+ * or `offset + length` is out of [chars] array bounds.
  */
 @kotlin.internal.InlineOnly
 public actual inline fun String(chars: CharArray, offset: Int, length: Int): String =
@@ -345,6 +351,8 @@ public inline fun String.intern(): String = (this as java.lang.String).intern()
 
 /**
  * Returns `true` if this string is empty or consists solely of whitespace characters.
+ *
+ * @sample samples.text.Strings.stringIsBlank
  */
 public actual fun CharSequence.isBlank(): Boolean = length == 0 || indices.all { this[it].isWhitespace() }
 

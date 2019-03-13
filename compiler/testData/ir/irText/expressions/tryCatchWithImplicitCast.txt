@@ -2,7 +2,7 @@ FILE fqName:<root> fileName:/tryCatchWithImplicitCast.kt
   FUN name:testImplicitCast visibility:public modality:FINAL <> (a:kotlin.Any) returnType:kotlin.Unit flags:
     VALUE_PARAMETER name:a index:0 type:kotlin.Any flags:
     BLOCK_BODY
-      WHEN type=kotlin.Unit origin=null
+      WHEN type=kotlin.Unit origin=IF
         BRANCH
           if: TYPE_OP type=kotlin.Boolean origin=NOT_INSTANCEOF typeOperand=kotlin.String
             typeOperand: CLASS IR_EXTERNAL_DECLARATION_STUB CLASS name:String modality:FINAL visibility:public flags: superTypes:[kotlin.Comparable<kotlin.String>; kotlin.CharSequence; java.io.Serializable]
@@ -18,5 +18,4 @@ FILE fqName:<root> fileName:/tryCatchWithImplicitCast.kt
           CATCH parameter=e: Throwable
             VAR CATCH_PARAMETER name:e type:kotlin.Throwable flags:val
             BLOCK type=kotlin.String origin=null
-              CONST String type=kotlin.String value=
-
+              CONST String type=kotlin.String value=""

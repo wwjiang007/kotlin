@@ -5,23 +5,19 @@
 
 package kotlin
 
-// TODO: Ignore FunctionN interfaces
+@PublishedApi
+internal fun throwUninitializedPropertyAccessException(name: String): Nothing =
+    throw UninitializedPropertyAccessException("lateinit property $name has not been initialized")
 
-public interface Function0<out R> : Function<R> {
-    public operator fun invoke(): R
+internal fun noWhenBranchMatchedException(): Nothing = throw NoWhenBranchMatchedException()
+
+
+fun THROW_ISE() {
+    throw IllegalStateException()
 }
-
-public interface Function1<in P1, out R> : Function<R> {
-    public operator fun invoke(p1: P1): R
+fun THROW_CCE() {
+    throw ClassCastException()
 }
-
-public interface Function2<in P1, in P2, out R> : Function<R> {
-    public operator fun invoke(p1: P1, p2: P2): R
+fun THROW_NPE() {
+    throw NullPointerException()
 }
-
-public interface Function3<in P1, in P2, in P3, out R> : Function<R> {
-    public operator fun invoke(p1: P1, p2: P2, p3: P3): R
-}
-
-public inline fun <reified T> arrayOfNulls(size: Int): Array<T?> = js("[]")  // FIXME: Implement
-

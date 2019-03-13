@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.cli.jvm.compiler
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.StandardFileSystems
+import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.PsiJavaModule
@@ -58,11 +59,13 @@ import org.jetbrains.kotlin.modules.TargetId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.progress.ProgressIndicatorAndCompilationCanceledStatus
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.resolve.jvm.KotlinJavaPsiFacade
 import org.jetbrains.kotlin.script.tryConstructClassFromStringArgs
 import org.jetbrains.kotlin.utils.newLinkedHashMapWithExpectedSize
 import java.io.File
 import java.lang.reflect.InvocationTargetException
 import java.net.URLClassLoader
+import javax.swing.SwingUtilities
 
 object KotlinToJVMBytecodeCompiler {
     private fun writeOutput(
@@ -130,8 +133,17 @@ object KotlinToJVMBytecodeCompiler {
 
         for (module in chunk) {
             ProgressIndicatorAndCompilationCanceledStatus.checkCanceled()
-            val moduleSourceFiles = getAbsolutePaths(buildFile, module.getSourceFiles()).map(localFileSystem::findFileByPath)
-            val ktFiles = environment.getSourceFiles().filter { file -> file.virtualFile in moduleSourceFiles }
+            val (moduleSourceDirs, moduleSourceFiles) =
+                    getAbsolutePaths(buildFile, module.getSourceFiles())
+                        .mapNotNull(localFileSystem::findFileByPath)
+                        .partition(VirtualFile::isDirectory)
+
+            val ktFiles = environment.getSourceFiles().filter { file ->
+                val virtualFile = file.virtualFile
+                virtualFile in moduleSourceFiles || moduleSourceDirs.any { dir ->
+                    VfsUtilCore.isAncestor(dir, virtualFile, true)
+                }
+            }
 
             if (!checkKotlinPackageUsage(environment, ktFiles)) return false
 
@@ -222,7 +234,7 @@ object KotlinToJVMBytecodeCompiler {
         }
 
     private fun findMainClass(generationState: GenerationState, files: List<KtFile>): FqName? {
-        val mainFunctionDetector = MainFunctionDetector(generationState.bindingContext)
+        val mainFunctionDetector = MainFunctionDetector(generationState.bindingContext, generationState.languageVersionSettings)
         return files.asSequence()
             .map { file ->
                 if (mainFunctionDetector.hasMain(file.declarations))
@@ -255,7 +267,7 @@ object KotlinToJVMBytecodeCompiler {
         }
     }
 
-    internal fun compileAndExecuteScript(environment: KotlinCoreEnvironment, scriptArgs: List<String>): ExitCode {
+    fun compileAndExecuteScript(environment: KotlinCoreEnvironment, scriptArgs: List<String>): ExitCode {
         val scriptClass = compileScript(environment) ?: return ExitCode.COMPILATION_ERROR
 
         try {
@@ -292,10 +304,7 @@ object KotlinToJVMBytecodeCompiler {
                 environment.updateClasspath(result.additionalJavaRoots.map { JavaSourceRoot(it, null) })
             }
 
-            // Clear package caches (see KotlinJavaPsiFacade)
-            ApplicationManager.getApplication().runWriteAction {
-                (PsiManager.getInstance(environment.project).modificationTracker as? PsiModificationTrackerImpl)?.incCounter()
-            }
+            KotlinJavaPsiFacade.getInstance(environment.project).clearPackageCaches()
 
             // Clear all diagnostic messages
             configuration[CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY]?.clear()

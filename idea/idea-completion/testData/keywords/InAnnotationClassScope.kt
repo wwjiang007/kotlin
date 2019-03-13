@@ -19,12 +19,11 @@ annotation class Test {
 // EXIST:  infix
 // EXIST:  sealed class
 // EXIST:  lateinit var
-// EXIST:  data
+// EXIST:  data class
 // EXIST:  inline
 // EXIST:  tailrec
 // EXIST:  external
 // EXIST:  annotation class
-// EXIST:  const
 // EXIST:  suspend
 // EXIST:  typealias
 // EXIST:  expect

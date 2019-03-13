@@ -81,7 +81,10 @@ open class DeepCopySymbolRemapper(
 
     override fun visitField(declaration: IrField) {
         remapSymbol(fields, declaration) {
-            IrFieldSymbolImpl(descriptorsRemapper.remapDeclaredField(it.descriptor))
+            if (declaration.correspondingProperty == null)
+                IrFieldSymbolImpl(descriptorsRemapper.remapDeclaredField(it.descriptor))
+            else
+                IrFieldSymbolImpl(descriptorsRemapper.remapDeclaredProperty(it.descriptor))
         }
         declaration.acceptChildrenVoid(this)
     }
@@ -157,6 +160,7 @@ open class DeepCopySymbolRemapper(
     override fun getReferencedVariable(symbol: IrVariableSymbol): IrVariableSymbol = variables.getReferenced(symbol)
     override fun getReferencedField(symbol: IrFieldSymbol): IrFieldSymbol = fields.getReferenced(symbol)
     override fun getReferencedConstructor(symbol: IrConstructorSymbol): IrConstructorSymbol = constructors.getReferenced(symbol)
+    override fun getReferencedSimpleFunction(symbol: IrSimpleFunctionSymbol): IrSimpleFunctionSymbol = functions.getReferenced(symbol)
     override fun getReferencedValue(symbol: IrValueSymbol): IrValueSymbol =
         when (symbol) {
             is IrValueParameterSymbol -> valueParameters.getReferenced(symbol)

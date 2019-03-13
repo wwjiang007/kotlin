@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -144,9 +144,9 @@ public class InspectionTestGenerated extends AbstractInspectionTest {
             runTest("idea/testData/inspections/coroutines/asyncResultUnused/inspectionData/inspections.test");
         }
 
-        @TestMetadata("coroutines/resultIsSuccessOrFailure/inspectionData/inspections.test")
-        public void testCoroutines_resultIsSuccessOrFailure_inspectionData_Inspections_test() throws Exception {
-            runTest("idea/testData/inspections/coroutines/resultIsSuccessOrFailure/inspectionData/inspections.test");
+        @TestMetadata("coroutines/directUseOfResultType/inspectionData/inspections.test")
+        public void testCoroutines_directUseOfResultType_inspectionData_Inspections_test() throws Exception {
+            runTest("idea/testData/inspections/coroutines/directUseOfResultType/inspectionData/inspections.test");
         }
 
         @TestMetadata("dataClassPrivateConstructor/inspectionData/inspections.test")
@@ -237,6 +237,11 @@ public class InspectionTestGenerated extends AbstractInspectionTest {
         @TestMetadata("naming/objectProperty/inspectionData/inspections.test")
         public void testNaming_objectProperty_inspectionData_Inspections_test() throws Exception {
             runTest("idea/testData/inspections/naming/objectProperty/inspectionData/inspections.test");
+        }
+
+        @TestMetadata("naming/package/inspectionData/inspections.test")
+        public void testNaming_package_inspectionData_Inspections_test() throws Exception {
+            runTest("idea/testData/inspections/naming/package/inspectionData/inspections.test");
         }
 
         @TestMetadata("naming/privateProperty/inspectionData/inspections.test")
@@ -407,6 +412,11 @@ public class InspectionTestGenerated extends AbstractInspectionTest {
         @TestMetadata("unusedSymbol/function/inspectionData/inspections.test")
         public void testUnusedSymbol_function_inspectionData_Inspections_test() throws Exception {
             runTest("idea/testData/inspections/unusedSymbol/function/inspectionData/inspections.test");
+        }
+
+        @TestMetadata("unusedSymbol/functionMain/inspectionData/inspections.test")
+        public void testUnusedSymbol_functionMain_inspectionData_Inspections_test() throws Exception {
+            runTest("idea/testData/inspections/unusedSymbol/functionMain/inspectionData/inspections.test");
         }
 
         @TestMetadata("unusedSymbol/js/inspectionData/inspections.test")

@@ -10,14 +10,15 @@ import org.gradle.api.Project
 import org.gradle.api.attributes.Usage
 import org.gradle.api.internal.file.FileResolver
 import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
-import org.jetbrains.kotlin.gradle.plugin.source.KotlinSourceSet
+import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinUsages
 import org.jetbrains.kotlin.gradle.plugin.usageByName
 import java.io.File
 
 internal abstract class KotlinSourceSetFactory<T : KotlinSourceSet> internal constructor(
     protected val fileResolver: FileResolver,
     protected val project: Project
-) : NamedDomainObjectFactory<T> {
+) : NamedDomainObjectFactory<KotlinSourceSet> {
 
     abstract val itemClass: Class<T>
 
@@ -35,9 +36,14 @@ internal abstract class KotlinSourceSetFactory<T : KotlinSourceSet> internal con
         defineSourceSetConfigurations(project, sourceSet)
     }
 
-    private fun defineSourceSetConfigurations(project: Project, sourceSet: KotlinSourceSet) = with (project.configurations) {
+    private fun defineSourceSetConfigurations(project: Project, sourceSet: KotlinSourceSet) = with(project.configurations) {
         sourceSet.relatedConfigurationNames.forEach { configurationName ->
-            maybeCreate(configurationName)
+            maybeCreate(configurationName).apply {
+                if (!configurationName.endsWith(METADATA_CONFIGURATION_NAME_SUFFIX)) {
+                    isCanBeResolved = false
+                }
+                isCanBeConsumed = false
+            }
         }
     }
 
@@ -68,6 +74,7 @@ internal class DefaultKotlinSourceSetFactory(
         dependencyConfigurationWithMetadata.forEach { (configurationName, metadataName) ->
             project.configurations.maybeCreate(metadataName).apply {
                 attributes.attribute(KotlinPlatformType.attribute, KotlinPlatformType.common)
+                attributes.attribute(Usage.USAGE_ATTRIBUTE, project.usageByName(KotlinUsages.KOTLIN_API))
                 isVisible = false
                 isCanBeConsumed = false
                 extendsFrom(project.configurations.maybeCreate(configurationName))

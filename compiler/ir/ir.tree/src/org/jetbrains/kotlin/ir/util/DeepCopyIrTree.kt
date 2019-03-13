@@ -28,10 +28,12 @@ import org.jetbrains.kotlin.ir.symbols.IrClassifierSymbol
 import org.jetbrains.kotlin.ir.symbols.impl.*
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 
+@Suppress("DEPRECATION")
 inline fun <reified T : IrElement> T.deepCopyOld(): T =
     transform(DeepCopyIrTree(), null).patchDeclarationParents() as T
 
 @Deprecated("Creates unbound symbols")
+@Suppress("DEPRECATION")
 open class DeepCopyIrTree : IrElementTransformerVoid() {
 
     protected open fun mapDeclarationOrigin(declarationOrigin: IrDeclarationOrigin) = declarationOrigin
@@ -92,6 +94,7 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
             declaration.startOffset, declaration.endOffset,
             mapDeclarationOrigin(declaration.origin),
             mapClassDeclaration(declaration.descriptor),
+            declaration.modality,
             declaration.declarations.map { it.transform() }
         ).apply {
             transformAnnotations(declaration)
@@ -116,6 +119,7 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
             declaration.startOffset, declaration.endOffset,
             mapDeclarationOrigin(declaration.origin),
             mapFunctionDeclaration(declaration.descriptor),
+            declaration.returnType, // TODO
             declaration.body?.transform()
         ).transformParameters(declaration).apply {
             transformAnnotations(declaration)
@@ -126,7 +130,6 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
                 else
                     IrSimpleFunctionSymbolImpl(overriddenDescriptor.original)
             }
-            returnType = declaration.returnType // TODO
         }
 
     override fun visitConstructor(declaration: IrConstructor): IrConstructor =
@@ -134,10 +137,10 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
             declaration.startOffset, declaration.endOffset,
             mapDeclarationOrigin(declaration.origin),
             mapConstructorDeclaration(declaration.descriptor),
+            declaration.returnType, // TODO
             declaration.body?.transform()
         ).transformParameters(declaration).apply {
             transformAnnotations(declaration)
-            returnType = declaration.returnType // TODO
         }
 
     protected fun <T : IrTypeParametersContainer> T.transformTypeParameters(
@@ -643,6 +646,24 @@ open class DeepCopyIrTree : IrElementTransformerVoid() {
             expression.startOffset, expression.endOffset,
             expression.type,
             expression.value.transform()
+        )
+
+    override fun visitDynamicOperatorExpression(expression: IrDynamicOperatorExpression): IrDynamicOperatorExpression =
+        IrDynamicOperatorExpressionImpl(
+            expression.startOffset, expression.endOffset,
+            expression.type,
+            expression.operator
+        ).apply {
+            receiver = expression.receiver.transform()
+            expression.arguments.mapTo(arguments) { it.transform() }
+        }
+
+    override fun visitDynamicMemberExpression(expression: IrDynamicMemberExpression): IrDynamicMemberExpression =
+        IrDynamicMemberExpressionImpl(
+            expression.startOffset, expression.endOffset,
+            expression.type,
+            expression.memberName,
+            expression.receiver.transform()
         )
 
     override fun visitErrorDeclaration(declaration: IrErrorDeclaration): IrErrorDeclaration =

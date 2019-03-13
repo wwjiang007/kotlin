@@ -40,7 +40,11 @@ class ReformatInspection : LocalInspectionTool() {
     override fun runForWholeFile(): Boolean = true
 
     override fun checkFile(file: PsiFile, manager: InspectionManager, isOnTheFly: Boolean): Array<out ProblemDescriptor>? {
-        if (file !is KtFile || !ProjectRootsUtil.isInProjectSource(file)) {
+        return checkFile(file, isOnTheFly)?.toTypedArray()
+    }
+
+    private fun checkFile(file: PsiFile, isOnTheFly: Boolean): List<ProblemDescriptor>? {
+        if (file !is KtFile || !file.isWritable || !ProjectRootsUtil.isInProjectSource(file)) {
             return null
         }
 
@@ -72,7 +76,7 @@ class ReformatInspection : LocalInspectionTool() {
                 ProblemHighlightType.GENERIC_ERROR_OR_WARNING, false, null,
                 isOnTheFly
             )
-        }.toTypedArray()
+        }
     }
 
     override fun createOptionsPanel(): JComponent? {

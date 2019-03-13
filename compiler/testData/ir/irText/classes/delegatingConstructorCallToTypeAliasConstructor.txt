@@ -33,13 +33,13 @@ FILE fqName:<root> fileName:/delegatingConstructorCallToTypeAliasConstructor.kt
       $this: VALUE_PARAMETER name:<this> type:kotlin.Any flags:
   TYPEALIAS typealias CT = Cell<T> type=Cell<T>
   TYPEALIAS typealias CStr = Cell<String> type=Cell<kotlin.String>
-  CLASS CLASS name:C1 modality:FINAL visibility:public flags: superTypes:[CT<kotlin.String> /* = Cell<kotlin.String> */]
+  CLASS CLASS name:C1 modality:FINAL visibility:public flags: superTypes:[Cell<kotlin.String>]
     $this: VALUE_PARAMETER INSTANCE_RECEIVER name:<this> type:C1 flags:
     CONSTRUCTOR visibility:public <> () returnType:C1 flags:primary
       BLOCK_BODY
-        DELEGATING_CONSTRUCTOR_CALL 'constructor Cell(String)'
+        DELEGATING_CONSTRUCTOR_CALL 'constructor Cell(T)'
           <T>: kotlin.String
-          value: CONST String type=kotlin.String value=O
+          value: CONST String type=kotlin.String value="O"
         INSTANCE_INITIALIZER_CALL classDescriptor='C1'
     PROPERTY FAKE_OVERRIDE name:value visibility:public modality:FINAL flags:val
       FUN FAKE_OVERRIDE name:<get-value> visibility:public modality:FINAL <> ($this:Cell<kotlin.String>) returnType:kotlin.String flags:
@@ -60,13 +60,13 @@ FILE fqName:<root> fileName:/delegatingConstructorCallToTypeAliasConstructor.kt
       overridden:
         FUN FAKE_OVERRIDE name:toString visibility:public modality:OPEN <> ($this:kotlin.Any) returnType:kotlin.String flags:
       $this: VALUE_PARAMETER name:<this> type:kotlin.Any flags:
-  CLASS CLASS name:C2 modality:FINAL visibility:public flags: superTypes:[CStr /* = Cell<kotlin.String> */]
+  CLASS CLASS name:C2 modality:FINAL visibility:public flags: superTypes:[Cell<kotlin.String>]
     $this: VALUE_PARAMETER INSTANCE_RECEIVER name:<this> type:C2 flags:
     CONSTRUCTOR visibility:public <> () returnType:C2 flags:primary
       BLOCK_BODY
-        DELEGATING_CONSTRUCTOR_CALL 'constructor Cell(String)'
+        DELEGATING_CONSTRUCTOR_CALL 'constructor Cell(T)'
           <T>: kotlin.String
-          value: CONST String type=kotlin.String value=K
+          value: CONST String type=kotlin.String value="K"
         INSTANCE_INITIALIZER_CALL classDescriptor='C2'
     PROPERTY FAKE_OVERRIDE name:value visibility:public modality:FINAL flags:val
       FUN FAKE_OVERRIDE name:<get-value> visibility:public modality:FINAL <> ($this:Cell<kotlin.String>) returnType:kotlin.String flags:

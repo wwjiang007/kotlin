@@ -1,8 +1,8 @@
+// IGNORE_BACKEND: NATIVE
 // IGNORE_BACKEND: JS_IR, JS
 // IGNORE_BACKEND: JVM_IR
 // WITH_RUNTIME
 // WITH_COROUTINES
-// LANGUAGE_VERSION: 1.3
 
 import helpers.*
 import kotlin.coroutines.*

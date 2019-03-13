@@ -1,6 +1,7 @@
+// KJS_WITH_FULL_RUNTIME
 // !LANGUAGE: +InlineClasses
-// WITH_UNSIGNED
-// IGNORE_BACKEND: JVM_IR, JS_IR, JS
+// WITH_RUNTIME
+// IGNORE_BACKEND: JVM_IR
 
 inline class Data(val data: Array<UInt>)
 

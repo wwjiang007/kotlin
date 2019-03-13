@@ -62,7 +62,7 @@ class K2JVMCompilerArguments : CommonCompilerArguments() {
     @Argument(
         value = "-jvm-target",
         valueDescription = "<version>",
-        description = "Target version of the generated JVM bytecode (1.6 or 1.8), default is 1.6"
+        description = "Target version of the generated JVM bytecode (1.6, 1.8, 9, 10, 11 or 12), default is 1.6"
     )
     var jvmTarget: String? by NullableStringFreezableVar(JvmTarget.DEFAULT.description)
 
@@ -110,7 +110,9 @@ class K2JVMCompilerArguments : CommonCompilerArguments() {
     @Argument(
         value = "-Xnormalize-constructor-calls",
         valueDescription = "{disable|enable}",
-        description = "Normalize constructor calls (disable: don't normalize; enable: normalize), default is disable"
+        description = "Normalize constructor calls (disable: don't normalize; enable: normalize),\n" +
+                "default is 'disable' in language version 1.2 and below,\n" +
+                "'enable' since language version 1.3"
     )
     var constructorCallNormalizationMode: String? by NullableStringFreezableVar(null)
 
@@ -147,8 +149,8 @@ class K2JVMCompilerArguments : CommonCompilerArguments() {
 
     @Argument(
         value = "-Xuse-old-class-files-reading",
-        description = "Use old class files reading implementation " +
-                "(may slow down the build and should be used in case of problems with the new implementation)"
+        description = "Use old class files reading implementation. This may slow down the build and cause problems with Groovy interop.\n" +
+                "Should be used in case of problems with the new implementation"
     )
     var useOldClassFilesReading: Boolean by FreezableVar(false)
 
@@ -245,6 +247,20 @@ class K2JVMCompilerArguments : CommonCompilerArguments() {
     var disableStandardScript: Boolean by FreezableVar(false)
 
     @Argument(
+        value = "-Xgenerate-strict-metadata-version",
+        description = "Generate metadata with strict version semantics (see kdoc on Metadata.extraInt)"
+    )
+    var strictMetadataVersionSemantics: Boolean by FreezableVar(false)
+
+    @Argument(
+        value = "-Xsanitize-parentheses",
+        description = "Transform '(' and ')' in method names to some other character sequence.\n" +
+                "This mode can BREAK BINARY COMPATIBILITY and is only supposed to be used as a workaround\n" +
+                "of an issue in the ASM bytecode framework. See KT-29475 for more details"
+    )
+    var sanitizeParentheses: Boolean by FreezableVar(false)
+
+    @Argument(
         value = "-Xfriend-paths",
         valueDescription = "<path>",
         description = "Paths to output directories for friend modules (whose internals should be visible)"
@@ -253,17 +269,20 @@ class K2JVMCompilerArguments : CommonCompilerArguments() {
 
     override fun configureAnalysisFlags(collector: MessageCollector): MutableMap<AnalysisFlag<*>, Any> {
         val result = super.configureAnalysisFlags(collector)
-        result[AnalysisFlag.jsr305] = Jsr305Parser(collector).parse(
+        result[JvmAnalysisFlags.strictMetadataVersionSemantics] = strictMetadataVersionSemantics
+        result[JvmAnalysisFlags.jsr305] = Jsr305Parser(collector).parse(
             jsr305,
             supportCompatqualCheckerFrameworkAnnotations
         )
-        result[AnalysisFlag.ignoreDataFlowInAssert] = JVMAssertionsMode.fromString(assertionsMode) != JVMAssertionsMode.LEGACY
-        JvmDefaultMode.fromStringOrNull(jvmDefault)?.let { result[AnalysisFlag.jvmDefaultMode] = it }
-                ?: collector.report(
-                    CompilerMessageSeverity.ERROR,
-                    "Unknown @JvmDefault mode: $jvmDefault, " +
-                            "supported modes: ${JvmDefaultMode.values().map { it.description }}"
-                )
+        result[AnalysisFlags.ignoreDataFlowInAssert] = JVMAssertionsMode.fromString(assertionsMode) != JVMAssertionsMode.LEGACY
+        JvmDefaultMode.fromStringOrNull(jvmDefault)?.let { result[JvmAnalysisFlags.jvmDefaultMode] = it }
+            ?: collector.report(
+                CompilerMessageSeverity.ERROR,
+                "Unknown @JvmDefault mode: $jvmDefault, " +
+                        "supported modes: ${JvmDefaultMode.values().map { it.description }}"
+            )
+        result[JvmAnalysisFlags.inheritMultifileParts] = inheritMultifileParts
+        result[JvmAnalysisFlags.sanitizeParentheses] = sanitizeParentheses
         return result
     }
 

@@ -10,17 +10,21 @@ import java.io.File
 
 class DirtyFilesContainer(
     private val caches: IncrementalCachesManager<*>,
-    private val reporter: ICReporter
+    private val reporter: ICReporter,
+    private val sourceFilesExtensions: List<String>
 ) {
     private val myDirtyFiles = HashSet<File>()
 
     fun toMutableList(): MutableList<File> =
         ArrayList(myDirtyFiles)
 
-    fun add(files: Iterable<File>) {
-        val existingKotlinFiles = files.filter { it.isKotlinFile() }
+    fun add(files: Iterable<File>, reason: String?) {
+        val existingKotlinFiles = files.filter { it.isKotlinFile(sourceFilesExtensions) }
         if (existingKotlinFiles.isNotEmpty()) {
             myDirtyFiles.addAll(existingKotlinFiles)
+            if (reason != null) {
+                reporter.reportMarkDirty(existingKotlinFiles, reason)
+            }
         }
     }
 
@@ -28,7 +32,8 @@ class DirtyFilesContainer(
         if (lookupSymbols.isEmpty()) return
 
         val dirtyFilesFromLookups = mapLookupSymbolsToFiles(caches.lookupCache, lookupSymbols, reporter)
-        add(dirtyFilesFromLookups)
+        // reason is null, because files are reported in mapLookupSymbolsToFiles
+        add(dirtyFilesFromLookups, reason = null)
     }
 
     fun addByDirtyClasses(dirtyClassesFqNames: Collection<FqName>) {
@@ -42,6 +47,7 @@ class DirtyFilesContainer(
         }
         val dirtyFilesFromFqNames =
             mapClassesFqNamesToFiles(listOf(caches.platformCache), fqNamesWithSubtypes, reporter)
-        add(dirtyFilesFromFqNames)
+        // reason is null, because files are reported in mapClassesFqNamesToFiles
+        add(dirtyFilesFromFqNames, reason = null)
     }
 }

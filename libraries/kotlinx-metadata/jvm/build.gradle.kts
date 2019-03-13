@@ -36,7 +36,7 @@ configurations.getByName("compileOnly").extendsFrom(shadows)
 configurations.getByName("testCompile").extendsFrom(shadows)
 
 dependencies {
-    compile(project(":kotlin-stdlib"))
+    compile(kotlinStdlib())
     shadows(project(":kotlinx-metadata"))
     shadows(project(":core:metadata"))
     shadows(project(":core:metadata.jvm"))
@@ -44,7 +44,12 @@ dependencies {
     testCompile(commonDep("junit:junit"))
     testCompile(intellijDep()) { includeJars("asm-all", rootProject = rootProject) }
     testCompileOnly(project(":kotlin-reflect-api"))
-    testRuntime(projectDist(":kotlin-reflect"))
+    testRuntime(project(":kotlin-reflect"))
+}
+
+
+if (deployVersion != null) {
+    publish()
 }
 
 noDefaultJar()
@@ -75,8 +80,3 @@ sourcesJar {
 }
 
 javadocJar()
-
-if (deployVersion != null) {
-    publish()
-}
-

@@ -16,17 +16,21 @@
 
 package org.jetbrains.kotlin.ir.util
 
+import com.intellij.openapi.util.text.StringUtil
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.ReceiverParameterDescriptor
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.types.*
+import org.jetbrains.kotlin.ir.types.impl.originalKotlinType
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 import org.jetbrains.kotlin.renderer.ClassifierNamePolicy
 import org.jetbrains.kotlin.renderer.DescriptorRenderer
 import org.jetbrains.kotlin.renderer.DescriptorRendererModifier
 import org.jetbrains.kotlin.renderer.OverrideRenderingPolicy
 import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.Variance
 import org.jetbrains.kotlin.utils.addIfNotNull
 
 fun IrElement.render() = accept(RenderIrElementVisitor(), null)
@@ -45,7 +49,7 @@ class RenderIrElementVisitor : IrElementVisitor<String, Nothing?> {
         "EXTERNAL_PACKAGE_FRAGMENT fqName:${declaration.fqName}"
 
     override fun visitFile(declaration: IrFile, data: Nothing?): String =
-        "FILE fqName:${declaration.fqName} fileName:${declaration.name}"
+        "FILE fqName:${declaration.fqName} fileName:${declaration.path}"
 
     override fun visitFunction(declaration: IrFunction, data: Nothing?): String =
         "FUN ${declaration.renderOriginIfNonTrivial()}${declaration.renderDeclared()}"
@@ -210,7 +214,14 @@ class RenderIrElementVisitor : IrElementVisitor<String, Nothing?> {
         "? ${expression::class.java.simpleName} type=${expression.type.render()}"
 
     override fun <T> visitConst(expression: IrConst<T>, data: Nothing?): String =
-        "CONST ${expression.kind} type=${expression.type.render()} value=${expression.value}"
+        "CONST ${expression.kind} type=${expression.type.render()} value=${expression.value?.escapeIfRequired()}"
+
+    private fun Any.escapeIfRequired() =
+        when (this) {
+            is String -> "\"${StringUtil.escapeStringCharacters(this)}\""
+            is Char -> "'${StringUtil.escapeStringCharacters(this.toString())}'"
+            else -> this
+        }
 
     override fun visitVararg(expression: IrVararg, data: Nothing?): String =
         "VARARG type=${expression.type.render()} varargElementType=${expression.varargElementType.render()}"
@@ -335,6 +346,12 @@ class RenderIrElementVisitor : IrElementVisitor<String, Nothing?> {
     override fun visitCatch(aCatch: IrCatch, data: Nothing?): String =
         "CATCH parameter=${aCatch.parameter.ref()}"
 
+    override fun visitDynamicOperatorExpression(expression: IrDynamicOperatorExpression, data: Nothing?): String =
+        "DYN_OP operator=${expression.operator} type=${expression.type.render()}"
+
+    override fun visitDynamicMemberExpression(expression: IrDynamicMemberExpression, data: Nothing?): String =
+        "DYN_MEMBER memberName='${expression.memberName}' type=${expression.type.render()}"
+
     override fun visitErrorDeclaration(declaration: IrErrorDeclaration, data: Nothing?): String =
         "ERROR_DECL ${declaration.descriptor::class.java.simpleName} ${declaration.descriptor.ref()}"
 
@@ -343,38 +360,84 @@ class RenderIrElementVisitor : IrElementVisitor<String, Nothing?> {
 
     override fun visitErrorCallExpression(expression: IrErrorCallExpression, data: Nothing?): String =
         "ERROR_CALL '${expression.description}' type=${expression.type.render()}"
+}
 
-    companion object {
-        val DECLARATION_RENDERER = DescriptorRenderer.withOptions {
-            withDefinedIn = false
-            overrideRenderingPolicy = OverrideRenderingPolicy.RENDER_OPEN_OVERRIDE
-            includePropertyConstant = true
-            classifierNamePolicy = ClassifierNamePolicy.FULLY_QUALIFIED
-            verbose = false
-            modifiers = DescriptorRendererModifier.ALL
+private val DECLARATION_RENDERER = DescriptorRenderer.withOptions {
+    withDefinedIn = false
+    overrideRenderingPolicy = OverrideRenderingPolicy.RENDER_OPEN_OVERRIDE
+    includePropertyConstant = true
+    classifierNamePolicy = ClassifierNamePolicy.FULLY_QUALIFIED
+    verbose = false
+    modifiers = DescriptorRendererModifier.ALL
+}
+
+private val REFERENCE_RENDERER = DescriptorRenderer.ONLY_NAMES_WITH_SHORT_TYPES
+
+internal fun IrDeclaration.name(): String =
+    descriptor.name.toString()
+
+internal fun DescriptorRenderer.renderDescriptor(descriptor: DeclarationDescriptor): String =
+    if (descriptor is ReceiverParameterDescriptor)
+        "this@${descriptor.containingDeclaration.name}: ${descriptor.type}"
+    else
+        render(descriptor)
+
+internal fun IrDeclaration.renderDeclared(): String =
+    DECLARATION_RENDERER.renderDescriptor(this.descriptor)
+
+internal fun DeclarationDescriptor.ref(): String =
+    REFERENCE_RENDERER.renderDescriptor(this.original)
+
+internal fun KotlinType.render(): String =
+    DECLARATION_RENDERER.renderType(this)
+
+internal fun IrDeclaration.renderOriginIfNonTrivial(): String =
+    if (origin != IrDeclarationOrigin.DEFINED) origin.toString() + " " else ""
+
+internal fun IrType.renderTypeInner(): String =
+    when (this) {
+        is IrDynamicType -> "dynamic"
+
+        is IrErrorType -> "ERROR"
+
+        is IrSimpleType -> buildString {
+            append(DECLARATION_RENDERER.renderClassifierName(classifier.descriptor)) // TODO get rid of descriptors
+            if (arguments.isNotEmpty()) {
+                append(
+                    arguments.joinToString(prefix = "<", postfix = ">", separator = ", ") {
+                        it.renderTypeArgument()
+                    }
+                )
+            }
+            if (hasQuestionMark) {
+                append('?')
+            }
         }
 
-        val REFERENCE_RENDERER = DescriptorRenderer.ONLY_NAMES_WITH_SHORT_TYPES
-
-        internal fun IrDeclaration.name(): String =
-            descriptor.name.toString()
-
-        internal fun DescriptorRenderer.renderDescriptor(descriptor: DeclarationDescriptor): String =
-            if (descriptor is ReceiverParameterDescriptor)
-                "this@${descriptor.containingDeclaration.name}: ${descriptor.type}"
-            else
-                render(descriptor)
-
-        internal fun IrDeclaration.renderDeclared(): String =
-            DECLARATION_RENDERER.renderDescriptor(this.descriptor)
-
-        internal fun DeclarationDescriptor.ref(): String =
-            REFERENCE_RENDERER.renderDescriptor(this)
-
-        internal fun KotlinType.render(): String =
-            DECLARATION_RENDERER.renderType(this)
-
-        internal fun IrDeclaration.renderOriginIfNonTrivial(): String =
-            if (origin != IrDeclarationOrigin.DEFINED) origin.toString() + " " else ""
+        else ->
+            originalKotlinType?.let {
+                DECLARATION_RENDERER.renderType(it)
+            } ?: "IrType without originalKotlinType: $this"
     }
-}
+
+private fun IrTypeArgument.renderTypeArgument(): String =
+    when (this) {
+        is IrStarProjection -> "*"
+
+        is IrTypeProjection -> buildString {
+            append(variance.label)
+            if (variance != Variance.INVARIANT) append(' ')
+            append(type.render())
+        }
+
+        else -> "IrTypeArgument[$this]"
+    }
+
+internal fun renderTypeAnnotations(annotations: List<IrCall>) =
+    if (annotations.isEmpty())
+        ""
+    else
+        annotations.joinToString(prefix = "", postfix = " ", separator = " ") { "@[${it.render()}]" }
+
+fun IrType.render() = "${renderTypeAnnotations(annotations)}${renderTypeInner()}"
+

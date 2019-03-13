@@ -26,7 +26,7 @@ import org.jetbrains.kotlin.ir.util.referenceFunction
 import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
 import org.jetbrains.kotlin.psi.KtClassLiteralExpression
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
-import org.jetbrains.kotlin.psi.psiUtil.startOffset
+import org.jetbrains.kotlin.psi.psiUtil.startOffsetSkippingComments
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.ImportedFromObjectCallableDescriptor
 import org.jetbrains.kotlin.types.KotlinType
@@ -41,7 +41,7 @@ class ReflectionReferencesGenerator(statementGenerator: StatementGenerator) : St
 
         return if (lhs is DoubleColonLHS.Expression && !lhs.isObjectQualifier) {
             IrGetClassImpl(
-                ktClassLiteral.startOffset, ktClassLiteral.endOffset, resultType,
+                ktClassLiteral.startOffsetSkippingComments, ktClassLiteral.endOffset, resultType,
                 ktArgument.genExpr()
             )
         } else {
@@ -49,7 +49,7 @@ class ReflectionReferencesGenerator(statementGenerator: StatementGenerator) : St
             val typeClass = typeConstructorDeclaration
                     ?: throw AssertionError("Unexpected type constructor for ${lhs.type}: $typeConstructorDeclaration")
             IrClassReferenceImpl(
-                ktClassLiteral.startOffset, ktClassLiteral.endOffset, resultType,
+                ktClassLiteral.startOffsetSkippingComments, ktClassLiteral.endOffset, resultType,
                 context.symbolTable.referenceClassifier(typeClass), lhs.type.toIrType()
             )
         }
@@ -62,7 +62,7 @@ class ReflectionReferencesGenerator(statementGenerator: StatementGenerator) : St
         val descriptorImportedFromObject = resultingDescriptor as? ImportedFromObjectCallableDescriptor<*>
         val referencedDescriptor = descriptorImportedFromObject?.callableFromObject ?: resultingDescriptor
 
-        val startOffset = ktCallableReference.startOffset
+        val startOffset = ktCallableReference.startOffsetSkippingComments
         val endOffset = ktCallableReference.endOffset
 
         return statementGenerator.generateCallReceiver(
@@ -118,8 +118,8 @@ class ReflectionReferencesGenerator(statementGenerator: StatementGenerator) : St
             variableDescriptor.getter ?: throw AssertionError("Local delegated property should have a getter: $variableDescriptor")
         val setterDescriptor = variableDescriptor.setter
 
-        val getterSymbol = context.symbolTable.referenceFunction(getterDescriptor)
-        val setterSymbol = setterDescriptor?.let { context.symbolTable.referenceFunction(it) }
+        val getterSymbol = context.symbolTable.referenceSimpleFunction(getterDescriptor)
+        val setterSymbol = setterDescriptor?.let { context.symbolTable.referenceSimpleFunction(it) }
 
         return IrLocalDelegatedPropertyReferenceImpl(
             startOffset, endOffset, type.toIrType(),
@@ -141,8 +141,8 @@ class ReflectionReferencesGenerator(statementGenerator: StatementGenerator) : St
         val setterDescriptor = propertyDescriptor.setter
 
         val fieldSymbol = if (getterDescriptor == null) context.symbolTable.referenceField(propertyDescriptor) else null
-        val getterSymbol = getterDescriptor?.let { context.symbolTable.referenceFunction(it.original) }
-        val setterSymbol = setterDescriptor?.let { context.symbolTable.referenceFunction(it.original) }
+        val getterSymbol = getterDescriptor?.let { context.symbolTable.referenceSimpleFunction(it.original) }
+        val setterSymbol = setterDescriptor?.let { context.symbolTable.referenceSimpleFunction(it.original) }
 
         return IrPropertyReferenceImpl(
             startOffset, endOffset, type.toIrType(),

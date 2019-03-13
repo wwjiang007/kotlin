@@ -3,6 +3,7 @@ package org.jetbrains.kotlin.gradle.plugin
 import org.gradle.api.Project
 import org.gradle.api.tasks.compile.AbstractCompile
 import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
+import org.jetbrains.kotlin.gradle.logging.kotlinDebug
 import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinCompile
 import org.jetbrains.kotlin.gradle.tasks.CompilerPluginOptions
 import java.util.*
@@ -46,7 +47,7 @@ class SubpluginEnvironment(
         javaTask: AbstractCompile? = null,
         variantData: Any? = null,
         androidProjectHandler: AbstractAndroidProjectHandler<out Any?>? = null,
-        kotlinCompilation: KotlinCompilation? = null
+        kotlinCompilation: KotlinCompilation<*>? = null
     ): List<KotlinGradleSubplugin<AbstractKotlinCompile<C>>> = addSubpluginOptions(
         project,
         kotlinTask,
@@ -57,15 +58,15 @@ class SubpluginEnvironment(
         kotlinCompilation
     )
 
-    fun <C : CommonCompilerArguments> addSubpluginOptions(
+    fun addSubpluginOptions(
         project: Project,
         kotlinTask: AbstractCompile,
         pluginOptions: CompilerPluginOptions,
         javaTask: AbstractCompile? = null,
         variantData: Any? = null,
         androidProjectHandler: AbstractAndroidProjectHandler<out Any?>? = null,
-        kotlinCompilation: KotlinCompilation? = null
-    ): List<KotlinGradleSubplugin<AbstractKotlinCompile<C>>> {
+        kotlinCompilation: KotlinCompilation<*>? = null
+    ): List<KotlinGradleSubplugin<AbstractCompile>> {
         val appliedSubplugins = subplugins.filter { it.isApplicable(project, kotlinTask) }
         for (subplugin in appliedSubplugins) {
             if (!subplugin.isApplicable(project, kotlinTask)) continue
@@ -73,11 +74,13 @@ class SubpluginEnvironment(
             val pluginId = subplugin.getCompilerPluginId()
             project.logger.kotlinDebug { "Loading subplugin $pluginId" }
 
-            val artifact = subplugin.getPluginArtifact()
-            val artifactVersion = artifact.version ?: kotlinPluginVersion
-            val mavenCoordinate = "${artifact.groupId}:${artifact.artifactId}:$artifactVersion"
-            project.logger.kotlinDebug { "Adding '$mavenCoordinate' to '$PLUGIN_CLASSPATH_CONFIGURATION_NAME' configuration" }
-            project.dependencies.add(PLUGIN_CLASSPATH_CONFIGURATION_NAME, mavenCoordinate)
+            subplugin.getPluginArtifact().let { artifact ->
+                project.addMavenDependency(PLUGIN_CLASSPATH_CONFIGURATION_NAME, artifact)
+            }
+
+            subplugin.getNativeCompilerPluginArtifact()?.let { artifact ->
+                project.addMavenDependency(NATIVE_COMPILER_PLUGIN_CLASSPATH_CONFIGURATION_NAME, artifact)
+            }
 
             val subpluginOptions =
                 subplugin.apply(project, kotlinTask, javaTask, variantData, androidProjectHandler, kotlinCompilation)
@@ -91,5 +94,12 @@ class SubpluginEnvironment(
         }
 
         return appliedSubplugins
+    }
+
+    private fun Project.addMavenDependency(configuration: String, artifact: SubpluginArtifact) {
+        val artifactVersion = artifact.version ?: kotlinPluginVersion
+        val mavenCoordinate = "${artifact.groupId}:${artifact.artifactId}:$artifactVersion"
+        project.logger.kotlinDebug { "Adding '$mavenCoordinate' to '$configuration' configuration" }
+        project.dependencies.add(configuration, mavenCoordinate)
     }
 }

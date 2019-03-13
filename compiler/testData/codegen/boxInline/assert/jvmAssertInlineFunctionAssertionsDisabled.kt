@@ -3,6 +3,9 @@
 // WITH_RUNTIME
 // FULL_JDK
 // IGNORE_BACKEND: JVM_IR
+// TARGET_BACKEND: JVM
+
+package test
 
 inline fun inlineMe() {
     assert(false) { "FROM INLINED" }
@@ -10,6 +13,8 @@ inline fun inlineMe() {
 
 // FILE: inlineSite.kt
 // KOTLIN_CONFIGURATION_FLAGS: ASSERTIONS_MODE=jvm
+
+import test.*
 
 class CheckerJvmAssertInlineFunctionAssertionsDisabled {
     fun check() {

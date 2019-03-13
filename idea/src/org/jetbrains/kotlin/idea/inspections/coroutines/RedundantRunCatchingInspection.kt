@@ -24,7 +24,7 @@ class RedundantRunCatchingInspection : AbstractCallChainChecker() {
                 "Redundant 'runCatching' call may be reduced to '$replacement'",
                 ProblemHighlightType.GENERIC_ERROR_OR_WARNING,
                 isOnTheFly,
-                SimplifyCallChainFix(replacement)
+                SimplifyCallChainFix(conversion)
             )
             holder.registerProblem(descriptor)
         })
@@ -35,7 +35,7 @@ class RedundantRunCatchingInspection : AbstractCallChainChecker() {
         private val conversions = listOf(
             Conversion(
                 "kotlin.runCatching",
-                "kotlin.SuccessOrFailure.getOrThrow",
+                "kotlin.Result.getOrThrow",
                 "run"
             )
         )

@@ -1,7 +1,7 @@
 package org.jetbrains.kotlin.gradle
 
 import org.gradle.api.logging.LogLevel
-import org.jetbrains.kotlin.gradle.tasks.USING_EXPERIMENTAL_JS_INCREMENTAL_COMPILATION_MESSAGE
+import org.jetbrains.kotlin.gradle.tasks.USING_JS_INCREMENTAL_COMPILATION_MESSAGE
 import org.jetbrains.kotlin.gradle.util.getFileByName
 import org.jetbrains.kotlin.gradle.util.getFilesByNames
 import org.jetbrains.kotlin.gradle.util.modify
@@ -133,7 +133,7 @@ class Kotlin2JsGradlePluginIT : BaseGradleIT() {
 
     @Test
     fun testCompilerTestAccessInternalProduction() {
-        val project = Project("kotlin2JsInternalTest", GradleVersionRequired.Exact("3.5"))
+        val project = Project("kotlin2JsInternalTest")
 
         project.build("runRhino") {
             assertSuccessful()
@@ -167,7 +167,7 @@ class Kotlin2JsGradlePluginIT : BaseGradleIT() {
 
     @Test
     fun testKotlinJsBuiltins() {
-        val project = Project("kotlinBuiltins", GradleVersionRequired.AtLeast("4.0"))
+        val project = Project("kotlinBuiltins")
 
         project.setupWorkingDir()
         val buildGradle = File(project.projectDir, "app").getFileByName("build.gradle")
@@ -309,7 +309,7 @@ class Kotlin2JsGradlePluginIT : BaseGradleIT() {
     /** Issue: KT-18495 */
     @Test
     fun testNoSeparateClassesDirWarning() {
-        val project = Project("kotlin2JsProject", GradleVersionRequired.AtLeast("4.0"))
+        val project = Project("kotlin2JsProject")
         project.build("build") {
             assertSuccessful()
             assertNotContains("this build assumes a single directory for all classes from a source set")
@@ -317,10 +317,10 @@ class Kotlin2JsGradlePluginIT : BaseGradleIT() {
     }
 
     @Test
-    fun testIncrementalCompilation() = Project("kotlin2JsICProject", GradleVersionRequired.AtLeast("4.0")).run {
+    fun testIncrementalCompilation() = Project("kotlin2JsICProject").run {
         build("build") {
             assertSuccessful()
-            assertContains(USING_EXPERIMENTAL_JS_INCREMENTAL_COMPILATION_MESSAGE)
+            assertContains(USING_JS_INCREMENTAL_COMPILATION_MESSAGE)
             assertCompiledKotlinSources(project.relativize(allKotlinFiles))
         }
 
@@ -334,9 +334,19 @@ class Kotlin2JsGradlePluginIT : BaseGradleIT() {
         }
         build("build") {
             assertSuccessful()
-            assertContains(USING_EXPERIMENTAL_JS_INCREMENTAL_COMPILATION_MESSAGE)
+            assertContains(USING_JS_INCREMENTAL_COMPILATION_MESSAGE)
             val affectedFiles = project.projectDir.getFilesByNames("A.kt", "useAInLibMain.kt", "useAInAppMain.kt", "useAInAppTest.kt")
             assertCompiledKotlinSources(project.relativize(affectedFiles))
+        }
+    }
+
+    @Test
+    fun testIncrementalCompilationDisabled() = Project("kotlin2JsICProject").run {
+        val options = defaultBuildOptions().copy(incrementalJs = false)
+
+        build("build", options = options) {
+            assertSuccessful()
+            assertNotContains(USING_JS_INCREMENTAL_COMPILATION_MESSAGE)
         }
     }
 }

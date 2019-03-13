@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
+ * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
  * that can be found in the license/LICENSE.txt file.
  */
 
@@ -7,23 +7,16 @@ package org.jetbrains.kotlin.codegen.inline
 
 import com.intellij.psi.PsiElement
 import com.intellij.util.ArrayUtil
-import org.jetbrains.kotlin.backend.common.isBuiltInIntercepted
-import org.jetbrains.kotlin.builtins.BuiltInsPackageFragment
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.codegen.*
 import org.jetbrains.kotlin.codegen.AsmUtil.getMethodAsmFlags
 import org.jetbrains.kotlin.codegen.AsmUtil.isPrimitive
 import org.jetbrains.kotlin.codegen.context.ClosureContext
-import org.jetbrains.kotlin.codegen.coroutines.createMethodNodeForCoroutineContext
-import org.jetbrains.kotlin.codegen.coroutines.createMethodNodeForIntercepted
-import org.jetbrains.kotlin.codegen.coroutines.createMethodNodeForSuspendCoroutineUninterceptedOrReturn
-import org.jetbrains.kotlin.codegen.coroutines.isBuiltInSuspendCoroutineUninterceptedOrReturnInJvm
-import org.jetbrains.kotlin.codegen.intrinsics.bytecode
-import org.jetbrains.kotlin.codegen.intrinsics.classId
+import org.jetbrains.kotlin.codegen.intrinsics.IntrinsicArrayConstructors
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
 import org.jetbrains.kotlin.config.isReleaseCoroutines
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.descriptors.annotations.isInlineOnly
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
 import org.jetbrains.kotlin.psi.KtExpression
@@ -33,10 +26,10 @@ import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.ImportedFromObjectCallableDescriptor
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCallWithAssert
-import org.jetbrains.kotlin.resolve.calls.checkers.isBuiltInCoroutineContext
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.inline.InlineUtil
 import org.jetbrains.kotlin.resolve.inline.InlineUtil.isInlinableParameterExpression
+import org.jetbrains.kotlin.resolve.inline.isInlineOnly
 import org.jetbrains.kotlin.resolve.jvm.AsmTypes
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodGenericSignature
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodParameterKind
@@ -75,7 +68,8 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
 
     private val initialFrameSize = codegen.frameMap.currentSize
 
-    private val reifiedTypeInliner = ReifiedTypeInliner(typeParameterMappings, state.languageVersionSettings.isReleaseCoroutines())
+    private val reifiedTypeInliner =
+        ReifiedTypeInliner(typeParameterMappings, state.typeMapper, state.languageVersionSettings.isReleaseCoroutines())
 
     protected val functionDescriptor: FunctionDescriptor =
         if (InlineUtil.isArrayConstructorWithLambda(function))
@@ -224,10 +218,10 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
             val originalSuspendLambdaDescriptor =
                 parentContext.originalSuspendLambdaDescriptor ?: error("No original lambda descriptor found")
             codegen.genCoroutineInstanceForSuspendLambda(originalSuspendLambdaDescriptor)
-                    ?: error("No stack value for coroutine instance of lambda found")
+                ?: error("No stack value for coroutine instance of lambda found")
         } else
             codegen.getContinuationParameterFromEnclosingSuspendFunctionDescriptor(codegen.context.functionDescriptor)
-                    ?: error("No stack value for continuation parameter of suspend function")
+                ?: error("No stack value for continuation parameter of suspend function")
     }
 
     protected fun inlineCall(nodeAndSmap: SMAPAndMethodNode, callDefault: Boolean): InlineResult {
@@ -287,7 +281,6 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
         sourceCompiler.generateAndInsertFinallyBlocks(
             adapter, infos, (remapper.remap(parameters.argsSizeOnStack + 1).value as StackValue.Local).index
         )
-        removeStaticInitializationTrigger(adapter)
         if (!sourceCompiler.isFinallyMarkerRequired()) {
             removeFinallyMarkers(adapter)
         }
@@ -300,8 +293,12 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
 
         defaultSourceMapper.callSiteMarker = null
 
+        generateAssertFieldIfNeeded(info)
+
         return result
     }
+
+    protected abstract fun generateAssertFieldIfNeeded(info: RootInliningContext)
 
     private fun isInlinedToInlineFunInKotlinRuntime(): Boolean {
         val codegen = this.codegen as? ExpressionCodegen ?: return false
@@ -464,40 +461,9 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
             state: GenerationState,
             sourceCompilerForInline: SourceCompilerForInline
         ): SMAPAndMethodNode {
-            val languageVersionSettings = state.languageVersionSettings
-            when {
-                isSpecialEnumMethod(functionDescriptor) -> {
-                    val node = createSpecialEnumMethodBody(
-                        functionDescriptor.name.asString(),
-                        typeArguments!!.keys.single().defaultType,
-                        state.typeMapper
-                    )
-                    return SMAPAndMethodNode(node, createDefaultFakeSMAP())
-                }
-                functionDescriptor.isBuiltInIntercepted(languageVersionSettings) ->
-                    return SMAPAndMethodNode(
-                        createMethodNodeForIntercepted(functionDescriptor, state.typeMapper, languageVersionSettings),
-                        createDefaultFakeSMAP()
-                    )
-                functionDescriptor.isBuiltInCoroutineContext(languageVersionSettings) ->
-                    return SMAPAndMethodNode(
-                        createMethodNodeForCoroutineContext(functionDescriptor, languageVersionSettings),
-                        createDefaultFakeSMAP()
-                    )
-                functionDescriptor.isBuiltInSuspendCoroutineUninterceptedOrReturnInJvm(languageVersionSettings) ->
-                    return SMAPAndMethodNode(
-                        createMethodNodeForSuspendCoroutineUninterceptedOrReturn(
-                            functionDescriptor,
-                            state.typeMapper,
-                            languageVersionSettings
-                        ),
-                        createDefaultFakeSMAP()
-                    )
-                functionDescriptor.isBuiltinAlwaysEnabledAssert() ->
-                    return SMAPAndMethodNode(
-                        createMethodNodeForAlwaysEnabledAssert(functionDescriptor, state.typeMapper),
-                        createDefaultFakeSMAP()
-                    )
+            val intrinsic = generateInlineIntrinsic(state, functionDescriptor, typeArguments)
+            if (intrinsic != null) {
+                return SMAPAndMethodNode(intrinsic, createDefaultFakeSMAP())
             }
 
             val asmMethod = if (callDefault)
@@ -514,10 +480,10 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
 
             val resultInCache = state.inlineCache.methodNodeById.getOrPut(methodId) {
                 val result = doCreateMethodNodeFromCompiled(directMember, state, asmMethod)
-                        ?: if (functionDescriptor.isSuspend)
-                            doCreateMethodNodeFromCompiled(directMember, state, jvmSignature.asmMethod)
-                        else
-                            null
+                    ?: if (functionDescriptor.isSuspend)
+                        doCreateMethodNodeFromCompiled(directMember, state, jvmSignature.asmMethod)
+                    else
+                        null
                 result ?: throw IllegalStateException("Couldn't obtain compiled function body for $functionDescriptor")
             }
 
@@ -542,7 +508,7 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
         private fun cloneMethodNode(methodNode: MethodNode): MethodNode {
             methodNode.instructions.resetLabels()
             return MethodNode(
-                API, methodNode.access, methodNode.name, methodNode.desc, methodNode.signature,
+                Opcodes.API_VERSION, methodNode.access, methodNode.name, methodNode.desc, methodNode.signature,
                 ArrayUtil.toStringArray(methodNode.exceptions)
             ).also(methodNode::accept)
         }
@@ -553,9 +519,13 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
             asmMethod: Method
         ): SMAPAndMethodNode? {
             if (isBuiltInArrayIntrinsic(callableDescriptor)) {
-                val classId = classId
-                val bytes = state.inlineCache.classBytes.getOrPut(classId) { bytecode }
-                return getMethodNode(bytes, asmMethod.name, asmMethod.descriptor, AsmUtil.asmTypeByClassId(classId))
+                val body = when {
+                    callableDescriptor is FictitiousArrayConstructor -> IntrinsicArrayConstructors.generateArrayConstructorBody(asmMethod)
+                    callableDescriptor.name.asString() == "emptyArray" -> IntrinsicArrayConstructors.generateEmptyArrayBody(asmMethod)
+                    callableDescriptor.name.asString() == "arrayOf" -> IntrinsicArrayConstructors.generateArrayOfBody(asmMethod)
+                    else -> throw UnsupportedOperationException("Not an array intrinsic: $callableDescriptor")
+                }
+                return SMAPAndMethodNode(body, SMAP(listOf(FileMapping.SKIP)))
             }
 
             assert(callableDescriptor is DeserializedCallableMemberDescriptor) { "Not a deserialized function or proper: " + callableDescriptor }
@@ -567,7 +537,7 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
 
             val bytes = state.inlineCache.classBytes.getOrPut(containerId) {
                 findVirtualFile(state, containerId)?.contentsToByteArray()
-                        ?: throw IllegalStateException("Couldn't find declaration file for " + containerId)
+                    ?: throw IllegalStateException("Couldn't find declaration file for " + containerId)
             }
 
             val methodNode =
@@ -585,23 +555,10 @@ abstract class InlineCodegen<out T : BaseExpressionCodegen>(
         private fun isBuiltInArrayIntrinsic(callableDescriptor: CallableMemberDescriptor): Boolean {
             if (callableDescriptor is FictitiousArrayConstructor) return true
             val name = callableDescriptor.name.asString()
-            return (name == "arrayOf" || name == "emptyArray") && callableDescriptor.containingDeclaration is BuiltInsPackageFragment
-        }
-
-        private fun removeStaticInitializationTrigger(methodNode: MethodNode) {
-            val insnList = methodNode.instructions
-            var insn: AbstractInsnNode? = insnList.first
-            while (insn != null) {
-                if (MultifileClassPartCodegen.isStaticInitTrigger(insn)) {
-                    val clinitTriggerCall = insn
-                    insn = insn.next
-                    insnList.remove(clinitTriggerCall)
-                } else {
-                    insn = insn.next
-                }
+            return (name == "arrayOf" || name == "emptyArray") && callableDescriptor.containingDeclaration.let { container ->
+                container is PackageFragmentDescriptor && container.fqName == KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME
             }
         }
-
 
         /*descriptor is null for captured vars*/
         private fun shouldPutGeneralValue(type: Type, kotlinType: KotlinType?, stackValue: StackValue): Boolean {
@@ -677,6 +634,12 @@ class PsiInlineCodegen(
     sourceCompiler: SourceCompilerForInline
 ) : InlineCodegen<ExpressionCodegen>(codegen, state, function, typeParameterMappings, sourceCompiler), CallGenerator {
 
+    override fun generateAssertFieldIfNeeded(info: RootInliningContext) {
+        if (info.generateAssertField) {
+            codegen.parentCodegen.generateAssertField()
+        }
+    }
+
     override fun genCallInner(
         callableMethod: Callable,
         resolvedCall: ResolvedCall<*>?,
@@ -737,30 +700,37 @@ class PsiInlineCodegen(
     }
 
     override fun genValueAndPut(
-        valueParameterDescriptor: ValueParameterDescriptor,
+        valueParameterDescriptor: ValueParameterDescriptor?,
         argumentExpression: KtExpression,
-        parameterType: Type,
+        parameterType: JvmKotlinType,
         parameterIndex: Int
     ) {
+        requireNotNull(valueParameterDescriptor) {
+            "Parameter descriptor can only be null in case a @PolymorphicSignature function is called, " +
+                    "which cannot be declared in Kotlin and thus be inline: $codegen"
+        }
+
         if (isInliningParameter(argumentExpression, valueParameterDescriptor)) {
-            val lambdaInfo = rememberClosure(argumentExpression, parameterType, valueParameterDescriptor)
+            val lambdaInfo = rememberClosure(argumentExpression, parameterType.type, valueParameterDescriptor)
 
             val receiverValue = getBoundCallableReferenceReceiver(argumentExpression)
             if (receiverValue != null) {
                 val receiver = codegen.generateReceiverValue(receiverValue, false)
+                val receiverKotlinType = receiver.kotlinType
+                val boxedReceiver =
+                    if (receiverKotlinType != null)
+                        receiver.type.boxReceiverForBoundReference(receiverKotlinType, state.typeMapper)
+                    else
+                        receiver.type.boxReceiverForBoundReference()
+
                 putClosureParametersOnStack(
                     lambdaInfo,
-                    StackValue.coercion(receiver, receiver.type.boxReceiverForBoundReference(), null)
+                    StackValue.coercion(receiver, boxedReceiver, receiverKotlinType)
                 )
             }
         } else {
             val value = codegen.gen(argumentExpression)
-            putValueIfNeeded(
-                JvmKotlinType(parameterType, valueParameterDescriptor.original.type),
-                value,
-                ValueKind.GENERAL,
-                valueParameterDescriptor.index
-            )
+            putValueIfNeeded(parameterType, value, ValueKind.GENERAL, parameterIndex)
         }
     }
 
@@ -769,7 +739,8 @@ class PsiInlineCodegen(
         assert(isInlinableParameterExpression(ktLambda)) { "Couldn't find inline expression in ${expression.text}" }
 
         return PsiExpressionLambda(
-            ktLambda!!, typeMapper, parameter.isCrossinline, getBoundCallableReferenceReceiver(expression) != null
+            ktLambda!!, typeMapper, state.languageVersionSettings,
+            parameter.isCrossinline, getBoundCallableReferenceReceiver(expression) != null
         ).also { lambda ->
             val closureInfo = invocationParamBuilder.addNextValueParameter(type, true, null, parameter.index)
             closureInfo.lambda = lambda
