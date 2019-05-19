@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package kotlin
@@ -21,19 +21,25 @@ public class Array<T> {
 
     /**
      * Returns the array element at the specified [index]. This method can be called using the
-     * index operator:
+     * index operator.
      * ```
      * value = arr[index]
      * ```
+     *
+     * If the [index] is out of bounds of this array, throws an [IndexOutOfBoundsException] except in Kotlin/JS
+     * where the behavior is unspecified.
      */
     public operator fun get(index: Int): T
 
     /**
      * Sets the array element at the specified [index] to the specified [value]. This method can
-     * be called using the index operator:
+     * be called using the index operator.
      * ```
      * arr[index] = value
      * ```
+     *
+     * If the [index] is out of bounds of this array, throws an [IndexOutOfBoundsException] except in Kotlin/JS
+     * where the behavior is unspecified.
      */
     public operator fun set(index: Int, value: T): Unit
 

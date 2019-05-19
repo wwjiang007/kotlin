@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.state
@@ -149,8 +149,12 @@ class GenerationState private constructor(
     init {
         val icComponents = configuration.get(JVMConfigurationKeys.INCREMENTAL_COMPILATION_COMPONENTS)
         if (icComponents != null) {
-            incrementalCacheForThisTarget =
-                    icComponents.getIncrementalCache(targetId ?: error("Target ID should be specified for incremental compilation"))
+            val targetId = targetId
+                ?: moduleName?.let {
+                    // hack for Gradle IC, Gradle does not use build.xml file, so there is no way to pass target id
+                    TargetId(it, "java-production")
+                } ?: error("Target ID should be specified for incremental compilation")
+            incrementalCacheForThisTarget = icComponents.getIncrementalCache(targetId)
             packagesWithObsoleteParts = incrementalCacheForThisTarget.getObsoletePackageParts().map {
                 JvmClassName.byInternalName(it).packageFqName
             }.toSet()
@@ -200,7 +204,8 @@ class GenerationState private constructor(
     val intrinsics: IntrinsicMethods = run {
         val shouldUseConsistentEquals = languageVersionSettings.supportsFeature(LanguageFeature.ThrowNpeOnExplicitEqualsForBoxedNull) &&
                 !configuration.getBoolean(JVMConfigurationKeys.NO_EXCEPTION_ON_EXPLICIT_EQUALS_FOR_BOXED_NULL)
-        IntrinsicMethods(target, shouldUseConsistentEquals)
+        val canReplaceStdlibRuntimeApiBehavior = languageVersionSettings.apiVersion <= ApiVersion.parse(KotlinVersion.CURRENT.toString())!!
+        IntrinsicMethods(target, canReplaceStdlibRuntimeApiBehavior, shouldUseConsistentEquals)
     }
     val samWrapperClasses: SamWrapperClasses = SamWrapperClasses(this)
     val globalInlineContext: GlobalInlineContext = GlobalInlineContext(diagnostics)
@@ -273,8 +278,8 @@ class GenerationState private constructor(
                         ?.let { destination -> SignatureDumpingBuilderFactory(it, File(destination)) } ?: it
                 }
             )
-            .wrapWith(ClassBuilderInterceptorExtension.getInstances(project)) { builderFactory, extension ->
-                extension.interceptClassBuilderFactory(builderFactory, bindingContext, diagnostics)
+            .wrapWith(ClassBuilderInterceptorExtension.getInstances(project)) { classBuilderFactory, extension ->
+                extension.interceptClassBuilderFactory(classBuilderFactory, bindingContext, diagnostics)
             }
 
         this.factory = ClassFileFactory(this, interceptedBuilderFactory)

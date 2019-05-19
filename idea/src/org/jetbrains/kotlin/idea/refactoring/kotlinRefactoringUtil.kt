@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.refactoring
@@ -28,10 +28,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.JavaProjectRootsUtil
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
-import com.intellij.openapi.ui.popup.JBPopup
-import com.intellij.openapi.ui.popup.JBPopupAdapter
-import com.intellij.openapi.ui.popup.JBPopupFactory
-import com.intellij.openapi.ui.popup.LightweightWindowEvent
+import com.intellij.openapi.ui.popup.*
 import com.intellij.openapi.util.Pass
 import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.util.text.StringUtil
@@ -75,15 +72,18 @@ import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
 import org.jetbrains.kotlin.idea.core.*
 import org.jetbrains.kotlin.idea.core.util.showYesNoCancelDialog
 import org.jetbrains.kotlin.idea.j2k.IdeaJavaToKotlinServices
+import org.jetbrains.kotlin.idea.j2k.JavaToKotlinConverterFactory
 import org.jetbrains.kotlin.idea.project.languageVersionSettings
 import org.jetbrains.kotlin.idea.refactoring.changeSignature.KotlinValVar
 import org.jetbrains.kotlin.idea.refactoring.changeSignature.toValVar
 import org.jetbrains.kotlin.idea.refactoring.memberInfo.KtPsiClassWrapper
 import org.jetbrains.kotlin.idea.refactoring.rename.canonicalRender
-import org.jetbrains.kotlin.idea.util.*
+import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
+import org.jetbrains.kotlin.idea.util.ProjectRootsUtil
+import org.jetbrains.kotlin.idea.util.actualsForExpected
+import org.jetbrains.kotlin.idea.util.liftToExpected
 import org.jetbrains.kotlin.idea.util.string.collapseSpaces
 import org.jetbrains.kotlin.j2k.ConverterSettings
-import org.jetbrains.kotlin.j2k.JavaToKotlinConverter
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.FqNameUnsafe
@@ -99,6 +99,7 @@ import java.io.File
 import java.lang.annotation.Retention
 import java.util.*
 import javax.swing.Icon
+import kotlin.math.min
 
 const val CHECK_SUPER_METHODS_YES_NO_DIALOG = "CHECK_SUPER_METHODS_YES_NO_DIALOG"
 
@@ -271,7 +272,7 @@ fun <T, E : PsiElement> getPsiElementPopup(
         }
     }
 
-    return with(PopupChooserBuilderWrapper<E>(list)) {
+    return with(PopupChooserBuilder<E>(list)) {
         title?.let { setTitle(it) }
         renderer.installSpeedSearch(this, true)
         setItemChoosenCallback {
@@ -532,8 +533,8 @@ fun createJavaMethod(template: PsiMethod, targetClass: PsiClass): PsiMethod {
         method.modifierList.setModifierProperty(PsiModifier.FINAL, false)
     }
 
-    copyTypeParameters(template, method) { method, typeParameterList ->
-        method.addAfter(typeParameterList, method.modifierList)
+    copyTypeParameters(template, method) { psiMethod, typeParameterList ->
+        psiMethod.addAfter(typeParameterList, psiMethod.modifierList)
     }
 
     val targetParamList = method.parameterList
@@ -599,8 +600,8 @@ fun createJavaClass(klass: KtClass, targetClass: PsiClass?, forcePlainClass: Boo
         javaClass.modifierList!!.setModifierProperty(PsiModifier.ABSTRACT, false)
     }
 
-    copyTypeParameters(template, javaClass) { klass, typeParameterList ->
-        klass.addAfter(typeParameterList, klass.nameIdentifier)
+    copyTypeParameters(template, javaClass) { clazz, typeParameterList ->
+        clazz.addAfter(typeParameterList, clazz.nameIdentifier)
     }
 
     // Turning interface to class
@@ -641,15 +642,19 @@ fun createJavaClass(klass: KtClass, targetClass: PsiClass?, forcePlainClass: Boo
     return javaClass
 }
 
-fun PsiElement.j2kText(): String? {
+fun PsiElement.j2kText(): String? =
+    convertToKotlin()?.results?.single()?.text //TODO: insert imports
+
+fun PsiElement.convertToKotlin(): org.jetbrains.kotlin.j2k.Result? {
     if (language != JavaLanguage.INSTANCE) return null
 
-    val j2kConverter = JavaToKotlinConverter(
-        project,
-        ConverterSettings.defaultSettings,
-        IdeaJavaToKotlinServices
-    )
-    return j2kConverter.elementsToKotlin(listOf(this)).results.single()?.text ?: return null //TODO: insert imports
+    val j2kConverter =
+        JavaToKotlinConverterFactory.createJavaToKotlinConverter(
+            project,
+            ConverterSettings.defaultSettings,
+            IdeaJavaToKotlinServices
+        )
+    return j2kConverter.elementsToKotlin(listOf(this))
 }
 
 fun PsiExpression.j2k(): KtExpression? {
@@ -774,7 +779,7 @@ fun <ListType : KtElement> replaceListPsiAndKeepDelimiters(
     val oldCount = oldParameters.size
     val newCount = newParameters.size
 
-    val commonCount = Math.min(oldCount, newCount)
+    val commonCount = min(oldCount, newCount)
     for (i in 0 until commonCount) {
         oldParameters[i] = oldParameters[i].replace(newParameters[i]) as KtElement
     }
@@ -847,7 +852,13 @@ fun addTypeArgumentsIfNeeded(expression: KtExpression, typeArgumentList: KtTypeA
     val callElement = call.callElement as? KtCallExpression ?: return
     if (call.typeArgumentList != null) return
     val callee = call.calleeExpression ?: return
-    if (context.diagnostics.forElement(callee).all { it.factory != Errors.TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER }) return
+    if (context.diagnostics.forElement(callee).all {
+            it.factory != Errors.TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER &&
+                    it.factory != Errors.NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER
+        }
+    ) {
+        return
+    }
 
     callElement.addAfter(typeArgumentList, callElement.calleeExpression)
     ShortenReferences.DEFAULT.process(callElement.typeArgumentList!!)

@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.ir.backend.js.lower
@@ -27,6 +27,7 @@ import org.jetbrains.kotlin.ir.types.makeNullable
 import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.ir.util.isThrowable
 import org.jetbrains.kotlin.ir.util.isThrowableTypeOrSubtype
+import org.jetbrains.kotlin.ir.util.transformFlat
 import org.jetbrains.kotlin.ir.visitors.*
 import org.jetbrains.kotlin.name.Name
 
@@ -107,8 +108,8 @@ class ThrowableSuccessorsLowering(val context: JsIrBackendContext) : FileLowerin
     }
 
     inner class ThrowableInstanceCreationLowering : IrElementTransformerVoid() {
-        override fun visitCall(expression: IrCall): IrExpression {
-            if (expression.symbol !in throwableConstructors) return super.visitCall(expression)
+        override fun visitConstructorCall(expression: IrConstructorCall): IrExpression {
+            if (expression.symbol !in throwableConstructors) return super.visitConstructorCall(expression)
 
             expression.transformChildrenVoid(this)
 
@@ -130,7 +131,7 @@ class ThrowableSuccessorsLowering(val context: JsIrBackendContext) : FileLowerin
                 else -> {
                     val arg = expression.getValueArgument(0)!!
                     when {
-                        arg.type.makeNotNull(false).isThrowable() -> Pair(nullValue(), arg)
+                        arg.type.makeNotNull().isThrowable() -> Pair(nullValue(), arg)
                         else -> Pair(arg, nullValue())
                     }
                 }
@@ -147,12 +148,25 @@ class ThrowableSuccessorsLowering(val context: JsIrBackendContext) : FileLowerin
             if (isDirectChildOfThrowable(declaration)) {
                 val messageField = createBackingField(declaration, messagePropertyName, stringType)
                 val causeField = createBackingField(declaration, causePropertyName, throwableType)
+
                 val existedMessageAccessor = ownPropertyAccessor(declaration, messageGetter)
-                if (existedMessageAccessor.origin == IrDeclarationOrigin.FAKE_OVERRIDE)
+                val newMessageAccessor = if (existedMessageAccessor.origin == IrDeclarationOrigin.FAKE_OVERRIDE) {
                     createPropertyAccessor(existedMessageAccessor, messageField)
+                } else existedMessageAccessor
+
                 val existedCauseAccessor = ownPropertyAccessor(declaration, causeGetter)
-                if (existedCauseAccessor.origin == IrDeclarationOrigin.FAKE_OVERRIDE)
+                val newCauseAccessor = if (existedCauseAccessor.origin == IrDeclarationOrigin.FAKE_OVERRIDE) {
                     createPropertyAccessor(existedCauseAccessor, causeField)
+                } else existedCauseAccessor
+
+
+                declaration.declarations.transformFlat {
+                    when (it) {
+                        existedMessageAccessor -> listOf(newMessageAccessor)
+                        existedCauseAccessor -> listOf(newCauseAccessor)
+                        else -> null
+                    }
+                }
 
                 pendingSuperUsages += DirectThrowableSuccessors(declaration, messageField, causeField)
             }
@@ -181,11 +195,11 @@ class ThrowableSuccessorsLowering(val context: JsIrBackendContext) : FileLowerin
             return fieldDeclaration
         }
 
-        private fun createPropertyAccessor(fakeAccessor: IrSimpleFunction, field: IrField) {
+        private fun createPropertyAccessor(fakeAccessor: IrSimpleFunction, field: IrField): IrSimpleFunction {
             val name = fakeAccessor.name
             val function = JsIrBuilder.buildFunction(name, fakeAccessor.returnType, fakeAccessor.parent).apply {
                 overriddenSymbols += fakeAccessor.overriddenSymbols
-                correspondingProperty = fakeAccessor.correspondingProperty
+                correspondingPropertySymbol = fakeAccessor.correspondingPropertySymbol
                 dispatchReceiverParameter = fakeAccessor.dispatchReceiverParameter?.copyTo(this)
             }
 
@@ -194,7 +208,7 @@ class ThrowableSuccessorsLowering(val context: JsIrBackendContext) : FileLowerin
             val returnStatement = JsIrBuilder.buildReturn(function.symbol, returnValue, nothingType)
             function.body = JsIrBuilder.buildBlockBody(listOf(returnStatement))
 
-            fakeAccessor.correspondingProperty?.getter = function
+            return function
         }
     }
 
@@ -293,7 +307,7 @@ class ThrowableSuccessorsLowering(val context: JsIrBackendContext) : FileLowerin
                     val irVal = JsIrBuilder.buildVar(arg.type, parent, initializer = arg)
                     val argValue = JsIrBuilder.buildGetValue(irVal.symbol)
                     when {
-                        arg.type.makeNotNull(false).isThrowable() -> Triple(safeCallToString(irVal), argValue, listOf(irVal))
+                        arg.type.makeNotNull().isThrowable() -> Triple(safeCallToString(irVal), argValue, listOf(irVal))
                         else -> Triple(argValue, nullValue(), listOf(irVal))
                     }
                 }
@@ -315,7 +329,8 @@ class ThrowableSuccessorsLowering(val context: JsIrBackendContext) : FileLowerin
     private fun isDirectChildOfThrowable(irClass: IrClass) = irClass.superTypes.any { it.isThrowable() }
     private fun ownPropertyAccessor(irClass: IrClass, irBase: IrFunctionSymbol) =
         irClass.declarations.filterIsInstance<IrProperty>().mapNotNull { it.getter }
-            .single { it.overriddenSymbols.any { s -> s == irBase } }
+            .singleOrNull { it.overriddenSymbols.any { s -> s == irBase } }
+            ?: irClass.declarations.filterIsInstance<IrSimpleFunction>().single { it.overriddenSymbols.any { s -> s == irBase } }
 
     inner class ThrowablePropertiesUsageTransformer : IrElementTransformerVoid() {
         override fun visitCall(expression: IrCall): IrExpression {

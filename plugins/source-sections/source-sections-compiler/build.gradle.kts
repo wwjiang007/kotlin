@@ -9,18 +9,16 @@ plugins {
 
 dependencies {
     compileOnly(project(":compiler:frontend"))
-    compileOnly(project(":compiler:frontend.script"))
     compileOnly(project(":compiler:plugin-api"))
     compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
 
     testCompile(project(":compiler:frontend"))
-    testCompile(project(":compiler:frontend.script"))
     testCompile(project(":compiler:plugin-api"))
     testCompile(project(":compiler:util"))
     testCompile(project(":compiler:cli"))
     testCompile(project(":compiler:cli-common"))
     testCompile(project(":compiler:frontend.java"))
-    testCompile(project(":compiler:daemon-common"))
+    testCompile(project(":daemon-common"))
     testCompile(projectRuntimeJar(":kotlin-daemon-client"))
     testCompile(projectTests(":compiler:tests-common"))
     testCompile(commonDep("junit:junit"))
@@ -34,7 +32,7 @@ sourceSets {
     "test" { projectDefault() }
 }
 
-projectTest {
+projectTest(parallel = true) {
     workingDir = rootDir
 }
 

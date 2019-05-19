@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.backend.jvm.lower
@@ -115,7 +115,7 @@ private class JvmOverloadsAnnotationLowering(val context: JvmBackendContext) : C
             is IrConstructor -> {
                 val descriptor = WrappedClassConstructorDescriptor(oldFunction.descriptor.annotations)
                 IrConstructorImpl(
-                    oldFunction.startOffset, oldFunction.endOffset,
+                    UNDEFINED_OFFSET, UNDEFINED_OFFSET,
                     JvmLoweredDeclarationOrigin.JVM_OVERLOADS_WRAPPER,
                     IrConstructorSymbolImpl(descriptor),
                     oldFunction.name,
@@ -131,7 +131,7 @@ private class JvmOverloadsAnnotationLowering(val context: JvmBackendContext) : C
             is IrSimpleFunction -> {
                 val descriptor = WrappedSimpleFunctionDescriptor(oldFunction.descriptor.annotations)
                 IrFunctionImpl(
-                    oldFunction.startOffset, oldFunction.endOffset,
+                    UNDEFINED_OFFSET, UNDEFINED_OFFSET,
                     JvmLoweredDeclarationOrigin.JVM_OVERLOADS_WRAPPER,
                     IrSimpleFunctionSymbolImpl(descriptor),
                     oldFunction.name,

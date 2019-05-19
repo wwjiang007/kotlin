@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.calls.tower
@@ -84,6 +84,12 @@ class ResolvedAtomCompleter(
             diagnostics
         )
 
+        val lastCall = if (resolvedCall is VariableAsFunctionResolvedCall) resolvedCall.functionCall else resolvedCall
+        if (ErrorUtils.isError(resolvedCall.candidateDescriptor)) {
+            kotlinToResolvedCallTransformer.runArgumentsChecks(topLevelCallContext, topLevelTrace, lastCall as NewResolvedCallImpl<*>)
+            return resolvedCall
+        }
+
         val resolutionContextForPartialCall =
             topLevelCallContext.trace[BindingContext.PARTIAL_CALL_RESOLUTION_CONTEXT, resolvedCallAtom.atom.psiKotlinCall.psiCall]
 
@@ -96,13 +102,13 @@ class ResolvedAtomCompleter(
         else
             topLevelCallCheckerContext
 
-        kotlinToResolvedCallTransformer.bindAndReport(topLevelCallContext, topLevelTrace, resolvedCall, diagnostics)
-
-        val lastCall = if (resolvedCall is VariableAsFunctionResolvedCall) resolvedCall.functionCall else resolvedCall
+        kotlinToResolvedCallTransformer.bind(topLevelTrace, resolvedCall)
 
         kotlinToResolvedCallTransformer.runArgumentsChecks(topLevelCallContext, topLevelTrace, lastCall as NewResolvedCallImpl<*>)
         kotlinToResolvedCallTransformer.runCallCheckers(resolvedCall, callCheckerContext)
         kotlinToResolvedCallTransformer.runAdditionalReceiversCheckers(resolvedCall, topLevelCallContext)
+
+        kotlinToResolvedCallTransformer.reportDiagnostics(topLevelCallContext, topLevelTrace, resolvedCall, diagnostics)
 
         return resolvedCall
     }
@@ -133,7 +139,13 @@ class ResolvedAtomCompleter(
             resultSubstitutor.safeSubstitute(lambda.returnType)
         }
 
-        updateTraceForLambda(lambda, topLevelTrace, returnType)
+        val approximatedReturnType =
+            TypeApproximator(builtIns).approximateDeclarationType(
+                returnType,
+                local = true,
+                languageVersionSettings = topLevelCallContext.languageVersionSettings
+            )
+        updateTraceForLambda(lambda, topLevelTrace, approximatedReturnType)
 
         for (lambdaResult in lambda.resultArguments) {
             val resultValueArgument = lambdaResult as? PSIKotlinCallArgument ?: continue
@@ -143,7 +155,9 @@ class ResolvedAtomCompleter(
                     .replaceBindingTrace(topLevelTrace)
 
             val argumentExpression = resultValueArgument.valueArgument.getArgumentExpression() ?: continue
-            kotlinToResolvedCallTransformer.updateRecordedType(argumentExpression, newContext, true)
+            kotlinToResolvedCallTransformer.updateRecordedType(
+                argumentExpression, parameter = null, context = newContext, reportErrorForTypeMismatch = true
+            )
         }
     }
 
@@ -177,8 +191,8 @@ class ResolvedAtomCompleter(
         val substitutedFunctionalType = createFunctionType(
             builtIns,
             existingLambdaType.annotations,
-            lambda.receiver?.let { resultSubstitutor.substituteKeepAnnotations(it) },
-            lambda.parameters.map { resultSubstitutor.substituteKeepAnnotations(it) },
+            lambda.receiver?.let { resultSubstitutor.safeSubstitute(it) },
+            lambda.parameters.map { resultSubstitutor.safeSubstitute(it) },
             null, // parameter names transforms to special annotations, so they are already taken from parameter types
             returnType,
             lambda.isSuspend
@@ -194,13 +208,14 @@ class ResolvedAtomCompleter(
             }
 
             val valueType = receiver.value.type.unwrap()
-            val newValueType = resultSubstitutor.substituteKeepAnnotations(valueType)
+            val newValueType = resultSubstitutor.safeSubstitute(valueType)
 
-            val newReceiverValue = receiver.value.replaceType(newValueType)
-
-            functionDescriptor.setExtensionReceiverParameter(
-                ReceiverParameterDescriptorImpl(receiver.containingDeclaration, newReceiverValue, receiver.annotations)
-            )
+            if (valueType !== newValueType) {
+                val newReceiverValue = receiver.value.replaceType(newValueType)
+                functionDescriptor.setExtensionReceiverParameter(
+                    ReceiverParameterDescriptorImpl(receiver.containingDeclaration, newReceiverValue, receiver.annotations)
+                )
+            }
         }
     }
 

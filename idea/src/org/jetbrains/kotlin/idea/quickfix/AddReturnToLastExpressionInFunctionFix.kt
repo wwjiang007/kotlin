@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.quickfix
@@ -18,6 +18,7 @@ import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.resolve.calls.callUtil.getType
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
+import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
 
 class AddReturnToLastExpressionInFunctionFix(element: KtDeclarationWithBody) : KotlinQuickFixAction<KtDeclarationWithBody>(element) {
@@ -31,8 +32,9 @@ class AddReturnToLastExpressionInFunctionFix(element: KtDeclarationWithBody) : K
 
         val context = last.analyze(BodyResolveMode.PARTIAL)
         val lastType = last.getType(context) ?: return false
+        if (lastType.isError) return false
         val expectedType = element.resolveToDescriptorIfAny()?.returnType ?: return false
-        if (!lastType.isSubtypeOf(expectedType)) return false
+        if (expectedType.isError || !lastType.isSubtypeOf(expectedType)) return false
 
         return true
     }

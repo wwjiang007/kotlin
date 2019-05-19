@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.perf
@@ -9,7 +9,6 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.util.Disposer
 import com.intellij.psi.*
 import com.intellij.testFramework.UsefulTestCase
-import org.jetbrains.annotations.TestOnly
 import org.jetbrains.kotlin.asJava.LightClassGenerationSupport
 import org.jetbrains.kotlin.asJava.classes.KtLightClassForSourceDeclaration
 import org.jetbrains.kotlin.asJava.classes.KtUltraLightClass
@@ -20,10 +19,10 @@ import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtFile
 import org.junit.Assert
 
-fun UsefulTestCase.forceUsingUltraLightClassesForTest() {
-    KtUltraLightClass.forceUsingUltraLightClasses = true
+fun UsefulTestCase.forceUsingOldLightClassesForTest() {
+    KtUltraLightClass.forceUsingOldLightClasses = true
     Disposer.register(testRootDisposable, Disposable {
-        KtUltraLightClass.forceUsingUltraLightClasses = false
+        KtUltraLightClass.forceUsingOldLightClasses = false
     })
 }
 
@@ -38,7 +37,7 @@ object UltraLightChecker {
         SyntaxTraverser.psiTraverser(file).filter(KtClassOrObject::class.java).toList()
 
     fun checkClassEquivalence(ktClass: KtClassOrObject): KtUltraLightClass? {
-        val gold = KtLightClassForSourceDeclaration.create(ktClass)
+        val gold = KtLightClassForSourceDeclaration.createNoCache(ktClass, forceUsingOldLightClasses = true)
         val ultraLightClass = LightClassGenerationSupport.getInstance(ktClass.project).createUltraLightClass(ktClass) ?: return null
 
         if (gold != null) {

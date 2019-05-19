@@ -15,8 +15,6 @@ node {
 val antLauncherJar by configurations.creating
 val testJsRuntime by configurations.creating
 
-val generateIrRuntimeKlib by generator("org.jetbrains.kotlin.generators.tests.GenerateIrRuntimeKt")
-
 dependencies {
     testRuntime(intellijDep())
 
@@ -24,10 +22,12 @@ dependencies {
     testCompile(projectTests(":compiler:tests-common"))
     testCompileOnly(project(":compiler:frontend"))
     testCompileOnly(project(":compiler:cli"))
+    testCompileOnly(project(":compiler:cli-js"))
     testCompileOnly(project(":compiler:util"))
     testCompileOnly(intellijCoreDep()) { includeJars("intellij-core") }
     testCompileOnly(intellijDep()) { includeJars("openapi", "idea", "idea_rt", "util") }
     testCompile(project(":compiler:backend.js"))
+    testCompile(projectTests(":compiler:ir.serialization.js"))
     testCompile(project(":js:js.translator"))
     testCompile(project(":js:js.serializer"))
     testCompile(project(":js:js.dce"))
@@ -64,14 +64,23 @@ sourceSets {
     "test" { projectDefault() }
 }
 
-projectTest {
+
+fun Test.setUpBoxTests(jsEnabled: Boolean, jsIrEnabled: Boolean) {
     dependsOn(":dist")
-    dependsOn(testJsRuntime)
-    dependsOn(generateIrRuntimeKlib)
+    if (jsEnabled) dependsOn(testJsRuntime)
+    if (jsIrEnabled) {
+        dependsOn(":compiler:ir.serialization.js:generateFullRuntimeKLib")
+        dependsOn(":compiler:ir.serialization.js:generateReducedRuntimeKLib")
+        dependsOn(":compiler:ir.serialization.js:generateKotlinTestKLib")
+    }
+
+    if (jsEnabled && !jsIrEnabled) exclude("org/jetbrains/kotlin/js/test/ir/semantics/*")
+    if (!jsEnabled && jsIrEnabled) include("org/jetbrains/kotlin/js/test/ir/semantics/*")
+
     jvmArgs("-da:jdk.nashorn.internal.runtime.RecompilableScriptFunctionData") // Disable assertion which fails due to a bug in nashorn (KT-23637)
     workingDir = rootDir
     if (findProperty("kotlin.compiler.js.ir.tests.skip")?.toString()?.toBoolean() == true) {
-        exclude("org/jetbrains/kotlin/js/test/semantics/Ir*")
+        exclude("org/jetbrains/kotlin/js/test/ir/semantics/*")
     }
     doFirst {
         systemProperty("kotlin.ant.classpath", antLauncherJar.asPath)
@@ -86,18 +95,24 @@ projectTest {
     }
 }
 
-testsJar {}
-
-projectTest("quickTest") {
-    dependsOn(":dist")
-    dependsOn(testJsRuntime)
-    workingDir = rootDir
-    systemProperty("kotlin.js.skipMinificationTest", "true")
-    doFirst {
-        systemProperty("kotlin.ant.classpath", antLauncherJar.asPath)
-        systemProperty("kotlin.ant.launcher.class", "org.apache.tools.ant.Main")
-    }
+projectTest(parallel = true) {
+    setUpBoxTests(jsEnabled = true, jsIrEnabled = true)
 }
+
+projectTest("jsTest", true) {
+    setUpBoxTests(jsEnabled = true, jsIrEnabled = false)
+}
+
+projectTest("jsIrTest", true) {
+    setUpBoxTests(jsEnabled = false, jsIrEnabled = true)
+}
+
+projectTest("quickTest", true) {
+    setUpBoxTests(jsEnabled = true, jsIrEnabled = false)
+    systemProperty("kotlin.js.skipMinificationTest", "true")
+}
+
+testsJar {}
 
 val generateTests by generator("org.jetbrains.kotlin.generators.tests.GenerateJsTestsKt")
 val testDataDir = project(":js:js.translator").projectDir.resolve("testData")

@@ -16,6 +16,7 @@ messages/**)
 
 -dontnote **
 -dontwarn com.intellij.util.ui.IsRetina*
+-dontwarn com.intellij.util.ui.UIUtilities
 -dontwarn com.intellij.util.RetinaImage*
 -dontwarn apple.awt.*
 -dontwarn dk.brics.automaton.*
@@ -74,6 +75,7 @@ messages/**)
 -dontwarn com.intellij.util.io.Decompressor*
 -dontwarn org.w3c.dom.Location
 -dontwarn org.w3c.dom.Window
+-dontwarn org.slf4j.**
 
 
 #-libraryjars '<rtjar>'

@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.configuration
@@ -24,10 +24,10 @@ class KotlinGradleWebMultiplatformModuleBuilder : KotlinGradleAbstractMultiplatf
 
     override fun getBuilderId() = "kotlin.gradle.multiplatform.web"
 
-    override fun getPresentableName() = "JS Client and JVM Server"
+    override fun getPresentableName() = "JS Client and JVM Server | Gradle"
 
     override fun getDescription() =
-        "Multiplatform Gradle projects allow reusing the same Kotlin code between JS Client and JVM Server."
+        "Multiplatform Gradle project allowing reuse of the same Kotlin code between JS Client and JVM Server"
 
     override fun BuildScriptDataBuilder.setupAdditionalDependencies() {
         addBuildscriptRepositoriesDefinition("jcenter()")
@@ -237,16 +237,7 @@ class KotlinGradleWebMultiplatformModuleBuilder : KotlinGradleAbstractMultiplatf
 
             kotlin {
                 jvm()
-                js() {
-                    compilations.all {
-                        kotlinOptions {
-                            languageVersion = "1.3"
-                            moduleKind = "umd"
-                            sourceMap = true
-                            metaInfo = true
-                        }
-                    }
-                }
+                js()
                 sourceSets {
                     $commonSourceName {
                         dependencies {

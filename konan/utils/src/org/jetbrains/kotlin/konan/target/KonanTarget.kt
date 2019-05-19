@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.konan.target
@@ -190,6 +190,7 @@ open class HostManager(subtargetProvider: SubTargetProvider = NoSubTargets()) {
         ) + zephyrSubtargets,
         KonanTarget.MINGW_X64 to setOf(
             KonanTarget.MINGW_X64,
+            KonanTarget.MINGW_X86,
             KonanTarget.WASM32,
             KonanTarget.LINUX_X64,
             KonanTarget.LINUX_ARM32_HFP,

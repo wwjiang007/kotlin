@@ -159,12 +159,17 @@
 
       <registryKey key="kotlin.use.ultra.light.classes"
                    description="Whether to use an experimental implementation of Kotlin-as-Java classes"
-                   defaultValue="false"
+                   defaultValue="true"
                    restartRequired="false"/>
 
       <registryKey key="kotlin.uast.multiresolve.enabled"
                    description="Whether to use multi resolve for UAST in Kotlin provided by `Call.resolveCandidates`, otherwise PsiPolyVariantReference-based multiResolve will be performed"
                    defaultValue="true"
+                   restartRequired="false"/>
+
+      <registryKey key="kotlin.uast.force.uinjectionhost"
+                   description="Whether to convert `KtStringTemplateExpression` to `KotlinStringTemplateUPolyadicExpression` in all cases"
+                   defaultValue="false"
                    restartRequired="false"/>
     </extensions>
 
@@ -202,5 +207,6 @@
         <syntheticScopeProviderExtension implementation="org.jetbrains.kotlin.idea.debugger.evaluate.DebuggerFieldSyntheticScopeProvider"/>
         <expressionCodegenExtension implementation="org.jetbrains.kotlin.idea.debugger.evaluate.DebuggerFieldExpressionCodegenExtension"/>
         <completionInformationProvider implementation="org.jetbrains.kotlin.idea.debugger.evaluate.DebuggerFieldCompletionInformationProvider" />
+        <kotlinIndicesHelperExtension implementation="org.jetbrains.kotlin.idea.debugger.evaluate.DebuggerFieldKotlinIndicesHelperExtension"/>
     </extensions>
 </idea-plugin>

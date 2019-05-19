@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license 
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 // Auto-generated file. DO NOT EDIT!
@@ -191,7 +191,10 @@ public class Byte private constructor() : Number(), Comparable<Byte> {
     /**
      * Converts this [Byte] value to [Char].
      *
-     * Returns the `Char` with the numeric value equal to this value sign-extended to 16 bits.
+     * If this value is non-negative, the resulting `Char` code is equal to this value.
+     *
+     * The least significant 8 bits of the resulting `Char` code are the same as the bits of this `Byte` value,
+     * whereas the most significant 8 bits are filled with the sign bit of this value.
      */
     public override fun toChar(): Char
     /**
@@ -199,8 +202,8 @@ public class Byte private constructor() : Number(), Comparable<Byte> {
      *
      * The resulting `Short` value represents the same numerical value as this `Byte`.
      *
-     * The least significant 8 bits of the resulting `Short` value are the same as the binary representation of this `Byte` value,
-     * whereas the most significant 8 bits are filled with the bit sign of this value.
+     * The least significant 8 bits of the resulting `Short` value are the same as the bits of this `Byte` value,
+     * whereas the most significant 8 bits are filled with the sign bit of this value.
      */
     public override fun toShort(): Short
     /**
@@ -208,8 +211,8 @@ public class Byte private constructor() : Number(), Comparable<Byte> {
      *
      * The resulting `Int` value represents the same numerical value as this `Byte`.
      *
-     * The least significant 8 bits of the resulting `Int` value are the same as the binary representation of this `Byte` value,
-     * whereas the most significant 24 bits are filled with the bit sign of this value.
+     * The least significant 8 bits of the resulting `Int` value are the same as the bits of this `Byte` value,
+     * whereas the most significant 24 bits are filled with the sign bit of this value.
      */
     public override fun toInt(): Int
     /**
@@ -217,8 +220,8 @@ public class Byte private constructor() : Number(), Comparable<Byte> {
      *
      * The resulting `Long` value represents the same numerical value as this `Byte`.
      *
-     * The least significant 8 bits of the resulting `Long` value are the same as the binary representation of this `Byte` value,
-     * whereas the most significant 56 bits are filled with the bit sign of this value.
+     * The least significant 8 bits of the resulting `Long` value are the same as the bits of this `Byte` value,
+     * whereas the most significant 56 bits are filled with the sign bit of this value.
      */
     public override fun toLong(): Long
     /**
@@ -426,7 +429,8 @@ public class Short private constructor() : Number(), Comparable<Short> {
     /**
      * Converts this [Short] value to [Char].
      *
-     * Returns the `Char` with the numeric value equal to this value.
+     * The resulting `Char` code is equal to this value reinterpreted as an unsigned number,
+     * i.e. it has the same binary representation as this `Short`.
      */
     public override fun toChar(): Char
     /** Returns this value. */
@@ -436,8 +440,8 @@ public class Short private constructor() : Number(), Comparable<Short> {
      *
      * The resulting `Int` value represents the same numerical value as this `Short`.
      *
-     * The least significant 16 bits of the resulting `Int` value are the same as the binary representation of this `Short` value,
-     * whereas the most significant 16 bits are filled with the bit sign of this value.
+     * The least significant 16 bits of the resulting `Int` value are the same as the bits of this `Short` value,
+     * whereas the most significant 16 bits are filled with the sign bit of this value.
      */
     public override fun toInt(): Int
     /**
@@ -445,8 +449,8 @@ public class Short private constructor() : Number(), Comparable<Short> {
      *
      * The resulting `Long` value represents the same numerical value as this `Short`.
      *
-     * The least significant 16 bits of the resulting `Long` value are the same as the binary representation of this `Short` value,
-     * whereas the most significant 48 bits are filled with the bit sign of this value.
+     * The least significant 16 bits of the resulting `Long` value are the same as the bits of this `Short` value,
+     * whereas the most significant 48 bits are filled with the sign bit of this value.
      */
     public override fun toLong(): Long
     /**
@@ -669,7 +673,10 @@ public class Int private constructor() : Number(), Comparable<Int> {
     /**
      * Converts this [Int] value to [Char].
      *
-     * Returns the `Char` with the numeric value equal to this value truncated to 16 bits.
+     * If this value is in the range of `Char` codes `Char.MIN_VALUE..Char.MAX_VALUE`,
+     * the resulting `Char` code is equal to this value.
+     *
+     * The resulting `Char` code is represented by the least significant 16 bits of this `Int` value.
      */
     public override fun toChar(): Char
     /**
@@ -688,8 +695,8 @@ public class Int private constructor() : Number(), Comparable<Int> {
      *
      * The resulting `Long` value represents the same numerical value as this `Int`.
      *
-     * The least significant 32 bits of the resulting `Long` value are the same as the binary representation of this `Int` value,
-     * whereas the most significant 32 bits are filled with the bit sign of this value.
+     * The least significant 32 bits of the resulting `Long` value are the same as the bits of this `Int` value,
+     * whereas the most significant 32 bits are filled with the sign bit of this value.
      */
     public override fun toLong(): Long
     /**
@@ -914,7 +921,10 @@ public class Long private constructor() : Number(), Comparable<Long> {
     /**
      * Converts this [Long] value to [Char].
      *
-     * Returns the `Char` with the numeric value equal to this value truncated to 16 bits.
+     * If this value is in the range of `Char` codes `Char.MIN_VALUE..Char.MAX_VALUE`,
+     * the resulting `Char` code is equal to this value.
+     *
+     * The resulting `Char` code is represented by the least significant 16 bits of this `Long` value.
      */
     public override fun toChar(): Char
     /**

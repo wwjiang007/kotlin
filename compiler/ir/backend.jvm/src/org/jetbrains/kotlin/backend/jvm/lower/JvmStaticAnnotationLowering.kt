@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.backend.jvm.lower
@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.backend.common.FileLoweringPass
 import org.jetbrains.kotlin.backend.common.descriptors.WrappedSimpleFunctionDescriptor
 import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.backend.common.ir.copyTypeParametersFrom
+import org.jetbrains.kotlin.backend.common.ir.passTypeArgumentsFrom
 import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
 import org.jetbrains.kotlin.backend.common.lower.irBlock
 import org.jetbrains.kotlin.backend.common.lower.replaceThisByStaticReference
@@ -129,6 +130,8 @@ private class CompanionObjectJvmStaticLowering(val context: JvmBackendContext) :
         val companionInstanceFieldSymbol = companionInstanceField.symbol
         val call = IrCallImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, target.returnType, target.symbol)
 
+        call.passTypeArgumentsFrom(proxy)
+
         call.dispatchReceiver = IrGetFieldImpl(
             UNDEFINED_OFFSET,
             UNDEFINED_OFFSET,
@@ -167,10 +170,12 @@ private class SingletonObjectJvmStaticLowering(
 
         irClass.declarations.filter(::isJvmStaticFunction).forEach {
             val jvmStaticFunction = it as IrSimpleFunction
-            val oldDispatchReceiverParameter = jvmStaticFunction.dispatchReceiverParameter!!
-            jvmStaticFunction.dispatchReceiverParameter = null
-            modifyBody(jvmStaticFunction, irClass, oldDispatchReceiverParameter)
-            functionsMadeStatic.add(jvmStaticFunction.symbol)
+            // dispatch receiver parameter is already null for synthetic property annotation methods
+            jvmStaticFunction.dispatchReceiverParameter?.let { oldDispatchReceiverParameter ->
+                jvmStaticFunction.dispatchReceiverParameter = null
+                modifyBody(jvmStaticFunction, irClass, oldDispatchReceiverParameter)
+                functionsMadeStatic.add(jvmStaticFunction.symbol)
+            }
         }
     }
 
@@ -209,4 +214,4 @@ private class MakeCallsStatic(
 private fun isJvmStaticFunction(declaration: IrDeclaration): Boolean =
     declaration is IrSimpleFunction &&
             (declaration.hasAnnotation(JVM_STATIC_ANNOTATION_FQ_NAME) ||
-                    declaration.correspondingProperty?.hasAnnotation(JVM_STATIC_ANNOTATION_FQ_NAME) == true)
+                    declaration.correspondingPropertySymbol?.owner?.hasAnnotation(JVM_STATIC_ANNOTATION_FQ_NAME) == true)

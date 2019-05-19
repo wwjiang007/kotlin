@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.inspections
@@ -30,14 +30,15 @@ class RemoveRedundantQualifierNameInspection : AbstractKotlinInspection(), Clean
         object : KtVisitorVoid() {
             override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression) {
                 if (expression.parent is KtDotQualifiedExpression? || expression.isInImportDirective()) return
+                val expressionForAnalyze = expression.firstExpressionWithoutReceiver() ?: return
 
-                val context = expression.analyze()
-                val importableFqName = expression.getQualifiedElementSelector()
-                    ?.getResolvedCall(context)?.resultingDescriptor
+                val context = expressionForAnalyze.analyze()
+                val importableFqName = expressionForAnalyze.getQualifiedElementSelector()
+                    ?.mainReference?.resolveToDescriptors(context)?.firstOrNull()
                     ?.importableFqName ?: return
 
-                val applicableExpression = expression.firstApplicableExpression(validator = {
-                    applicableExpression(expression, context, importableFqName)
+                val applicableExpression = expressionForAnalyze.firstApplicableExpression(validator = {
+                    applicableExpression(expressionForAnalyze, context, importableFqName)
                 }) {
                     firstChild as? KtDotQualifiedExpression
                 } ?: return
@@ -56,6 +57,10 @@ class RemoveRedundantQualifierNameInspection : AbstractKotlinInspection(), Clean
             }
         }
 }
+
+private tailrec fun KtDotQualifiedExpression.firstExpressionWithoutReceiver(): KtDotQualifiedExpression? =
+    if ((getQualifiedElementSelector()?.mainReference?.resolve() as? KtCallableDeclaration)?.receiverTypeReference == null) this
+    else (receiverExpression as? KtDotQualifiedExpression)?.firstExpressionWithoutReceiver()
 
 private tailrec fun <T : KtElement> T.firstApplicableExpression(validator: T.() -> T?, generator: T.() -> T?): T? =
     validator() ?: generator()?.firstApplicableExpression(validator, generator)
@@ -119,7 +124,7 @@ class RemoveRedundantQualifierNameQuickFix : LocalQuickFix {
     override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
         val file = descriptor.psiElement.containingFile as KtFile
         val range = when (val element = descriptor.psiElement) {
-            is KtUserType -> IntRange(element.startOffset, element.referenceExpression?.endOffset ?: return)
+            is KtUserType -> IntRange(element.startOffset, element.endOffset)
             is KtDotQualifiedExpression -> IntRange(
                 element.startOffset,
                 element.getLastParentOfTypeInRowWithSelf<KtDotQualifiedExpression>()?.getQualifiedElementSelector()?.endOffset ?: return

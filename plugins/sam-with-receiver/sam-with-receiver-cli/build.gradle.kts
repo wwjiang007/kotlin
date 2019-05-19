@@ -25,7 +25,7 @@ sourceSets {
 
 publish()
 
-val jar = runtimeJar {}
+runtimeJar()
 sourcesJar()
 javadocJar()
 testsJar {}
@@ -34,11 +34,7 @@ dist {
     rename("kotlin-", "")
 }
 
-ideaPlugin {
-    from(jar)
-}
-
-projectTest {
+projectTest(parallel = true) {
     dependsOn(":kotlin-stdlib:jvm-minimal-for-test:dist")
     workingDir = rootDir
 }

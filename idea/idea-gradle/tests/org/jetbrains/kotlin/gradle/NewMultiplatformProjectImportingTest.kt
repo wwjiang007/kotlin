@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.gradle
@@ -479,6 +479,23 @@ class NewMultiplatformProjectImportingTest : MultiplePluginVersionGradleImportin
         }
     }
 
+    @Test
+    fun testDetectAndroidSources() {
+        configureByFiles()
+        createProjectSubFile(
+            "local.properties",
+            "sdk.dir=/${KotlinTestUtils.getAndroidSdkSystemIndependentPath()}"
+        )
+        importProject(true)
+        checkProjectStructure(exhaustiveModuleList = false, exhaustiveDependencyList = false, exhaustiveSourceSourceRootList = false) {
+            module("multiplatformb") {
+                sourceFolder("multiplatformb/src/androidMain/kotlin", JavaSourceRootType.SOURCE)
+
+
+            }
+        }
+    }
+
     /**
      * This test is inherited form testPlatformToCommonExpectedByInComposite and actually tests
      * dependencies in multiplatform project included in composite build
@@ -515,6 +532,19 @@ class NewMultiplatformProjectImportingTest : MultiplePluginVersionGradleImportin
                 moduleDependency("toInclude.commonMain", DependencyScope.TEST)
                 moduleDependency("toInclude.commonTest", DependencyScope.TEST)
                 moduleDependency("toInclude.jvmMain", DependencyScope.TEST)
+            }
+        }
+    }
+
+    @Test
+    fun testProductionOnTestFlag() {
+        configureByFiles()
+        importProject(true)
+
+        checkProjectStructure(false, false, false ) {
+            module("project.javaModule.test") {
+                moduleDependency("project.mppModule.jvmTest", DependencyScope.TEST, true)
+                moduleDependency("project.mppModule.jvmMain", DependencyScope.TEST, false)
             }
         }
     }

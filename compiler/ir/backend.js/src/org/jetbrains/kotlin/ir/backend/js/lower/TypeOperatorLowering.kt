@@ -1,12 +1,11 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.ir.backend.js.lower
 
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
-import org.jetbrains.kotlin.backend.common.utils.getPrimitiveArrayElementType
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
 import org.jetbrains.kotlin.ir.backend.js.ir.JsIrArithBuilder
@@ -46,8 +45,8 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : FileLoweringPass {
     //    private val isCharSymbol get() = context.intrinsics.isCharSymbol
     private val isObjectSymbol get() = context.intrinsics.isObjectSymbol
 
-    private val instanceOfIntrinsicSymbol = context.intrinsics.jsInstanceOf.symbol
-    private val typeOfIntrinsicSymbol = context.intrinsics.jsTypeOf.symbol
+    private val instanceOfIntrinsicSymbol = context.intrinsics.jsInstanceOf
+    private val typeOfIntrinsicSymbol = context.intrinsics.jsTypeOf
     private val jsClassIntrinsicSymbol = context.intrinsics.jsClass
 
     private val stringMarker get() = JsIrBuilder.buildString(context.irBuiltIns.stringType, "string")
@@ -110,10 +109,10 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : FileLoweringPass {
                 val argument = cacheValue(expression.argument, newStatements, declaration)
                 val check = generateTypeCheck(argument, toType)
 
-                newStatements += JsIrBuilder.buildIfElse(toType, check, argument(), failResult)
+                newStatements += JsIrBuilder.buildIfElse(expression.type, check, argument(), failResult)
 
                 return expression.run {
-                    IrCompositeImpl(startOffset, endOffset, toType, null, newStatements)
+                    IrCompositeImpl(startOffset, endOffset, expression.type, null, newStatements)
                 }
             }
 
@@ -186,7 +185,7 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : FileLoweringPass {
                     }
                 }
 
-                val toNotNullable = toType.makeNotNull(false)
+                val toNotNullable = toType.makeNotNull()
                 val argumentInstance = argument()
                 val instanceCheck = generateTypeCheckNonNull(argumentInstance, toNotNullable)
                 val isFromNullable = argumentInstance.type.isNullable()
@@ -244,9 +243,10 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : FileLoweringPass {
                 }
                 val typeParameter = typeParameterSymbol.owner
 
-                assert(!typeParameter.isReified) { "reified parameters have to be lowered before" }
+                // TODO either remove functions with reified type parameters or support this case
+                // assert(!typeParameter.isReified) { "reified parameters have to be lowered before" }
                 return typeParameter.superTypes.fold(litTrue) { r, t ->
-                    val check = generateTypeCheckNonNull(argument.copy(), t.makeNotNull(false))
+                    val check = generateTypeCheckNonNull(argument.copy(), t.makeNotNull())
                     calculator.and(r, check)
                 }
             }

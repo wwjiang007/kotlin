@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.resolve
@@ -14,13 +14,14 @@ import org.jetbrains.kotlin.fir.symbols.ConeCallableSymbol
 import org.jetbrains.kotlin.fir.symbols.ConeClassLikeSymbol
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
 
 interface FirProvider : FirSymbolProvider {
     fun getFirClassifierByFqName(fqName: ClassId): FirMemberDeclaration?
 
     override fun getClassLikeSymbolByFqName(classId: ClassId): ConeClassLikeSymbol?
 
-    override fun getCallableSymbols(callableId: CallableId): List<ConeCallableSymbol>
+    override fun getTopLevelCallableSymbols(packageFqName: FqName, name: Name): List<ConeCallableSymbol>
 
     override fun getPackage(fqName: FqName): FqName? {
         if (getFirFilesByPackage(fqName).isNotEmpty()) return fqName
@@ -28,6 +29,8 @@ interface FirProvider : FirSymbolProvider {
     }
 
     fun getFirClassifierContainerFile(fqName: ClassId): FirFile
+
+    fun getFirCallableContainerFile(symbol: ConeCallableSymbol): FirFile?
 
     companion object {
         fun getInstance(session: FirSession): FirProvider = session.service()

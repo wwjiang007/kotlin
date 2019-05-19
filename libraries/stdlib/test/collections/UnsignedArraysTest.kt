@@ -1,20 +1,16 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:Suppress("SIGNED_CONSTANT_CONVERTED_TO_UNSIGNED")
 package test.collections
 
+import test.assertArrayContentEquals
 import test.collections.behaviors.collectionBehavior
 import test.collections.behaviors.listBehavior
 import test.collections.behaviors.iteratorBehavior
 import kotlin.test.*
-
-fun assertArrayContentEquals(expected: UIntArray, actual: UIntArray, message: String = "")      { assertTrue(expected contentEquals actual, message) }
-fun assertArrayContentEquals(expected: ULongArray, actual: ULongArray, message: String = "")    { assertTrue(expected contentEquals actual, message) }
-fun assertArrayContentEquals(expected: UShortArray, actual: UShortArray, message: String = "")  { assertTrue(expected contentEquals actual, message) }
-fun assertArrayContentEquals(expected: UByteArray, actual: UByteArray, message: String = "")    { assertTrue(expected contentEquals actual, message) }
 
 
 class UnsignedArraysTest {

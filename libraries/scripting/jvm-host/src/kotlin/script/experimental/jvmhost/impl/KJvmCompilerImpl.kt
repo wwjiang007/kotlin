@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 package kotlin.script.experimental.jvmhost.impl
 
@@ -42,10 +42,11 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.name.NameUtils
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtScript
-import org.jetbrains.kotlin.script.KotlinScriptDefinition
 import org.jetbrains.kotlin.scripting.compiler.plugin.ScriptingCompilerConfigurationComponentRegistrar
-import org.jetbrains.kotlin.scripting.compiler.plugin.dependencies.ScriptsCompilationDependencies
-import org.jetbrains.kotlin.scripting.compiler.plugin.dependencies.collectScriptsCompilationDependencies
+import org.jetbrains.kotlin.scripting.configuration.ScriptingConfigurationKeys
+import org.jetbrains.kotlin.scripting.definitions.KotlinScriptDefinition
+import org.jetbrains.kotlin.scripting.dependencies.ScriptsCompilationDependencies
+import org.jetbrains.kotlin.scripting.dependencies.collectScriptsCompilationDependencies
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 import java.util.*
 import kotlin.reflect.KClass
@@ -62,6 +63,7 @@ import kotlin.script.experimental.host.getMergedScriptText
 import kotlin.script.experimental.host.getScriptingClass
 import kotlin.script.experimental.jvm.JvmDependency
 import kotlin.script.experimental.jvm.impl.BridgeDependenciesResolver
+import kotlin.script.experimental.jvm.impl.KJvmCompiledScript
 import kotlin.script.experimental.jvm.jdkHome
 import kotlin.script.experimental.jvm.jvm
 import kotlin.script.experimental.jvm.util.KotlinJars
@@ -100,7 +102,7 @@ class KJvmCompilerImpl(val hostConfiguration: ScriptingHostConfiguration) : KJvm
             val sourcesWithRefinementsState = SourcesWithRefinedConfigurations(script)
 
             kotlinCompilerConfiguration.add(
-                JVMConfigurationKeys.SCRIPT_DEFINITIONS,
+                ScriptingConfigurationKeys.SCRIPT_DEFINITIONS,
                 makeScriptDefinition(initialScriptCompilationConfiguration, script, sourcesWithRefinementsState)
             )
 
@@ -368,7 +370,8 @@ class KJvmCompilerImpl(val hostConfiguration: ScriptingHostConfiguration) : KJvm
                                 containingKtFile.virtualFile?.path,
                                 getScriptConfiguration(sourceFile),
                                 it.fqName.asString(),
-                                makeOtherScripts(it)
+                                makeOtherScripts(it),
+                                null
                             )
                         }
                     } ?: emptyList()
@@ -377,12 +380,13 @@ class KJvmCompilerImpl(val hostConfiguration: ScriptingHostConfiguration) : KJvm
                 return otherScripts
             }
 
+            val module = makeCompiledModule(generationState)
             return KJvmCompiledScript(
                 script.locationId,
                 getScriptConfiguration(ktScript.containingKtFile),
                 ktScript.fqName.asString(),
                 makeOtherScripts(ktScript),
-                KJvmCompiledModule(generationState)
+                module
             )
         }
 
@@ -567,3 +571,8 @@ internal class ScriptLightVirtualFile(name: String, private val _path: String?, 
     override fun getPath(): String = _path ?: super.getPath()
     override fun getCanonicalPath(): String? = path
 }
+
+private fun makeCompiledModule(generationState: GenerationState) = KJvmCompiledModuleInMemory(
+    generationState.factory.asList()
+        .associateTo(sortedMapOf<String, ByteArray>()) { it.relativePath to it.asByteArray() }
+)

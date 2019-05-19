@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.backend.jvm.lower
@@ -153,7 +153,7 @@ private class EnumClassLowering(val context: JvmBackendContext) : ClassLoweringP
                     }
                 })
 
-                body = enumConstructor.body // will be transformed later
+                body = enumConstructor.body?.patchDeclarationParents(this)
 
                 loweredEnumConstructors[enumConstructor.symbol] = this
                 metadata = enumConstructor.metadata
@@ -219,7 +219,10 @@ private class EnumClassLowering(val context: JvmBackendContext) : ClassLoweringP
             context.declarationFactory.getFieldForEnumEntry(
                 enumEntry, (enumEntry.correspondingClass ?: enumEntry.parentAsClass).defaultType
             ).also {
-                it.initializer = IrExpressionBodyImpl(enumEntry.initializerExpression!!)
+                it.initializer = IrExpressionBodyImpl(
+                    enumEntry.initializerExpression!!.patchDeclarationParents(it)
+                )
+                it.annotations.addAll(enumEntry.annotations)
                 enumEntryFields.add(it)
                 enumEntriesByField[it] = enumEntry
             }
@@ -396,7 +399,7 @@ private class EnumClassLowering(val context: JvmBackendContext) : ClassLoweringP
 
         private inner class InEnumEntryInitializer(enumEntry: IrEnumEntry) : InEnumEntry(enumEntry) {
             override fun createConstructorCall(startOffset: Int, endOffset: Int, loweredConstructor: IrConstructor) =
-                IrCallImpl(
+                IrConstructorCallImpl.fromSymbolDescriptor(
                     startOffset,
                     endOffset,
                     loweredConstructor.symbol.owner.parentAsClass.defaultType,
@@ -493,7 +496,7 @@ private class EnumClassLowering(val context: JvmBackendContext) : ClassLoweringP
             }
 
             private fun createEnumValueOfBody(): IrBody {
-                val enumValueOf = context.irBuiltIns.enumValueOfFun
+                val enumValueOf = context.irBuiltIns.enumValueOfSymbol
                 val returnType = irClass.defaultType
 
                 val unsubstitutedValueOfDescriptor = enumValueOf.descriptor
@@ -507,9 +510,9 @@ private class EnumClassLowering(val context: JvmBackendContext) : ClassLoweringP
                         UNDEFINED_OFFSET,
                         UNDEFINED_OFFSET,
                         returnType,
-                        enumValueOf.symbol,
+                        enumValueOf,
                         substitutedValueOfDescriptor,
-                        enumValueOf.typeParameters.size
+                        enumValueOf.owner.typeParameters.size
                     )
                 irValueOfCall.putTypeArgument(0, irClass.defaultType)
                 irValueOfCall.putValueArgument(

@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.calls.components
@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.resolve.scopes.receivers.QualifierReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValueWithSmartCastInfo
 import org.jetbrains.kotlin.types.*
+import org.jetbrains.kotlin.types.checker.captureFromExpression
 import org.jetbrains.kotlin.types.expressions.CoercionStrategy
 import org.jetbrains.kotlin.types.typeUtil.immediateSupertypes
 import org.jetbrains.kotlin.types.typeUtil.isUnit
@@ -142,7 +143,8 @@ private fun ConstraintSystemOperation.addReceiverConstraint(
     }
 
     val expectedType = toFreshSubstitutor.safeSubstitute(receiverParameter.value.type.unwrap())
-    val receiverType = receiverArgument.receiver.stableType
+    val receiverType = receiverArgument.receiver.stableType.let { captureFromExpression(it) ?: it }
+
     addSubtypeConstraint(receiverType, expectedType, position)
 }
 
@@ -315,7 +317,7 @@ class CallableReferencesCandidateFactory(
 
                 return callComponents.reflectionTypes.getKFunctionType(
                     Annotations.EMPTY, null, argumentsAndReceivers, null,
-                    returnType, descriptor.builtIns, isSuspend = false
+                    returnType, descriptor.builtIns, descriptor.isSuspend
                 ) to defaults
             }
             else -> error("Unsupported descriptor type: $descriptor")
@@ -347,15 +349,20 @@ fun extractInputOutputTypesFromCallableReferenceExpectedType(expectedType: Unwra
     if (expectedType == null) return null
 
     return when {
-        expectedType.isFunctionType ->
+        expectedType.isFunctionType || expectedType.isSuspendFunctionType ->
             extractInputOutputTypesFromFunctionType(expectedType)
 
         ReflectionTypes.isBaseTypeForNumberedReferenceTypes(expectedType) ->
             InputOutputTypes(emptyList(), expectedType.arguments.single().type.unwrap())
 
-        ReflectionTypes.isNumberedKFunctionOrKSuspendFunction(expectedType) -> {
+        ReflectionTypes.isNumberedKFunction(expectedType) -> {
             val functionFromSupertype = expectedType.immediateSupertypes().first { it.isFunctionType }.unwrap()
             extractInputOutputTypesFromFunctionType(functionFromSupertype)
+        }
+
+        ReflectionTypes.isNumberedKSuspendFunction(expectedType) -> {
+            val kSuspendFunctionType = expectedType.immediateSupertypes().first { it.isSuspendFunctionType }.unwrap()
+            extractInputOutputTypesFromFunctionType(kSuspendFunctionType)
         }
 
         ReflectionTypes.isNumberedKPropertyOrKMutablePropertyType(expectedType) -> {

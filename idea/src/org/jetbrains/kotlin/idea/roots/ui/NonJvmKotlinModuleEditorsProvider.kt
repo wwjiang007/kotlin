@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.roots.ui
@@ -8,7 +8,10 @@ package org.jetbrains.kotlin.idea.roots.ui
 import com.intellij.openapi.module.JavaModuleType
 import com.intellij.openapi.module.ModuleConfigurationEditor
 import com.intellij.openapi.module.ModuleType
-import com.intellij.openapi.roots.ui.configuration.*
+import com.intellij.openapi.roots.ui.configuration.ClasspathEditor
+import com.intellij.openapi.roots.ui.configuration.ModuleConfigurationEditorProviderEx
+import com.intellij.openapi.roots.ui.configuration.ModuleConfigurationState
+import com.intellij.openapi.roots.ui.configuration.OutputEditor
 import org.jetbrains.kotlin.idea.project.TargetPlatformDetector
 import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
 

@@ -1,11 +1,10 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.debugger.evaluate.compilation
 
-import com.intellij.debugger.engine.evaluation.EvaluationContextImpl
 import org.jetbrains.kotlin.backend.common.output.OutputFile
 import org.jetbrains.kotlin.caches.resolve.KotlinCacheService
 import org.jetbrains.kotlin.codegen.*
@@ -43,7 +42,7 @@ import org.jetbrains.kotlin.types.SimpleType
 import org.jetbrains.kotlin.utils.Printer
 import org.jetbrains.org.objectweb.asm.Type
 
-class CodeFragmentCompiler(val evaluationContext: EvaluationContextImpl) {
+class CodeFragmentCompiler(private val executionContext: ExecutionContext) {
     data class CompilationResult(
         val classes: List<ClassToLoad>,
         val parameterInfo: CodeFragmentParameterInfo,
@@ -57,7 +56,9 @@ class CodeFragmentCompiler(val evaluationContext: EvaluationContextImpl) {
         return runReadAction { doCompile(codeFragment, bindingContext, moduleDescriptor) }
     }
 
-    private fun doCompile(codeFragment: KtCodeFragment, bindingContext: BindingContext, moduleDescriptor: ModuleDescriptor): CompilationResult {
+    private fun doCompile(
+        codeFragment: KtCodeFragment, bindingContext: BindingContext, moduleDescriptor: ModuleDescriptor
+    ): CompilationResult {
         require(codeFragment is KtBlockCodeFragment || codeFragment is KtExpressionCodeFragment) {
             "Unsupported code fragment type: $codeFragment"
         }
@@ -78,7 +79,7 @@ class CodeFragmentCompiler(val evaluationContext: EvaluationContextImpl) {
             bindingContext, listOf(codeFragment), compilerConfiguration
         ).build()
 
-        val parameterInfo = CodeFragmentParameterAnalyzer(evaluationContext, codeFragment, bindingContext).analyze()
+        val parameterInfo = CodeFragmentParameterAnalyzer(executionContext, codeFragment, bindingContext).analyze()
         val (classDescriptor, methodDescriptor) = createDescriptorsForCodeFragment(
             codeFragment, Name.identifier(GENERATED_CLASS_NAME), Name.identifier(GENERATED_FUNCTION_NAME),
             parameterInfo, returnType, moduleDescriptorWrapper.packageFragmentForEvaluator
@@ -112,7 +113,7 @@ class CodeFragmentCompiler(val evaluationContext: EvaluationContextImpl) {
             }
 
             val ownerClassName = typeMapper.mapOwner(parameter.targetDescriptor).internalName
-            val lastDollarIndex = ownerClassName.lastIndexOf('$').takeIf { it >= 0} ?: continue
+            val lastDollarIndex = ownerClassName.lastIndexOf('$').takeIf { it >= 0 } ?: continue
             result[parameter.dumb] = ownerClassName.drop(lastDollarIndex)
         }
 
@@ -177,7 +178,12 @@ class CodeFragmentCompiler(val evaluationContext: EvaluationContextImpl) {
         val parameters = parameterInfo.parameters.mapIndexed { index, parameter ->
             ValueParameterDescriptorImpl(
                 methodDescriptor, null, index, Annotations.EMPTY, Name.identifier("p$index"),
-                parameter.targetType, false, false, false, null, SourceElement.NO_SOURCE
+                parameter.targetType,
+                declaresDefaultValue = false,
+                isCrossinline = false,
+                isNoinline = false,
+                varargElementType = null,
+                source = SourceElement.NO_SOURCE
             )
         }
 

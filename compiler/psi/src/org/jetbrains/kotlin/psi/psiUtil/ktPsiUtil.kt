@@ -35,6 +35,7 @@ import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.stubs.KotlinClassOrObjectStub
 import org.jetbrains.kotlin.types.expressions.OperatorConventions
+import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import java.util.*
 
 // NOTE: in this file we collect only Kotlin-specific methods working with PSI and not modifying it
@@ -190,7 +191,7 @@ fun KtClass.isAbstract(): Boolean = isInterface() || hasModifier(KtTokens.ABSTRA
  * @return the list of possible superclass names
  */
 fun StubBasedPsiElementBase<out KotlinClassOrObjectStub<out KtClassOrObject>>.getSuperNames(): List<String> {
-    fun addSuperName(result: MutableList<String>, referencedName: String): Unit {
+    fun addSuperName(result: MutableList<String>, referencedName: String) {
         result.add(referencedName)
 
         val file = containingFile
@@ -215,8 +216,8 @@ fun StubBasedPsiElementBase<out KotlinClassOrObjectStub<out KtClassOrObject>>.ge
         return stub.getSuperNames()
     }
 
-    val specifiers = (this as KtClassOrObject).superTypeListEntries
-    if (specifiers.isEmpty()) return Collections.emptyList<String>()
+    val specifiers = this.superTypeListEntries
+    if (specifiers.isEmpty()) return Collections.emptyList()
 
     val result = ArrayList<String>()
     for (specifier in specifiers) {
@@ -240,13 +241,13 @@ fun KtExpression.getAnnotationEntries(): List<KtAnnotationEntry> {
     return when (parent) {
         is KtAnnotatedExpression -> parent.annotationEntries
         is KtLabeledExpression -> parent.getAnnotationEntries()
-        else -> emptyList<KtAnnotationEntry>()
+        else -> emptyList()
     }
 }
 
 fun KtAnnotationsContainer.collectAnnotationEntriesFromStubOrPsi(): List<KtAnnotationEntry> {
     return when (this) {
-        is StubBasedPsiElementBase<*> -> getStub()?.collectAnnotationEntriesFromStubElement() ?: collectAnnotationEntriesFromPsi()
+        is StubBasedPsiElementBase<*> -> stub?.collectAnnotationEntriesFromStubElement() ?: collectAnnotationEntriesFromPsi()
         else -> collectAnnotationEntriesFromPsi()
     }
 }
@@ -256,7 +257,7 @@ private fun StubElement<*>.collectAnnotationEntriesFromStubElement(): List<KtAnn
         when (child.stubType) {
             KtNodeTypes.ANNOTATION_ENTRY -> listOf(child.psi as KtAnnotationEntry)
             KtNodeTypes.ANNOTATION -> (child.psi as KtAnnotation).entries
-            else -> emptyList<KtAnnotationEntry>()
+            else -> emptyList()
         }
     }
 }
@@ -266,7 +267,7 @@ private fun KtAnnotationsContainer.collectAnnotationEntriesFromPsi(): List<KtAnn
         when (child) {
             is KtAnnotationEntry -> listOf(child)
             is KtAnnotation -> child.entries
-            else -> emptyList<KtAnnotationEntry>()
+            else -> emptyList()
         }
     }
 }
@@ -298,8 +299,8 @@ inline fun <reified T : KtElement, R> flatMapDescendantsOfTypeVisitor(
 fun KtNamedFunction.isContractPresentPsiCheck(): Boolean {
     val contractAllowedHere =
         isTopLevel &&
-        hasBlockBody() &&
-        !hasModifier(KtTokens.OPERATOR_KEYWORD)
+                hasBlockBody() &&
+                !hasModifier(KtTokens.OPERATOR_KEYWORD)
     if (!contractAllowedHere) return false
 
     val firstExpression = (this as? KtFunction)?.bodyBlockExpression?.statements?.firstOrNull() ?: return false
@@ -427,6 +428,8 @@ val KtStringTemplateExpression.plainContent: String
 
 fun KtStringTemplateExpression.isSingleQuoted(): Boolean = node.firstChildNode.textLength == 1
 
+val KtNamedDeclaration.isPrivateNestedClassOrObject: Boolean get() = this is KtClassOrObject && isPrivate() && !isTopLevel()
+
 fun KtNamedDeclaration.getValueParameters(): List<KtParameter> {
     return getValueParameterList()?.parameters ?: Collections.emptyList()
 }
@@ -468,7 +471,8 @@ val KtModifierListOwner.isPublic: Boolean
 fun KtModifierListOwner.visibilityModifierType(): KtModifierKeywordToken? =
     visibilityModifier()?.node?.elementType as KtModifierKeywordToken?
 
-fun KtModifierListOwner.visibilityModifierTypeOrDefault(): KtModifierKeywordToken = visibilityModifierType() ?: KtTokens.DEFAULT_VISIBILITY_KEYWORD
+fun KtModifierListOwner.visibilityModifierTypeOrDefault(): KtModifierKeywordToken =
+    visibilityModifierType() ?: KtTokens.DEFAULT_VISIBILITY_KEYWORD
 
 fun KtDeclaration.modalityModifier() = modifierFromTokenSet(MODALITY_MODIFIERS)
 
@@ -519,7 +523,7 @@ fun KtElement.containingClass(): KtClass? = getStrictParentOfType()
 
 fun KtClassOrObject.findPropertyByName(name: String): KtNamedDeclaration? {
     return declarations.firstOrNull { it is KtProperty && it.name == name } as KtNamedDeclaration?
-            ?: primaryConstructorParameters.firstOrNull { it.hasValOrVar() && it.name == name }
+        ?: primaryConstructorParameters.firstOrNull { it.hasValOrVar() && it.name == name }
 }
 
 fun KtClassOrObject.findFunctionByName(name: String): KtNamedDeclaration? {
@@ -646,3 +650,25 @@ fun KtModifierKeywordToken.toVisibility(): Visibility {
 }
 
 fun KtFile.getFileOrScriptDeclarations() = if (isScript()) script!!.declarations else declarations
+
+fun KtExpression.getBinaryWithTypeParent(): KtBinaryExpressionWithTypeRHS? {
+    val callExpression = parent.safeAs<KtCallExpression>() ?: return null
+    val possibleQualifiedExpression = callExpression.parent
+
+    val targetExpression = if (possibleQualifiedExpression is KtQualifiedExpression) {
+        if (possibleQualifiedExpression.selectorExpression != callExpression) return null
+        possibleQualifiedExpression
+    } else {
+        callExpression
+    }
+
+    return targetExpression.topParenthesizedParentOrMe().parent as? KtBinaryExpressionWithTypeRHS
+}
+
+fun KtExpression.topParenthesizedParentOrMe(): KtExpression {
+    var result: KtExpression = this
+    while (KtPsiUtil.deparenthesizeOnce(result.parent.safeAs()) == result) {
+        result = result.parent.safeAs() ?: break
+    }
+    return result
+}

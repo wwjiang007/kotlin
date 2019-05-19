@@ -21,6 +21,7 @@ import com.intellij.execution.util.ExecUtil
 import com.intellij.util.LineSeparator
 import java.io.File
 import java.util.regex.Pattern
+import kotlin.system.exitProcess
 
 // This file generates protobuf classes from formal description.
 // To run it, you'll need protoc (protobuf compiler) 2.6.1 installed.
@@ -58,8 +59,8 @@ val PROTO_PATHS: List<ProtoPath> = listOf(
         ProtoPath("core/metadata.jvm/src/jvm_metadata.proto"),
         ProtoPath("core/metadata.jvm/src/jvm_module.proto"),
         ProtoPath("build-common/src/java_descriptors.proto"),
-        ProtoPath("compiler/ir/backend.js/src/ir.proto", false),
-        ProtoPath("compiler/ir/backend.js/src/js.proto", false)
+        ProtoPath("compiler/ir/backend.js/src/js.proto", false),
+        ProtoPath("compiler/ir/serialization.common/src/KotlinIr.proto", false)
 )
 
 private val EXT_OPTIONS_PROTO_PATH = ProtoPath("core/metadata/src/ext_options.proto")
@@ -86,7 +87,7 @@ fun main(args: Array<String>) {
     }
     finally {
         // Workaround for JVM hanging: IDEA's process handler creates thread pool
-        System.exit(0)
+        exitProcess(0)
     }
 }
 

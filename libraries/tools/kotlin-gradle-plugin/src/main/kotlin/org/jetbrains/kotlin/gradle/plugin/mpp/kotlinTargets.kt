@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 package org.jetbrains.kotlin.gradle.plugin.mpp
 
@@ -32,6 +32,8 @@ import org.jetbrains.kotlin.gradle.utils.dashSeparatedName
 import org.jetbrains.kotlin.gradle.utils.isGradleVersionAtLeast
 import org.jetbrains.kotlin.gradle.utils.lowerCamelCaseName
 
+internal const val PRIMARY_SINGLE_COMPONENT_NAME = "kotlin"
+
 abstract class AbstractKotlinTarget(
     final override val project: Project
 ) : KotlinTarget {
@@ -59,21 +61,23 @@ abstract class AbstractKotlinTarget(
     internal open val kotlinComponents: Set<KotlinTargetComponent> by lazy {
         val mainCompilation = compilations.getByName(KotlinCompilation.MAIN_COMPILATION_NAME)
         val usageContexts = createUsageContexts(mainCompilation)
-        setOf(
-            if (isGradleVersionAtLeast(4, 7)) {
-                val componentName = mainCompilation.target.name
-                createKotlinVariant(componentName, mainCompilation, usageContexts).apply {
-                    sourcesArtifacts = setOf(
-                        sourcesJarArtifact(
-                            mainCompilation, componentName,
-                            dashSeparatedName(target.name.toLowerCase(), componentName.toLowerCase())
-                        )
-                    )
-                }
-            } else {
-                KotlinVariant(mainCompilation, usageContexts)
-            }
+
+        val componentName =
+            if (project.kotlinExtension is KotlinMultiplatformExtension)
+                targetName
+            else PRIMARY_SINGLE_COMPONENT_NAME
+
+        val result = if (isGradleVersionAtLeast(4, 7)) {
+            createKotlinVariant(componentName, mainCompilation, usageContexts)
+        } else {
+            KotlinVariant(mainCompilation, usageContexts)
+        }
+
+        result.sourcesArtifacts = setOf(
+            sourcesJarArtifact(mainCompilation, componentName, dashSeparatedName(targetName.toLowerCase()))
         )
+
+        setOf(result)
     }
 
     override val components: Set<SoftwareComponent> by lazy {
@@ -160,24 +164,24 @@ abstract class AbstractKotlinTarget(
         compilation: KotlinCompilation<*>,
         usageContexts: Set<DefaultKotlinUsageContext>
     ): KotlinVariant {
+        val kotlinExtension = project.kotlinExtension
 
-        val kotlinExtension = project.kotlinExtension as? KotlinMultiplatformExtension
-            ?: return KotlinVariantWithCoordinates(compilation, usageContexts)
+        val result =
+            if (kotlinExtension !is KotlinMultiplatformExtension || targetName == KotlinMultiplatformPlugin.METADATA_TARGET_NAME)
+                KotlinVariantWithCoordinates(compilation, usageContexts)
+            else {
+                val metadataTarget =
+                    kotlinExtension.targets.getByName(KotlinMultiplatformPlugin.METADATA_TARGET_NAME) as AbstractKotlinTarget
 
-        if (targetName == KotlinMultiplatformPlugin.METADATA_TARGET_NAME)
-            return KotlinVariantWithCoordinates(compilation, usageContexts)
-
-        val separateMetadataTarget =
-            kotlinExtension.targets.getByName(KotlinMultiplatformPlugin.METADATA_TARGET_NAME) as AbstractKotlinTarget
-
-        val result = if (kotlinExtension.isGradleMetadataAvailable) {
-            KotlinVariantWithMetadataVariant(compilation, usageContexts, separateMetadataTarget)
-        } else {
-            // we should only add the Kotlin metadata dependency if we publish no Gradle metadata related to Kotlin MPP;
-            // with metadata, such a dependency would get invalid, since a platform module should only depend on modules for that
-            // same platform, not Kotlin metadata modules
-            KotlinVariantWithMetadataDependency(compilation, usageContexts, separateMetadataTarget)
-        }
+                if (kotlinExtension.isGradleMetadataAvailable) {
+                    KotlinVariantWithMetadataVariant(compilation, usageContexts, metadataTarget)
+                } else {
+                    // we should only add the Kotlin metadata dependency if we publish no Gradle metadata related to Kotlin MPP;
+                    // with metadata, such a dependency would get invalid, since a platform module should only depend on modules for that
+                    // same platform, not Kotlin metadata modules
+                    KotlinVariantWithMetadataDependency(compilation, usageContexts, metadataTarget)
+                }
+            }
 
         result.componentName = componentName
         return result

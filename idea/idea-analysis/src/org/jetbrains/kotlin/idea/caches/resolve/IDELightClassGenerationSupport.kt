@@ -34,7 +34,6 @@ import org.jetbrains.kotlin.asJava.classes.*
 import org.jetbrains.kotlin.asJava.finder.JavaElementFinder
 import org.jetbrains.kotlin.codegen.ClassBuilderMode
 import org.jetbrains.kotlin.codegen.JvmCodegenUtil
-import org.jetbrains.kotlin.codegen.state.IncompatibleClassTracker
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
 import org.jetbrains.kotlin.config.JvmTarget
 import org.jetbrains.kotlin.descriptors.ClassifierDescriptor
@@ -65,18 +64,20 @@ class IDELightClassGenerationSupport(private val project: Project) : LightClassG
         if (element.shouldNotBeVisibleAsLightClass() ||
             element is KtObjectDeclaration && element.isObjectLiteral() ||
             element.isLocal ||
-            element is KtEnumEntry
+            element is KtEnumEntry ||
+            element.containingKtFile.isScript()
         ) {
             return null
         }
 
         val module = ModuleUtilCore.findModuleForPsiElement(element) ?: return null
-        return KtUltraLightClass(element, object : UltraLightSupport {
+        return KtUltraLightClass(element, object : KtUltraLightSupport {
             override fun isTooComplexForUltraLightGeneration(element: KtClassOrObject): Boolean {
                 val facet = KotlinFacet.get(module)
-                val pluginClasspath = facet?.configuration?.settings?.compilerArguments?.pluginClasspaths
-                if (!pluginClasspath.isNullOrEmpty()) {
-                    LOG.debug { "Using heavy light classes for ${element.fqName?.asString()} because of compiler plugins $pluginClasspath" }
+                val pluginClasspaths = facet?.configuration?.settings?.compilerArguments?.pluginClasspaths
+                if (!pluginClasspaths.isNullOrEmpty()) {
+                    val stringifiedClasspaths = pluginClasspaths.joinToString()
+                    LOG.debug { "Using heavy light classes for ${element.fqName?.asString()} because of compiler plugins $stringifiedClasspaths" }
                     return true
                 }
 

@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.scratch;
@@ -44,6 +44,11 @@ public class ScratchRunActionTestGenerated extends AbstractScratchRunActionTest 
         @TestMetadata("klass.kts")
         public void testKlass() throws Exception {
             runTest("idea/testData/scratch/klass.kts");
+        }
+
+        @TestMetadata("libraryDepWithKotlinTest.kts")
+        public void testLibraryDepWithKotlinTest() throws Exception {
+            runTest("idea/testData/scratch/libraryDepWithKotlinTest.kts");
         }
 
         @TestMetadata("simple.kts")
@@ -127,6 +132,11 @@ public class ScratchRunActionTestGenerated extends AbstractScratchRunActionTest 
         @TestMetadata("klass.kts")
         public void testKlass() throws Exception {
             runTest("idea/testData/scratch/klass.kts");
+        }
+
+        @TestMetadata("libraryDepWithKotlinTest.kts")
+        public void testLibraryDepWithKotlinTest() throws Exception {
+            runTest("idea/testData/scratch/libraryDepWithKotlinTest.kts");
         }
 
         @TestMetadata("simple.kts")

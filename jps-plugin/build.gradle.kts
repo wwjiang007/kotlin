@@ -10,8 +10,10 @@ dependencies {
     compile(project(":core:descriptors"))
     compile(project(":core:descriptors.jvm"))
     compile(project(":kotlin-compiler-runner"))
-    compile(project(":compiler:daemon-common"))
+    compile(project(":daemon-common"))
+    compile(project(":daemon-common-new"))
     compile(projectRuntimeJar(":kotlin-daemon-client"))
+    compile(projectRuntimeJar(":kotlin-daemon"))
     compile(project(":compiler:frontend.java"))
     compile(project(":js:js.frontend"))
     compile(projectRuntimeJar(":kotlin-preloader"))
@@ -23,7 +25,7 @@ dependencies {
             includeJars("jdom", "trove4j", "jps-model", "openapi", "util", "asm-all", rootProject = rootProject)
         }
     }
-    compileOnly(intellijDep("jps-standalone")) { includeJars("jps-builders", "jps-builders-6") }
+    compileOnly(jpsStandalone()) { includeJars("jps-builders", "jps-builders-6") }
     testCompileOnly(project(":kotlin-reflect-api"))
     testCompile(project(":compiler:incremental-compilation-impl"))
     testCompile(projectTests(":compiler:tests-common"))
@@ -31,7 +33,7 @@ dependencies {
     testCompile(commonDep("junit:junit"))
     testCompile(project(":kotlin-test:kotlin-test-jvm"))
     testCompile(projectTests(":kotlin-build-common"))
-    testCompileOnly(intellijDep("jps-standalone")) { includeJars("jps-builders", "jps-builders-6") }
+    testCompileOnly(jpsStandalone()) { includeJars("jps-builders", "jps-builders-6") }
     Ide.IJ {
         testCompile(intellijDep("devkit"))
     }
@@ -40,7 +42,7 @@ dependencies {
     } else {
         testCompileOnly(intellijDep()) { includeJars("openapi", "idea", "log4j") }
     }
-    testCompile(intellijDep("jps-build-test"))
+    testCompile(jpsBuildTest())
     compilerModules.forEach {
         testRuntime(project(it))
     }
@@ -58,7 +60,7 @@ sourceSets {
     }
 }
 
-projectTest {
+projectTest(parallel = true) {
     // do not replace with compile/runtime dependency,
     // because it forces Intellij reindexing after each compiler change
     dependsOn(":kotlin-compiler:dist")

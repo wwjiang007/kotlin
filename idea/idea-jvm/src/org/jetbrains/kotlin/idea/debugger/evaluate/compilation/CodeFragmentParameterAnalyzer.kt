@@ -1,12 +1,11 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.debugger.evaluate.compilation
 
 import com.intellij.debugger.engine.evaluation.EvaluateExceptionUtil
-import com.intellij.debugger.engine.evaluation.EvaluationContextImpl
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.codegen.AsmUtil
 import org.jetbrains.kotlin.codegen.CodeFragmentCodegenInfo
@@ -15,6 +14,7 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor
 import org.jetbrains.kotlin.descriptors.impl.SyntheticFieldDescriptor
 import org.jetbrains.kotlin.idea.debugger.evaluate.DebuggerFieldPropertyDescriptor
+import org.jetbrains.kotlin.idea.debugger.evaluate.ExecutionContext
 import org.jetbrains.kotlin.idea.debugger.evaluate.compilation.CodeFragmentParameter.*
 import org.jetbrains.kotlin.idea.debugger.evaluate.KotlinCodeFragmentFactory.Companion.FAKE_JAVA_CONTEXT_FUNCTION_NAME
 import org.jetbrains.kotlin.idea.debugger.safeLocation
@@ -26,6 +26,8 @@ import org.jetbrains.kotlin.psi.psiUtil.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.checkers.COROUTINE_CONTEXT_1_3_FQ_NAME
+import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
+import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.scopes.receivers.ExtensionReceiver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitClassReceiver
@@ -57,8 +59,8 @@ interface CodeFragmentParameter {
 }
 
 class CodeFragmentParameterInfo(
-    val parameters: List<CodeFragmentParameter.Smart>,
-    val crossingBounds: Set<CodeFragmentParameter.Dumb>
+    val parameters: List<Smart>,
+    val crossingBounds: Set<Dumb>
 )
 
 /*
@@ -66,7 +68,7 @@ class CodeFragmentParameterInfo(
     It handles both directly mentioned names such as local variables or parameters and implicit values (dispatch/extension receivers).
  */
 class CodeFragmentParameterAnalyzer(
-    private val evaluationContext: EvaluationContextImpl,
+    private val context: ExecutionContext,
     private val codeFragment: KtCodeFragment,
     private val bindingContext: BindingContext
 ) {
@@ -76,7 +78,7 @@ class CodeFragmentParameterAnalyzer(
     private val onceUsedChecker = OnceUsedChecker(CodeFragmentParameterAnalyzer::class.java)
 
     private val containingPrimaryConstructor: ConstructorDescriptor? by lazy {
-        evaluationContext.frameProxy?.safeLocation()?.safeMethod()?.takeIf { it.isConstructor } ?: return@lazy null
+        context.frameProxy.safeLocation()?.safeMethod()?.takeIf { it.isConstructor } ?: return@lazy null
         val constructor = codeFragment.context?.getParentOfType<KtPrimaryConstructor>(false) ?: return@lazy null
         bindingContext[BindingContext.CONSTRUCTOR, constructor]
     }
@@ -87,10 +89,15 @@ class CodeFragmentParameterAnalyzer(
         codeFragment.accept(object : KtTreeVisitor<Unit>() {
             override fun visitSimpleNameExpression(expression: KtSimpleNameExpression, data: Unit?): Void? {
                 val resolvedCall = expression.getResolvedCall(bindingContext) ?: return null
+                processResolvedCall(resolvedCall, expression)
 
+                return null
+            }
+
+            private fun processResolvedCall(resolvedCall: ResolvedCall<*>, expression: KtSimpleNameExpression) {
                 // Capture dispatch receiver for the extension callable
                 run {
-                    val descriptor = resolvedCall.resultingDescriptor as? CallableDescriptor
+                    val descriptor = resolvedCall.resultingDescriptor
                     val containingClass = descriptor?.containingDeclaration as? ClassDescriptor
                     val extensionParameter = descriptor?.extensionReceiverParameter
                     if (descriptor != null && descriptor !is DebuggerFieldPropertyDescriptor
@@ -104,12 +111,12 @@ class CodeFragmentParameterAnalyzer(
 
                 if (runReadAction { expression.isDotSelector() }) {
                     // The receiver expression is already captured for this reference
-                    return null
+                    return
                 }
 
                 if (isCodeFragmentDeclaration(resolvedCall.resultingDescriptor)) {
                     // The reference is from the code fragment we analyze, no need to capture
-                    return null
+                    return
                 }
 
                 var processed = false
@@ -143,14 +150,20 @@ class CodeFragmentParameterAnalyzer(
 
                 // If a reference has receivers, we can calculate its value using them, no need to capture
                 if (!processed) {
-                    val descriptor = resolvedCall.resultingDescriptor
-                    val parameter = processDebugLabel(descriptor)
-                        ?: processCoroutineContextCall(descriptor)
-                        ?: processSimpleNameExpression(descriptor)
-                    checkBounds(descriptor, expression, parameter)
+                    if (resolvedCall is VariableAsFunctionResolvedCall) {
+                        processResolvedCall(resolvedCall.functionCall, expression)
+                        processResolvedCall(resolvedCall.variableCall, expression)
+                    } else {
+                        processDescriptor(resolvedCall.resultingDescriptor, expression)
+                    }
                 }
+            }
 
-                return null
+            private fun processDescriptor(descriptor: DeclarationDescriptor, expression: KtSimpleNameExpression) {
+                val parameter = processDebugLabel(descriptor)
+                    ?: processCoroutineContextCall(descriptor)
+                    ?: processSimpleNameExpression(descriptor)
+                checkBounds(descriptor, expression, parameter)
             }
 
             override fun visitThisExpression(expression: KtThisExpression, data: Unit?): Void? {
@@ -257,6 +270,10 @@ class CodeFragmentParameterAnalyzer(
     }
 
     private fun processSimpleNameExpression(target: DeclarationDescriptor): Smart? {
+        if (target is ValueParameterDescriptor && target.isCrossinline) {
+            throw EvaluateExceptionUtil.createEvaluateException("Evaluation of 'crossinline' lambdas is not supported")
+        }
+
         val isLocalTarget = (target as? DeclarationDescriptorWithVisibility)?.visibility == Visibilities.LOCAL
 
         val isPrimaryConstructorParameter = !isLocalTarget
@@ -277,6 +294,7 @@ class CodeFragmentParameterAnalyzer(
             is ValueDescriptor -> {
                 parameters.getOrPut(target) {
                     val type = target.type
+                    @Suppress("DEPRECATION")
                     val kind = if (target is LocalVariableDescriptor && target.isDelegated) Kind.DELEGATED else Kind.ORDINARY
                     Smart(Dumb(kind, target.name.asString()), type, target)
                 }

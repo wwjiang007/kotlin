@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.roots
@@ -30,7 +30,7 @@ fun JpsModuleSourceRoot.getMigratedSourceRootTypeWithProperties(): Pair<JpsModul
     val currentRootType = rootType
     @Suppress("UNCHECKED_CAST")
     val newSourceRootType: JpsModuleSourceRootType<JpsElement> = when (currentRootType) {
-        JavaSourceRootType.SOURCE -> SourceKotlinRootType
+        JavaSourceRootType.SOURCE -> SourceKotlinRootType as JpsModuleSourceRootType<JpsElement>
         JavaSourceRootType.TEST_SOURCE -> TestSourceKotlinRootType
         JavaResourceRootType.RESOURCE -> ResourceKotlinRootType
         JavaResourceRootType.TEST_RESOURCE -> TestResourceKotlinRootType

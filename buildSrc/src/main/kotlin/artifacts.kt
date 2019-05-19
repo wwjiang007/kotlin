@@ -73,6 +73,12 @@ fun <T : Jar> Project.runtimeJar(task: T, body: T.() -> Unit = {}): T {
         removeArtifacts(configurations.getOrCreate("archives"), defaultJarTask)
     }
     return task.apply {
+        configurations.findByName("embedded")?.let { embedded ->
+            dependsOn(embedded)
+            from {
+                embedded.map(::zipTree)
+            }
+        }
         setupPublicJar(project.the<BasePluginConvention>().archivesBaseName)
         setDuplicatesStrategy(DuplicatesStrategy.EXCLUDE)
         body()
@@ -121,7 +127,7 @@ fun Project.publish(body: Upload.() -> Unit = {}): Upload {
     apply<plugins.PublishedKotlinModule>()
 
     if (artifactsRemovedDiagnosticFlag) {
-        error("`publish()` should be called before removing artifacts typically done in `noDefaultJar()` of `runtimeJar()` calls")
+        error("`publish()` should be called before removing artifacts typically done in `noDefaultJar()` or `runtimeJar()` call")
     }
 
     afterEvaluate {
@@ -131,27 +137,6 @@ fun Project.publish(body: Upload.() -> Unit = {}): Upload {
 
     return (tasks.getByName("uploadArchives") as Upload).apply {
         body()
-    }
-}
-
-fun Project.ideaPlugin(subdir: String = "lib", body: AbstractCopyTask.() -> Unit): Copy {
-    val thisProject = this
-    val pluginTask = task<Copy>("ideaPlugin") {
-        body()
-        into(File(rootProject.extra["ideaPluginDir"].toString(), subdir).path)
-        rename("-${java.util.regex.Pattern.quote(thisProject.version.toString())}", "")
-    }
-
-    task("idea-plugin") {
-        dependsOn(pluginTask)
-    }
-
-    return pluginTask
-}
-
-fun Project.ideaPlugin(subdir: String = "lib"): Copy = ideaPlugin(subdir) {
-    runtimeJarTaskIfExists()?.let {
-        from(it)
     }
 }
 

@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.quickfix
@@ -13,10 +13,9 @@ import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.bindingContextUtil.isUsedAsStatement
 import org.jetbrains.kotlin.resolve.calls.callUtil.getType
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
+import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
 
 class AddReturnToUnusedLastExpressionInFunctionFix(element: KtElement) : KotlinQuickFixAction<KtElement>(element) {
@@ -29,9 +28,11 @@ class AddReturnToUnusedLastExpressionInFunctionFix(element: KtElement) : KotlinQ
         if (!expr.isLastStatementInFunctionBody()) return false
 
         val exprType = expr.getType(context) ?: return false
+        if (exprType.isError) return false
+
         val function = expr.parent.parent as? KtNamedFunction ?: return false
         val functionReturnType = function.resolveToDescriptorIfAny()?.returnType ?: return false
-        if (!exprType.isSubtypeOf(functionReturnType)) return false
+        if (functionReturnType.isError || !exprType.isSubtypeOf(functionReturnType)) return false
 
         return true
     }

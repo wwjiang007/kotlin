@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.gradle
@@ -12,7 +12,16 @@ import java.io.Serializable
 
 typealias KotlinDependency = ExternalDependency
 
-fun KotlinDependency.deepCopy(): KotlinDependency = ModelFactory.createCopy(this)
+fun KotlinDependency.deepCopy(cache: MutableMap<Any, Any>): KotlinDependency {
+    val cachedValue = cache[this] as? KotlinDependency
+    return if (cachedValue != null) {
+        cachedValue
+    } else {
+        val result = ModelFactory.createCopy(this)
+        cache[this] = result
+        result
+    }
+}
 
 interface KotlinModule : Serializable {
     val name: String
@@ -31,6 +40,8 @@ interface KotlinSourceSet : KotlinModule {
         const val COMMON_MAIN_SOURCE_SET_NAME = "commonMain"
         const val COMMON_TEST_SOURCE_SET_NAME = "commonTest"
 
+        // Note. This method could not be deleted due to usage in KotlinAndroidGradleMPPModuleDataService from IDEA Core
+        @Suppress("unused")
         fun commonName(forTests: Boolean) = if (forTests) COMMON_TEST_SOURCE_SET_NAME else COMMON_MAIN_SOURCE_SET_NAME
     }
 }

@@ -1,15 +1,17 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 package org.jetbrains.kotlin.gradle
 
 import org.jetbrains.kotlin.gradle.plugin.ProjectLocalConfigurations
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJvmWithJavaTargetPreset
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinMultiplatformPlugin
 import org.jetbrains.kotlin.gradle.plugin.mpp.NativeOutputKind
 import org.jetbrains.kotlin.gradle.plugin.mpp.UnusedSourceSetsChecker
 import org.jetbrains.kotlin.gradle.plugin.sources.METADATA_CONFIGURATION_NAME_SUFFIX
 import org.jetbrains.kotlin.gradle.plugin.sources.SourceSetConsistencyChecks
+import org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTarget
 import org.jetbrains.kotlin.gradle.util.*
 import org.jetbrains.kotlin.konan.target.CompilerOutputKind
 import org.jetbrains.kotlin.konan.target.HostManager
@@ -182,7 +184,7 @@ class NewMultiplatformIT : BaseGradleIT() {
 
                 // Check that linker options were correctly passed to the K/N compiler.
                 checkProgramCompilationCommandLine {
-                    assertTrue(it.contains("-linker-options -L."))
+                    assertTrue(it.contains("-linker-option -L."))
                 }
             }
 
@@ -202,33 +204,6 @@ class NewMultiplatformIT : BaseGradleIT() {
 
             build("clean", "assemble", "--rerun-tasks") {
                 checkAppBuild()
-            }
-
-            // Check that binary getters initially introduced in 1.3 work.
-            build("checkBinaryGetters") {
-                assertTrue(output.contains("Wasm binary file: main.wasm"))
-                assertTrue(output.contains("Wasm link task: linkMainReleaseExecutableWasm32"))
-                assertTrue(output.contains("Wasm link task name: linkMainReleaseExecutableWasm32"))
-
-                val testFiles = listOf(
-                    "MacOS" to "test.kexe",
-                    "Windows" to "test.exe",
-                    "Linux" to "test.kexe"
-                )
-
-                val testLinkTasks = listOf(
-                    "MacOS" to "linkTestDebugExecutableMacos64",
-                    "Windows" to "linkTestDebugExecutableMingw64",
-                    "Linux" to "linkTestDebugExecutableLinux64"
-                )
-
-                testFiles.forEach { (platform, file) ->
-                    assertTrue(output.contains("$platform test file: $file"), "Cannot get test binary for platform $platform")
-                }
-
-                testLinkTasks.forEach { (platform, task) ->
-                    assertTrue(output.contains("$platform test link task: $task"), "Cannot get test link task for platform $platform")
-                }
             }
         }
 
@@ -299,52 +274,131 @@ class NewMultiplatformIT : BaseGradleIT() {
     }
 
     @Test
-    fun testJvmWithJavaEquivalence() = with(Project("sample-lib", gradleVersion, "new-mpp-lib-and-app")) {
-        lateinit var classesWithoutJava: Set<String>
+    fun testJvmWithJavaEquivalence() = doTestJvmWithJava(testJavaSupportInJvmTargets = false)
 
-        fun getFilePathsSet(inDirectory: String): Set<String> {
-            val dir = projectDir.resolve(inDirectory)
-            return dir.walk().filter { it.isFile }.map { it.relativeTo(dir).path.replace('\\', '/') }.toSet()
-        }
+    @Test
+    fun testJavaSupportInJvmTargets() = doTestJvmWithJava(testJavaSupportInJvmTargets = true)
 
-        build("assemble") {
-            assertSuccessful()
-            classesWithoutJava = getFilePathsSet("build/classes")
-        }
+    private fun doTestJvmWithJava(testJavaSupportInJvmTargets: Boolean) =
+        with(Project("sample-lib", GradleVersionRequired.AtLeast("5.0"), "new-mpp-lib-and-app")) {
+            lateinit var classesWithoutJava: Set<String>
 
-        gradleBuildScript().modify {
-            it.replace("presets.jvm", "presets.jvmWithJava").replace("jvm(", "targetFromPreset(presets.jvmWithJava, ")
-        }
+            fun getFilePathsSet(inDirectory: String): Set<String> {
+                val dir = projectDir.resolve(inDirectory)
+                return dir.walk().filter { it.isFile }.map { it.relativeTo(dir).invariantSeparatorsPath }.toSet()
+            }
 
-        projectDir.resolve("src/main/java").apply {
-            mkdirs()
-            mkdir()
-            // Check that Java can access the dependencies (kotlin-stdlib):
-            resolve("JavaClassInJava.java").writeText("""
-                package com.example.lib;
-                import kotlin.sequences.Sequence;
-                class JavaClassInJava {
-                    Sequence<String> makeSequence() { throw new UnsupportedOperationException(); }
+            build("assemble") {
+                assertSuccessful()
+                classesWithoutJava = getFilePathsSet("build/classes")
+            }
+
+            gradleBuildScript().modify {
+                if (testJavaSupportInJvmTargets) {
+                    it + "\nkotlin.jvm(\"jvm6\").${KotlinJvmTarget::withJava.name}()"
+                } else {
+                    it.replace("presets.jvm", "presets.jvmWithJava").replace("jvm(", "targetFromPreset(presets.jvmWithJava, ")
+                }.plus(
+                    "\n" + """
+                    buildscript {
+                        repositories {
+                            maven { url 'https://plugins.gradle.org/m2/' }
+                        }
+                        dependencies {
+                            classpath 'com.github.jengelman.gradle.plugins:shadow:5.0.0'
+                        }
+                    }
+                    
+                    apply plugin: 'com.github.johnrengelman.shadow'
+                    apply plugin: 'application'
+                    
+                    mainClassName = 'com.example.lib.CommonKt'
+                    """.trimIndent()
+                )
+            }
+
+            fun javaSourceRootForCompilation(compilationName: String) =
+                if (testJavaSupportInJvmTargets) "src/jvm6${compilationName.capitalize()}/java" else "src/$compilationName/java"
+
+            val javaMainSrcDir = javaSourceRootForCompilation("main")
+            val javaTestSrcDir = javaSourceRootForCompilation("test")
+
+            projectDir.resolve(javaMainSrcDir).apply {
+                mkdirs()
+                // Check that Java can access the dependencies (kotlin-stdlib):
+                resolve("JavaClassInJava.java").writeText(
+                    """
+                    package com.example.lib;
+                    import kotlin.sequences.Sequence;
+                    class JavaClassInJava {
+                        Sequence<String> makeSequence() { throw new UnsupportedOperationException(); }
+                    }
+                    """.trimIndent()
+                )
+
+                // Add a Kotlin source file in the Java source root and check that it is compiled:
+                resolve("KotlinClassInJava.kt").writeText(
+                    """
+                    package com.example.lib
+                    class KotlinClassInJava
+                    """.trimIndent()
+                )
+            }
+
+            projectDir.resolve(javaTestSrcDir).apply {
+                mkdirs()
+                resolve("JavaTest.java").writeText(
+                    """
+                    package com.example.lib;
+                    import org.junit.*;
+                    public class JavaTest {
+                        @Test
+                        public void testAccessKotlin() {
+                            MainKt.expectedFun();
+                            MainKt.x();
+                            new KotlinClassInJava();
+                            new JavaClassInJava();
+                        }
+                    }
+                    """.trimIndent()
+                )
+            }
+
+            build("clean", "build", "run", "shadowJar") {
+                assertSuccessful()
+                val expectedMainClasses =
+                    classesWithoutJava + setOf(
+                        "kotlin/jvm6/main/com/example/lib/KotlinClassInJava.class",
+                        "java/main/com/example/lib/JavaClassInJava.class",
+                        "java/test/com/example/lib/JavaTest.class"
+                    )
+                val actualClasses = getFilePathsSet("build/classes")
+                Assert.assertEquals(expectedMainClasses, actualClasses)
+
+                val jvmTestTaskName = if (testJavaSupportInJvmTargets) "jvm6Test" else "test"
+                assertTasksExecuted(":$jvmTestTaskName")
+                assertFileExists("build/reports/tests/$jvmTestTaskName/classes/com.example.lib.JavaTest.html")
+
+                if (testJavaSupportInJvmTargets) {
+                    assertNotContains(KotlinJvmWithJavaTargetPreset.DEPRECATION_WARNING)
+                } else {
+                    assertContains(KotlinJvmWithJavaTargetPreset.DEPRECATION_WARNING)
                 }
-            """.trimIndent())
 
-            // Add a Kotlin source file in the Java source root and check that it is compiled:
-            resolve("KotlinClassInJava.kt").writeText("""
-                package com.example.lib
-                class KotlinClassInJava
-            """.trimIndent())
-        }
+                assertTasksExecuted(":run")
+                assertContains(">>> Common.kt >>> main()")
 
-        build("clean", "assemble") {
-            assertSuccessful()
-            val expectedClasses =
-                classesWithoutJava +
-                        "kotlin/jvm6/main/com/example/lib/KotlinClassInJava.class" +
-                        "java/main/com/example/lib/JavaClassInJava.class"
-            val actualClasses = getFilePathsSet("build/classes")
-            Assert.assertEquals(expectedClasses, actualClasses)
+                assertTasksExecuted(":shadowJar")
+                val entries = ZipFile(projectDir.resolve("build/libs/sample-lib-1.0-all.jar")).use { zip ->
+                    zip.entries().asSequence().map { it.name }.toSet()
+                }
+                assertTrue { "kotlin/Pair.class" in entries }
+                assertTrue { "com/example/lib/CommonKt.class" in entries }
+                assertTrue { "com/example/lib/MainKt.class" in entries }
+                assertTrue { "com/example/lib/JavaClassInJava.class" in entries }
+                assertTrue { "com/example/lib/KotlinClassInJava.class" in entries }
+            }
         }
-    }
 
     @Test
     fun testLibWithTests() = doTestLibWithTests(Project("new-mpp-lib-with-tests", gradleVersion))
@@ -398,6 +452,7 @@ class NewMultiplatformIT : BaseGradleIT() {
                     arrayOf(
                         it + "com/example/lib/CommonKt.class",
                         it + "com/example/lib/MainKt.class",
+                        it + "Script.class",
                         it + "META-INF/new-mpp-lib-with-tests.kotlin_module"
                     )
                 },
@@ -932,7 +987,7 @@ class NewMultiplatformIT : BaseGradleIT() {
             assertSuccessful()
         }
 
-        // Check that run tasks work find and an entry point can be specified.
+        // Check that run tasks work fine and an entry point can be specified.
         build("runDebugExecutable$hostSuffix") {
             assertSuccessful()
             assertTrue(output.contains("<root>.main"))
@@ -994,7 +1049,7 @@ class NewMultiplatformIT : BaseGradleIT() {
             build("linkCustomReleaseFrameworkIos") {
                 assertSuccessful()
                 checkFrameworkCompilationCommandLine {
-                    assertTrue(it.contains("-linker-options -L."))
+                    assertTrue(it.contains("-linker-option -L."))
                     assertTrue(it.contains("-Xtime"))
                     assertTrue(it.contains("-Xstatic-framework"))
                     assertFalse(it.contains("-Xembed-bitcode-marker"))
@@ -1074,7 +1129,7 @@ class NewMultiplatformIT : BaseGradleIT() {
     @Test
     fun testNativeTests() = with(Project("new-mpp-native-tests", gradleVersion)) {
         val testTasks = listOf("macos64Test", "linux64Test", "mingw64Test")
-        val hostTestTask = ":${nativeHostTargetName}Test"
+        val hostTestTask = "${nativeHostTargetName}Test"
         build("tasks") {
             assertSuccessful()
             println(output)
@@ -1085,7 +1140,8 @@ class NewMultiplatformIT : BaseGradleIT() {
         }
         build("check") {
             assertSuccessful()
-            assertTasksExecuted(hostTestTask)
+            assertTasksExecuted(":$hostTestTask")
+            assertTestResults("testProject/new-mpp-native-tests/TEST-TestKt.xml", hostTestTask)
         }
     }
 
@@ -1108,25 +1164,35 @@ class NewMultiplatformIT : BaseGradleIT() {
                 """.trimIndent())
             }
 
-            val host = nativeHostTargetName
+            val targetsToBuild = if (HostManager.hostIsMingw) {
+                listOf(nativeHostTargetName, "mingw86")
+            } else {
+                listOf(nativeHostTargetName)
+            }
 
-            val libraryCinteropTask = ":projectLibrary:cinteropStdio${host.capitalize()}"
-            val libraryCompileTask = ":projectLibrary:compileKotlin${host.capitalize()}"
+            val libraryCinteropTasks = targetsToBuild.map { ":projectLibrary:cinteropStdio${it.capitalize()}" }
+            val libraryCompileTasks = targetsToBuild.map { ":projectLibrary:compileKotlin${it.capitalize()}" }
 
             build(":projectLibrary:build") {
                 assertSuccessful()
-                assertTasksExecuted(libraryCinteropTask)
+                assertTasksExecuted(libraryCinteropTasks)
                 assertTrue(output.contains("Project test"), "No test output found")
-                assertFileExists("projectLibrary/build/classes/kotlin/$host/main/projectLibrary-cinterop-stdio.klib")
+                targetsToBuild.forEach {
+                    assertFileExists("projectLibrary/build/classes/kotlin/$it/main/projectLibrary-cinterop-stdio.klib")
+                }
             }
 
             build(":publishedLibrary:build", ":publishedLibrary:publish") {
                 assertSuccessful()
-                assertTasksExecuted(":publishedLibrary:cinteropStdio${host.capitalize()}")
+                assertTasksExecuted(
+                    targetsToBuild.map { ":publishedLibrary:cinteropStdio${it.capitalize()}" }
+                )
                 assertTrue(output.contains("Published test"), "No test output found")
-                assertFileExists("publishedLibrary/build/classes/kotlin/$host/main/publishedLibrary-cinterop-stdio.klib")
-                assertFileExists("publishedLibrary/build/classes/kotlin/$host/test/test-cinterop-stdio.klib")
-                assertFileExists("repo/org/example/publishedLibrary-$host/1.0/publishedLibrary-$host-1.0-cinterop-stdio.klib")
+                targetsToBuild.forEach {
+                    assertFileExists("publishedLibrary/build/classes/kotlin/$it/main/publishedLibrary-cinterop-stdio.klib")
+                    assertFileExists("publishedLibrary/build/classes/kotlin/$it/test/test-cinterop-stdio.klib")
+                    assertFileExists("repo/org/example/publishedLibrary-$it/1.0/publishedLibrary-$it-1.0-cinterop-stdio.klib")
+                }
             }
 
             build(":build") {
@@ -1136,14 +1202,18 @@ class NewMultiplatformIT : BaseGradleIT() {
             }
 
             // Check that changing the compiler version in properties causes interop reprocessing and source recompilation.
+            val hostLibraryTasks = listOf(
+                ":projectLibrary:cinteropStdio${nativeHostTargetName.capitalize()}",
+                ":projectLibrary:compileKotlin${nativeHostTargetName.capitalize()}"
+            )
             build(":projectLibrary:build") {
                 assertSuccessful()
-                assertTasksUpToDate(libraryCinteropTask, libraryCompileTask)
+                assertTasksUpToDate(hostLibraryTasks)
             }
 
-            build(libraryCinteropTask, libraryCompileTask, "-Porg.jetbrains.kotlin.native.version=1.1.0") {
+            build(*hostLibraryTasks.toTypedArray(), "-Porg.jetbrains.kotlin.native.version=1.1.0") {
                 assertSuccessful()
-                assertTasksExecuted(libraryCinteropTask, libraryCompileTask)
+                assertTasksExecuted(hostLibraryTasks)
             }
         }
     }
@@ -1483,7 +1553,7 @@ class NewMultiplatformIT : BaseGradleIT() {
             }
 
             val expectedDefaultSourceSets = listOf(
-                "jvm6", "nodeJs", "wasm32", "mingw64", "linux64", "macos64"
+                "jvm6", "nodeJs", "wasm32", "mingw64", "mingw86", "linux64", "macos64"
             ).flatMapTo(mutableSetOf()) { target ->
                 listOf("main", "test").map { compilation ->
                     Triple(target, compilation, "$target${compilation.capitalize()}")

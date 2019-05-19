@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.debugger.evaluate.compilation
@@ -13,10 +13,10 @@ data class CompiledDataDescriptor(
     val parameters: List<CodeFragmentParameter.Dumb>,
     val crossingBounds: Set<CodeFragmentParameter.Dumb>,
     val mainMethodSignature: CodeFragmentCompiler.MethodSignature,
-    val sourcePosition: SourcePosition
+    val sourcePosition: SourcePosition?
 ) {
     companion object {
-        fun from(result: CodeFragmentCompiler.CompilationResult, sourcePosition: SourcePosition): CompiledDataDescriptor {
+        fun from(result: CodeFragmentCompiler.CompilationResult, sourcePosition: SourcePosition?): CompiledDataDescriptor {
             val localFunctionSuffixes = result.localFunctionSuffixes
 
             val dumbParameters = ArrayList<CodeFragmentParameter.Dumb>(result.parameterInfo.parameters.size)

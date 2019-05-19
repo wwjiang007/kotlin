@@ -1,13 +1,11 @@
-import com.github.jengelman.gradle.plugins.shadow.transformers.Transformer
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import com.github.jengelman.gradle.plugins.shadow.transformers.Transformer
 import com.github.jengelman.gradle.plugins.shadow.transformers.TransformerContext
-import org.gradle.kotlin.dsl.extra
-import org.jetbrains.kotlin.pill.PillExtension
+import kotlinx.metadata.jvm.KmModuleVisitor
+import kotlinx.metadata.jvm.KotlinModuleMetadata
 import proguard.gradle.ProGuardTask
 import shadow.org.apache.tools.zip.ZipEntry
 import shadow.org.apache.tools.zip.ZipOutputStream
-import kotlinx.metadata.jvm.KotlinModuleMetadata
-import kotlinx.metadata.jvm.KmModuleVisitor
 
 description = "Kotlin Full Reflection Library"
 
@@ -40,10 +38,11 @@ val libsDir = property("libsDir")
 
 val proguardDeps by configurations.creating
 val proguardAdditionalInJars by configurations.creating
-val shadows by configurations.creating {
-    isTransitive = false
-}
-configurations.getByName("compileOnly").extendsFrom(shadows)
+
+val embedded by configurations
+embedded.isTransitive = false
+
+configurations.getByName("compileOnly").extendsFrom(embedded)
 val mainJar by configurations.creating
 
 dependencies {
@@ -53,17 +52,17 @@ dependencies {
     proguardAdditionalInJars(project(":kotlin-annotations-jvm"))
     proguardDeps(files(firstFromJavaHomeThatExists("jre/lib/rt.jar", "../Classes/classes.jar", jdkHome = File(property("JDK_16") as String))))
 
-    shadows(project(":core:type-system"))
-    shadows(project(":kotlin-reflect-api"))
-    shadows(project(":core:metadata"))
-    shadows(project(":core:metadata.jvm"))
-    shadows(project(":core:descriptors"))
-    shadows(project(":core:descriptors.jvm"))
-    shadows(project(":core:deserialization"))
-    shadows(project(":core:descriptors.runtime"))
-    shadows(project(":core:util.runtime"))
-    shadows("javax.inject:javax.inject:1")
-    shadows(protobufLite())
+    embedded(project(":core:type-system"))
+    embedded(project(":kotlin-reflect-api"))
+    embedded(project(":core:metadata"))
+    embedded(project(":core:metadata.jvm"))
+    embedded(project(":core:descriptors"))
+    embedded(project(":core:descriptors.jvm"))
+    embedded(project(":core:deserialization"))
+    embedded(project(":core:descriptors.runtime"))
+    embedded(project(":core:util.runtime"))
+    embedded("javax.inject:javax.inject:1")
+    embedded(protobufLite())
     
     compileOnly("org.jetbrains:annotations:13.0")
 }
@@ -118,7 +117,7 @@ val reflectShadowJar by task<ShadowJar> {
 
     transform(KotlinModuleShadowTransformer(logger))
 
-    configurations = listOf(shadows)
+    configurations = listOf(embedded)
     relocate("org.jetbrains.kotlin", "kotlin.reflect.jvm.internal.impl")
     relocate("javax.inject", "kotlin.reflect.jvm.internal.impl.javax.inject")
     mergeServiceFiles()
@@ -143,7 +142,7 @@ val proguard by task<ProGuardTask> {
     outputs.file(proguardOutput)
 
     injars(mapOf("filter" to "!META-INF/versions/**"), stripMetadata.outputs.files)
-    injars(mapOf("filter" to "!META-INF/**"), proguardAdditionalInJars)
+    injars(mapOf("filter" to "!META-INF/**,!**/*.kotlin_builtins"), proguardAdditionalInJars)
     outjars(proguardOutput)
 
     libraryjars(mapOf("filter" to "!META-INF/versions/**"), proguardDeps)
@@ -187,10 +186,7 @@ val sourcesJar = sourcesJar(sourceSet = null) {
 val result by task<Jar> {
     dependsOn(proguard)
     from(zipTree(file(proguardOutput)))
-//    from(zipTree(reflectShadowJar.archivePath)) {
-//        include("META-INF/versions/**")
-//    }
-    callGroovy("manifestAttributes", manifest, project, "Main" /*true*/)
+    callGroovy("manifestAttributes", manifest, project, "Main")
 }
 
 val modularJar by task<Jar> {
@@ -211,15 +207,10 @@ val dexMethodCount by task<DexMethodCount> {
 tasks.getByName("check").dependsOn(dexMethodCount)
 
 artifacts {
-    val artifactJar = mapOf(
-        "file" to result.outputs.files.single(),
-        "builtBy" to result,
-        "name" to base.archivesBaseName
-    )
+    listOf(mainJar.name, "runtime", "archives").forEach { configurationName ->
+        add(configurationName, result)
+    }
 
-    add(mainJar.name, artifactJar)
-    add("runtime", artifactJar)
-    add("archives", artifactJar)
     add("archives", modularJar)
 }
 

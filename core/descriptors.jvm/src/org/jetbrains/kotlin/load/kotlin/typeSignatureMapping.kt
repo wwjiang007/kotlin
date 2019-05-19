@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.load.kotlin
@@ -44,7 +44,7 @@ interface TypeMappingConfiguration<out T : Any> {
     // returns null when type doesn't need to be preprocessed
     fun preprocessType(kotlinType: KotlinType): KotlinType? = null
 
-    fun releaseCoroutines(): Boolean
+    fun releaseCoroutines(): Boolean = true
 }
 
 const val NON_EXISTENT_CLASS_NAME = "error/NonExistentClass"
@@ -123,12 +123,12 @@ fun <T : Any> mapType(
                 descriptorTypeWriter?.writeArrayType()
 
                 arrayElementType =
-                        mapType(
-                            memberType, factory,
-                            mode.toGenericArgumentMode(memberProjection.projectionKind),
-                            typeMappingConfiguration, descriptorTypeWriter, writeGenericType,
-                            isIrBackend
-                        )
+                    mapType(
+                        memberType, factory,
+                        mode.toGenericArgumentMode(memberProjection.projectionKind),
+                        typeMappingConfiguration, descriptorTypeWriter, writeGenericType,
+                        isIrBackend
+                    )
 
                 descriptorTypeWriter?.writeArrayEnd()
             }
@@ -280,7 +280,7 @@ internal fun computeExpandedTypeInner(kotlinType: KotlinType, visitedClassifiers
                 }
 
         classifier is ClassDescriptor && classifier.isInline -> {
-            val inlineClassBoxType = kotlinType
+            // kotlinType is the boxed inline class type
 
             val underlyingType = kotlinType.substitutedUnderlyingType() ?: return null
             val expandedUnderlyingType = computeExpandedTypeInner(underlyingType, visitedClassifiers) ?: return null
@@ -290,10 +290,10 @@ internal fun computeExpandedTypeInner(kotlinType: KotlinType, visitedClassifiers
                 // Here inline class type is nullable. Apply nullability to the expandedUnderlyingType.
 
                 // Nullable types become inline class boxes
-                expandedUnderlyingType.isNullable() -> inlineClassBoxType
+                expandedUnderlyingType.isNullable() -> kotlinType
 
                 // Primitives become inline class boxes
-                KotlinBuiltIns.isPrimitiveType(expandedUnderlyingType) -> inlineClassBoxType
+                KotlinBuiltIns.isPrimitiveType(expandedUnderlyingType) -> kotlinType
 
                 // Non-null reference types become nullable reference types
                 else -> expandedUnderlyingType.makeNullable()
@@ -365,11 +365,11 @@ open class JvmDescriptorTypeWriter<T : Any>(private val jvmTypeFactory: JvmTypeF
     protected fun writeJvmTypeAsIs(type: T) {
         if (jvmCurrentType == null) {
             jvmCurrentType =
-                    if (jvmCurrentTypeArrayLevel > 0) {
-                        jvmTypeFactory.createFromString("[".repeat(jvmCurrentTypeArrayLevel) + jvmTypeFactory.toString(type))
-                    } else {
-                        type
-                    }
+                if (jvmCurrentTypeArrayLevel > 0) {
+                    jvmTypeFactory.createFromString("[".repeat(jvmCurrentTypeArrayLevel) + jvmTypeFactory.toString(type))
+                } else {
+                    type
+                }
         }
     }
 

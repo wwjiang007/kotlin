@@ -1,16 +1,22 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.backend.common.lower
 
-import org.jetbrains.kotlin.backend.common.*
-import org.jetbrains.kotlin.backend.common.descriptors.*
+import org.jetbrains.kotlin.backend.common.CommonBackendContext
+import org.jetbrains.kotlin.backend.common.DeclarationContainerLoweringPass
+import org.jetbrains.kotlin.backend.common.FileLoweringPass
+import org.jetbrains.kotlin.backend.common.FunctionLoweringPass
+import org.jetbrains.kotlin.backend.common.descriptors.WrappedClassConstructorDescriptor
+import org.jetbrains.kotlin.backend.common.descriptors.WrappedSimpleFunctionDescriptor
+import org.jetbrains.kotlin.backend.common.descriptors.WrappedValueParameterDescriptor
+import org.jetbrains.kotlin.backend.common.descriptors.synthesizedName
 import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.backend.common.ir.copyTypeParametersFrom
 import org.jetbrains.kotlin.backend.common.ir.ir2string
-import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
+import org.jetbrains.kotlin.backend.common.ir.passTypeArgumentsFrom
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
@@ -31,12 +37,6 @@ import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 import org.jetbrains.kotlin.name.Name
-
-val jvmDefaultArgumentStubPhase = makeIrFilePhase(
-    { context -> DefaultArgumentStubGenerator(context, false) },
-    name = "DefaultArgumentsStubGenerator",
-    description = "Generate synthetic stubs for functions with default parameter values"
-)
 
 // TODO: fix expect/actual default parameters
 
@@ -122,7 +122,7 @@ open class DefaultArgumentStubGenerator(
                     irGet(parameter)
                 }
 
-                val temporaryVariable = irTemporary(argument, nameHint = parameter.name.asString())
+                val temporaryVariable = createTmpVariable(argument, nameHint = parameter.name.asString())
                 temporaryVariable.parent = newIrFunction
 
                 params.add(temporaryVariable)
@@ -135,11 +135,10 @@ open class DefaultArgumentStubGenerator(
                     endOffset = irFunction.endOffset,
                     type = context.irBuiltIns.unitType,
                     symbol = irFunction.symbol, descriptor = irFunction.symbol.descriptor,
-                    typeArgumentsCount = irFunction.typeParameters.size
+                    typeArgumentsCount = newIrFunction.parentAsClass.typeParameters.size + newIrFunction.typeParameters.size
                 ).apply {
-                    newIrFunction.typeParameters.forEachIndexed { i, param ->
-                        putTypeArgument(i, param.defaultType)
-                    }
+                    passTypeArgumentsFrom(newIrFunction.parentAsClass)
+                    passTypeArgumentsFrom(newIrFunction)
                     dispatchReceiver = newIrFunction.dispatchReceiverParameter?.let { irGet(it) }
 
                     params.forEachIndexed { i, variable -> putValueArgument(i, irGet(variable)) }
@@ -162,10 +161,8 @@ open class DefaultArgumentStubGenerator(
         newIrFunction: IrFunction,
         params: MutableList<IrVariable>
     ): IrExpression {
-        val dispatchCall = irCall(irFunction).apply {
-            newIrFunction.typeParameters.forEachIndexed { i, param ->
-                putTypeArgument(i, param.defaultType)
-            }
+        val dispatchCall = irCall(irFunction.symbol).apply {
+            passTypeArgumentsFrom(newIrFunction)
             dispatchReceiver = newIrFunction.dispatchReceiverParameter?.let { irGet(it) }
             extensionReceiver = newIrFunction.extensionReceiverParameter?.let { irGet(it) }
 
@@ -216,40 +213,10 @@ open class DefaultParameterInjector(
 
     override fun lower(irFile: IrFile) {
         irFile.transformChildrenVoid(object : IrElementTransformerVoid() {
-            override fun visitDelegatingConstructorCall(expression: IrDelegatingConstructorCall): IrExpression {
-                super.visitDelegatingConstructorCall(expression)
-
-                val declaration = expression.symbol.owner as IrFunction
-
-                if (!declaration.needsDefaultArgumentsLowering(skipInline, skipExternalMethods))
-                    return expression
-
-                val argumentsCount = argumentCount(expression)
-
-                if (argumentsCount == declaration.valueParameters.size)
-                    return expression
-
-                val (symbolForCall, params) = parametersForCall(expression)
-                return IrDelegatingConstructorCallImpl(
-                    startOffset = expression.startOffset,
-                    endOffset = expression.endOffset,
-                    type = context.irBuiltIns.unitType,
-                    symbol = symbolForCall as IrConstructorSymbol,
-                    descriptor = symbolForCall.descriptor,
-                    typeArgumentsCount = symbolForCall.owner.typeParameters.size
-                )
-                    .apply {
-                        copyTypeArgumentsFrom(expression)
-                        params.forEach {
-                            log { "call::params@${it.first.index}/${it.first.name.asString()}: ${ir2string(it.second)}" }
-                            putValueArgument(it.first.index, it.second)
-                        }
-                        dispatchReceiver = expression.dispatchReceiver
-                    }
-            }
-
-            override fun visitCall(expression: IrCall): IrExpression {
-                super.visitCall(expression)
+            private fun visitFunctionAccessExpression(
+                expression: IrFunctionAccessExpression,
+                builder: (IrFunctionSymbol) -> IrFunctionAccessExpression
+            ): IrExpression {
                 val functionDeclaration = expression.symbol.owner
 
                 if (!functionDeclaration.needsDefaultArgumentsLowering(skipInline, skipExternalMethods))
@@ -268,30 +235,66 @@ open class DefaultParameterInjector(
                 }
                 declaration.typeParameters.forEach { log { "$declaration[${it.index}] : $it" } }
 
-                return IrCallImpl(
-                    startOffset = expression.startOffset,
-                    endOffset = expression.endOffset,
-                    type = symbol.owner.returnType,
-                    symbol = symbol,
-                    descriptor = descriptor,
-                    typeArgumentsCount = expression.typeArgumentsCount,
-                    origin = DEFAULT_DISPATCH_CALL,
-                    superQualifierSymbol = expression.superQualifierSymbol
-                )
-                    .apply {
-                        this.copyTypeArgumentsFrom(expression)
+                return builder(symbol).apply {
+                    this.copyTypeArgumentsFrom(expression)
 
-                        params.forEach {
-                            log { "call::params@${it.first.index}/${it.first.name.asString()}: ${ir2string(it.second)}" }
-                            putValueArgument(it.first.index, it.second)
-                        }
-
-                        dispatchReceiver = expression.dispatchReceiver
-                        extensionReceiver = expression.extensionReceiver
-
-                        log { "call::extension@: ${ir2string(expression.extensionReceiver)}" }
-                        log { "call::dispatch@: ${ir2string(expression.dispatchReceiver)}" }
+                    params.forEach {
+                        log { "call::params@${it.first.index}/${it.first.name.asString()}: ${ir2string(it.second)}" }
+                        putValueArgument(it.first.index, it.second)
                     }
+
+                    dispatchReceiver = expression.dispatchReceiver
+                    extensionReceiver = expression.extensionReceiver
+
+                    log { "call::extension@: ${ir2string(expression.extensionReceiver)}" }
+                    log { "call::dispatch@: ${ir2string(expression.dispatchReceiver)}" }
+                }
+            }
+
+            override fun visitDelegatingConstructorCall(expression: IrDelegatingConstructorCall): IrExpression {
+                super.visitDelegatingConstructorCall(expression)
+
+                return visitFunctionAccessExpression(expression) {
+                    IrDelegatingConstructorCallImpl(
+                        startOffset = expression.startOffset,
+                        endOffset = expression.endOffset,
+                        type = context.irBuiltIns.unitType,
+                        symbol = it as IrConstructorSymbol,
+                        descriptor = it.descriptor,
+                        typeArgumentsCount = expression.typeArgumentsCount
+                    )
+                }
+            }
+
+            override fun visitConstructorCall(expression: IrConstructorCall): IrExpression {
+                super.visitConstructorCall(expression)
+
+                return visitFunctionAccessExpression(expression) {
+                    IrConstructorCallImpl.fromSymbolOwner(
+                        expression.startOffset,
+                        expression.endOffset,
+                        it.owner.returnType,
+                        it as IrConstructorSymbol,
+                        DEFAULT_DISPATCH_CALL
+                    )
+                }
+            }
+
+            override fun visitCall(expression: IrCall): IrExpression {
+                super.visitCall(expression)
+
+                return visitFunctionAccessExpression(expression) {
+                    IrCallImpl(
+                        startOffset = expression.startOffset,
+                        endOffset = expression.endOffset,
+                        type = it.owner.returnType,
+                        symbol = it,
+                        descriptor = it.descriptor,
+                        typeArgumentsCount = expression.typeArgumentsCount,
+                        origin = DEFAULT_DISPATCH_CALL,
+                        superQualifierSymbol = expression.superQualifierSymbol
+                    )
+                }
             }
 
             private fun IrFunction.findSuperMethodWithDefaultArguments(): IrFunction? {

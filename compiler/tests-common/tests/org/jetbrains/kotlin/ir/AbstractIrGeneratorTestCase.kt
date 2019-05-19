@@ -41,14 +41,14 @@ import java.io.PrintWriter
 import java.util.*
 
 abstract class AbstractIrGeneratorTestCase : CodegenTestCase() {
-    override fun doMultiFileTest(wholeFile: File, files: List<TestFile>, javaFilesDir: File?) {
-        setupEnvironment(files, javaFilesDir)
+    override fun doMultiFileTest(wholeFile: File, files: List<TestFile>) {
+        setupEnvironment(files)
 
         loadMultiFiles(files)
         doTest(wholeFile, files)
     }
 
-    private fun setupEnvironment(files: List<TestFile>, javaFilesDir: File?) {
+    private fun setupEnvironment(files: List<TestFile>) {
         val jdkKind = getJdkKind(files)
 
         val javacOptions = ArrayList<String>(0)
@@ -74,7 +74,7 @@ abstract class AbstractIrGeneratorTestCase : CodegenTestCase() {
         val configuration = createConfiguration(
             configurationKind, jdkKind,
             listOf<File>(getAnnotationsJar()),
-            arrayOf(javaFilesDir).filterNotNull(),
+            listOfNotNull(writeJavaFiles(files)),
             files
         )
 
@@ -83,7 +83,7 @@ abstract class AbstractIrGeneratorTestCase : CodegenTestCase() {
 
     protected abstract fun doTest(wholeFile: File, testFiles: List<TestFile>)
 
-    protected fun generateIrModule(ignoreErrors: Boolean = false): IrModuleFragment {
+    protected open fun generateIrModule(ignoreErrors: Boolean = false): IrModuleFragment {
         assert(myFiles != null) { "myFiles not initialized" }
         assert(myEnvironment != null) { "myEnvironment not initialized" }
         return doGenerateIrModule(Psi2IrTranslator(myEnvironment.configuration.languageVersionSettings, Psi2IrConfiguration(ignoreErrors)))

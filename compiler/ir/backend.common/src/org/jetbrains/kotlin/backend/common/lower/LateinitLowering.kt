@@ -18,7 +18,7 @@ package org.jetbrains.kotlin.backend.common.lower
 
 import org.jetbrains.kotlin.backend.common.CommonBackendContext
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
-import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
+import org.jetbrains.kotlin.backend.common.ir.Symbols
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.builders.*
@@ -33,12 +33,6 @@ import org.jetbrains.kotlin.ir.types.isPrimitiveType
 import org.jetbrains.kotlin.ir.util.resolveFakeOverride
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
-
-val jvmLateinitPhase = makeIrFilePhase(
-    ::LateinitLowering,
-    name = "Lateinit",
-    description = "Insert checks for lateinit field references"
-)
 
 class LateinitLowering(val context: CommonBackendContext) : FileLoweringPass {
     override fun lower(irFile: IrFile) {
@@ -82,7 +76,7 @@ class LateinitLowering(val context: CommonBackendContext) : FileLoweringPass {
             override fun visitCall(expression: IrCall): IrExpression {
                 expression.transformChildrenVoid(this)
 
-                if (expression.symbol != context.ir.symbols.lateinitIsInitializedPropertyGetter) return expression
+                if (!Symbols.isLateinitIsInitializedPropertyGetter(expression.symbol)) return expression
 
                 val receiver = expression.extensionReceiver as IrPropertyReference
 

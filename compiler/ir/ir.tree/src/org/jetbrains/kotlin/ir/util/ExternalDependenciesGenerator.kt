@@ -20,6 +20,8 @@ import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
+import org.jetbrains.kotlin.ir.symbols.IrSymbol
+import kotlin.math.min
 
 class ExternalDependenciesGenerator(
     moduleDescriptor: ModuleDescriptor,
@@ -49,19 +51,28 @@ class ExternalDependenciesGenerator(
         ArrayList(symbolTable.unboundSimpleFunctions).forEach {
             stubGenerator.generateFunctionStub(it.descriptor)
         }
+        ArrayList(symbolTable.unboundProperties).forEach {
+            stubGenerator.generatePropertyStub(it.descriptor)
+        }
         ArrayList(symbolTable.unboundTypeParameters).forEach {
             stubGenerator.generateOrGetTypeParameterStub(it.descriptor)
         }
 
         deserializer?.declareForwardDeclarations()
 
-        if (deserializer != null) return
+        assertEmpty(symbolTable.unboundClasses, "classes")
+        assertEmpty(symbolTable.unboundConstructors, "constructors")
+        assertEmpty(symbolTable.unboundEnumEntries, "enum entries")
+        assertEmpty(symbolTable.unboundFields, "fields")
+        assertEmpty(symbolTable.unboundSimpleFunctions, "simple functions")
+        assertEmpty(symbolTable.unboundProperties, "properties")
+        assertEmpty(symbolTable.unboundTypeParameters, "type parameters")
+    }
 
-        assert(symbolTable.unboundClasses.isEmpty())
-        assert(symbolTable.unboundConstructors.isEmpty())
-        assert(symbolTable.unboundEnumEntries.isEmpty())
-        assert(symbolTable.unboundFields.isEmpty())
-        assert(symbolTable.unboundSimpleFunctions.isEmpty())
-        assert(symbolTable.unboundTypeParameters.isEmpty())
+    private fun assertEmpty(s: Set<IrSymbol>, marker: String) {
+        assert(s.isEmpty()) {
+            "$marker: ${s.size} unbound:\n" +
+                    s.toList().subList(0, min(10, s.size)).joinToString(separator = "\n") { it.descriptor.toString() }
+        }
     }
 }

@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.generators.builtins.unsigned
@@ -224,7 +224,7 @@ class UnsignedTypeGenerator(val type: UnsignedType, out: PrintWriter) : BuiltIns
                 else -> {
                     out.println("     * The resulting `$signed` value represents the same numerical value as this `$className`.")
                     out.println("     *")
-                    out.println("     * The ${lsb(type.bitSize)} of the resulting `$signed` value are the same as the binary representation of this `$className` value,")
+                    out.println("     * The ${lsb(type.bitSize)} of the resulting `$signed` value are the same as the bits of this `$className` value,")
                     out.println("     * whereas the ${msb(otherType.bitSize - type.bitSize)} are filled with zeros.")
                 }
             }
@@ -257,7 +257,7 @@ class UnsignedTypeGenerator(val type: UnsignedType, out: PrintWriter) : BuiltIns
                     else -> {
                         out.println("     * The resulting `$name` value represents the same numerical value as this `$className`.")
                         out.println("     *")
-                        out.println("     * The ${lsb(type.bitSize)} of the resulting `$name` value are the same as the binary representation of this `$className` value,")
+                        out.println("     * The ${lsb(type.bitSize)} of the resulting `$name` value are the same as the bits of this `$className` value,")
                         out.println("     * whereas the ${msb(otherType.bitSize - type.bitSize)} are filled with zeros.")
                     }
                 }
@@ -311,7 +311,7 @@ class UnsignedTypeGenerator(val type: UnsignedType, out: PrintWriter) : BuiltIns
                 otherType < type -> {
                     out.println(" * If this value is positive, the resulting `$className` value represents the same numerical value as this `$otherSigned`.")
                     out.println(" *")
-                    out.println(" * The ${lsb(otherType.bitSize)} of the resulting `$className` value are the same as the binary representation of this `$otherSigned` value,")
+                    out.println(" * The ${lsb(otherType.bitSize)} of the resulting `$className` value are the same as the bits of this `$otherSigned` value,")
                     out.println(" * whereas the ${msb(type.bitSize - otherType.bitSize)} are filled with the sign bit of this value.")
                 }
                 otherType == type -> {
@@ -371,7 +371,6 @@ class UnsignedTypeGenerator(val type: UnsignedType, out: PrintWriter) : BuiltIns
             UnsignedType.UBYTE, UnsignedType.USHORT -> out.println("toInt().toString()")
             UnsignedType.UINT -> out.println("toLong().toString()")
             UnsignedType.ULONG -> out.println("ulongToString(data)")
-            else -> error(type)
         }
 
         out.println()
@@ -428,10 +427,20 @@ class UnsignedArrayGenerator(val type: UnsignedType, out: PrintWriter) : BuiltIn
     /** Creates a new array of the specified [size], with all elements initialized to zero. */
     public constructor(size: Int) : this($storageArrayType(size))
 
-    /** Returns the array element at the given [index]. This method can be called using the index operator. */
+    /**
+     * Returns the array element at the given [index]. This method can be called using the index operator.
+     *
+     * If the [index] is out of bounds of this array, throws an [IndexOutOfBoundsException] except in Kotlin/JS
+     * where the behavior is unspecified.
+     */
     public operator fun get(index: Int): $elementType = storage[index].to$elementType()
 
-    /** Sets the element at the given [index] to the given [value]. This method can be called using the index operator. */
+    /**
+     * Sets the element at the given [index] to the given [value]. This method can be called using the index operator.
+     *
+     * If the [index] is out of bounds of this array, throws an [IndexOutOfBoundsException] except in Kotlin/JS
+     * where the behavior is unspecified.
+     */
     public operator fun set(index: Int, value: $elementType) {
         storage[index] = value.to$storageElementType()
     }

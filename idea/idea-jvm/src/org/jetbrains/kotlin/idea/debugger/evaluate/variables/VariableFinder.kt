@@ -1,12 +1,11 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.debugger.evaluate.variables
 
 import com.intellij.debugger.engine.evaluation.EvaluateExceptionUtil
-import com.intellij.debugger.engine.evaluation.EvaluationContextImpl
 import com.intellij.debugger.jdi.LocalVariableProxyImpl
 import com.intellij.debugger.jdi.StackFrameProxyImpl
 import com.intellij.openapi.diagnostic.Attachment
@@ -33,7 +32,9 @@ import kotlin.coroutines.Continuation
 import org.jetbrains.org.objectweb.asm.Type as AsmType
 import com.sun.jdi.Type as JdiType
 
-class VariableFinder private constructor(private val context: ExecutionContext, private val frameProxy: StackFrameProxyImpl) {
+class VariableFinder(private val context: ExecutionContext) {
+    private val frameProxy = context.frameProxy
+
     companion object {
         private const val USE_UNSAFE_FALLBACK = true
 
@@ -44,14 +45,9 @@ class VariableFinder private constructor(private val context: ExecutionContext, 
             "kotlin.coroutines.jvm.internal.RestrictedSuspendLambda"
         )
 
-        fun instance(context: ExecutionContext): VariableFinder? {
-            val frameProxy = context.evaluationContext.frameProxy ?: return null
-            return VariableFinder(context, frameProxy)
-        }
-
-        fun variableNotFound(context: EvaluationContextImpl, message: String): Exception {
+        fun variableNotFound(context: ExecutionContext, message: String): Exception {
             val frameProxy = context.frameProxy
-            val location = frameProxy?.safeLocation()
+            val location = frameProxy.safeLocation()
             val scope = context.debugProcess.searchScope
 
             val locationText = location?.run { "Location: ${sourceName()}:${lineNumber()}" } ?: "No location available"
@@ -79,10 +75,7 @@ class VariableFinder private constructor(private val context: ExecutionContext, 
             return EvaluateExceptionUtil.createEvaluateException(message)
         }
 
-        // org.jetbrains.kotlin.codegen.inline.MethodInliner.prepareNode
-        private const val OUTER_THIS_FOR_INLINE = AsmUtil.THIS + '_'
-
-        val inlinedThisRegex = getLocalVariableNameRegexInlineAware(OUTER_THIS_FOR_INLINE)
+        val inlinedThisRegex = getLocalVariableNameRegexInlineAware(AsmUtil.INLINE_DECLARATION_SITE_THIS)
 
         private fun getCapturedVariableNameRegex(capturedName: String): Regex {
             val escapedName = Regex.escape(capturedName)
@@ -186,7 +179,7 @@ class VariableFinder private constructor(private val context: ExecutionContext, 
         return when (parameter.kind) {
             Kind.ORDINARY -> findOrdinary(VariableKind.Ordinary(parameter.name, asmType, isDelegated = false))
             Kind.DELEGATED -> findOrdinary(VariableKind.Ordinary(parameter.name, asmType, isDelegated = true))
-            Kind.FAKE_JAVA_OUTER_CLASS -> frameProxy.thisObject()?.let { Result(it) }
+            Kind.FAKE_JAVA_OUTER_CLASS -> thisObject()?.let { Result(it) }
             Kind.EXTENSION_RECEIVER -> findExtensionThis(VariableKind.ExtensionThis(parameter.name, asmType))
             Kind.LOCAL_FUNCTION -> findLocalFunction(VariableKind.LocalFunction(parameter.name, asmType))
             Kind.DISPATCH_RECEIVER -> findDispatchThis(VariableKind.OuterClassThis(asmType))
@@ -206,12 +199,12 @@ class VariableFinder private constructor(private val context: ExecutionContext, 
         findCapturedVariableInReceiver(variables, kind)?.let { return it }
 
         // Recursive search in captured this
-        val containingThis = frameProxy.thisObject() ?: return null
+        val containingThis = thisObject() ?: return null
         return findCapturedVariable(kind, containingThis)
     }
 
     private fun findFieldVariable(kind: VariableKind.FieldVar): Result? {
-        val thisObject = frameProxy.thisObject()
+        val thisObject = thisObject()
         if (thisObject != null) {
             val field = thisObject.referenceType().fieldByName(kind.fieldName) ?: return null
             return Result(thisObject.getValue(field))
@@ -224,19 +217,19 @@ class VariableFinder private constructor(private val context: ExecutionContext, 
 
     private fun findLocalFunction(kind: VariableKind.LocalFunction): Result? {
         val variables = frameProxy.safeVisibleVariables()
-        
+
         // Local variables – direct search, new convention
         val newConventionName = AsmUtil.LOCAL_FUNCTION_VARIABLE_PREFIX + kind.name
         findLocalVariable(variables, kind, newConventionName)?.let { return it }
 
         // Local variables – direct search, old convention (before 1.3.30)
         findLocalVariable(variables, kind, kind.name + "$")?.let { return it }
-        
+
         // Recursive search in local receiver variables
         findCapturedVariableInReceiver(variables, kind)?.let { return it }
 
         // Recursive search in captured this
-        val containingThis = frameProxy.thisObject() ?: return null
+        val containingThis = thisObject() ?: return null
         return findCapturedVariable(kind, containingThis)
     }
 
@@ -251,7 +244,7 @@ class VariableFinder private constructor(private val context: ExecutionContext, 
         findCapturedVariableInReceiver(variables, kind)?.let { return it }
 
         // Recursive search in captured this
-        val containingThis = frameProxy.thisObject()
+        val containingThis = thisObject()
         if (containingThis != null) {
             findCapturedVariable(kind, containingThis)?.let { return it }
         }
@@ -266,7 +259,7 @@ class VariableFinder private constructor(private val context: ExecutionContext, 
     }
 
     private fun findDispatchThis(kind: VariableKind.OuterClassThis): Result? {
-        val containingThis = frameProxy.thisObject()
+        val containingThis = thisObject()
         if (containingThis != null) {
             findCapturedVariable(kind, containingThis)?.let { return it }
         }
@@ -297,7 +290,7 @@ class VariableFinder private constructor(private val context: ExecutionContext, 
     }
 
     private fun findDebugLabel(name: String): Result? {
-        val markupMap = DebugLabelPropertyDescriptorProvider.getMarkupMap(context.evaluationContext.debugProcess)
+        val markupMap = DebugLabelPropertyDescriptorProvider.getMarkupMap(context.debugProcess)
 
         for ((value, markup) in markupMap) {
             if (markup.text == name) {
@@ -314,7 +307,7 @@ class VariableFinder private constructor(private val context: ExecutionContext, 
         // Recursive search in local receiver variables
         findCapturedVariableInReceiver(variables, kind)?.let { return it }
 
-        val containingThis = frameProxy.thisObject() ?: return null
+        val containingThis = thisObject() ?: return null
         return findCapturedVariable(kind, containingThis)
     }
 
@@ -379,7 +372,7 @@ class VariableFinder private constructor(private val context: ExecutionContext, 
             return null
         }
 
-        val thisObject = frameProxy.thisObject() ?: return null
+        val thisObject = thisObject() ?: return null
         val thisType = thisObject.referenceType()
 
         if (SUSPEND_LAMBDA_CLASSES.none { thisType.isSubtype(it) }) {
@@ -408,7 +401,7 @@ class VariableFinder private constructor(private val context: ExecutionContext, 
             .methodsByName("getContext", "()Lkotlin/coroutines/CoroutineContext;").firstOrNull()
             ?: return null
 
-        return context.debugProcess.invokeMethod(context.evaluationContext, continuation, getContextMethod, emptyList()) as? ObjectReference
+        return context.invokeMethod(continuation, getContextMethod, emptyList()) as? ObjectReference
     }
 
     private fun findCapturedVariableInReceiver(variables: List<LocalVariableProxyImpl>, kind: VariableKind): Result? {
@@ -482,7 +475,7 @@ class VariableFinder private constructor(private val context: ExecutionContext, 
             .methodsByName("getValue", "()Ljava/lang/Object;").firstOrNull()
             ?: return rawValue
 
-        return context.debugProcess.invokeMethod(context.evaluationContext, delegateValue, getValueMethod, emptyList())
+        return context.invokeMethod(delegateValue, getValueMethod, emptyList())
     }
 
     private fun isCapturedReceiverFieldName(name: String): Boolean {
@@ -509,5 +502,14 @@ class VariableFinder private constructor(private val context: ExecutionContext, 
 
     private fun List<LocalVariableProxyImpl>.namedEntitySequence(): Sequence<NamedEntity> {
         return asSequence().map { NamedEntity.of(it, frameProxy) }
+    }
+
+    private fun thisObject(): ObjectReference? {
+        val thisObjectFromEvaluation = context.evaluationContext.computeThisObject() as? ObjectReference
+        if (thisObjectFromEvaluation != null) {
+            return thisObjectFromEvaluation
+        }
+
+        return frameProxy.thisObject()
     }
 }

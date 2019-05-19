@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen;
@@ -103,6 +103,8 @@ public class AsmUtil {
     public static final String THIS_IN_DEFAULT_IMPLS = "$this";
 
     public static final String LABELED_THIS_FIELD = THIS + "_";
+
+    public static final String INLINE_DECLARATION_SITE_THIS = "this_";
 
     public static final String LABELED_THIS_PARAMETER = "$" + THIS + "$";
 
@@ -778,7 +780,7 @@ public class AsmUtil {
         return typeMapper.mapToCallableMethod(toStringDescriptor, false, OwnerKind.ERASED_INLINE_CLASS);
     }
 
-    static void genHashCode(MethodVisitor mv, InstructionAdapter iv, Type type, JvmTarget jvmTarget) {
+    public static void genHashCode(MethodVisitor mv, InstructionAdapter iv, Type type, JvmTarget jvmTarget) {
         if (type.getSort() == Type.ARRAY) {
             Type elementType = correctElementType(type);
             if (elementType.getSort() == Type.OBJECT || elementType.getSort() == Type.ARRAY) {
@@ -848,17 +850,28 @@ public class AsmUtil {
         return StackValue.operation(Type.BOOLEAN_TYPE, v -> {
             left.put(AsmTypes.OBJECT_TYPE, left.kotlinType, v);
             right.put(AsmTypes.OBJECT_TYPE, right.kotlinType, v);
-            genAreEqualCall(v);
-
-            if (opToken == KtTokens.EXCLEQ || opToken == KtTokens.EXCLEQEQEQ) {
-                genInvertBoolean(v);
-            }
-            return Unit.INSTANCE;
+            return genAreEqualCall(v, opToken);
         });
+    }
+
+    @NotNull
+    public static StackValue genEqualsBoxedOnStack(@NotNull IElementType opToken) {
+        return StackValue.operation(Type.BOOLEAN_TYPE, v -> genAreEqualCall(v, opToken));
     }
 
     public static void genAreEqualCall(InstructionAdapter v) {
         v.invokestatic(IntrinsicMethods.INTRINSICS_CLASS_NAME, "areEqual", "(Ljava/lang/Object;Ljava/lang/Object;)Z", false);
+    }
+
+    @NotNull
+    private static Unit genAreEqualCall(InstructionAdapter v, @NotNull IElementType opToken) {
+        genAreEqualCall(v);
+
+        if (opToken == KtTokens.EXCLEQ || opToken == KtTokens.EXCLEQEQEQ) {
+            genInvertBoolean(v);
+        }
+
+        return Unit.INSTANCE;
     }
 
     public static void genIEEE754EqualForNullableTypesCall(InstructionAdapter v, Type left, Type right) {

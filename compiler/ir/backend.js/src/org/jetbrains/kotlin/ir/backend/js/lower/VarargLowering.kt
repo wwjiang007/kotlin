@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.ir.backend.js.lower
@@ -10,20 +10,15 @@ import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFile
-import org.jetbrains.kotlin.ir.expressions.IrCall
-import org.jetbrains.kotlin.ir.expressions.IrExpression
-import org.jetbrains.kotlin.ir.expressions.IrSpreadElement
-import org.jetbrains.kotlin.ir.expressions.IrVararg
+import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
+import org.jetbrains.kotlin.ir.expressions.impl.IrConstructorCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrGetFieldImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrVarargImpl
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classifierOrNull
 import org.jetbrains.kotlin.ir.types.impl.IrSimpleTypeImpl
-import org.jetbrains.kotlin.ir.util.constructors
-import org.jetbrains.kotlin.ir.util.defaultType
-import org.jetbrains.kotlin.ir.util.getInlineClassBackingField
-import org.jetbrains.kotlin.ir.util.getInlinedClass
+import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 
@@ -63,14 +58,14 @@ private class VarargTransformer(
     fun IrExpression.unboxInlineClassIfNeeded(): IrExpression {
         val inlinedClass = type.getInlinedClass() ?: return this
         val field = getInlineClassBackingField(inlinedClass)
-        return IrGetFieldImpl(startOffset, endOffset, field.symbol, inlinedClass.defaultType, this)
+        return IrGetFieldImpl(startOffset, endOffset, field.symbol, field.type, this)
     }
 
     fun IrExpression.boxInlineClassIfNeeded(inlineClass: IrClass?) =
         if (inlineClass == null)
             this
         else
-            IrCallImpl(startOffset, endOffset, inlineClass.defaultType, inlineClass.constructors.single { it.isPrimary }.symbol).also {
+            IrConstructorCallImpl.fromSymbolOwner(startOffset, endOffset, inlineClass.defaultType, inlineClass.constructors.single { it.isPrimary }.symbol).also {
                 it.putValueArgument(0, this)
             }
 
@@ -86,8 +81,8 @@ private class VarargTransformer(
         val needUnboxing: Boolean
         val arrayInlineClass = expression.type.getInlinedClass()
         if (arrayInlineClass != null) {
-            primitiveElementType = getInlineClassBackingField(elementType.getInlinedClass()!!).type
-            primitiveExpressionType = getInlineClassBackingField(arrayInlineClass).type
+            primitiveElementType = getInlineClassUnderlyingType(elementType.getInlinedClass()!!)
+            primitiveExpressionType = getInlineClassUnderlyingType(arrayInlineClass)
             needUnboxing = true
         } else {
             primitiveElementType = elementType
@@ -117,33 +112,34 @@ private class VarargTransformer(
 
         // empty vararg => empty array literal
         if (segments.isEmpty()) {
-            return emptyList().toArrayLiteral(primitiveExpressionType, primitiveElementType)
+            val res = emptyList<IrExpression>().toArrayLiteral(primitiveExpressionType, primitiveElementType)
+            return if (needUnboxing)
+                res.boxInlineClassIfNeeded(arrayInlineClass!!)
+            else
+                res
         }
 
         // vararg with a single segment => no need to concatenate
         if (segments.size == 1) {
-            return if (expression.elements.any { it is IrSpreadElement }) {
-                // Single spread operator => need to copy the array
+            val segment = segments.first()
+            val argument = if (expression.elements.any { it is IrSpreadElement }) {
                 IrCallImpl(
                     expression.startOffset,
                     expression.endOffset,
                     expression.type,
-                    context.intrinsics.jsArraySlice.symbol
+                    context.intrinsics.jsArraySlice
                 ).apply {
-                    putValueArgument(0, segments.first())
+                    putTypeArgument(0, expression.type)
+                    putValueArgument(0, segment)
                 }
-            } else {
-                val res = segments.first()
-                return if (needUnboxing)
-                    res.boxInlineClassIfNeeded(arrayInlineClass!!)
-                else
-                    res
-            }
+            } else segment
+
+            return if (needUnboxing) argument.boxInlineClassIfNeeded(arrayInlineClass!!) else argument
         }
 
         val arrayLiteral =
             segments.toArrayLiteral(
-                IrSimpleTypeImpl(context.intrinsics.array, false, emptyList(), emptyList()),
+                IrSimpleTypeImpl(context.intrinsics.array, false, emptyList(), emptyList()), // TODO: Substitution
                 context.irBuiltIns.anyType
             )
 
@@ -168,7 +164,7 @@ private class VarargTransformer(
             res
     }
 
-    override fun visitCall(expression: IrCall): IrExpression {
+    private fun transformFunctionAccessExpression(expression: IrFunctionAccessExpression): IrExpression {
         expression.transformChildrenVoid()
         val size = expression.valueArgumentsCount
 
@@ -176,10 +172,13 @@ private class VarargTransformer(
             val argument = expression.getValueArgument(i)
             val parameter = expression.symbol.owner.valueParameters[i]
             if (argument == null && parameter.varargElementType != null) {
-                expression.putValueArgument(i, emptyList().toArrayLiteral(parameter.type, parameter.varargElementType!!))
+                expression.putValueArgument(i, emptyList<IrExpression>().toArrayLiteral(parameter.type, parameter.varargElementType!!))
             }
         }
 
         return expression
     }
+
+    override fun visitCall(expression: IrCall) = transformFunctionAccessExpression(expression)
+    override fun visitConstructorCall(expression: IrConstructorCall) = transformFunctionAccessExpression(expression)
 }

@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.gradle.plugin.mpp
@@ -11,7 +11,6 @@ import org.gradle.api.Project
 import org.gradle.api.attributes.Attribute
 import org.gradle.api.attributes.AttributeContainer
 import org.gradle.api.internal.FeaturePreviews
-import org.gradle.api.internal.file.FileResolver
 import org.gradle.api.internal.plugins.DslObject
 import org.gradle.api.plugins.JavaBasePlugin
 import org.gradle.api.publish.PublicationContainer
@@ -20,21 +19,21 @@ import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.api.publish.maven.internal.publication.MavenPublicationInternal
 import org.gradle.api.publish.maven.tasks.AbstractPublishToMaven
 import org.gradle.api.tasks.compile.AbstractCompile
-import org.gradle.internal.reflect.Instantiator
 import org.gradle.jvm.tasks.Jar
 import org.gradle.util.ConfigureUtil
-import org.jetbrains.kotlin.gradle.dsl.*
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import org.jetbrains.kotlin.gradle.dsl.configureOrCreate
+import org.jetbrains.kotlin.gradle.dsl.kotlinExtension
+import org.jetbrains.kotlin.gradle.dsl.multiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.plugin.sources.DefaultLanguageSettingsBuilder
+import org.jetbrains.kotlin.gradle.scripting.internal.ScriptingGradleSubplugin
 import org.jetbrains.kotlin.gradle.utils.SingleWarningPerBuild
 import org.jetbrains.kotlin.gradle.utils.checkGradleCompatibility
 import org.jetbrains.kotlin.gradle.utils.lowerCamelCaseName
-import org.jetbrains.kotlin.konan.target.HostManager
 import org.jetbrains.kotlin.konan.target.presetName
 
 class KotlinMultiplatformPlugin(
-    private val fileResolver: FileResolver,
-    private val instantiator: Instantiator,
     private val kotlinPluginVersion: String,
     private val featurePreviews: FeaturePreviews // TODO get rid of this internal API usage once we don't need it
 ) : Plugin<Project> {
@@ -78,17 +77,19 @@ class KotlinMultiplatformPlugin(
         configureDefaultVersionsResolutionStrategy(project, kotlinPluginVersion)
         configureSourceSets(project)
 
-        setUpConfigurationAttributes(project)
-
         // set up metadata publishing
         targetsFromPreset.fromPreset(
-            KotlinMetadataTargetPreset(project, instantiator, fileResolver, kotlinPluginVersion),
+            KotlinMetadataTargetPreset(project, kotlinPluginVersion),
             METADATA_TARGET_NAME
         )
         configurePublishingWithMavenPublish(project)
 
+        targetsContainer.withType(AbstractKotlinTarget::class.java).all { applyUserDefinedAttributes(it) }
+
         // propagate compiler plugin options to the source set language settings
         setupCompilerPluginOptions(project)
+
+        project.pluginManager.apply(ScriptingGradleSubplugin::class.java)
 
         UnusedSourceSetsChecker.checkSourceSets(project)
     }
@@ -132,11 +133,11 @@ class KotlinMultiplatformPlugin(
 
     fun setupDefaultPresets(project: Project) {
         with(project.multiplatformExtension.presets) {
-            add(KotlinJvmTargetPreset(project, instantiator, fileResolver, kotlinPluginVersion))
-            add(KotlinJsTargetPreset(project, instantiator, fileResolver, kotlinPluginVersion))
+            add(KotlinJvmTargetPreset(project, kotlinPluginVersion))
+            add(KotlinJsTargetPreset(project, kotlinPluginVersion))
             add(KotlinAndroidTargetPreset(project, kotlinPluginVersion))
             add(KotlinJvmWithJavaTargetPreset(project, kotlinPluginVersion))
-            HostManager().targets.forEach { _, target ->
+            project.hostManager.targets.forEach { _, target ->
                 add(KotlinNativeTargetPreset(target.presetName, project, target, kotlinPluginVersion))
             }
         }
@@ -226,45 +227,6 @@ class KotlinMultiplatformPlugin(
         }
     }
 
-    private fun setUpConfigurationAttributes(project: Project) {
-        val targets = project.multiplatformExtension.targets
-
-        project.afterEvaluate {
-            targets.all { target ->
-                val mainCompilationAttributes = target.compilations.findByName(KotlinCompilation.MAIN_COMPILATION_NAME)?.attributes
-                    ?: return@all
-
-                fun <T> copyAttribute(key: Attribute<T>, from: AttributeContainer, to: AttributeContainer) {
-                    to.attribute(key, from.getAttribute(key)!!)
-                }
-
-                listOf(
-                    target.apiElementsConfigurationName,
-                    target.runtimeElementsConfigurationName,
-                    target.defaultConfigurationName
-                )
-                    .mapNotNull { configurationName -> target.project.configurations.findByName(configurationName) }
-                    .forEach { configuration ->
-                        mainCompilationAttributes.keySet().forEach { key ->
-                            copyAttribute(key, mainCompilationAttributes, configuration.attributes)
-                        }
-                    }
-
-                target.compilations.all { compilation ->
-                    val compilationAttributes = compilation.attributes
-
-                    compilation.relatedConfigurationNames
-                        .mapNotNull { configurationName -> target.project.configurations.findByName(configurationName) }
-                        .forEach { configuration ->
-                            compilationAttributes.keySet().forEach { key ->
-                                copyAttribute(key, compilationAttributes, configuration.attributes)
-                            }
-                        }
-                }
-            }
-        }
-    }
-
     companion object {
         const val METADATA_TARGET_NAME = "metadata"
 
@@ -274,6 +236,52 @@ class KotlinMultiplatformPlugin(
                     "Future Gradle versions may fail to resolve dependencies on these publications. " +
                     "You can disable Gradle metadata usage during publishing and dependencies resolution by removing " +
                     "`enableFeaturePreview('GRADLE_METADATA')` from the settings.gradle file."
+    }
+}
+
+/**
+ * The attributes attached to the targets and compilations need to be propagated to the relevant Gradle configurations:
+ * 1. Output configurations of each target need the corresponding compilation's attributes (and, indirectly, the target's attributes)
+ * 2. Resolvable configurations of each compilation need the compilation's attributes
+ */
+internal fun applyUserDefinedAttributes(target: AbstractKotlinTarget) {
+    val project = target.project
+
+    project.whenEvaluated {
+        fun copyAttributes(from: AttributeContainer, to: AttributeContainer) {
+            fun <T> copyAttribute(key: Attribute<T>, from: AttributeContainer, to: AttributeContainer) {
+                to.attribute(key, from.getAttribute(key)!!)
+            }
+
+            from.keySet().forEach { key -> copyAttribute(key, from, to) }
+        }
+
+        // To copy the attributes to the output configurations, find those output configurations and their producing compilations
+        // based on the target's components:
+        val outputConfigurationsWithCompilations =
+            target.kotlinComponents.filterIsInstance<KotlinVariant>().flatMap { kotlinVariant ->
+                kotlinVariant.usages.filterIsInstance<KotlinUsageContext>().mapNotNull { usageContext ->
+                    project.configurations.findByName(usageContext.dependencyConfigurationName)?.let { configuration ->
+                        configuration to usageContext.compilation
+                    }
+                }
+            } + listOfNotNull(
+                target.compilations.findByName(KotlinCompilation.MAIN_COMPILATION_NAME)?.let { mainCompilation ->
+                    project.configurations.findByName(target.defaultConfigurationName)?.to(mainCompilation)
+                }
+            )
+
+        outputConfigurationsWithCompilations.forEach { (configuration, compilation) ->
+            copyAttributes(compilation.attributes, configuration.attributes)
+        }
+
+        target.compilations.all { compilation ->
+            val compilationAttributes = compilation.attributes
+
+            compilation.relatedConfigurationNames
+                .mapNotNull { configurationName -> target.project.configurations.findByName(configurationName) }
+                .forEach { configuration -> copyAttributes(compilationAttributes, configuration.attributes) }
+        }
     }
 }
 

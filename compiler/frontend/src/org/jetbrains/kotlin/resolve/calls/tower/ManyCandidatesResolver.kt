@@ -1,6 +1,6 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.resolve.calls.tower
@@ -53,6 +53,7 @@ abstract class ManyCandidatesResolver<D : CallableDescriptor>(
         if (callInfo !is PSIErrorCallInfo<*>) {
             throw AssertionError("Error call info for $callInfo should be instance of PSIErrorCallInfo")
         }
+        @Suppress("UNCHECKED_CAST")
         errorCallsInfo.add(callInfo as PSIErrorCallInfo<D>)
     }
 
@@ -122,6 +123,7 @@ class PSIPartialCallInfo(
 class PSICompletedCallInfo(
     override val callResolutionResult: CompletedCallResolutionResult,
     val context: BasicCallResolutionContext,
+    val resolvedCall: ResolvedCall<*>,
     val tracingStrategy: TracingStrategy
 ) : CompletedCallInfo
 

@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.codegen.state
@@ -30,6 +30,7 @@ import org.jetbrains.kotlin.descriptors.impl.LocalVariableAccessorDescriptor
 import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor
 import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
 import org.jetbrains.kotlin.fileClasses.JvmFileClassUtil
+import org.jetbrains.kotlin.ir.descriptors.IrPropertyDelegateDescriptor
 import org.jetbrains.kotlin.load.java.BuiltinMethodsWithSpecialGenericSignature
 import org.jetbrains.kotlin.load.java.JvmAbi
 import org.jetbrains.kotlin.load.java.descriptors.JavaCallableMemberDescriptor
@@ -137,7 +138,8 @@ class KotlinTypeMapper @JvmOverloads constructor(
         val container = descriptor.containingDeclaration
         return when (container) {
             is PackageFragmentDescriptor -> {
-                val packageMemberOwner = internalNameForPackageMemberOwner(descriptor as CallableMemberDescriptor, publicFacade)
+                val packageMemberOwner =
+                    internalNameForPackageMemberOwner(descriptor as CallableMemberDescriptor, publicFacade, isIrBackend)
                 Type.getObjectType(packageMemberOwner)
             }
             is ClassDescriptor -> mapClass((container as ClassDescriptor?)!!)
@@ -1241,10 +1243,6 @@ class KotlinTypeMapper @JvmOverloads constructor(
                 throw IllegalStateException(generateErrorMessageForErrorType(kotlinType, descriptor))
             }
 
-            override fun releaseCoroutines(): Boolean {
-                return false
-            }
-
             override fun preprocessType(kotlinType: KotlinType): KotlinType? {
                 return null
             }
@@ -1255,7 +1253,11 @@ class KotlinTypeMapper @JvmOverloads constructor(
          */
         val LANGUAGE_VERSION_SETTINGS_DEFAULT: LanguageVersionSettings = LanguageVersionSettingsImpl.DEFAULT
 
-        private fun internalNameForPackageMemberOwner(callableDescriptor: CallableMemberDescriptor, publicFacade: Boolean): String {
+        private fun internalNameForPackageMemberOwner(
+            callableDescriptor: CallableMemberDescriptor,
+            publicFacade: Boolean,
+            isIrBackend: Boolean
+        ): String {
             val isAccessor: Boolean
             val descriptor = if (callableDescriptor is AccessorForCallableDescriptor<*>) {
                 isAccessor = true
@@ -1283,6 +1285,10 @@ class KotlinTypeMapper @JvmOverloads constructor(
             if (directMember is DeserializedCallableMemberDescriptor) {
                 val facadeFqName = getPackageMemberOwnerInternalName(directMember, publicFacade)
                 if (facadeFqName != null) return facadeFqName
+            }
+
+            if (isIrBackend && directMember is IrPropertyDelegateDescriptor) {
+                return internalNameForPackageMemberOwner(directMember.correspondingProperty, publicFacade, isIrBackend)
             }
 
             // TODO: drop this usage and move IrBuiltinsPackageFragmentDescriptor to IR modules; it shouldn't be used here

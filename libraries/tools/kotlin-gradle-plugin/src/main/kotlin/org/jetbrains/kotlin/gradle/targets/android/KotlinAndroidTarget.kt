@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:Suppress("PackageDirectoryMismatch") // Old package for compatibility
@@ -26,7 +26,7 @@ open class KotlinAndroidTarget(
     override val platformType: KotlinPlatformType
         get() = KotlinPlatformType.androidJvm
 
-    private val compilationFactory = KotlinJvmAndroidCompilationFactory(project, this)
+    internal val compilationFactory = KotlinJvmAndroidCompilationFactory(project, this)
 
     override val compilations: NamedDomainObjectContainer<out KotlinJvmAndroidCompilation> =
         project.container(compilationFactory.itemClass, compilationFactory)
@@ -90,7 +90,6 @@ open class KotlinAndroidTarget(
         checkPublishLibraryVariantsExist()
 
         KotlinAndroidPlugin.androidTargetHandler(project.getKotlinPluginVersion()!!, this).doCreateComponents()
-            .also { project.components.addAll(it) }
     }
 
     // Capture the type parameter T for `AbstractAndroidProjectHandler`

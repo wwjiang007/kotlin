@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.asJava.classes
@@ -25,10 +25,7 @@ import org.jetbrains.kotlin.codegen.signature.JvmSignatureWriter
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.load.kotlin.TypeMappingMode
-import org.jetbrains.kotlin.psi.KtDeclaration
-import org.jetbrains.kotlin.psi.KtElement
-import org.jetbrains.kotlin.psi.KtTypeParameter
-import org.jetbrains.kotlin.psi.KtTypeParameterListOwner
+import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.types.KotlinType
@@ -41,7 +38,7 @@ import java.text.StringCharacterIterator
 internal fun buildTypeParameterList(
     declaration: CallableMemberDescriptor,
     owner: PsiTypeParameterListOwner,
-    support: UltraLightSupport
+    support: KtUltraLightSupport
 ): PsiTypeParameterList = buildTypeParameterList(
     declaration, owner, support,
     object : TypeParametersSupport<CallableMemberDescriptor, TypeParameterDescriptor> {
@@ -61,7 +58,7 @@ internal fun buildTypeParameterList(
 internal fun buildTypeParameterList(
     declaration: KtTypeParameterListOwner,
     owner: PsiTypeParameterListOwner,
-    support: UltraLightSupport
+    support: KtUltraLightSupport
 ): PsiTypeParameterList = buildTypeParameterList(
     declaration, owner, support,
     object : TypeParametersSupport<KtTypeParameterListOwner, KtTypeParameter> {
@@ -87,35 +84,37 @@ interface TypeParametersSupport<D, T> {
 internal fun <D, T> buildTypeParameterList(
     declaration: D,
     owner: PsiTypeParameterListOwner,
-    support: UltraLightSupport,
+    support: KtUltraLightSupport,
     typeParametersSupport: TypeParametersSupport<D, T>
 ): PsiTypeParameterList {
+
     val tpList = KotlinLightTypeParameterListBuilder(owner)
+
     for ((i, param) in typeParametersSupport.parameters(declaration).withIndex()) {
-        tpList.addParameter(object : LightTypeParameterBuilder(typeParametersSupport.name(param).orEmpty(), owner, i) {
-            private val superList: LightReferenceListBuilder by lazyPub {
-                val boundList =
-                    KotlinLightReferenceListBuilder(manager, PsiReferenceList.Role.EXTENDS_BOUNDS_LIST)
 
-                if (typeParametersSupport.hasNonTrivialBounds(declaration, param)) {
-                    val boundTypes = typeParametersSupport.asDescriptor(param)?.upperBounds.orEmpty()
-                        .mapNotNull { it.asPsiType(support, TypeMappingMode.DEFAULT, this) as? PsiClassType }
-                    val hasDefaultBound = boundTypes.size == 1 && boundTypes[0].equalsToText(CommonClassNames.JAVA_LANG_OBJECT)
-                    if (!hasDefaultBound) {
-                        boundTypes.forEach(boundList::addReference)
-                    }
-                }
-                boundList
+        val referenceListBuilder = { element: PsiElement ->
+            val boundList = KotlinLightReferenceListBuilder(element.manager, PsiReferenceList.Role.EXTENDS_BOUNDS_LIST)
+
+            if (typeParametersSupport.hasNonTrivialBounds(declaration, param)) {
+                val boundTypes = typeParametersSupport.asDescriptor(param)
+                    ?.upperBounds
+                    .orEmpty()
+                    .mapNotNull { it.asPsiType(support, TypeMappingMode.DEFAULT, element) as? PsiClassType }
+
+                val hasDefaultBound = boundTypes.size == 1 && boundTypes[0].equalsToText(CommonClassNames.JAVA_LANG_OBJECT)
+                if (!hasDefaultBound) boundTypes.forEach(boundList::addReference)
             }
+            boundList
+        }
 
-            override fun getExtendsList(): LightReferenceListBuilder = superList
+        val parameterName = typeParametersSupport.name(param).orEmpty()
 
-            override fun getParent(): PsiElement = tpList
-            override fun getContainingFile(): PsiFile = owner.containingFile
-        })
+        tpList.addParameter(KtUltraLightTypeParameter(parameterName, owner, tpList, i, referenceListBuilder))
     }
+
     return tpList
 }
+
 
 internal fun KtDeclaration.getKotlinType(): KotlinType? {
     val descriptor = resolve()
@@ -131,14 +130,14 @@ internal fun KtElement.analyze() = LightClassGenerationSupport.getInstance(proje
 
 // copy-pasted from kotlinInternalUastUtils.kt and post-processed
 internal fun KotlinType.asPsiType(
-    support: UltraLightSupport,
+    support: KtUltraLightSupport,
     mode: TypeMappingMode,
     psiContext: PsiElement
 ): PsiType = support.mapType(psiContext) { typeMapper, signatureWriter ->
     typeMapper.mapType(this, signatureWriter, mode)
 }
 
-internal fun UltraLightSupport.mapType(
+internal fun KtUltraLightSupport.mapType(
     psiContext: PsiElement,
     mapTypeToSignatureWriter: (KotlinTypeMapper, JvmSignatureWriter) -> Unit
 ): PsiType {

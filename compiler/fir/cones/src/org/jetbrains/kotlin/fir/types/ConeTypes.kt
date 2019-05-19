@@ -1,11 +1,12 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.types
 
 import org.jetbrains.kotlin.fir.symbols.*
+import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.types.model.*
 
 sealed class ConeKotlinTypeProjection : TypeArgumentMarker {
@@ -65,21 +66,15 @@ sealed class ConeKotlinType : ConeKotlinTypeProjection(), ConeTypedProjection, K
     abstract val nullability: ConeNullability
 }
 
-class ConeKotlinErrorType(val reason: String) : ConeKotlinType() {
-    override val typeArguments: Array<out ConeKotlinTypeProjection>
-        get() = EMPTY_ARRAY
+val ConeKotlinType.isNullable: Boolean get() = nullability != ConeNullability.NOT_NULL
 
-    override val nullability: ConeNullability
-        get() = ConeNullability.UNKNOWN
+val ConeKotlinType.isMarkedNullable: Boolean get() = nullability == ConeNullability.NULLABLE
 
-    override fun toString(): String {
-        return "<ERROR TYPE: $reason>"
-    }
-}
+typealias ConeKotlinErrorType = ConeClassErrorType
 
 class ConeClassErrorType(val reason: String) : ConeClassLikeType() {
     override val lookupTag: ConeClassLikeLookupTag
-        get() = error("!")
+        get() = ConeClassLikeLookupTagImpl(ClassId.fromString("<error>"))
 
     override val typeArguments: Array<out ConeKotlinTypeProjection>
         get() = EMPTY_ARRAY
@@ -104,8 +99,6 @@ abstract class ConeClassType : ConeClassLikeType()
 
 abstract class ConeAbbreviatedType : ConeClassLikeType() {
     abstract val abbreviationLookupTag: ConeClassLikeLookupTag
-
-    abstract val directExpansion: ConeClassLikeType
 }
 
 abstract class ConeTypeParameterType : ConeLookupTagBasedType() {
@@ -113,18 +106,59 @@ abstract class ConeTypeParameterType : ConeLookupTagBasedType() {
 }
 
 
-abstract class ConeFunctionType : ConeClassLikeType() {
 
-    abstract override val lookupTag: ConeClassLikeLookupTag
-    abstract val receiverType: ConeKotlinType?
-    abstract val parameterTypes: List<ConeKotlinType>
-    abstract val returnType: ConeKotlinType
-}
+class ConeFlexibleType(val lowerBound: ConeKotlinType, val upperBound: ConeKotlinType) : ConeKotlinType(),
+    FlexibleTypeMarker {
 
-class ConeFlexibleType(val lowerBound: ConeLookupTagBasedType, val upperBound: ConeLookupTagBasedType) : ConeKotlinType(), FlexibleTypeMarker {
+    init {
+        val message = { "Bounds violation: $lowerBound, $upperBound" }
+        require(lowerBound is SimpleTypeMarker, message)
+        require(upperBound is SimpleTypeMarker, message)
+    }
+
     override val typeArguments: Array<out ConeKotlinTypeProjection>
         get() = emptyArray()
 
     override val nullability: ConeNullability
         get() = lowerBound.nullability.takeIf { it == upperBound.nullability } ?: ConeNullability.UNKNOWN
+}
+
+fun ConeKotlinType.upperBoundIfFlexible() = (this as? ConeFlexibleType)?.upperBound ?: this
+fun ConeKotlinType.lowerBoundIfFlexible() = (this as? ConeFlexibleType)?.lowerBound ?: this
+
+class ConeCapturedTypeConstructor(val projection: ConeKotlinTypeProjection, var supertypes: List<ConeKotlinType>? = null) :
+    TypeConstructorMarker {
+
+}
+
+class ConeCapturedType(
+    val captureStatus: CaptureStatus,
+    val lowerType: ConeKotlinType?,
+    override val nullability: ConeNullability = ConeNullability.NOT_NULL,
+    val constructor: ConeCapturedTypeConstructor
+) : ConeKotlinType(), SimpleTypeMarker, CapturedTypeMarker {
+    constructor(captureStatus: CaptureStatus, lowerType: ConeKotlinType?, projection: ConeKotlinTypeProjection) : this(
+        captureStatus,
+        lowerType,
+        constructor = ConeCapturedTypeConstructor(
+            projection
+        )
+    )
+
+    override val typeArguments: Array<out ConeKotlinTypeProjection>
+        get() = emptyArray()
+}
+
+class ConeTypeVariableType(
+    override val nullability: ConeNullability,
+    override val lookupTag: ConeClassifierLookupTag
+) : ConeLookupTagBasedType() {
+    override val typeArguments: Array<out ConeKotlinTypeProjection> get() = emptyArray()
+}
+
+class ConeDefinitelyNotNullType(val original: ConeKotlinType): ConeKotlinType(), DefinitelyNotNullTypeMarker {
+    override val typeArguments: Array<out ConeKotlinTypeProjection>
+        get() = original.typeArguments
+    override val nullability: ConeNullability
+        get() = ConeNullability.NOT_NULL
 }

@@ -1,3 +1,8 @@
+/*
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
+ */
+
 package org.jetbrains.kotlin.asJava.classes
 
 import com.intellij.lang.jvm.JvmModifier
@@ -31,7 +36,7 @@ class KtUltraLightNullabilityAnnotation(
     override fun getQualifiedName(): String? {
         val kotlinType = member.kotlinTypeForNullabilityAnnotation?.takeUnless(KotlinType::isError) ?: return null
         val psiType = member.psiTypeForNullabilityAnnotation ?: return null
-        if (member.isPrivateOrParameterInPrivateMethod() || psiType is PsiPrimitiveType) return null
+        if (psiType is PsiPrimitiveType) return null
 
         if (kotlinType.isTypeParameter()) {
             if (!TypeUtils.hasNullableSuperType(kotlinType)) return NotNull::class.java.name
@@ -48,13 +53,13 @@ class KtUltraLightNullabilityAnnotation(
 }
 
 fun DeclarationDescriptor.obtainLightAnnotations(
-    ultraLightSupport: UltraLightSupport,
+    ultraLightSupport: KtUltraLightSupport,
     parent: PsiElement
 ): List<KtLightAbstractAnnotation> = annotations.map { KtUltraLightAnnotationForDescriptor(it, ultraLightSupport, parent) }
 
 class KtUltraLightAnnotationForDescriptor(
     private val annotationDescriptor: AnnotationDescriptor,
-    private val ultraLightSupport: UltraLightSupport,
+    private val ultraLightSupport: KtUltraLightSupport,
     parent: PsiElement
 ) : KtLightAbstractAnnotation(parent, { error("clsDelegate for annotation based on descriptor: $annotationDescriptor") }) {
     override fun getNameReferenceElement(): PsiJavaCodeReferenceElement? = null
@@ -95,7 +100,7 @@ class KtUltraLightAnnotationForDescriptor(
 private class PsiNameValuePairForAnnotationArgument(
     private val _name: String = "",
     private val constantValue: ConstantValue<*>,
-    private val ultraLightSupport: UltraLightSupport,
+    private val ultraLightSupport: KtUltraLightSupport,
     parent: PsiElement
 ) : KtLightElementBase(parent), PsiNameValuePair {
     override val kotlinOrigin: KtElement? get() = null
@@ -116,7 +121,7 @@ private class PsiNameValuePairForAnnotationArgument(
 }
 
 private fun ConstantValue<*>.toAnnotationMemberValue(
-    parent: PsiElement, ultraLightSupport: UltraLightSupport
+    parent: PsiElement, ultraLightSupport: KtUltraLightSupport
 ): PsiAnnotationMemberValue? = when (this) {
 
     is AnnotationValue -> KtUltraLightAnnotationForDescriptor(value, ultraLightSupport, parent)

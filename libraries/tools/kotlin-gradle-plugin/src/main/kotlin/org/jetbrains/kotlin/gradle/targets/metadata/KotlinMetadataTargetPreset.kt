@@ -1,31 +1,30 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:Suppress("PackageDirectoryMismatch") // Old package for compatibility
 package org.jetbrains.kotlin.gradle.plugin.mpp
 
 import org.gradle.api.Project
-import org.gradle.api.internal.file.FileResolver
-import org.gradle.internal.reflect.Instantiator
 import org.jetbrains.kotlin.gradle.dsl.KotlinCompile
 import org.jetbrains.kotlin.gradle.dsl.kotlinExtension
-import org.jetbrains.kotlin.gradle.plugin.*
+import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
+import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
+import org.jetbrains.kotlin.gradle.plugin.KotlinTargetConfigurator
 import org.jetbrains.kotlin.gradle.plugin.sources.applyLanguageSettingsToKotlinTask
-import org.jetbrains.kotlin.gradle.tasks.KotlinTasksProvider
+import org.jetbrains.kotlin.gradle.targets.metadata.KotlinMetadataTargetConfigurator
 
 class KotlinMetadataTargetPreset(
     project: Project,
-    instantiator: Instantiator,
-    fileResolver: FileResolver,
     kotlinPluginVersion: String
-) : KotlinOnlyTargetPreset<KotlinCommonCompilation>(
+) : KotlinOnlyTargetPreset<KotlinOnlyTarget<KotlinCommonCompilation>, KotlinCommonCompilation>(
     project,
-    instantiator,
-    fileResolver,
     kotlinPluginVersion
 ) {
+    override fun instantiateTarget() = KotlinOnlyTarget<KotlinCommonCompilation>(project, KotlinPlatformType.common)
+
     override fun getName(): String = PRESET_NAME
 
     override fun createCompilationFactory(
@@ -36,17 +35,12 @@ class KotlinMetadataTargetPreset(
     override val platformType: KotlinPlatformType
         get() = KotlinPlatformType.common
 
-    override fun buildCompilationProcessor(compilation: KotlinCommonCompilation): KotlinSourceSetProcessor<*> {
-        val tasksProvider = KotlinTasksProvider(compilation.target.targetName)
-        return KotlinCommonSourceSetProcessor(project, compilation, tasksProvider, kotlinPluginVersion)
-    }
-
     companion object {
         const val PRESET_NAME = "metadata"
     }
 
     override fun createKotlinTargetConfigurator(): KotlinTargetConfigurator<KotlinCommonCompilation> =
-        KotlinTargetConfigurator(createDefaultSourceSets = false, createTestCompilation = false)
+        KotlinMetadataTargetConfigurator(kotlinPluginVersion)
 
     override fun createTarget(name: String): KotlinOnlyTarget<KotlinCommonCompilation> =
         super.createTarget(name).apply {

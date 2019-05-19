@@ -2,6 +2,8 @@ package org.jetbrains.kotlin.gradle.plugin
 
 import com.android.build.gradle.BaseExtension
 import com.android.build.gradle.BasePlugin
+import com.android.build.gradle.api.AndroidSourceSet
+import com.android.build.gradle.api.BaseVariant
 import com.android.builder.model.SourceProvider
 import groovy.lang.Closure
 import org.gradle.api.*
@@ -29,10 +31,7 @@ import org.gradle.api.tasks.compile.AbstractCompile
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.jvm.tasks.Jar
 import org.gradle.tooling.provider.model.ToolingModelBuilderRegistry
-import org.jetbrains.kotlin.gradle.dsl.KotlinCommonOptions
-import org.jetbrains.kotlin.gradle.dsl.KotlinJvmOptionsImpl
-import org.jetbrains.kotlin.gradle.dsl.KotlinSingleJavaTargetExtension
-import org.jetbrains.kotlin.gradle.dsl.kotlinExtension
+import org.jetbrains.kotlin.gradle.dsl.*
 import org.jetbrains.kotlin.gradle.internal.Kapt3KotlinGradleSubplugin
 import org.jetbrains.kotlin.gradle.internal.KaptVariantData
 import org.jetbrains.kotlin.gradle.internal.checkAndroidAnnotationProcessorDependencyUsage
@@ -42,6 +41,7 @@ import org.jetbrains.kotlin.gradle.model.builder.KotlinModelBuilder
 import org.jetbrains.kotlin.gradle.plugin.mpp.*
 import org.jetbrains.kotlin.gradle.scripting.internal.ScriptingGradleSubplugin
 import org.jetbrains.kotlin.gradle.tasks.*
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jetbrains.kotlin.gradle.utils.*
 import java.io.File
 import java.net.URL
@@ -353,10 +353,14 @@ internal abstract class AbstractKotlinPlugin(
             { compilation -> buildSourceSetProcessor(project, compilation, kotlinPluginVersion) }
         )
 
+        applyUserDefinedAttributes(target)
+
         rewriteMppDependenciesInPom(target)
 
         configureProjectGlobalSettings(project, kotlinPluginVersion)
         registry.register(KotlinModelBuilder(kotlinPluginVersion, null))
+
+        project.components.addAll(target.components)
     }
 
     private fun rewriteMppDependenciesInPom(target: AbstractKotlinTarget) {
@@ -427,8 +431,9 @@ internal abstract class AbstractKotlinPlugin(
             jarTask.dependsOn(inspectTask.getTaskOrProvider())
         }
 
-        private fun setUpJavaSourceSets(
-            kotlinTarget: KotlinWithJavaTarget<*>
+        internal fun setUpJavaSourceSets(
+            kotlinTarget: KotlinTarget,
+            duplicateJavaSourceSetsAsKotlinSourceSets: Boolean = true
         ) {
             val project = kotlinTarget.project
             val javaSourceSets = project.convention.getPlugin(JavaPluginConvention::class.java).sourceSets
@@ -439,22 +444,27 @@ internal abstract class AbstractKotlinPlugin(
             }
 
             // Workaround for indirect mutual recursion between the two `all { ... }` handlers:
-            val compilationsUnderConstruction = mutableMapOf<String, KotlinWithJavaCompilation<*>>()
+            val compilationsUnderConstruction = mutableMapOf<String, KotlinCompilation<*>>()
 
             javaSourceSets.all { javaSourceSet ->
                 val kotlinCompilation =
                     compilationsUnderConstruction[javaSourceSet.name] ?: kotlinTarget.compilations.maybeCreate(javaSourceSet.name)
-                kotlinCompilation.javaSourceSet = javaSourceSet
-                val kotlinSourceSet = project.kotlinExtension.sourceSets.maybeCreate(kotlinCompilation.name)
-                javaSourceSet.addConvention(kotlinSourceSetDslName, kotlinSourceSet)
-                kotlinSourceSet.kotlin.source(javaSourceSet.java)
-                kotlinCompilation.source(kotlinSourceSet)
+                (kotlinCompilation as? KotlinWithJavaCompilation<*>)?.javaSourceSet = javaSourceSet
+
+                if (duplicateJavaSourceSetsAsKotlinSourceSets) {
+                    val kotlinSourceSet = project.kotlinExtension.sourceSets.maybeCreate(kotlinCompilation.name)
+                    kotlinSourceSet.kotlin.source(javaSourceSet.java)
+                    kotlinCompilation.source(kotlinSourceSet)
+                    javaSourceSet.addConvention(kotlinSourceSetDslName, kotlinSourceSet)
+                } else {
+                    javaSourceSet.addConvention(kotlinSourceSetDslName, kotlinCompilation.defaultSourceSet)
+                }
             }
 
             kotlinTarget.compilations.all { kotlinCompilation ->
                 val sourceSetName = kotlinCompilation.name
                 compilationsUnderConstruction[sourceSetName] = kotlinCompilation
-                kotlinCompilation.javaSourceSet = javaSourceSets.maybeCreate(sourceSetName)
+                (kotlinCompilation as? KotlinWithJavaCompilation<*>)?.javaSourceSet = javaSourceSets.maybeCreate(sourceSetName)
 
                 // Another Kotlin source set following the other convention, named according to the compilation, not the Java source set:
                 val kotlinSourceSet = project.kotlinExtension.sourceSets.maybeCreate(kotlinCompilation.defaultSourceSetName)
@@ -561,14 +571,14 @@ internal open class KotlinPlugin(
         Kotlin2JvmSourceSetProcessor(project, tasksProvider, compilation, kotlinPluginVersion)
 
     override fun apply(project: Project) {
-        val target = KotlinWithJavaTarget<KotlinCommonOptions>(project, KotlinPlatformType.jvm, targetName).apply {
+        val target = KotlinWithJavaTarget<KotlinJvmOptions>(project, KotlinPlatformType.jvm, targetName).apply {
             disambiguationClassifier = null // don't add anything to the task names
         }
-        (project.kotlinExtension as KotlinSingleJavaTargetExtension).target = target
-
-        project.pluginManager.apply(ScriptingGradleSubplugin::class.java)
+        (project.kotlinExtension as KotlinJvmProjectExtension).target = target
 
         super.apply(project)
+
+        project.pluginManager.apply(ScriptingGradleSubplugin::class.java)
     }
 }
 
@@ -589,8 +599,8 @@ internal open class KotlinCommonPlugin(
         KotlinCommonSourceSetProcessor(project, compilation, tasksProvider, kotlinPluginVersion)
 
     override fun apply(project: Project) {
-        val target = KotlinWithJavaTarget<KotlinCommonOptions>(project, KotlinPlatformType.common, targetName)
-        (project.kotlinExtension as KotlinSingleJavaTargetExtension).target = target
+        val target = KotlinWithJavaTarget<KotlinMultiplatformCommonOptions>(project, KotlinPlatformType.common, targetName)
+        (project.kotlinExtension as KotlinCommonProjectExtension).target = target
 
         super.apply(project)
     }
@@ -615,9 +625,9 @@ internal open class Kotlin2JsPlugin(
         )
 
     override fun apply(project: Project) {
-        val target = KotlinWithJavaTarget<KotlinCommonOptions>(project, KotlinPlatformType.js, targetName)
+        val target = KotlinWithJavaTarget<KotlinJsOptions>(project, KotlinPlatformType.js, targetName)
 
-        (project.kotlinExtension as KotlinSingleJavaTargetExtension).target = target
+        (project.kotlinExtension as Kotlin2JsProjectExtension).target = target
         super.apply(project)
     }
 }
@@ -631,8 +641,15 @@ internal open class KotlinAndroidPlugin(
         checkGradleCompatibility()
 
         val androidTarget = KotlinAndroidTarget("", project)
+        (project.kotlinExtension as KotlinAndroidProjectExtension).target = androidTarget
+
         applyToTarget(kotlinPluginVersion, androidTarget)
+
+        applyUserDefinedAttributes(androidTarget)
+
         registry.register(KotlinModelBuilder(kotlinPluginVersion, androidTarget))
+
+        project.whenEvaluated { project.components.addAll(androidTarget.components) }
     }
 
     companion object {
@@ -724,53 +741,83 @@ abstract class AbstractAndroidProjectHandler<V>(private val kotlinConfigurationT
         }
 
         val kotlinOptions = KotlinJvmOptionsImpl()
+        project.whenEvaluated {
+            // TODO don't require the flag once there is an Android Gradle plugin build that supports desugaring of Long.hashCode and
+            //  Boolean.hashCode. Instead, run conditionally, only with the AGP versions that play well with Kotlin bytecode for
+            //  JVM target 1.8.
+            //  See: KT-31027
+            if (PropertiesProvider(project).setJvmTargetFromAndroidCompileOptions == true) {
+                applyAndroidJavaVersion(project.extensions.getByType(BaseExtension::class.java), kotlinOptions)
+            }
+        }
+
         kotlinOptions.noJdk = true
         ext.addExtension(KOTLIN_OPTIONS_DSL_NAME, kotlinOptions)
 
-        project.afterEvaluate { project ->
-        forEachVariant(project) { variant ->
-            val variantName = getVariantName(variant)
-            val compilation = kotlinAndroidTarget.compilations.create(variantName)
-            setUpDependencyResolution(variant, compilation)
-        }
+        val androidPluginIds = listOf(
+            "android", "com.android.application", "android-library", "com.android.library",
+            "com.android.test", "com.android.feature", "com.android.dynamic-feature", "com.android.instantapp"
+        )
 
-            val androidPluginIds = listOf(
-                "android", "com.android.application", "android-library", "com.android.library",
-                "com.android.test", "com.android.feature", "com.android.dynamic-feature", "com.android.instantapp"
-            )
-            val plugin = androidPluginIds.asSequence()
+        val plugin by lazy {
+            androidPluginIds.asSequence()
                 .mapNotNull { project.plugins.findPlugin(it) as? BasePlugin }
                 .firstOrNull()
                 ?: throw InvalidPluginException("'kotlin-android' expects one of the Android Gradle " +
                                                         "plugins to be applied to the project:\n\t" +
                                                         androidPluginIds.joinToString("\n\t") { "* $it" })
+        }
 
-            checkAndroidAnnotationProcessorDependencyUsage(project)
+        forEachVariant(project) { variant ->
+            val variantName = getVariantName(variant)
 
-            forEachVariant(project) {
-                processVariant(
-                    it, kotlinAndroidTarget, project, ext, plugin, kotlinOptions, kotlinConfigurationTools.kotlinTasksProvider
-                )
+            // Create the compilation and configure it first, then add to the compilations container. As this code is executed
+            // in afterEvaluate, a user's build script might have already attached item handlers to the compilations container, and those
+            // handlers might break when fired on a compilation that is not yet properly configured (e.g. KT-29964):
+            kotlinAndroidTarget.compilationFactory.create(variantName).let { compilation ->
+                compilation.androidVariant = variant as BaseVariant
+
+                setUpDependencyResolution(variant, compilation)
+
+                preprocessVariant(variant, compilation, project, ext, plugin, kotlinOptions, kotlinConfigurationTools.kotlinTasksProvider)
+
+                @Suppress("UNCHECKED_CAST")
+                (kotlinAndroidTarget.compilations as NamedDomainObjectCollection<in KotlinJvmAndroidCompilation>).add(compilation)
             }
 
-            val subpluginEnvironment = SubpluginEnvironment.loadSubplugins(project, kotlinConfigurationTools.kotlinPluginVersion)
+        }
 
+        project.whenEvaluated {
             forEachVariant(project) { variant ->
                 val compilation = kotlinAndroidTarget.compilations.getByName(getVariantName(variant))
+                postprocessVariant(variant, compilation, project, ext, plugin)
+
+                val subpluginEnvironment = SubpluginEnvironment.loadSubplugins(project, kotlinConfigurationTools.kotlinPluginVersion)
                 applySubplugins(project, compilation, variant, subpluginEnvironment)
             }
+            checkAndroidAnnotationProcessorDependencyUsage(project)
         }
     }
 
-    private fun processVariant(
+    private fun applyAndroidJavaVersion(baseExtension: BaseExtension, kotlinOptions: KotlinJvmOptions) {
+        val javaVersion =
+            listOf(baseExtension.compileOptions.sourceCompatibility, baseExtension.compileOptions.targetCompatibility).min()!!
+        if (javaVersion >= JavaVersion.VERSION_1_8)
+            kotlinOptions.jvmTarget = "1.8"
+    }
+
+    private fun preprocessVariant(
         variantData: V,
-        target: KotlinAndroidTarget,
+        compilation: KotlinJvmAndroidCompilation,
         project: Project,
         androidExt: BaseExtension,
         androidPlugin: BasePlugin,
         rootKotlinOptions: KotlinJvmOptionsImpl,
         tasksProvider: KotlinTasksProvider
     ) {
+        // This function is called before the variantData is completely filled by the Android plugin.
+        // The fine details of variantData, such as AP options or Java sources, should not be trusted here.
+
         checkVariantIsValid(variantData)
         val variantDataName = getVariantName(variantData)
         logger.kotlinDebug("Process variant [$variantDataName]")
@@ -782,12 +829,11 @@ abstract class AbstractAndroidProjectHandler<V>(private val kotlinConfigurationT
             return
         }
 
-        val compilation = target.compilations.getByName(variantDataName)
         val defaultSourceSet = project.kotlinExtension.sourceSets.maybeCreate(compilation.defaultSourceSetName)
 
         val kotlinTaskName = compilation.compileKotlinTaskName
-        // todo: Investigate possibility of creating and configuring kotlinTask before evaluation
-        val kotlinTask = tasksProvider.registerKotlinJVMTask(project, kotlinTaskName, compilation) {
+
+        tasksProvider.registerKotlinJVMTask(project, kotlinTaskName, compilation) {
             it.parentKotlinOptionsImpl = rootKotlinOptions
 
             // store kotlin classes in separate directory. They will serve as class-path to java compiler
@@ -797,7 +843,6 @@ abstract class AbstractAndroidProjectHandler<V>(private val kotlinConfigurationT
 
         // Register the source only after the task is created, because the task is required for that:
         compilation.source(defaultSourceSet)
-        configureSources(kotlinTask.doGetTask(), variantData, compilation)
 
         // In MPPs, add the common main Kotlin sources to non-test variants, the common test sources to test variants
         val commonSourceSetName = if (getTestedVariantData(variantData) == null)
@@ -806,8 +851,20 @@ abstract class AbstractAndroidProjectHandler<V>(private val kotlinConfigurationT
         project.kotlinExtension.sourceSets.findByName(commonSourceSetName)?.let {
             compilation.source(it)
         }
+    }
 
-        wireKotlinTasks(project, compilation, androidPlugin, androidExt, variantData, javaTask, kotlinTask.doGetTask())
+    private fun postprocessVariant(
+        variantData: V,
+        compilation: KotlinJvmAndroidCompilation,
+        project: Project,
+        androidExt: BaseExtension,
+        androidPlugin: BasePlugin
+    ) {
+        val javaTask = getJavaTask(variantData) ?: return
+
+        val kotlinTask = compilation.compileKotlinTask
+        configureSources(kotlinTask, variantData, compilation)
+        wireKotlinTasks(project, compilation, androidPlugin, androidExt, variantData, javaTask, kotlinTask)
     }
 
     private fun applySubplugins(

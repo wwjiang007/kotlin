@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.backend.common.lower
@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.backend.common.lower
 import org.jetbrains.kotlin.backend.common.BackendContext
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
 import org.jetbrains.kotlin.backend.common.descriptors.WrappedSimpleFunctionDescriptor
+import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.Visibilities
@@ -18,6 +19,7 @@ import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrBlockBodyImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrBlockImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrSimpleFunctionSymbolImpl
+import org.jetbrains.kotlin.ir.util.isEffectivelyExternal
 import org.jetbrains.kotlin.ir.util.transformDeclarationsFlat
 import org.jetbrains.kotlin.ir.visitors.*
 import org.jetbrains.kotlin.name.Name
@@ -27,6 +29,7 @@ import java.util.*
 class PropertiesLowering(
     private val context: BackendContext,
     private val originOfSyntheticMethodForAnnotations: IrDeclarationOrigin? = null,
+    private val skipExternalProperties: Boolean = false,
     private val computeSyntheticMethodName: ((Name) -> String)? = null
 ) : IrElementTransformerVoid(), FileLoweringPass {
     override fun lower(irFile: IrFile) {
@@ -42,25 +45,26 @@ class PropertiesLowering(
     override fun visitClass(declaration: IrClass): IrStatement {
         declaration.transformChildrenVoid(this)
         declaration.transformDeclarationsFlat { lowerProperty(it, declaration.kind) }
-        declaration.declarations.removeAll { it is IrProperty }
         return declaration
     }
 
     private fun lowerProperty(declaration: IrDeclaration, kind: ClassKind): List<IrDeclaration>? =
         if (declaration is IrProperty)
-            ArrayList<IrDeclaration>(4).apply {
-                // JvmFields in a companion object refer to companion's owners and should not be generated within companion.
-                if (kind != ClassKind.ANNOTATION_CLASS && declaration.backingField?.parent == declaration.parent) {
-                    addIfNotNull(declaration.backingField)
-                }
-                addIfNotNull(declaration.getter)
-                addIfNotNull(declaration.setter)
+            if (skipExternalProperties && declaration.isEffectivelyExternal()) listOf(declaration) else {
+                ArrayList<IrDeclaration>(4).apply {
+                    // JvmFields in a companion object refer to companion's owners and should not be generated within companion.
+                    if (kind != ClassKind.ANNOTATION_CLASS && declaration.backingField?.parent == declaration.parent) {
+                        addIfNotNull(declaration.backingField)
+                    }
+                    addIfNotNull(declaration.getter)
+                    addIfNotNull(declaration.setter)
 
-                if (declaration.annotations.isNotEmpty() && originOfSyntheticMethodForAnnotations != null
-                    && computeSyntheticMethodName != null
-                ) {
-                    val methodName = computeSyntheticMethodName.invoke(declaration.name) // Workaround KT-4113
-                    add(createSyntheticMethodForAnnotations(declaration, originOfSyntheticMethodForAnnotations, methodName))
+                    if (declaration.annotations.isNotEmpty() && originOfSyntheticMethodForAnnotations != null
+                        && computeSyntheticMethodName != null
+                    ) {
+                        val methodName = computeSyntheticMethodName.invoke(declaration.name) // Workaround KT-4113
+                        add(createSyntheticMethodForAnnotations(declaration, originOfSyntheticMethodForAnnotations, methodName))
+                    }
                 }
             }
         else
@@ -77,13 +81,11 @@ class PropertiesLowering(
         ).apply {
             descriptor.bind(this)
 
-            extensionReceiverParameter = declaration.getter?.extensionReceiverParameter
+            extensionReceiverParameter = declaration.getter?.extensionReceiverParameter?.copyTo(this)
 
             body = IrBlockBodyImpl(-1, -1)
 
-            // TODO: uncomment this and derive annotations from owner in wrapped descriptors
-            // annotations.addAll(declaration.annotations)
-
+            annotations.addAll(declaration.annotations)
             metadata = declaration.metadata
         }
     }

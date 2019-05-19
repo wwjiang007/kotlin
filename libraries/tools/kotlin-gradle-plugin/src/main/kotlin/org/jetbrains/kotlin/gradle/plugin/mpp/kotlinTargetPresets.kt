@@ -1,29 +1,32 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.gradle.plugin.mpp
 
 import org.gradle.api.Project
-import org.gradle.api.internal.file.FileResolver
-import org.gradle.internal.reflect.Instantiator
-import org.jetbrains.kotlin.gradle.plugin.*
+import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
+import org.jetbrains.kotlin.gradle.plugin.KotlinTargetConfigurator
+import org.jetbrains.kotlin.gradle.plugin.KotlinTargetPreset
 
-abstract class KotlinOnlyTargetPreset<T : KotlinCompilation<*>>(
+abstract class KotlinOnlyTargetPreset<R : KotlinOnlyTarget<T>, T : KotlinCompilation<*>>(
     protected val project: Project,
-    private val instantiator: Instantiator,
-    private val fileResolver: FileResolver,
     protected val kotlinPluginVersion: String
-) : KotlinTargetPreset<KotlinOnlyTarget<T>> {
+) : KotlinTargetPreset<R> {
 
-    protected open fun createKotlinTargetConfigurator(): KotlinTargetConfigurator<T> =
-        KotlinTargetConfigurator(createDefaultSourceSets = true, createTestCompilation = true)
+    protected abstract fun createKotlinTargetConfigurator(): KotlinTargetConfigurator<T>
 
-    override fun createTarget(name: String): KotlinOnlyTarget<T> {
-        val result = KotlinOnlyTarget<T>(project, platformType).apply {
+    protected open fun provideTargetDisambiguationClassifier(target: KotlinOnlyTarget<T>): String? =
+        target.targetName
+
+    abstract protected fun instantiateTarget(): R
+
+    override fun createTarget(name: String): R {
+        val result = instantiateTarget().apply {
             targetName = name
-            disambiguationClassifier = name
+            disambiguationClassifier = provideTargetDisambiguationClassifier(this@apply)
             preset = this@KotlinOnlyTargetPreset
 
             val compilationFactory = createCompilationFactory(this)
@@ -32,17 +35,9 @@ abstract class KotlinOnlyTargetPreset<T : KotlinCompilation<*>>(
 
         createKotlinTargetConfigurator().configureTarget(result)
 
-        result.compilations.all { compilation ->
-            buildCompilationProcessor(compilation).run()
-            if (compilation.name == KotlinCompilation.MAIN_COMPILATION_NAME) {
-                sourcesJarTask(compilation, result.targetName, result.targetName.toLowerCase())
-            }
-        }
-
         return result
     }
 
     protected abstract fun createCompilationFactory(forTarget: KotlinOnlyTarget<T>): KotlinCompilationFactory<T>
     protected abstract val platformType: KotlinPlatformType
-    internal abstract fun buildCompilationProcessor(compilation: T): KotlinSourceSetProcessor<*>
 }

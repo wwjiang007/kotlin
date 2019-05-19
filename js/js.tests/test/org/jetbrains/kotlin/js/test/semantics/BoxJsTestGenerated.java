@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.js.test.semantics;
@@ -1400,6 +1400,29 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
         @TestMetadata("newInstanceDefaultConstructor.kt")
         public void testNewInstanceDefaultConstructor() throws Exception {
             runTest("js/js.translator/testData/box/examples/newInstanceDefaultConstructor.kt");
+        }
+    }
+
+    @TestMetadata("js/js.translator/testData/box/export")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class Export extends AbstractBoxJsTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest0(this::doTest, TargetBackend.JS, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInExport() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("js/js.translator/testData/box/export"), Pattern.compile("^([^_](.+))\\.kt$"), TargetBackend.JS, true);
+        }
+
+        @TestMetadata("nonIndetifierModuleName.kt")
+        public void testNonIndetifierModuleName() throws Exception {
+            runTest("js/js.translator/testData/box/export/nonIndetifierModuleName.kt");
+        }
+
+        @TestMetadata("reservedModuleName.kt")
+        public void testReservedModuleName() throws Exception {
+            runTest("js/js.translator/testData/box/export/reservedModuleName.kt");
         }
     }
 
@@ -5220,6 +5243,11 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("js/js.translator/testData/box/main"), Pattern.compile("^([^_](.+))\\.kt$"), TargetBackend.JS, true);
         }
 
+        @TestMetadata("differentMains.kt")
+        public void testDifferentMains() throws Exception {
+            runTest("js/js.translator/testData/box/main/differentMains.kt");
+        }
+
         @TestMetadata("incremental.kt")
         public void testIncremental() throws Exception {
             runTest("js/js.translator/testData/box/main/incremental.kt");
@@ -5248,6 +5276,11 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
         @TestMetadata("suspendMainThrows.kt")
         public void testSuspendMainThrows() throws Exception {
             runTest("js/js.translator/testData/box/main/suspendMainThrows.kt");
+        }
+
+        @TestMetadata("twoMains.kt")
+        public void testTwoMains() throws Exception {
+            runTest("js/js.translator/testData/box/main/twoMains.kt");
         }
     }
 
@@ -5319,6 +5352,11 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
         @TestMetadata("moduleAndVariableNameClash.kt")
         public void testModuleAndVariableNameClash() throws Exception {
             runTest("js/js.translator/testData/box/multiModule/moduleAndVariableNameClash.kt");
+        }
+
+        @TestMetadata("privateInterfaceMethodInheritance.kt")
+        public void testPrivateInterfaceMethodInheritance() throws Exception {
+            runTest("js/js.translator/testData/box/multiModule/privateInterfaceMethodInheritance.kt");
         }
 
         @TestMetadata("privateInterfaceNameClash.kt")
@@ -6741,6 +6779,39 @@ public class BoxJsTestGenerated extends AbstractBoxJsTest {
         @TestMetadata("tmpInsidePrimaryConstructor.kt")
         public void testTmpInsidePrimaryConstructor() throws Exception {
             runTest("js/js.translator/testData/box/regression/tmpInsidePrimaryConstructor.kt");
+        }
+
+        @TestMetadata("js/js.translator/testData/box/regression/stdlibTestSnippets")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class StdlibTestSnippets extends AbstractBoxJsTest {
+            private void runTest(String testDataFilePath) throws Exception {
+                KotlinTestUtils.runTest0(this::doTest, TargetBackend.JS, testDataFilePath);
+            }
+
+            public void testAllFilesPresentInStdlibTestSnippets() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("js/js.translator/testData/box/regression/stdlibTestSnippets"), Pattern.compile("^([^_](.+))\\.kt$"), TargetBackend.JS, true);
+            }
+
+            @TestMetadata("arrayTest_plusInference.kt")
+            public void testArrayTest_plusInference() throws Exception {
+                runTest("js/js.translator/testData/box/regression/stdlibTestSnippets/arrayTest_plusInference.kt");
+            }
+
+            @TestMetadata("iterableChunked.kt")
+            public void testIterableChunked() throws Exception {
+                runTest("js/js.translator/testData/box/regression/stdlibTestSnippets/iterableChunked.kt");
+            }
+
+            @TestMetadata("json.kt")
+            public void testJson() throws Exception {
+                runTest("js/js.translator/testData/box/regression/stdlibTestSnippets/json.kt");
+            }
+
+            @TestMetadata("throwable.kt")
+            public void testThrowable() throws Exception {
+                runTest("js/js.translator/testData/box/regression/stdlibTestSnippets/throwable.kt");
+            }
         }
     }
 

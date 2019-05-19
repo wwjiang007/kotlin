@@ -1,43 +1,33 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.gradle.plugin
 
 import org.gradle.api.Project
 import org.gradle.api.Task
-import org.gradle.api.artifacts.*
+import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.Dependency
+import org.gradle.api.artifacts.PublishArtifact
 import org.gradle.api.artifacts.type.ArtifactTypeDefinition
 import org.gradle.api.attributes.Usage
 import org.gradle.api.attributes.Usage.USAGE_ATTRIBUTE
 import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.artifacts.ArtifactAttributes
-import org.gradle.api.internal.artifacts.publish.DefaultPublishArtifact
-import org.gradle.api.internal.plugins.DefaultArtifactPublicationSet
 import org.gradle.api.internal.plugins.DslObject
 import org.gradle.api.plugins.BasePlugin
 import org.gradle.api.plugins.JavaBasePlugin
-import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.Delete
-import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.bundling.Jar
-import org.gradle.api.tasks.testing.Test
 import org.gradle.language.base.plugins.LifecycleBasePlugin
 import org.gradle.language.jvm.tasks.ProcessResources
-import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
-import org.jetbrains.kotlin.gradle.dsl.KotlinNativeBinaryContainer
 import org.jetbrains.kotlin.gradle.dsl.kotlinExtension
-import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation.Companion.MAIN_COMPILATION_NAME
-import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation.Companion.TEST_COMPILATION_NAME
 import org.jetbrains.kotlin.gradle.plugin.mpp.*
-import org.jetbrains.kotlin.gradle.tasks.AbstractKotlinNativeCompile
-import org.jetbrains.kotlin.gradle.tasks.CInteropProcess
-import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
-import org.jetbrains.kotlin.gradle.tasks.KotlinNativeLink
+import org.jetbrains.kotlin.gradle.targets.jvm.tasks.KotlinJvmTest
+import org.jetbrains.kotlin.gradle.tasks.createOrRegisterTask
+import org.jetbrains.kotlin.gradle.testing.internal.registerTestTask
 import org.jetbrains.kotlin.gradle.utils.lowerCamelCaseName
-import java.io.File
-import java.util.*
 import java.util.concurrent.Callable
 
 abstract class AbstractKotlinTargetConfigurator<KotlinTargetType : KotlinTarget>(
@@ -56,15 +46,15 @@ abstract class AbstractKotlinTargetConfigurator<KotlinTargetType : KotlinTarget>
     }
 
 
-    abstract protected fun configureArchivesAndComponent(target: KotlinTargetType)
-    abstract protected fun configureTest(target: KotlinTargetType)
+    protected abstract fun configureArchivesAndComponent(target: KotlinTargetType)
+    protected abstract fun configureTest(target: KotlinTargetType)
 
     private fun Project.registerOutputsForStaleOutputCleanup(kotlinCompilation: KotlinCompilation<*>) {
         val cleanTask = tasks.getByName(LifecycleBasePlugin.CLEAN_TASK_NAME) as Delete
         cleanTask.delete(kotlinCompilation.output.allOutputs)
     }
 
-    protected fun configureCompilations(platformTarget: KotlinTargetType) {
+    protected open fun configureCompilations(platformTarget: KotlinTargetType) {
         val project = platformTarget.project
         val main = platformTarget.compilations.create(KotlinCompilation.MAIN_COMPILATION_NAME)
 
@@ -230,6 +220,7 @@ abstract class AbstractKotlinTargetConfigurator<KotlinTargetType : KotlinTarget>
 
     companion object {
         const val testTaskNameSuffix = "test"
+        const val runTaskNameSuffix = "run"
 
         fun defineConfigurationsForCompilation(
             compilation: KotlinCompilation<*>
@@ -283,7 +274,7 @@ abstract class AbstractKotlinTargetConfigurator<KotlinTargetType : KotlinTarget>
                     isVisible = false
                     isCanBeResolved = true // Needed for IDE import
                     description =
-                            "Runtime dependencies for $compilation (deprecated, use '${compilation.runtimeOnlyConfigurationName} ' instead)."
+                        "Runtime dependencies for $compilation (deprecated, use '${compilation.runtimeOnlyConfigurationName} ' instead)."
                 }
 
                 val runtimeOnlyConfiguration = configurations.maybeCreate(compilation.runtimeOnlyConfigurationName).apply {
@@ -313,13 +304,29 @@ internal val KotlinCompilation<*>.deprecatedCompileConfigurationName: String
 internal val KotlinCompilationToRunnableFiles<*>.deprecatedRuntimeConfigurationName: String
     get() = disambiguateName("runtime")
 
-open class KotlinTargetConfigurator<KotlinCompilationType : KotlinCompilation<*>>(
+internal val KotlinTarget.testTaskName: String
+    get() = lowerCamelCaseName(targetName, AbstractKotlinTargetConfigurator.testTaskNameSuffix)
+
+abstract class KotlinTargetConfigurator<KotlinCompilationType : KotlinCompilation<*>>(
     createDefaultSourceSets: Boolean,
-    createTestCompilation: Boolean
+    createTestCompilation: Boolean,
+    val kotlinPluginVersion: String
 ) : AbstractKotlinTargetConfigurator<KotlinOnlyTarget<KotlinCompilationType>>(
     createDefaultSourceSets,
     createTestCompilation
 ) {
+    internal abstract fun buildCompilationProcessor(compilation: KotlinCompilationType): KotlinSourceSetProcessor<*>
+
+    override fun configureCompilations(platformTarget: KotlinOnlyTarget<KotlinCompilationType>) {
+        super.configureCompilations(platformTarget)
+
+        platformTarget.compilations.all { compilation ->
+            buildCompilationProcessor(compilation).run()
+            if (compilation.name == KotlinCompilation.MAIN_COMPILATION_NAME) {
+                sourcesJarTask(compilation, platformTarget.targetName, platformTarget.targetName.toLowerCase())
+            }
+        }
+    }
 
     override fun configureArchivesAndComponent(target: KotlinOnlyTarget<KotlinCompilationType>) {
         val project = target.project
@@ -356,19 +363,27 @@ open class KotlinTargetConfigurator<KotlinCompilationType : KotlinCompilation<*>
     }
 
     override fun configureTest(target: KotlinOnlyTarget<KotlinCompilationType>) {
-        val testCompilation = target.compilations.findByName(KotlinCompilation.TEST_COMPILATION_NAME) as? KotlinCompilationToRunnableFiles<*>
-            ?: return // Otherwise, there is no runtime classpath
+        val testCompilation =
+            target.compilations.findByName(KotlinCompilation.TEST_COMPILATION_NAME) as? KotlinCompilationToRunnableFiles<*>
+                ?: return // Otherwise, there is no runtime classpath
 
-        target.project.tasks.create(lowerCamelCaseName(target.targetName, testTaskNameSuffix), Test::class.java).apply {
-            project.afterEvaluate {
-                // use afterEvaluate to override the JavaPlugin defaults for Test tasks
-                conventionMapping.map("testClassesDirs") { testCompilation.output.classesDirs }
-                conventionMapping.map("classpath") { testCompilation.runtimeDependencyFiles }
-                description = "Runs the unit tests."
-                group = JavaBasePlugin.VERIFICATION_GROUP
-                target.project.tasks.findByName(JavaBasePlugin.CHECK_TASK_NAME)?.dependsOn(this@apply)
+        val testTaskName = lowerCamelCaseName(target.disambiguationClassifier, testTaskNameSuffix)
+        val testTask = target.project.createOrRegisterTask<KotlinJvmTest>(testTaskName) { testTask ->
+            testTask.targetName = target.disambiguationClassifier
+        }
+
+        testTask.project.afterEvaluate {
+            // use afterEvaluate to override the JavaPlugin defaults for Test tasks
+            testTask.configure { testTask ->
+                testTask.conventionMapping.map("testClassesDirs") { testCompilation.output.classesDirs }
+                testTask.conventionMapping.map("classpath") { testCompilation.runtimeDependencyFiles }
+                testTask.description = "Runs the unit tests."
+                testTask.group = JavaBasePlugin.VERIFICATION_GROUP
+                testTask.project.tasks.findByName(JavaBasePlugin.CHECK_TASK_NAME)?.dependsOn(testTask)
             }
         }
+
+        registerTestTask(testTask)
     }
 
     private fun addJar(configuration: Configuration, jarArtifact: PublishArtifact) {

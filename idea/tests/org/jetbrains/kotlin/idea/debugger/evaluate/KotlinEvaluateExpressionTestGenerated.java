@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.debugger.evaluate;
@@ -141,6 +141,11 @@ public class KotlinEvaluateExpressionTestGenerated extends AbstractKotlinEvaluat
             runTest("idea/testData/debugger/tinyApp/src/evaluate/singleBreakpoint/escapedNames.kt");
         }
 
+        @TestMetadata("experimentalApi.kt")
+        public void testExperimentalApi() throws Exception {
+            runTest("idea/testData/debugger/tinyApp/src/evaluate/singleBreakpoint/experimentalApi.kt");
+        }
+
         @TestMetadata("extractLocalVariables.kt")
         public void testExtractLocalVariables() throws Exception {
             runTest("idea/testData/debugger/tinyApp/src/evaluate/singleBreakpoint/extractLocalVariables.kt");
@@ -269,6 +274,11 @@ public class KotlinEvaluateExpressionTestGenerated extends AbstractKotlinEvaluat
         @TestMetadata("kt28087.kt")
         public void testKt28087() throws Exception {
             runTest("idea/testData/debugger/tinyApp/src/evaluate/singleBreakpoint/kt28087.kt");
+        }
+
+        @TestMetadata("kt29179.kt")
+        public void testKt29179() throws Exception {
+            runTest("idea/testData/debugger/tinyApp/src/evaluate/singleBreakpoint/kt29179.kt");
         }
 
         @TestMetadata("kt5554OnlyIntsShouldBeCoerced.kt")
@@ -660,6 +670,11 @@ public class KotlinEvaluateExpressionTestGenerated extends AbstractKotlinEvaluat
                 runTest("idea/testData/debugger/tinyApp/src/evaluate/singleBreakpoint/frame/delegatedPropertyInClass.kt");
             }
 
+            @TestMetadata("delegatedPropertyInClassKotlinVariables.kt")
+            public void testDelegatedPropertyInClassKotlinVariables() throws Exception {
+                runTest("idea/testData/debugger/tinyApp/src/evaluate/singleBreakpoint/frame/delegatedPropertyInClassKotlinVariables.kt");
+            }
+
             @TestMetadata("delegatedPropertyInClassWithToString.kt")
             public void testDelegatedPropertyInClassWithToString() throws Exception {
                 runTest("idea/testData/debugger/tinyApp/src/evaluate/singleBreakpoint/frame/delegatedPropertyInClassWithToString.kt");
@@ -788,6 +803,31 @@ public class KotlinEvaluateExpressionTestGenerated extends AbstractKotlinEvaluat
             @TestMetadata("hideSyntheticThis.kt")
             public void testHideSyntheticThis() throws Exception {
                 runTest("idea/testData/debugger/tinyApp/src/evaluate/singleBreakpoint/frame/hideSyntheticThis.kt");
+            }
+
+            @TestMetadata("inlineFunThisKotlinVariables.kt")
+            public void testInlineFunThisKotlinVariables() throws Exception {
+                runTest("idea/testData/debugger/tinyApp/src/evaluate/singleBreakpoint/frame/inlineFunThisKotlinVariables.kt");
+            }
+
+            @TestMetadata("lambdaFun1.kt")
+            public void testLambdaFun1() throws Exception {
+                runTest("idea/testData/debugger/tinyApp/src/evaluate/singleBreakpoint/frame/lambdaFun1.kt");
+            }
+
+            @TestMetadata("lambdaFun2.kt")
+            public void testLambdaFun2() throws Exception {
+                runTest("idea/testData/debugger/tinyApp/src/evaluate/singleBreakpoint/frame/lambdaFun2.kt");
+            }
+
+            @TestMetadata("lambdaFun3.kt")
+            public void testLambdaFun3() throws Exception {
+                runTest("idea/testData/debugger/tinyApp/src/evaluate/singleBreakpoint/frame/lambdaFun3.kt");
+            }
+
+            @TestMetadata("lambdaFun4.kt")
+            public void testLambdaFun4() throws Exception {
+                runTest("idea/testData/debugger/tinyApp/src/evaluate/singleBreakpoint/frame/lambdaFun4.kt");
             }
 
             @TestMetadata("lambdaParameterMangling.kt")
@@ -1044,6 +1084,11 @@ public class KotlinEvaluateExpressionTestGenerated extends AbstractKotlinEvaluat
         @TestMetadata("isInsideInlineLambda.kt")
         public void testIsInsideInlineLambda() throws Exception {
             runTest("idea/testData/debugger/tinyApp/src/evaluate/multipleBreakpoints/isInsideInlineLambda.kt");
+        }
+
+        @TestMetadata("lambdaParameters.kt")
+        public void testLambdaParameters() throws Exception {
+            runTest("idea/testData/debugger/tinyApp/src/evaluate/multipleBreakpoints/lambdaParameters.kt");
         }
 
         @TestMetadata("localFun.kt")

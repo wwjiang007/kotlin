@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package templates
@@ -206,7 +206,7 @@ object ArrayOps : TemplateGroupBase() {
                 body { "definedExternally" }
             }
             on(Backend.IR) {
-                body { "return arrayToString(this as Array<*>)" }
+                body { """return joinToString(", ", "[", "]")""" }
             }
         }
         on(Platform.Native) {
@@ -1038,7 +1038,13 @@ object ArrayOps : TemplateGroupBase() {
                             body { "definedExternally" }
                         }
                         on(Backend.IR) {
-                            body { "this.asDynamic().sort()" }
+                            if (primitive == PrimitiveType.Char) {
+                                // Requires comparator because default comparator of 'Array.prototype.sort' compares
+                                // string representation of values
+                                body { "this.asDynamic().sort(::primitiveCompareTo)" }
+                            } else {
+                                body { "this.asDynamic().sort()" }
+                            }
                         }
                     } else {
                         body {

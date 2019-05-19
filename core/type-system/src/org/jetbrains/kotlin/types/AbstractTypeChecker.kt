@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.types
@@ -21,9 +21,7 @@ abstract class AbstractTypeCheckerContext : TypeSystemContext {
 
     abstract fun areEqualTypeConstructors(a: TypeConstructorMarker, b: TypeConstructorMarker): Boolean
 
-    abstract fun intersectTypes(types: List<KotlinTypeMarker>): KotlinTypeMarker
-
-    open fun prepareType(type: KotlinTypeMarker): KotlinTypeMarker {
+    override fun prepareType(type: KotlinTypeMarker): KotlinTypeMarker {
         return type
     }
 
@@ -146,6 +144,15 @@ abstract class AbstractTypeCheckerContext : TypeSystemContext {
 }
 
 object AbstractTypeChecker {
+
+    fun isSubtypeOf(context: TypeCheckerProviderContext, subType: KotlinTypeMarker, superType: KotlinTypeMarker): Boolean {
+        return AbstractTypeChecker.isSubtypeOf(context.newBaseTypeCheckerContext(true), subType, superType)
+    }
+
+    fun equalTypes(context: TypeCheckerProviderContext, a: KotlinTypeMarker, b: KotlinTypeMarker): Boolean {
+        return AbstractTypeChecker.equalTypes(context.newBaseTypeCheckerContext(false), a, b)
+    }
+
     fun isSubtypeOf(context: AbstractTypeCheckerContext, subType: KotlinTypeMarker, superType: KotlinTypeMarker): Boolean {
         if (subType === superType) return true
         return context.completeIsSubTypeOf(context.prepareType(subType), context.prepareType(superType))
@@ -180,6 +187,32 @@ object AbstractTypeChecker {
         return isSubtypeOfForSingleClassifierType(subType.lowerBoundIfFlexible(), superType.upperBoundIfFlexible())
     }
 
+    private fun AbstractTypeCheckerContext.checkSubtypeForIntegerLiteralType(subType: SimpleTypeMarker, superType: SimpleTypeMarker): Boolean? {
+        if (!subType.isIntegerLiteralType() && !superType.isIntegerLiteralType()) return null
+
+        fun typeInIntegerLiteralType(integerLiteralType: SimpleTypeMarker, type: SimpleTypeMarker): Boolean =
+            integerLiteralType.possibleIntegerTypes().any { it.typeConstructor() == type.typeConstructor() }
+
+        when {
+            subType.isIntegerLiteralType() && superType.isIntegerLiteralType() -> {
+                return true
+            }
+
+            subType.isIntegerLiteralType() -> {
+                if (typeInIntegerLiteralType(subType, superType)) {
+                    return true
+                }
+            }
+
+            superType.isIntegerLiteralType() -> {
+                if (typeInIntegerLiteralType(superType, subType)) {
+                    return true
+                }
+            }
+        }
+        return null
+    }
+
     private fun AbstractTypeCheckerContext.hasNothingSupertype(type: SimpleTypeMarker) = // todo add tests
         anySupertype(type, { it.typeConstructor().isNothingConstructor() }) {
             if (it.isClassType()) {
@@ -198,6 +231,11 @@ object AbstractTypeChecker {
         }
 
         if (!AbstractNullabilityChecker.isPossibleSubtype(this, subType, superType)) return false
+
+        checkSubtypeForIntegerLiteralType(subType.lowerBoundIfFlexible(), superType.upperBoundIfFlexible())?.let {
+            addSubtypeConstraint(subType, superType)
+            return it
+        }
 
         val superConstructor = superType.typeConstructor()
 
@@ -281,7 +319,7 @@ object AbstractTypeChecker {
                 !type.isDynamic() && !type.isDefinitelyNotNullType() &&
                 type.lowerBoundIfFlexible().typeConstructor() == type.upperBoundIfFlexible().typeConstructor()
 
-    private fun effectiveVariance(declared: TypeVariance, useSite: TypeVariance): TypeVariance? {
+    fun effectiveVariance(declared: TypeVariance, useSite: TypeVariance): TypeVariance? {
         if (declared == TypeVariance.INV) return useSite
         if (useSite == TypeVariance.INV) return declared
 
@@ -325,17 +363,6 @@ object AbstractTypeChecker {
         }
 
         return null
-    }
-
-
-    private inline fun TypeArgumentListMarker.all(
-        context: AbstractTypeCheckerContext,
-        crossinline predicate: (TypeArgumentMarker) -> Boolean
-    ): Boolean = with(context) {
-        repeat(size()) { index ->
-            if (!predicate(get(index))) return false
-        }
-        return true
     }
 
 
@@ -408,7 +435,7 @@ object AbstractTypeChecker {
         }
 
         // i.e. superType is not a classType
-        if (!constructor.isClassTypeConstructor()) {
+        if (!constructor.isClassTypeConstructor() && !constructor.isIntegerLiteralTypeConstructor()) {
             return collectAllSupertypesWithGivenTypeConstructor(baseType, constructor)
         }
 
@@ -432,6 +459,14 @@ object AbstractNullabilityChecker {
     // this method checks only nullability
     fun isPossibleSubtype(context: AbstractTypeCheckerContext, subType: SimpleTypeMarker, superType: SimpleTypeMarker): Boolean =
         context.runIsPossibleSubtype(subType, superType)
+
+    fun isSubtypeOfAny(context: TypeCheckerProviderContext, type: KotlinTypeMarker): Boolean =
+        AbstractNullabilityChecker.isSubtypeOfAny(context.newBaseTypeCheckerContext(false), type)
+
+    fun isSubtypeOfAny(context: AbstractTypeCheckerContext, type: KotlinTypeMarker): Boolean =
+        with(context) {
+            hasNotNullSupertype(type.lowerBoundIfFlexible(), SupertypesPolicy.LowerIfFlexible)
+        }
 
     private fun AbstractTypeCheckerContext.runIsPossibleSubtype(subType: SimpleTypeMarker, superType: SimpleTypeMarker): Boolean {
         // it makes for case String? & Any <: String
@@ -480,6 +515,9 @@ object AbstractNullabilityChecker {
         }) {
             if (it.isMarkedNullable()) SupertypesPolicy.None else supertypesPolicy
         }
+
+    fun TypeCheckerProviderContext.hasPathByNotMarkedNullableNodes(start: SimpleTypeMarker, end: TypeConstructorMarker) =
+        newBaseTypeCheckerContext(false).hasPathByNotMarkedNullableNodes(start, end)
 
     fun AbstractTypeCheckerContext.hasPathByNotMarkedNullableNodes(start: SimpleTypeMarker, end: TypeConstructorMarker) =
         anySupertype(start, {
