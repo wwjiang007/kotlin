@@ -124,7 +124,7 @@ class Kapt3KotlinGradleSubplugin : KotlinGradleSubplugin<KotlinCompile> {
         }
 
         fun Project.isIncrementalKapt(): Boolean {
-            return hasProperty(INCREMENTAL_APT) && property(INCREMENTAL_APT) == "true"
+            return !(hasProperty(INCREMENTAL_APT) && property(INCREMENTAL_APT) == "false")
         }
 
         fun Project.isInfoAsWarnings(): Boolean {
@@ -266,8 +266,6 @@ class Kapt3KotlinGradleSubplugin : KotlinGradleSubplugin<KotlinCompile> {
         pluginOptions += SubpluginOption("aptMode", aptMode)
         disableAnnotationProcessingInJavaTask()
 
-        javaCompile?.source(generatedFilesDir)
-
         pluginOptions += FilesSubpluginOption("sources", listOf(generatedFilesDir))
         pluginOptions += FilesSubpluginOption("classes", listOf(getKaptGeneratedClassesDir(project, sourceSetName)))
 
@@ -393,6 +391,11 @@ class Kapt3KotlinGradleSubplugin : KotlinGradleSubplugin<KotlinCompile> {
         kaptTask.isIncremental = project.isIncrementalKapt()
         if (kaptTask.isIncremental) {
             kaptTask.incAptCache = getKaptIncrementalAnnotationProcessingCache()
+            if (isGradleVersionAtLeast(4, 3)) {
+                kaptTask.localState.register(kaptTask.incAptCache)
+            } else {
+                kaptTask.outputs.files(kaptTask.incAptCache).withPropertyName("incrementalAptCache")
+            }
 
             maybeRegisterTransform(project)
             val classStructure = project.configurations.create("_classStructure${taskName}")
@@ -527,7 +530,9 @@ private val artifactType = Attribute.of("artifactType", String::class.java)
 
 
 internal fun registerGeneratedJavaSource(kaptTask: KaptTask, javaTask: AbstractCompile) {
-    javaTask.source(kaptTask.destinationDir)
+    val generatedJavaSources = javaTask.project.fileTree(kaptTask.destinationDir)
+    generatedJavaSources.include("**/*.java")
+    javaTask.source(generatedJavaSources)
 }
 
 internal fun Configuration.getNamedDependencies(): List<Dependency> = allDependencies.filter { it.group != null && it.name != null }

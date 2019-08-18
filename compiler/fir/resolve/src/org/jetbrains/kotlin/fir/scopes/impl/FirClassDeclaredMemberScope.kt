@@ -5,52 +5,82 @@
 
 package org.jetbrains.kotlin.fir.scopes.impl
 
-import org.jetbrains.kotlin.fir.declarations.FirCallableDeclaration
+import org.jetbrains.kotlin.fir.declarations.FirCallableMemberDeclaration
+import org.jetbrains.kotlin.fir.declarations.FirConstructor
 import org.jetbrains.kotlin.fir.declarations.FirRegularClass
 import org.jetbrains.kotlin.fir.scopes.FirPosition
 import org.jetbrains.kotlin.fir.scopes.FirScope
 import org.jetbrains.kotlin.fir.scopes.ProcessorAction
 import org.jetbrains.kotlin.fir.scopes.ProcessorAction.NEXT
 import org.jetbrains.kotlin.fir.scopes.ProcessorAction.STOP
+import org.jetbrains.kotlin.fir.service
 import org.jetbrains.kotlin.fir.symbols.*
-import org.jetbrains.kotlin.name.ClassId
+import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirClassSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirFunctionSymbol
 import org.jetbrains.kotlin.name.Name
 
-class FirClassDeclaredMemberScope(
-    klass: FirRegularClass
-) : FirScope {
-    private val classId = klass.symbol.classId
-    private val callablesIndex by lazy {
-        klass.declarations.filterIsInstance<FirCallableDeclaration>()
-            .map { it.symbol }.groupBy { it.callableId }
+class FirClassDeclaredMemberScopeProvider {
+
+    val cache = mutableMapOf<FirRegularClass, FirClassDeclaredMemberScope>()
+    fun declaredMemberScope(klass: FirRegularClass): FirClassDeclaredMemberScope {
+        return cache.getOrPut(klass) {
+            FirClassDeclaredMemberScope(klass)
+        }
     }
-    private val classIndex by lazy {
-        klass.declarations.filterIsInstance<FirRegularClass>()
-            .map { it.symbol }.associateBy { it.classId }
-    }
+}
 
+fun declaredMemberScope(klass: FirRegularClass): FirClassDeclaredMemberScope {
+    return klass
+        .session
+        .service<FirClassDeclaredMemberScopeProvider>()
+        .declaredMemberScope(klass)
+}
 
-    override fun processFunctionsByName(name: Name, processor: (ConeFunctionSymbol) -> ProcessorAction): ProcessorAction {
-        val matchedClass = classIndex[ClassId(classId.packageFqName, classId.relativeClassName.child(name), false)]
-
-        if (matchedClass != null) {
-            if (FirClassDeclaredMemberScope(matchedClass.fir).processFunctionsByName(name, processor) == STOP) {
-                return STOP
+class FirClassDeclaredMemberScope(klass: FirRegularClass) : FirScope() {
+    private val callablesIndex: Map<Name, List<FirCallableSymbol<*>>> = run {
+        val result = mutableMapOf<Name, MutableList<FirCallableSymbol<*>>>()
+        for (declaration in klass.declarations) {
+            when (declaration) {
+                is FirCallableMemberDeclaration<*> -> {
+                    val name = if (declaration is FirConstructor) klass.name else declaration.name
+                    result.getOrPut(name) { mutableListOf() } += declaration.symbol
+                }
+                is FirRegularClass -> {
+                    for (nestedDeclaration in declaration.declarations) {
+                        if (nestedDeclaration is FirConstructor) {
+                            result.getOrPut(declaration.name) { mutableListOf() } += nestedDeclaration.symbol
+                        }
+                    }
+                }
             }
         }
-        val symbols = callablesIndex[CallableId(classId.packageFqName, classId.relativeClassName, name)] ?: emptyList()
+        result
+    }
+    private val classIndex: Map<Name, FirClassSymbol> = run {
+        val result = mutableMapOf<Name, FirClassSymbol>()
+        for (declaration in klass.declarations) {
+            if (declaration is FirRegularClass) {
+                result[declaration.name] = declaration.symbol
+            }
+        }
+        result
+    }
+
+    override fun processFunctionsByName(name: Name, processor: (FirFunctionSymbol<*>) -> ProcessorAction): ProcessorAction {
+        val symbols = callablesIndex[name] ?: emptyList()
         for (symbol in symbols) {
-            if (symbol is ConeFunctionSymbol && !processor(symbol)) {
+            if (symbol is FirFunctionSymbol<*> && !processor(symbol)) {
                 return STOP
             }
         }
         return NEXT
     }
 
-    override fun processPropertiesByName(name: Name, processor: (ConeVariableSymbol) -> ProcessorAction): ProcessorAction {
-        val symbols = callablesIndex[CallableId(classId.packageFqName, classId.relativeClassName, name)] ?: emptyList()
+    override fun processPropertiesByName(name: Name, processor: (FirCallableSymbol<*>) -> ProcessorAction): ProcessorAction {
+        val symbols = callablesIndex[name] ?: emptyList()
         for (symbol in symbols) {
-            if (symbol is ConePropertySymbol && !processor(symbol)) {
+            if (symbol is ConeVariableSymbol && !processor(symbol)) {
                 return STOP
             }
         }
@@ -58,7 +88,7 @@ class FirClassDeclaredMemberScope(
     }
 
     override fun processClassifiersByName(name: Name, position: FirPosition, processor: (ConeClassifierSymbol) -> Boolean): Boolean {
-        val matchedClass = classIndex[classId.createNestedClassId(name)]
+        val matchedClass = classIndex[name]
         if (matchedClass != null && !processor(matchedClass)) {
             return false
         }

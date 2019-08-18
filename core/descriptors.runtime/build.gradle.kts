@@ -11,6 +11,12 @@ dependencies {
 
     testCompile(projectTests(":compiler:tests-common"))
     testCompile(projectTests(":generators:test-generator"))
+
+    testRuntimeOnly(intellijCoreDep()) { includeJars("intellij-core") }
+    Platform[192].orHigher {
+        testRuntimeOnly(intellijDep()) { includeJars("platform-concurrency") }
+        testRuntimeOnly(intellijPluginDep("jps-standalone")) { includeJars("jps-model") }
+    }
 }
 
 sourceSets {

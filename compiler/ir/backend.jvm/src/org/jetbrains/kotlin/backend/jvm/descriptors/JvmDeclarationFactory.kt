@@ -9,37 +9,29 @@ import org.jetbrains.kotlin.backend.common.deepCopyWithWrappedDescriptors
 import org.jetbrains.kotlin.backend.common.descriptors.WrappedClassConstructorDescriptor
 import org.jetbrains.kotlin.backend.common.descriptors.WrappedClassDescriptor
 import org.jetbrains.kotlin.backend.common.descriptors.WrappedValueParameterDescriptor
-import org.jetbrains.kotlin.backend.common.ir.DeclarationFactory
-import org.jetbrains.kotlin.backend.common.ir.copyTo
-import org.jetbrains.kotlin.backend.common.ir.copyTypeParametersFrom
-import org.jetbrains.kotlin.backend.common.ir.createImplicitParameterDeclarationWithWrappedDescriptor
+import org.jetbrains.kotlin.backend.common.ir.*
 import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
-import org.jetbrains.kotlin.backend.jvm.lower.createStaticFunctionWithReceivers
 import org.jetbrains.kotlin.builtins.CompanionObjectMapping.isMappedIntrinsicCompanionObject
 import org.jetbrains.kotlin.codegen.OwnerKind
 import org.jetbrains.kotlin.codegen.state.GenerationState
-import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.descriptors.annotations.Annotations
-import org.jetbrains.kotlin.descriptors.impl.PropertyDescriptorImpl
+import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.builders.declarations.buildField
 import org.jetbrains.kotlin.ir.builders.setSourceRange
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrClassImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrConstructorImpl
-import org.jetbrains.kotlin.ir.declarations.impl.IrFieldImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrValueParameterImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrClassSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrConstructorSymbolImpl
-import org.jetbrains.kotlin.ir.symbols.impl.IrFieldSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrValueParameterSymbolImpl
 import org.jetbrains.kotlin.ir.types.IrType
-import org.jetbrains.kotlin.ir.types.toKotlinType
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.load.java.JavaVisibilities
 import org.jetbrains.kotlin.load.java.JvmAbi
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.org.objectweb.asm.Opcodes
 import java.util.*
 
 class JvmDeclarationFactory(
@@ -97,7 +89,7 @@ class JvmDeclarationFactory(
             oldConstructor.isInline, oldConstructor.isExternal, oldConstructor.isPrimary
         ).apply {
             newDescriptor.bind(this)
-            annotations.addAll(oldConstructor.annotations.map { it.deepCopyWithWrappedDescriptors(this) })
+            annotations.addAll(oldConstructor.annotations.map { it.deepCopyWithSymbols(this) })
             parent = oldConstructor.parent
             returnType = oldConstructor.returnType
             copyTypeParametersFrom(oldConstructor)
@@ -148,7 +140,19 @@ class JvmDeclarationFactory(
             createStaticFunctionWithReceivers(
                 defaultImpls, name, interfaceFun,
                 dispatchReceiverType = parent.defaultType,
-                origin = JvmLoweredDeclarationOrigin.DEFAULT_IMPLS
+                // If `interfaceFun` is not a real implementation, then we're generating stubs in a descendant
+                // interface's DefaultImpls. For example,
+                //
+                //     interface I1 { fun f() { ... } }
+                //     interface I2 : I1
+                //
+                // is supposed to allow using `I2.DefaultImpls.f` as if it was inherited from `I1.DefaultImpls`.
+                // The classes are not actually related and `I2.DefaultImpls.f` is not a fake override but a bridge.
+                origin = when {
+                    interfaceFun.origin != IrDeclarationOrigin.FAKE_OVERRIDE -> interfaceFun.origin
+                    interfaceFun.resolveFakeOverride()!!.origin.isSynthetic -> JvmLoweredDeclarationOrigin.DEFAULT_IMPLS_BRIDGE_TO_SYNTHETIC
+                    else -> JvmLoweredDeclarationOrigin.DEFAULT_IMPLS_BRIDGE
+                }
             )
         }
     }

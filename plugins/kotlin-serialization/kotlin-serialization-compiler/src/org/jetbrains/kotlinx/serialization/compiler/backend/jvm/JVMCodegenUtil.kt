@@ -29,10 +29,7 @@ import org.jetbrains.kotlin.resolve.jvm.diagnostics.OtherOrigin
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.typeUtil.isTypeParameter
-import org.jetbrains.kotlinx.serialization.compiler.backend.common.AbstractSerialGenerator
-import org.jetbrains.kotlinx.serialization.compiler.backend.common.SerialTypeInfo
-import org.jetbrains.kotlinx.serialization.compiler.backend.common.findAddOnSerializer
-import org.jetbrains.kotlinx.serialization.compiler.backend.common.findTypeSerializerOrContext
+import org.jetbrains.kotlinx.serialization.compiler.backend.common.*
 import org.jetbrains.kotlinx.serialization.compiler.resolve.*
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.DECODER_CLASS
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.ENCODER_CLASS
@@ -102,15 +99,15 @@ fun InstructionAdapter.genKOutputMethodCall(
     val sti = generator.getSerialTypeInfo(property, propertyType)
     val useSerializer = if (fromClassStartVar == null) stackValueSerializerInstanceFromSerializer(classCodegen, sti, generator)
     else stackValueSerializerInstanceFromClass(classCodegen, sti, fromClassStartVar, generator)
-    if (!sti.unit) ImplementationBodyCodegen.genPropertyOnStack(
+    val actualType = if (!sti.unit) ImplementationBodyCodegen.genPropertyOnStack(
         this,
         expressionCodegen.context,
         property.descriptor,
         propertyOwnerType,
         ownerVar,
         classCodegen.state
-    )
-    StackValue.coerce(propertyType, sti.type, this)
+    ) else null
+    actualType?.type?.let { type -> StackValue.coerce(type, sti.type, this) }
     invokeinterface(
         kOutputType.internalName,
         CallingConventions.encode + sti.elementMethodPrefix + (if (useSerializer) "Serializable" else "") + CallingConventions.elementPostfix,
@@ -191,7 +188,6 @@ internal fun InstructionAdapter.stackValueSerializerInstanceFromSerializerWithou
             ?: if (!property.type.isTypeParameter()) serializerCodegen.findTypeSerializerOrContext(
                 property.module,
                 property.type,
-                property.descriptor.annotations,
                 property.descriptor.findPsi()
             ) else null
     return serializerCodegen.stackValueSerializerInstance(
@@ -221,7 +217,7 @@ internal fun InstructionAdapter.stackValueSerializerInstanceFromSerializer(codeg
 // use iv == null to check only (do not emit serializer onto stack)
 internal fun AbstractSerialGenerator.stackValueSerializerInstance(codegen: ClassBodyCodegen, module: ModuleDescriptor, kType: KotlinType, maybeSerializer: ClassDescriptor?,
                                           iv: InstructionAdapter?, genericIndex: Int? = null, genericSerializerFieldGetter: (InstructionAdapter.(Int) -> Unit)? = null): Boolean {
-    if (genericIndex != null) {
+    if (maybeSerializer == null && genericIndex != null) {
         // get field from serializer object
         iv?.run { genericSerializerFieldGetter?.invoke(this, genericIndex) }
         return true
@@ -361,7 +357,13 @@ fun AbstractSerialGenerator.getSerialTypeInfo(property: SerializableProperty, ty
                         // reference elements
                         serializer = property.module.findClassAcrossModuleDependencies(referenceArraySerializerId)
                     }
-                    else -> TODO("primitive arrays are not supported yet")
+                    else -> {
+                        serializer = findTypeSerializerOrContext(
+                            property.module,
+                            property.type,
+                            property.descriptor.findPsi()
+                        )
+                    }
                     // primitive elements are not supported yet
                 }
             }
@@ -382,7 +384,6 @@ fun AbstractSerialGenerator.getSerialTypeInfo(property: SerializableProperty, ty
                 ?: findTypeSerializerOrContext(
                     property.module,
                     property.type,
-                    property.descriptor.annotations,
                     property.descriptor.findPsi()
                 )
             return JVMSerialTypeInfo(

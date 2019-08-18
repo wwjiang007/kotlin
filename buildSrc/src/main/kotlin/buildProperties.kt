@@ -28,7 +28,8 @@ class KotlinBuildProperties(
 
     private operator fun get(key: String): Any? = localProperties.getProperty(key) ?: propertiesProvider.getProperty(key)
 
-    private fun getBoolean(key: String): Boolean = this[key]?.toString() == "true"
+    private fun getBoolean(key: String, default: Boolean = false): Boolean =
+        (this[key]?.toString()?.toBoolean() ?: default) == true
 
     val isJpsBuildEnabled: Boolean = getBoolean("jpsBuild")
 
@@ -51,15 +52,42 @@ class KotlinBuildProperties(
         get() = isJpsBuildEnabled && isInIdeaSync
 
     val includeJava9: Boolean
-        get() = !isInJpsBuildIdeaSync
+        get() = !isInJpsBuildIdeaSync && getBoolean("kotlin.build.java9", true)
 
     val useBootstrapStdlib: Boolean
-        get() = isInJpsBuildIdeaSync
+        get() = isInJpsBuildIdeaSync || getBoolean("kotlin.build.useBootstrapStdlib", false)
+
+    private val kotlinUltimateExists: Boolean = propertiesProvider.rootProjectDir.resolve("kotlin-ultimate").exists()
+
+    val isTeamcityBuild: Boolean = getBoolean("teamcity") || System.getenv("TEAMCITY_VERSION") != null
+
+    val intellijUltimateEnabled: Boolean
+        get() {
+            val explicitlyEnabled = getBoolean("intellijUltimateEnabled")
+            if (!kotlinUltimateExists && explicitlyEnabled) {
+                error("intellijUltimateEnabled property is set, while kotlin-ultimate repository is not provided")
+            }
+            return kotlinUltimateExists && (explicitlyEnabled || isTeamcityBuild)
+        }
+
+    val includeCidrPlugins: Boolean = kotlinUltimateExists && getBoolean("cidrPluginsEnabled")
+
+    val includeUltimate: Boolean = kotlinUltimateExists && (isTeamcityBuild || intellijUltimateEnabled)
+
+    val postProcessing: Boolean get() = isTeamcityBuild || getBoolean("kotlin.build.postprocessing", true)
+
+    val relocation: Boolean get() = postProcessing
+
+    val proguard: Boolean get() = postProcessing && getBoolean("kotlin.build.proguard", isTeamcityBuild)
+
+    val jsIrDist: Boolean get() = getBoolean("kotlin.stdlib.js.ir.dist")
+
+    val jarCompression: Boolean get() = getBoolean("kotlin.build.jar.compression", isTeamcityBuild)
 }
 
-private const val extensionName = "kotlinBuildFlags"
+private const val extensionName = "kotlinBuildProperties"
 
-class ProjectProperties(val project: Project): PropertiesProvider {
+class ProjectProperties(val project: Project) : PropertiesProvider {
     override val rootProjectDir: File
         get() = project.projectDir
 
@@ -72,7 +100,7 @@ val Project.kotlinBuildProperties: KotlinBuildProperties
             rootProject.extensions.add(extensionName, it)
         }
 
-class SettingsProperties(val settings: Settings): PropertiesProvider {
+class SettingsProperties(val settings: Settings) : PropertiesProvider {
     override val rootProjectDir: File
         get() = settings.rootDir
 

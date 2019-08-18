@@ -21,7 +21,11 @@ abstract class AbstractUltraLightClassSanityTest : KotlinLightCodeInsightFixture
             return //tests allopen compiler plugin that we don't have in this test
         }
 
-        val file = myFixture.addFileToProject(testDataPath, ioFile.readText()) as KtFile
+        val sourceText = ioFile.readText()
+        val file = myFixture.addFileToProject(testDataPath, sourceText) as KtFile
+
+        UltraLightChecker.checkForReleaseCoroutine(sourceText, module)
+
         UltraLightChecker.checkClassEquivalence(file)
     }
 }

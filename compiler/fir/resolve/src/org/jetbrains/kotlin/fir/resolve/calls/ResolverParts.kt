@@ -6,11 +6,9 @@
 package org.jetbrains.kotlin.fir.resolve.calls
 
 import org.jetbrains.kotlin.descriptors.Visibilities
-import org.jetbrains.kotlin.fir.declarations.FirFunction
 import org.jetbrains.kotlin.fir.declarations.FirMemberDeclaration
+import org.jetbrains.kotlin.fir.expressions.FirResolvedQualifier
 import org.jetbrains.kotlin.fir.resolve.FirProvider
-import org.jetbrains.kotlin.fir.resolve.transformers.firSafeNullable
-import org.jetbrains.kotlin.fir.resolve.transformers.firUnsafe
 import org.jetbrains.kotlin.fir.service
 import org.jetbrains.kotlin.fir.symbols.ConeCallableSymbol
 import org.jetbrains.kotlin.fir.symbols.ConeClassLikeSymbol
@@ -23,34 +21,33 @@ import org.jetbrains.kotlin.load.java.JavaVisibilities
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind.*
-import java.lang.IllegalStateException
 
 
 abstract class ResolutionStage {
-    abstract fun check(candidate: Candidate, sink: CheckerSink, callInfo: CallInfo)
+    abstract suspend fun check(candidate: Candidate, sink: CheckerSink, callInfo: CallInfo)
 }
 
 abstract class CheckerStage : ResolutionStage()
 
 internal object CheckExplicitReceiverConsistency : ResolutionStage() {
-    override fun check(candidate: Candidate, sink: CheckerSink, callInfo: CallInfo) {
+    override suspend fun check(candidate: Candidate, sink: CheckerSink, callInfo: CallInfo) {
         val receiverKind = candidate.explicitReceiverKind
         val explicitReceiver = callInfo.explicitReceiver
         // TODO: add invoke cases
         when (receiverKind) {
             NO_EXPLICIT_RECEIVER -> {
-                if (explicitReceiver != null) return sink.reportApplicability(CandidateApplicability.WRONG_RECEIVER)
+                if (explicitReceiver != null && explicitReceiver !is FirResolvedQualifier)
+                    return sink.yieldApplicability(CandidateApplicability.WRONG_RECEIVER)
             }
             EXTENSION_RECEIVER, DISPATCH_RECEIVER -> {
-                if (explicitReceiver == null) return sink.reportApplicability(CandidateApplicability.WRONG_RECEIVER)
+                if (explicitReceiver == null) return sink.yieldApplicability(CandidateApplicability.WRONG_RECEIVER)
             }
             BOTH_RECEIVERS -> {
-                if (explicitReceiver == null) return sink.reportApplicability(CandidateApplicability.WRONG_RECEIVER)
+                if (explicitReceiver == null) return sink.yieldApplicability(CandidateApplicability.WRONG_RECEIVER)
                 // Here we should also check additional invoke receiver
             }
         }
     }
-
 }
 
 internal sealed class CheckReceivers : ResolutionStage() {
@@ -78,7 +75,7 @@ internal sealed class CheckReceivers : ResolutionStage() {
         }
 
         override fun Candidate.getReceiverValue(): ReceiverValue? {
-            val callableSymbol = symbol as? FirCallableSymbol ?: return null
+            val callableSymbol = symbol as? FirCallableSymbol<*> ?: return null
             val callable = callableSymbol.fir
             val type = (callable.receiverTypeRef as FirResolvedTypeRef?)?.type ?: return null
             return object : ReceiverValue {
@@ -95,63 +92,86 @@ internal sealed class CheckReceivers : ResolutionStage() {
 
     abstract fun ExplicitReceiverKind.shouldBeResolvedAsImplicit(): Boolean
 
-    override fun check(candidate: Candidate, sink: CheckerSink, callInfo: CallInfo) {
-        val receiverParameterValue = candidate.getReceiverValue()
+    override suspend fun check(candidate: Candidate, sink: CheckerSink, callInfo: CallInfo) {
+        val expectedReceiverParameterValue = candidate.getReceiverValue()
         val explicitReceiverExpression = callInfo.explicitReceiver
         val explicitReceiverKind = candidate.explicitReceiverKind
 
-        if (receiverParameterValue != null) {
+        if (expectedReceiverParameterValue != null) {
             if (explicitReceiverExpression != null && explicitReceiverKind.shouldBeResolvedAsExplicit()) {
                 resolveArgumentExpression(
-                    candidate.csBuilder, explicitReceiverExpression,
-                    candidate.substitutor.substituteOrSelf(receiverParameterValue.type),
-                    explicitReceiverExpression.typeRef,
-                    sink, isReceiver = true, typeProvider = callInfo.typeProvider, acceptLambdaAtoms = { candidate.postponedAtoms += it }
+                    candidate.csBuilder,
+                    argument = explicitReceiverExpression,
+                    expectedType = candidate.substitutor.substituteOrSelf(expectedReceiverParameterValue.type),
+                    expectedTypeRef = explicitReceiverExpression.typeRef,
+                    sink = sink,
+                    isReceiver = true,
+                    isSafeCall = callInfo.isSafeCall,
+                    typeProvider = callInfo.typeProvider,
+                    acceptLambdaAtoms = { candidate.postponedAtoms += it }
                 )
+                sink.yield()
+            } else {
+                val argumentExtensionReceiverValue = candidate.implicitExtensionReceiverValue
+                if (argumentExtensionReceiverValue != null && explicitReceiverKind.shouldBeResolvedAsImplicit()) {
+                    resolvePlainArgumentType(
+                        candidate.csBuilder,
+                        argumentType = argumentExtensionReceiverValue.type,
+                        expectedType = candidate.substitutor.substituteOrSelf(expectedReceiverParameterValue.type),
+                        sink = sink,
+                        isReceiver = true,
+                        isSafeCall = callInfo.isSafeCall
+                    )
+                    sink.yield()
+                }
             }
         }
     }
 }
 
 internal object MapArguments : ResolutionStage() {
-    override fun check(candidate: Candidate, sink: CheckerSink, callInfo: CallInfo) {
-        val symbol = candidate.symbol as? FirFunctionSymbol ?: return sink.reportApplicability(CandidateApplicability.HIDDEN)
-        val function = symbol.firUnsafe<FirFunction>()
+    override suspend fun check(candidate: Candidate, sink: CheckerSink, callInfo: CallInfo) {
+        val symbol = candidate.symbol as? FirFunctionSymbol<*> ?: return sink.reportApplicability(CandidateApplicability.HIDDEN)
+        val function = symbol.fir
         val processor = FirCallArgumentsProcessor(function, callInfo.arguments)
         val mappingResult = processor.process()
         candidate.argumentMapping = mappingResult.argumentMapping
         if (!mappingResult.isSuccess) {
-            return sink.reportApplicability(CandidateApplicability.PARAMETER_MAPPING_ERROR)
+            return sink.yieldApplicability(CandidateApplicability.PARAMETER_MAPPING_ERROR)
         }
     }
-
 }
 
 internal object CheckArguments : CheckerStage() {
-    override fun check(candidate: Candidate, sink: CheckerSink, callInfo: CallInfo) {
+    override suspend fun check(candidate: Candidate, sink: CheckerSink, callInfo: CallInfo) {
         val argumentMapping =
             candidate.argumentMapping ?: throw IllegalStateException("Argument should be already mapped while checking arguments!")
         for ((argument, parameter) in argumentMapping) {
-            candidate.resolveArgument(argument, parameter, isReceiver = false, typeProvider = callInfo.typeProvider, sink = sink)
-        }
-
-        if (candidate.system.hasContradiction) {
-            sink.reportApplicability(CandidateApplicability.INAPPLICABLE)
+            candidate.resolveArgument(
+                argument,
+                parameter,
+                isReceiver = false,
+                isSafeCall = false,
+                typeProvider = callInfo.typeProvider,
+                sink = sink
+            )
+            if (candidate.system.hasContradiction) {
+                sink.yieldApplicability(CandidateApplicability.INAPPLICABLE)
+            }
+            sink.yield()
         }
     }
 }
 
 internal object DiscriminateSynthetics : CheckerStage() {
-    override fun check(candidate: Candidate, sink: CheckerSink, callInfo: CallInfo) {
+    override suspend fun check(candidate: Candidate, sink: CheckerSink, callInfo: CallInfo) {
         if (candidate.symbol is SyntheticSymbol) {
             sink.reportApplicability(CandidateApplicability.SYNTHETIC_RESOLVED)
         }
     }
-
 }
 
 internal object CheckVisibility : CheckerStage() {
-
     private fun ConeSymbol.packageFqName(): FqName {
         return when (this) {
             is ConeClassLikeSymbol -> classId.packageFqName
@@ -160,10 +180,10 @@ internal object CheckVisibility : CheckerStage() {
         }
     }
 
-    override fun check(candidate: Candidate, sink: CheckerSink, callInfo: CallInfo) {
+    override suspend fun check(candidate: Candidate, sink: CheckerSink, callInfo: CallInfo) {
         val symbol = candidate.symbol
-        val declaration = symbol.firSafeNullable<FirMemberDeclaration>()
-        if (declaration != null && !declaration.visibility.isPublicAPI) {
+        val declaration = symbol.fir
+        if (declaration is FirMemberDeclaration && !declaration.visibility.isPublicAPI) {
             val visible = when (declaration.visibility) {
                 JavaVisibilities.PACKAGE_VISIBILITY ->
                     symbol.packageFqName() == callInfo.containingFile.packageFqName
@@ -186,24 +206,8 @@ internal object CheckVisibility : CheckerStage() {
             }
 
             if (!visible) {
-                sink.reportApplicability(CandidateApplicability.HIDDEN)
+                sink.yieldApplicability(CandidateApplicability.HIDDEN)
             }
         }
     }
 }
-
-
-internal fun functionCallResolutionSequence() = listOf(
-    CheckVisibility, MapArguments, CheckExplicitReceiverConsistency, CreateFreshTypeVariableSubstitutorStage,
-    CheckReceivers.Dispatch, CheckReceivers.Extension, CheckArguments
-)
-
-
-internal fun qualifiedAccessResolutionSequence() = listOf(
-    CheckVisibility,
-    DiscriminateSynthetics,
-    CheckExplicitReceiverConsistency,
-    CreateFreshTypeVariableSubstitutorStage,
-    CheckReceivers.Dispatch,
-    CheckReceivers.Extension
-)

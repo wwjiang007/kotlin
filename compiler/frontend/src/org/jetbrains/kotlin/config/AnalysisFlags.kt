@@ -29,4 +29,10 @@ object AnalysisFlags {
 
     @JvmStatic
     val allowResultReturnType by AnalysisFlag.Delegates.Boolean
+
+    @JvmStatic
+    val constraintSystemForOverloadResolution by AnalysisFlag.Delegates.ConstraintSystemForOverloadResolution
+
+    @JvmStatic
+    val useTypeRefinement by AnalysisFlag.Delegates.Boolean
 }

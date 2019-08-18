@@ -26,6 +26,7 @@ dependencies {
     testCompile(project(":compiler:light-classes"))
     testCompile(project(":compiler:serialization"))
     testCompile(project(":kotlin-preloader"))
+    testCompile(project(":compiler:cli-common"))
     testCompile(project(":daemon-common"))
     testCompile(project(":daemon-common-new"))
     testCompile(project(":js:js.serializer"))
@@ -40,8 +41,30 @@ dependencies {
     testCompile(androidDxJar()) { isTransitive = false }
     testCompileOnly(intellijCoreDep()) { includeJars("intellij-core") }
     testCompile(intellijDep()) {
-        includeJars("openapi", "platform-api", "platform-impl", "idea", "idea_rt", "guava", "trove4j", "picocontainer", "asm-all", "log4j", "jdom", "bootstrap", rootProject = rootProject)
+        includeJars(
+            "openapi",
+            "jps-model",
+            "extensions",
+            "util",
+            "platform-api",
+            "platform-impl",
+            "idea",
+            "idea_rt",
+            "guava",
+            "trove4j",
+            "picocontainer",
+            "asm-all",
+            "log4j",
+            "jdom",
+            "streamex",
+            "bootstrap",
+            rootProject = rootProject
+        )
         isTransitive = false
+    }
+
+    Platform[192].orHigher {
+        testCompile(intellijDep()) { includeJars("platform-util-ui", "platform-concurrency", "platform-objectSerializer") }
     }
 }
 

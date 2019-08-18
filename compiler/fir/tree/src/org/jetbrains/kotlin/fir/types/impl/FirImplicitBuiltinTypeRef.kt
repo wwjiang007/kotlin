@@ -6,62 +6,60 @@
 package org.jetbrains.kotlin.fir.types.impl
 
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.FirAbstractElement
 import org.jetbrains.kotlin.fir.expressions.FirAnnotationCall
 import org.jetbrains.kotlin.fir.symbols.ConeClassLikeLookupTagImpl
 import org.jetbrains.kotlin.fir.symbols.StandardClassIds
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
-import org.jetbrains.kotlin.fir.types.FirImplicitTypeRef
+import org.jetbrains.kotlin.fir.types.ConeKotlinTypeProjection
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
-import org.jetbrains.kotlin.fir.visitors.FirVisitor
 import org.jetbrains.kotlin.name.ClassId
 
 sealed class FirImplicitBuiltinTypeRef(
-    override val session: FirSession,
-    override val psi: PsiElement?,
-    val id: ClassId
-) : FirImplicitTypeRef, FirResolvedTypeRef {
+    psi: PsiElement?,
+    val id: ClassId,
+    typeArguments: Array<out ConeKotlinTypeProjection> = emptyArray(),
+    isNullable: Boolean = false
+) : FirResolvedTypeRef, FirAbstractElement(psi) {
     override val annotations: List<FirAnnotationCall>
         get() = emptyList()
 
-    override val type: ConeKotlinType = ConeClassTypeImpl(ConeClassLikeLookupTagImpl(id), emptyArray(), false)
-
-    override fun <R, D> accept(visitor: FirVisitor<R, D>, data: D): R =
-        visitor.visitImplicitTypeRef(this, data)
+    override val type: ConeKotlinType = ConeClassTypeImpl(ConeClassLikeLookupTagImpl(id), typeArguments, isNullable)
 }
 
 class FirImplicitUnitTypeRef(
-    session: FirSession,
     psi: PsiElement?
-) : FirImplicitBuiltinTypeRef(session, psi, StandardClassIds.Unit)
+) : FirImplicitBuiltinTypeRef(psi, StandardClassIds.Unit)
 
 class FirImplicitAnyTypeRef(
-    session: FirSession,
     psi: PsiElement?
-) : FirImplicitBuiltinTypeRef(session, psi, StandardClassIds.Any)
+) : FirImplicitBuiltinTypeRef(psi, StandardClassIds.Any)
+
+class FirImplicitNullableAnyTypeRef(
+    psi: PsiElement?
+) : FirImplicitBuiltinTypeRef(psi, StandardClassIds.Any, isNullable = true)
 
 class FirImplicitEnumTypeRef(
-    session: FirSession,
     psi: PsiElement?
-) : FirImplicitBuiltinTypeRef(session, psi, StandardClassIds.Enum)
+) : FirImplicitBuiltinTypeRef(psi, StandardClassIds.Enum)
 
 class FirImplicitAnnotationTypeRef(
-    session: FirSession,
     psi: PsiElement?
-) : FirImplicitBuiltinTypeRef(session, psi, StandardClassIds.Annotation)
+) : FirImplicitBuiltinTypeRef(psi, StandardClassIds.Annotation)
 
 class FirImplicitBooleanTypeRef(
-    session: FirSession,
     psi: PsiElement?
-) : FirImplicitBuiltinTypeRef(session, psi, StandardClassIds.Boolean)
+) : FirImplicitBuiltinTypeRef(psi, StandardClassIds.Boolean)
 
 class FirImplicitNothingTypeRef(
-    session: FirSession,
     psi: PsiElement?
-) : FirImplicitBuiltinTypeRef(session, psi, StandardClassIds.Nothing)
+) : FirImplicitBuiltinTypeRef(psi, StandardClassIds.Nothing)
 
 class FirImplicitStringTypeRef(
-    session: FirSession,
     psi: PsiElement?
-) : FirImplicitBuiltinTypeRef(session, psi, StandardClassIds.String)
+) : FirImplicitBuiltinTypeRef(psi, StandardClassIds.String)
 
+class FirImplicitKPropertyTypeRef(
+    psi: PsiElement?,
+    typeArgument: ConeKotlinTypeProjection
+) : FirImplicitBuiltinTypeRef(psi, StandardClassIds.KProperty, arrayOf(typeArgument))

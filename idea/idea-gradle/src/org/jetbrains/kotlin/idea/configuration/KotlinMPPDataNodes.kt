@@ -9,12 +9,13 @@ import com.intellij.openapi.externalSystem.model.DataNode
 import com.intellij.openapi.externalSystem.model.ProjectKeys
 import com.intellij.openapi.externalSystem.model.project.AbstractExternalEntityData
 import com.intellij.openapi.externalSystem.model.project.AbstractNamedData
+import com.intellij.openapi.externalSystem.model.project.ExternalSystemSourceType
 import com.intellij.openapi.externalSystem.model.project.ModuleData
 import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil
 import com.intellij.openapi.util.Key
+import com.intellij.util.containers.MultiMap
 import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
-import org.jetbrains.kotlin.gradle.KotlinModule
-import org.jetbrains.kotlin.gradle.KotlinPlatform
+import org.jetbrains.kotlin.gradle.*
 import org.jetbrains.kotlin.idea.util.CopyableDataNodeUserDataProperty
 import org.jetbrains.plugins.gradle.util.GradleConstants
 import java.io.File
@@ -24,16 +25,19 @@ import com.intellij.openapi.externalSystem.model.Key as ExternalKey
 var DataNode<out ModuleData>.kotlinSourceSet: KotlinSourceSetInfo?
         by CopyableDataNodeUserDataProperty(Key.create("KOTLIN_SOURCE_SET"))
 
-var DataNode<out ModuleData>.kotlinTargetDataNode: DataNode<KotlinTargetData>?
-        by CopyableDataNodeUserDataProperty(Key.create("KOTLIN_TARGET_DATA_NODE"))
-
 val DataNode<ModuleData>.kotlinAndroidSourceSets: List<KotlinSourceSetInfo>?
         get() = ExternalSystemApiUtil.getChildren(this, KotlinAndroidSourceSetData.KEY).firstOrNull()?.data?.sourceSetInfos
 
 class KotlinSourceSetInfo(val kotlinModule: KotlinModule) : Serializable {
     var moduleId: String? = null
     var gradleModuleId: String = ""
-    var platform: KotlinPlatform = KotlinPlatform.COMMON
+
+    var actualPlatforms: KotlinPlatformContainer = KotlinPlatformContainerImpl()
+
+    @Deprecated("Returns only single TargetPlatform", ReplaceWith("actualPlatforms.actualPlatforms"), DeprecationLevel.ERROR)
+    val platform: KotlinPlatform
+        get() = actualPlatforms.getSinglePlatform()
+
     var defaultCompilerArguments: CommonCompilerArguments? = null
     var compilerArguments: CommonCompilerArguments? = null
     var dependencyClasspath: List<String> = emptyList()
@@ -52,8 +56,15 @@ class KotlinAndroidSourceSetData(
 class KotlinTargetData(name: String) : AbstractNamedData(GradleConstants.SYSTEM_ID, name) {
     var moduleIds: Set<String> = emptySet()
     var archiveFile: File? = null
+    var konanArtifacts: Collection<KonanArtifactModel>? = null
 
     companion object {
         val KEY = ExternalKey.create(KotlinTargetData::class.java, ProjectKeys.MODULE.processingWeight + 1)
+    }
+}
+
+class KotlinOutputPathsData(val paths: MultiMap<ExternalSystemSourceType, String>) : AbstractExternalEntityData(GradleConstants.SYSTEM_ID) {
+    companion object {
+        val KEY = ExternalKey.create(KotlinOutputPathsData::class.java, ProjectKeys.CONTENT_ROOT.processingWeight + 1)
     }
 }

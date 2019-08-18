@@ -27,6 +27,7 @@ interface LambdaAnalyzer {
         receiverType: ConeKotlinType?,
         parameters: List<ConeKotlinType>,
         expectedReturnType: ConeKotlinType?, // null means, that return type is not proper i.e. it depends on some type variables
+        rawReturnType: ConeKotlinType,
         stubsForPostponedVariables: Map<TypeVariableMarker, StubTypeMarker>
     ): Pair<List<FirExpression>, InferenceSession>
 }
@@ -93,6 +94,7 @@ class PostponedArgumentsAnalyzer(
             receiver,
             parameters,
             expectedTypeForReturnArguments,
+            rawReturnType,
             stubsForPostponedVariables
         )
 
@@ -108,6 +110,7 @@ class PostponedArgumentsAnalyzer(
                 lambda.returnType.let(::substitute),
                 lambda.atom.returnTypeRef, // TODO: proper ref
                 checkerSink,
+                false,
                 false,
                 { atom = it },
                 typeProvider

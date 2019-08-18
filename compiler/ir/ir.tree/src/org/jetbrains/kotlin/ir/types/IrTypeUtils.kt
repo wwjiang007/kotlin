@@ -5,11 +5,15 @@
 
 package org.jetbrains.kotlin.ir.types
 
+import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
 import org.jetbrains.kotlin.ir.symbols.FqNameEqualityChecker
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrClassifierSymbol
 import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
 import org.jetbrains.kotlin.ir.util.render
+import org.jetbrains.kotlin.resolve.calls.NewCommonSuperTypeCalculator
+import org.jetbrains.kotlin.types.AbstractTypeChecker
+import org.jetbrains.kotlin.types.AbstractTypeCheckerContext
 import org.jetbrains.kotlin.utils.DFS
 
 fun IrClassifierSymbol.superTypes() = when (this) {
@@ -59,3 +63,30 @@ fun Collection<IrClassifierSymbol>.commonSuperclass(): IrClassifierSymbol {
             ) { it.owner.render() }}"
         )
 }
+
+fun IrType.isSubtypeOf(superType: IrType, irBuiltIns: IrBuiltIns): Boolean {
+    return AbstractTypeChecker.isSubtypeOf(IrTypeCheckerContext(irBuiltIns) as AbstractTypeCheckerContext, this, superType)
+}
+
+fun Collection<IrType>.commonSupertype(irBuiltIns: IrBuiltIns): IrType {
+    return NewCommonSuperTypeCalculator.run {
+        IrTypeCheckerContext(irBuiltIns).commonSuperType(map { it }) as IrType
+    }
+}
+
+fun IrType.isNullable(): Boolean = DFS.ifAny(
+    listOf(this),
+    {
+        when (val classifier = it.classifierOrNull) {
+            is IrTypeParameterSymbol -> classifier.owner.superTypes
+            is IrClassSymbol -> emptyList()
+            null -> emptyList()
+            else -> error("Unsupported classifier: $classifier")
+        }
+    }, {
+        when (it) {
+            is IrSimpleType -> it.hasQuestionMark
+            else -> it is IrDynamicType
+        }
+    }
+)

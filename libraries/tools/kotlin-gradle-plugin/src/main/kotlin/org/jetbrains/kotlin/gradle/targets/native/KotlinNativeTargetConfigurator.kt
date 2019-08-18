@@ -18,14 +18,15 @@ import org.gradle.api.plugins.BasePlugin
 import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.Exec
 import org.gradle.language.base.plugins.LifecycleBasePlugin
-import org.jetbrains.kotlin.gradle.dsl.KotlinNativeBinaryContainer
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation.Companion.MAIN_COMPILATION_NAME
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation.Companion.TEST_COMPILATION_NAME
 import org.jetbrains.kotlin.gradle.plugin.mpp.*
 import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
 import org.jetbrains.kotlin.gradle.tasks.*
 import org.jetbrains.kotlin.gradle.testing.internal.configureConventions
-import org.jetbrains.kotlin.gradle.testing.internal.registerTestTask
+import org.jetbrains.kotlin.gradle.testing.internal.kotlinTestRegistry
+import org.jetbrains.kotlin.gradle.utils.lowerCamelCaseName
+import org.jetbrains.kotlin.konan.target.KonanTarget
 import java.io.File
 import java.util.*
 
@@ -57,7 +58,7 @@ open class KotlinNativeTargetConfigurator(
         producingTask: Task,
         copy: Boolean = false
     ) {
-        if (!compilation.target.enabledOnCurrentHost) {
+        if (!compilation.target.konanTarget.enabledOnCurrentHost) {
             return
         }
 
@@ -116,49 +117,30 @@ open class KotlinNativeTargetConfigurator(
             this.binary = binary
             group = BasePlugin.BUILD_GROUP
             description = "Links ${binary.outputKind.description} '${binary.name}' for a target '${target.name}'."
-            enabled = target.enabledOnCurrentHost
+            enabled = target.konanTarget.enabledOnCurrentHost
             destinationDir = binary.outputDirectory
             addCompilerPlugins()
 
-            tasks.maybeCreate(target.artifactsTaskName).dependsOn(this)
-            tasks.maybeCreate(LifecycleBasePlugin.ASSEMBLE_TASK_NAME).dependsOn(this)
+            if (binary !is TestExecutable) {
+                tasks.maybeCreate(target.artifactsTaskName).dependsOn(this)
+                tasks.maybeCreate(LifecycleBasePlugin.ASSEMBLE_TASK_NAME).dependsOn(this)
+            }
         }
     }
 
     private fun Project.createRunTask(binary: Executable) {
         val taskName = binary.runTaskName ?: return
+        tasks.create(taskName, Exec::class.java).apply {
+            group = RUN_GROUP
+            description = "Executes Kotlin/Native executable ${binary.name} for target ${binary.target.name}"
 
-        if (binary.isDefaultTestExecutable) {
-            val testTask = createOrRegisterTask<KotlinNativeTest>(taskName) { testTask ->
-                testTask.group = LifecycleBasePlugin.VERIFICATION_GROUP
-                testTask.description = "Executes Kotlin/Native unit tests for target ${binary.target.name}."
-                testTask.targetName = binary.compilation.target.targetName
+            enabled = binary.target.konanTarget.isCurrentHost
 
-                testTask.enabled = binary.target.konanTarget.isCurrentHost
+            executable = binary.outputFile.absolutePath
+            workingDir = project.projectDir
 
-                testTask.executable = binary.outputFile
-                testTask.workingDir = project.projectDir.absolutePath
-
-                testTask.onlyIf { binary.outputFile.exists() }
-                testTask.dependsOn(binary.linkTaskName)
-
-                testTask.configureConventions()
-            }
-
-            registerTestTask(testTask)
-        } else {
-            tasks.create(taskName, Exec::class.java).apply {
-                group = RUN_GROUP
-                description = "Executes Kotlin/Native executable ${binary.name} for target ${binary.target.name}"
-
-                enabled = binary.target.konanTarget.isCurrentHost
-
-                executable = binary.outputFile.absolutePath
-                workingDir = project.projectDir
-
-                onlyIf { binary.outputFile.exists() }
-                dependsOn(binary.linkTaskName)
-            }
+            onlyIf { binary.outputFile.exists() }
+            dependsOn(binary.linkTaskName)
         }
     }
 
@@ -171,7 +153,7 @@ open class KotlinNativeTargetConfigurator(
             group = BasePlugin.BUILD_GROUP
             description = "Compiles a klibrary from the '${compilation.name}' " +
                     "compilation for target '${compilation.platformType.name}'."
-            enabled = compilation.target.enabledOnCurrentHost
+            enabled = compilation.target.konanTarget.enabledOnCurrentHost
 
             destinationDir = klibOutputDirectory(compilation)
             addCompilerPlugins()
@@ -182,7 +164,7 @@ open class KotlinNativeTargetConfigurator(
 
         project.tasks.getByName(compilation.compileAllTaskName).dependsOn(compileTask)
 
-        if (compilation.compilationName == KotlinCompilation.MAIN_COMPILATION_NAME) {
+        if (compilation.compilationName == MAIN_COMPILATION_NAME) {
             project.tasks.getByName(compilation.target.artifactsTaskName).apply {
                 dependsOn(compileTask)
             }
@@ -202,7 +184,7 @@ open class KotlinNativeTargetConfigurator(
                 description = "Generates Kotlin/Native interop library '${interop.name}' " +
                         "for compilation '${compilation.name}'" +
                         "of target '${konanTarget.name}'."
-                enabled = compilation.target.enabledOnCurrentHost
+                enabled = compilation.target.konanTarget.enabledOnCurrentHost
 
                 val interopOutput = project.files(outputFileProvider).builtBy(this)
                 with(compilation) {
@@ -249,9 +231,32 @@ open class KotlinNativeTargetConfigurator(
         }
     }
 
-    override fun configureTest(target: KotlinNativeTarget) {
-        target.binaries.defaultTestExecutable {
-            compilation = target.compilations.maybeCreate(TEST_COMPILATION_NAME)
+    override fun configureTest(target: KotlinNativeTarget): Unit = with(target.project) {
+        // We create test binaries for all platforms.
+        target.binaries.test(listOf(NativeBuildType.DEBUG)) {
+
+            // But run them only on host ones.
+            if (target.konanTarget in listOf(KonanTarget.MACOS_X64, KonanTarget.MINGW_X64, KonanTarget.LINUX_X64)) {
+
+                val taskName = lowerCamelCaseName(target.disambiguationClassifier, testTaskNameSuffix)
+                val testTask = createOrRegisterTask<KotlinNativeTest>(taskName) { testTask ->
+                    testTask.group = LifecycleBasePlugin.VERIFICATION_GROUP
+                    testTask.description = "Executes Kotlin/Native unit tests for target ${target.name}."
+                    testTask.targetName = compilation.target.targetName
+
+                    testTask.enabled = target.konanTarget.isCurrentHost
+
+                    testTask.executable { outputFile }
+                    testTask.workingDir = project.projectDir.absolutePath
+
+                    testTask.onlyIf { outputFile.exists() }
+                    testTask.dependsOn(linkTaskName)
+
+                    testTask.configureConventions()
+                }
+
+                kotlinTestRegistry.registerTestTask(testTask)
+            }
         }
     }
 

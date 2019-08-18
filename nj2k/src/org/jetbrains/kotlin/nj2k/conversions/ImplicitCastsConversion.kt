@@ -5,7 +5,12 @@
 
 package org.jetbrains.kotlin.nj2k.conversions
 
-import org.jetbrains.kotlin.nj2k.*
+import org.jetbrains.kotlin.nj2k.NewJ2kConverterContext
+import org.jetbrains.kotlin.nj2k.copyTreeAndDetach
+import org.jetbrains.kotlin.nj2k.isEquals
+import org.jetbrains.kotlin.nj2k.parenthesizeIfBinaryExpression
+import org.jetbrains.kotlin.nj2k.symbols.isUnresolved
+import org.jetbrains.kotlin.nj2k.symbols.parameterTypesWithUnfoldedVarargs
 import org.jetbrains.kotlin.nj2k.tree.*
 import org.jetbrains.kotlin.nj2k.tree.impl.*
 import org.jetbrains.kotlin.resolve.jvm.JvmPrimitiveType
@@ -75,7 +80,7 @@ class ImplicitCastsConversion(private val context: NewJ2kConverterContext) : Rec
 
 
     private fun convertMethodCallExpression(expression: JKMethodCallExpression) {
-        if (expression.identifier.isUnresolved()) return
+        if (expression.identifier.isUnresolved) return
         val parameterTypes = expression.identifier.parameterTypesWithUnfoldedVarargs() ?: return
         val newArguments =
             (expression.arguments.arguments.asSequence() zip parameterTypes)
@@ -92,7 +97,6 @@ class ImplicitCastsConversion(private val context: NewJ2kConverterContext) : Rec
         }
     }
 
-
     private fun JKExpression.castStringToRegex(toType: JKType): JKExpression? {
         if (toType.safeAs<JKClassType>()?.classReference?.fqName != "java.util.regex.Pattern") return null
         val expressionType = type(context.symbolProvider) ?: return null
@@ -101,7 +105,7 @@ class ImplicitCastsConversion(private val context: NewJ2kConverterContext) : Rec
             copyTreeAndDetach().parenthesizeIfBinaryExpression(),
             JKKtQualifierImpl.DOT,
             JKKtCallExpressionImpl(
-                context.symbolProvider.provideByFqName("kotlin.text.toRegex", multiResolve = true),
+                context.symbolProvider.provideMethodSymbol("kotlin.text.toRegex"),
                 JKArgumentListImpl(),
                 JKTypeArgumentListImpl()
             )
@@ -133,7 +137,7 @@ class ImplicitCastsConversion(private val context: NewJ2kConverterContext) : Rec
                 return JKJavaLiteralExpressionImpl(
                     literal,
                     expectedType
-                ).fixLiteral(expectedType)
+                )
             }
         }
 
@@ -143,7 +147,7 @@ class ImplicitCastsConversion(private val context: NewJ2kConverterContext) : Rec
             this.copyTreeAndDetach(),
             JKKtQualifierImpl.DOT,
             JKJavaMethodCallExpressionImpl(
-                context.symbolProvider.provideByFqName("kotlin.$initialTypeName.$conversionFunctionName"),
+                context.symbolProvider.provideMethodSymbol("kotlin.$initialTypeName.$conversionFunctionName"),
                 JKArgumentListImpl()
             )
         )

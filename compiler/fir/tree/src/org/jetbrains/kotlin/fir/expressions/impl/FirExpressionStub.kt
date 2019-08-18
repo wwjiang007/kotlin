@@ -6,10 +6,5 @@
 package org.jetbrains.kotlin.fir.expressions.impl
 
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.fir.FirSession
-import org.jetbrains.kotlin.fir.expressions.FirExpression
 
-class FirExpressionStub(
-    session: FirSession,
-    psi: PsiElement?
-) : FirAbstractExpression(session, psi)
+class FirExpressionStub(psi: PsiElement?) : FirUnknownTypeExpression(psi)

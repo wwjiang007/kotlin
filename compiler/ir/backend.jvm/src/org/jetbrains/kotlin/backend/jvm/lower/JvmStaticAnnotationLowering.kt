@@ -24,11 +24,13 @@ import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
-import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.expressions.IrBody
+import org.jetbrains.kotlin.ir.expressions.IrCall
+import org.jetbrains.kotlin.ir.expressions.IrExpression
+import org.jetbrains.kotlin.ir.expressions.IrTypeOperator
 import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.impl.IrSimpleFunctionSymbolImpl
-import org.jetbrains.kotlin.ir.types.classifierOrFail
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
@@ -132,12 +134,14 @@ private class CompanionObjectJvmStaticLowering(val context: JvmBackendContext) :
 
         call.passTypeArgumentsFrom(proxy)
 
-        call.dispatchReceiver = IrGetFieldImpl(
-            UNDEFINED_OFFSET,
-            UNDEFINED_OFFSET,
-            companionInstanceFieldSymbol,
-            companion.defaultType
-        )
+        target.dispatchReceiverParameter?.let { _ ->
+            call.dispatchReceiver = IrGetFieldImpl(
+                UNDEFINED_OFFSET,
+                UNDEFINED_OFFSET,
+                companionInstanceFieldSymbol,
+                companion.defaultType
+            )
+        }
         proxy.extensionReceiverParameter?.let { extensionReceiver ->
             call.extensionReceiver = IrGetValueImpl(
                 UNDEFINED_OFFSET,
@@ -198,7 +202,7 @@ private class MakeCallsStatic(
                     oldReceiver.startOffset, oldReceiver.endOffset,
                     context.irBuiltIns.unitType,
                     IrTypeOperator.IMPLICIT_COERCION_TO_UNIT,
-                    context.irBuiltIns.unitType, context.irBuiltIns.unitType.classifierOrFail,
+                    context.irBuiltIns.unitType,
                     oldReceiver
                 )
 

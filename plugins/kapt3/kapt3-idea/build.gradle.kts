@@ -12,6 +12,9 @@ dependencies {
     compile(project(":idea:idea-core"))
     compile(project(":idea:idea-gradle"))
     compileOnly(intellijDep())
+    Platform[192].orHigher {
+        compileOnly(intellijPluginDep("java"))
+    }
     compileOnly(intellijPluginDep("gradle"))
     compileOnly(intellijPluginDep("android"))
 }

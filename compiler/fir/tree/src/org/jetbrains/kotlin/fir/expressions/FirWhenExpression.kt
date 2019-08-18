@@ -5,19 +5,20 @@
 
 package org.jetbrains.kotlin.fir.expressions
 
+import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.fir.expressions.impl.FirUnknownTypeExpression
 import org.jetbrains.kotlin.fir.visitors.FirVisitor
 
-interface FirWhenExpression : FirExpression {
-    val subject: FirExpression?
+abstract class FirWhenExpression(psi: PsiElement?) : FirUnknownTypeExpression(psi) {
+    abstract val subject: FirExpression?
 
     // when (val subjectVariable = subject()) { ... }
-    val subjectVariable: FirVariable?
+    abstract val subjectVariable: FirVariable<*>?
 
-    val branches: List<FirWhenBranch>
+    abstract val branches: List<FirWhenBranch>
 
     override fun <R, D> accept(visitor: FirVisitor<R, D>, data: D): R =
         visitor.visitWhenExpression(this, data)
-
 
     override fun <R, D> acceptChildren(visitor: FirVisitor<R, D>, data: D) {
         subjectVariable?.accept(visitor, data) ?: subject?.accept(visitor, data)

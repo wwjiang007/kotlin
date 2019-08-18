@@ -34,6 +34,11 @@ public class FirResolveTestCaseWithStdlibGenerated extends AbstractFirResolveTes
         runTest("compiler/fir/resolve/testData/resolve/stdlib/arrayFirstOrNull.kt");
     }
 
+    @TestMetadata("backingField.kt")
+    public void testBackingField() throws Exception {
+        runTest("compiler/fir/resolve/testData/resolve/stdlib/backingField.kt");
+    }
+
     @TestMetadata("companionLoad.kt")
     public void testCompanionLoad() throws Exception {
         runTest("compiler/fir/resolve/testData/resolve/stdlib/companionLoad.kt");
@@ -49,6 +54,11 @@ public class FirResolveTestCaseWithStdlibGenerated extends AbstractFirResolveTes
         runTest("compiler/fir/resolve/testData/resolve/stdlib/concurrent.kt");
     }
 
+    @TestMetadata("exception.kt")
+    public void testException() throws Exception {
+        runTest("compiler/fir/resolve/testData/resolve/stdlib/exception.kt");
+    }
+
     @TestMetadata("factoryFunctionOverloads.kt")
     public void testFactoryFunctionOverloads() throws Exception {
         runTest("compiler/fir/resolve/testData/resolve/stdlib/factoryFunctionOverloads.kt");
@@ -57,6 +67,11 @@ public class FirResolveTestCaseWithStdlibGenerated extends AbstractFirResolveTes
     @TestMetadata("functionX.kt")
     public void testFunctionX() throws Exception {
         runTest("compiler/fir/resolve/testData/resolve/stdlib/functionX.kt");
+    }
+
+    @TestMetadata("hashSet.kt")
+    public void testHashSet() throws Exception {
+        runTest("compiler/fir/resolve/testData/resolve/stdlib/hashSet.kt");
     }
 
     @TestMetadata("helloWorld.kt")
@@ -69,9 +84,34 @@ public class FirResolveTestCaseWithStdlibGenerated extends AbstractFirResolveTes
         runTest("compiler/fir/resolve/testData/resolve/stdlib/mapList.kt");
     }
 
+    @TestMetadata("recursiveBug.kt")
+    public void testRecursiveBug() throws Exception {
+        runTest("compiler/fir/resolve/testData/resolve/stdlib/recursiveBug.kt");
+    }
+
     @TestMetadata("reflectionClass.kt")
     public void testReflectionClass() throws Exception {
         runTest("compiler/fir/resolve/testData/resolve/stdlib/reflectionClass.kt");
+    }
+
+    @TestMetadata("simpleDelegateProvider.kt")
+    public void testSimpleDelegateProvider() throws Exception {
+        runTest("compiler/fir/resolve/testData/resolve/stdlib/simpleDelegateProvider.kt");
+    }
+
+    @TestMetadata("simpleDelegatedToMap.kt")
+    public void testSimpleDelegatedToMap() throws Exception {
+        runTest("compiler/fir/resolve/testData/resolve/stdlib/simpleDelegatedToMap.kt");
+    }
+
+    @TestMetadata("simpleLazy.kt")
+    public void testSimpleLazy() throws Exception {
+        runTest("compiler/fir/resolve/testData/resolve/stdlib/simpleLazy.kt");
+    }
+
+    @TestMetadata("topLevelResolve.kt")
+    public void testTopLevelResolve() throws Exception {
+        runTest("compiler/fir/resolve/testData/resolve/stdlib/topLevelResolve.kt");
     }
 
     @TestMetadata("typeAliasDeserialization.kt")

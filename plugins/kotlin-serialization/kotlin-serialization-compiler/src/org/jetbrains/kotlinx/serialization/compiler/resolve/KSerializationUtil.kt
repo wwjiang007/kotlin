@@ -18,19 +18,18 @@ package org.jetbrains.kotlinx.serialization.compiler.resolve
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.annotations.Annotated
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.resolve.descriptorUtil.classId
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.resolve.lazy.descriptors.LazyAnnotationDescriptor
 import org.jetbrains.kotlin.resolve.scopes.getDescriptorsFiltered
 import org.jetbrains.kotlin.types.*
-import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
-import org.jetbrains.kotlin.types.typeUtil.supertypes
-import org.jetbrains.kotlinx.serialization.compiler.backend.jvm.contextSerializerId
-import org.jetbrains.kotlinx.serialization.compiler.backend.jvm.enumSerializerId
-import org.jetbrains.kotlinx.serialization.compiler.backend.jvm.polymorphicSerializerId
+import org.jetbrains.kotlin.types.typeUtil.*
+import org.jetbrains.kotlinx.serialization.compiler.backend.jvm.*
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.KSERIALIZER_CLASS
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerializationAnnotations.serialInfoFqName
 
@@ -60,7 +59,7 @@ internal fun ClassDescriptor.createSerializerTypeFor(argument: SimpleType, baseS
     val projectionType = Variance.INVARIANT
     val types = listOf(TypeProjectionImpl(projectionType, argument))
     val descriptor = module.findClassAcrossModuleDependencies(ClassId.topLevel(baseSerializerInterface))
-        ?: throw IllegalArgumentException("Can't locate $baseSerializerInterface")
+        ?: throw IllegalArgumentException("Can't locate $baseSerializerInterface. Is kotlinx-serialization library present in compile classpath?")
     return KotlinTypeFactory.simpleNotNullType(Annotations.EMPTY, descriptor, types)
 }
 
@@ -97,7 +96,13 @@ internal val Annotations.serialTransient: Boolean
 
 val KotlinType?.toClassDescriptor: ClassDescriptor?
     @JvmName("toClassDescriptor")
-    get() = this?.constructor?.declarationDescriptor as? ClassDescriptor
+    get() = this?.constructor?.declarationDescriptor?.let { descriptor ->
+        when(descriptor) {
+            is ClassDescriptor -> descriptor
+            is TypeParameterDescriptor -> descriptor.representativeUpperBound.toClassDescriptor
+            else -> null
+        }
+    }
 
 internal val ClassDescriptor.shouldHaveGeneratedMethodsInCompanion: Boolean
     get() = this.kind == ClassKind.CLASS && annotations.hasAnnotation(SerializationAnnotations.serializableAnnotationFqName)
@@ -113,11 +118,14 @@ internal val ClassDescriptor.hasSerializableAnnotationWithoutArgs: Boolean
         if (!annotations.hasAnnotation(SerializationAnnotations.serializableAnnotationFqName)) return false
         // If provided descriptor is lazy, carefully look at psi in order not to trigger full resolve which may be recursive.
         // Otherwise, this descriptor is deserialized from another module and it is OK to check value right away.
-        val lazyDesc = annotations.findAnnotation(SerializationAnnotations.serializableAnnotationFqName)
-                as? LazyAnnotationDescriptor ?: return (serializableWith == null)
-        val psi = lazyDesc.annotationEntry
+        val psi = findSerializableAnnotationDeclaration() ?: return (serializableWith == null)
         return psi.valueArguments.isEmpty()
     }
+
+internal fun Annotated.findSerializableAnnotationDeclaration(): KtAnnotationEntry? {
+    val lazyDesc = annotations.findAnnotation(SerializationAnnotations.serializableAnnotationFqName) as? LazyAnnotationDescriptor
+    return lazyDesc?.annotationEntry
+}
 
 // For abstract classes marked with @Serializable,
 // methods are generated anyway although they shouldn't have
@@ -155,21 +163,11 @@ internal val ClassDescriptor.hasCompanionObjectAsSerializer: Boolean
 
 internal fun ClassDescriptor.isSerializerWhichRequiersKClass() = classId in setOf(enumSerializerId, contextSerializerId, polymorphicSerializerId)
 
-internal fun checkSerializerNullability(classType: KotlinType, serializerType: KotlinType): KotlinType {
-    val castedToKSerial = requireNotNull(
-        serializerType.supertypes().find { isKSerializer(it) },
-        { "${KSERIALIZER_CLASS} is not a supertype of $serializerType" }
-    )
-    if (!classType.isMarkedNullable && castedToKSerial.arguments.first().type.isMarkedNullable)
-        throw IllegalStateException("Can't serialize non-nullable field of type ${classType} with nullable serializer ${serializerType}")
-    return serializerType
-}
-
 // returns only user-overriden Serializer
 internal val KotlinType.overridenSerializer: KotlinType?
     get() {
         val desc = this.toClassDescriptor ?: return null
-        (desc.serializableWith)?.let { return checkSerializerNullability(this, it) }
+        desc.serializableWith?.let { return it }
         if (desc.annotations.hasAnnotation(SerializationAnnotations.polymorphicFqName))
             return desc.module.getClassFromSerializationPackage(SpecialBuiltins.polymorphicSerializer).defaultType
         return null

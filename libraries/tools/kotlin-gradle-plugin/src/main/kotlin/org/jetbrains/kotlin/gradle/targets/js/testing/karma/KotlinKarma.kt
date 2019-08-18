@@ -18,26 +18,26 @@ import org.jetbrains.kotlin.gradle.internal.testing.TCServiceMessagesTestExecuti
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJsCompilation
 import org.jetbrains.kotlin.gradle.targets.js.appendConfigsFromDir
 import org.jetbrains.kotlin.gradle.targets.js.internal.parseNodeJsStackTraceAsJvm
-import org.jetbrains.kotlin.gradle.targets.js.nodejs.nodeJs
 import org.jetbrains.kotlin.gradle.targets.js.NpmPackageVersion
 import org.jetbrains.kotlin.gradle.targets.js.RequiredKotlinJsDependency
+import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin
 import org.jetbrains.kotlin.gradle.targets.js.npm.npmProject
 import org.jetbrains.kotlin.gradle.targets.js.testing.KotlinJsTest
 import org.jetbrains.kotlin.gradle.targets.js.testing.KotlinJsTestFramework
 import org.jetbrains.kotlin.gradle.targets.js.testing.karma.KarmaConfig.CoverageReporter.Reporter
-import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfigWriter
+import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 import org.jetbrains.kotlin.gradle.testing.internal.reportsDir
 import org.slf4j.Logger
 import java.io.File
 
 class KotlinKarma(override val compilation: KotlinJsCompilation) : KotlinJsTestFramework {
-    val project: Project
-        get() = compilation.target.project
+    private val project: Project = compilation.target.project
+    private val nodeJs = NodeJsRootPlugin.apply(project.rootProject)
+    private val versions = nodeJs.versions
 
     private val config: KarmaConfig = KarmaConfig()
     private val requiredDependencies = mutableSetOf<NpmPackageVersion>()
 
-    private val versions = project.nodeJs.versions
     private val configurators = mutableListOf<(KotlinJsTest) -> Unit>()
     private val confJsWriters = mutableListOf<(Appendable) -> Unit>()
     private var sourceMaps = false
@@ -70,6 +70,8 @@ class KotlinKarma(override val compilation: KotlinJsCompilation) : KotlinJsTestF
         config.singleRun = false
         config.autoWatch = true
     }
+
+    fun useConfigDirectory(dir: String) = useConfigDirectory(File(dir))
 
     fun useConfigDirectory(dir: File) {
         configDirectory = dir
@@ -104,6 +106,16 @@ class KotlinKarma(override val compilation: KotlinJsCompilation) : KotlinJsTestF
 
     private fun useWebpack() {
         requiredDependencies.add(versions.karmaWebpack)
+        requiredDependencies.add(versions.webpack)
+
+        val webpackConfigWriter = KotlinWebpackConfig(
+            configDirectory = project.projectDir.resolve("webpack.config.d").takeIf { it.isDirectory },
+            sourceMaps = true,
+            export = false,
+            progressReporter = true,
+            progressReporterPathFilter = nodeJs.rootPackageDir.absolutePath
+        )
+        requiredDependencies.addAll(webpackConfigWriter.getRequiredDependencies(versions))
 
         addPreprocessor("webpack")
         confJsWriters.add {
@@ -111,13 +123,7 @@ class KotlinKarma(override val compilation: KotlinJsCompilation) : KotlinJsTestF
             it.appendln("// webpack config")
             it.appendln("function createWebpackConfig() {")
 
-            KotlinWebpackConfigWriter(
-                configDirectory = project.projectDir.resolve("webpack.config.d").takeIf { it.isDirectory },
-                sourceMaps = true,
-                export = false,
-                progressReporter = true,
-                progressReporterPathFilter = project.nodeJs.root.rootPackageDir.absolutePath
-            ).appendTo(it)
+            webpackConfigWriter.appendTo(it)
 
             it.appendln("   return config;")
             it.appendln("}")
@@ -125,6 +131,11 @@ class KotlinKarma(override val compilation: KotlinJsCompilation) : KotlinJsTestF
             it.appendln("config.set({webpack: createWebpackConfig()});")
             it.appendln()
         }
+
+        requiredDependencies.add(versions.webpack)
+        requiredDependencies.add(versions.webpackCli)
+        requiredDependencies.add(versions.sourceMapLoader)
+        requiredDependencies.add(versions.sourceMapSupport)
     }
 
     fun useCoverage(
@@ -190,6 +201,10 @@ class KotlinKarma(override val compilation: KotlinJsCompilation) : KotlinJsTestF
         forkOptions: ProcessForkOptions,
         nodeJsArgs: MutableList<String>
     ): TCServiceMessagesTestExecutionSpec {
+        if (config.browsers.isEmpty()) {
+            error("No browsers configured for $task")
+        }
+
         val clientSettings = TCServiceMessagesClientSettings(
             task.name,
             testNameSuffix = task.targetName,

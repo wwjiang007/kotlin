@@ -7,12 +7,14 @@ package org.jetbrains.kotlin.resolve.calls.components
 
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.resolve.calls.inference.NewConstraintSystem
+import org.jetbrains.kotlin.resolve.calls.inference.addSubtypeConstraintIfCompatible
 import org.jetbrains.kotlin.resolve.calls.inference.components.KotlinConstraintSystemCompleter
 import org.jetbrains.kotlin.resolve.calls.inference.components.KotlinConstraintSystemCompleter.ConstraintSystemCompletionMode
 import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintStorage.Empty.hasContradiction
 import org.jetbrains.kotlin.resolve.calls.inference.model.ExpectedTypeConstraintPosition
 import org.jetbrains.kotlin.resolve.calls.model.*
 import org.jetbrains.kotlin.resolve.calls.tower.forceResolution
+import org.jetbrains.kotlin.resolve.descriptorUtil.hasExactAnnotation
 import org.jetbrains.kotlin.types.ErrorUtils
 import org.jetbrains.kotlin.types.TypeUtils
 import org.jetbrains.kotlin.types.UnwrappedType
@@ -133,7 +135,10 @@ class KotlinCallCompleter(
         val candidate = candidates.singleOrNull()
 
         // this is needed at least for non-local return checker, because when we analyze lambda we should already bind descriptor for outer call
-        candidate?.resolvedCall?.let { resolutionCallbacks.bindStubResolvedCallForCandidate(it) }
+        candidate?.resolvedCall?.let {
+            resolutionCallbacks.bindStubResolvedCallForCandidate(it)
+            resolutionCallbacks.disableContractsIfNecessary(it)
+        }
 
         return candidate ?: factory.createErrorCandidate().forceResolution()
     }
@@ -150,17 +155,29 @@ class KotlinCallCompleter(
         resolutionCallbacks: KotlinResolutionCallbacks
     ) {
         if (returnType == null) return
-        if (expectedType == null || TypeUtils.noExpectedType(expectedType)) return
+        if (expectedType == null || (TypeUtils.noExpectedType(expectedType) && expectedType !== TypeUtils.UNIT_EXPECTED_TYPE)) return
 
-        // This is needed to avoid multiple mismatch errors as we type check resulting type against expected one later
-        // Plus, it helps with IDE-tests where it's important to have particular diagnostics.
-        // Note that it aligns with the old inference, see CallCompleter.completeResolvedCallAndArguments
-        if (csBuilder.currentStorage().notFixedTypeVariables.isEmpty()) return
+        when {
+            csBuilder.currentStorage().notFixedTypeVariables.isEmpty() -> {
+                // This is needed to avoid multiple mismatch errors as we type check resulting type against expected one later
+                // Plus, it helps with IDE-tests where it's important to have particular diagnostics.
+                // Note that it aligns with the old inference, see CallCompleter.completeResolvedCallAndArguments
+                return
+            }
 
-        // We don't add expected type constraint for constant expression like "1 + 1" because of type coercion for numbers:
-        // val a: Long = 1 + 1, note that result type of "1 + 1" will be Int and adding constraint with Long will produce type mismatch
-        if (!resolutionCallbacks.isCompileTimeConstant(resolvedCall, expectedType)) {
-            csBuilder.addSubtypeConstraint(returnType, expectedType, ExpectedTypeConstraintPosition(resolvedCall.atom))
+            expectedType === TypeUtils.UNIT_EXPECTED_TYPE ->
+                csBuilder.addSubtypeConstraintIfCompatible(
+                    returnType, csBuilder.builtIns.unitType, ExpectedTypeConstraintPosition(resolvedCall.atom)
+                )
+
+            resolutionCallbacks.isCompileTimeConstant(resolvedCall, expectedType) -> {
+                // We don't add expected type constraint for constant expression like "1 + 1" because of type coercion for numbers:
+                // val a: Long = 1 + 1, note that result type of "1 + 1" will be Int and adding constraint with Long will produce type mismatch
+                return
+            }
+
+            else ->
+                csBuilder.addSubtypeConstraint(returnType, expectedType, ExpectedTypeConstraintPosition(resolvedCall.atom))
         }
     }
 
@@ -211,7 +228,7 @@ class KotlinCallCompleter(
 
             val constraints = variableWithConstraints.constraints
             val onlyProperEqualConstraints =
-                constraints.isNotEmpty() && constraints.all { it.kind.isEqual() && csBuilder.isProperType(it.type) }
+                constraints.isNotEmpty() && constraints.any { it.kind.isEqual() && csBuilder.isProperType(it.type) }
 
             if (!onlyProperEqualConstraints) return false
         }
@@ -226,13 +243,15 @@ class KotlinCallCompleter(
         val constructor = typeVariable.constructor
         val variableWithConstraints = csBuilder.currentStorage().notFixedTypeVariables[constructor] ?: return false
         val constraints = variableWithConstraints.constraints
-        return constraints.isNotEmpty() && constraints.all {
+        return constraints.isNotEmpty() && constraints.anyOrAll(requireAll = typeVariable.hasExactAnnotation()) {
             !it.type.typeConstructor(context).isIntegerLiteralTypeConstructor(context) &&
                     (it.kind.isLower() || it.kind.isEqual()) &&
                     csBuilder.isProperType(it.type)
         }
-
     }
+
+    private inline fun <T> Iterable<T>.anyOrAll(requireAll: Boolean, p: (T) -> Boolean): Boolean =
+        if (requireAll) all(p) else any(p)
 
     private fun KotlinResolutionCandidate.computeReturnTypeWithSmartCastInfo(
         returnType: UnwrappedType,

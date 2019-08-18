@@ -11,6 +11,7 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.impl.source.tree.LeafPsiElement;
 import kotlin.Pair;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.analyzer.ModuleInfo;
 import org.jetbrains.kotlin.cfg.WhenMissingCase;
 import org.jetbrains.kotlin.config.LanguageFeature;
 import org.jetbrains.kotlin.config.LanguageVersion;
@@ -266,6 +267,8 @@ public interface Errors {
 
     DiagnosticFactory1<PsiElement, FqName> EXPERIMENTAL_UNSIGNED_LITERALS = DiagnosticFactory1.create(WARNING);
     DiagnosticFactory1<PsiElement, FqName> EXPERIMENTAL_UNSIGNED_LITERALS_ERROR = DiagnosticFactory1.create(ERROR);
+
+    DiagnosticFactory0<PsiElement> NON_PARENTHESIZED_ANNOTATIONS_ON_FUNCTIONAL_TYPES = DiagnosticFactory0.create(ERROR);
 
     // Const
     DiagnosticFactory0<PsiElement> CONST_VAL_NOT_TOP_LEVEL_OR_OBJECT = DiagnosticFactory0.create(ERROR);
@@ -644,6 +647,10 @@ public interface Errors {
             DiagnosticFactory3.create(ERROR, INCOMPATIBLE_DECLARATION);
     DiagnosticFactory2<KtNamedDeclaration, MemberDescriptor,
             Map<Incompatible, Collection<MemberDescriptor>>> ACTUAL_WITHOUT_EXPECT =
+            DiagnosticFactory2.create(ERROR, INCOMPATIBLE_DECLARATION);
+    DiagnosticFactory2<KtNamedDeclaration, DeclarationDescriptor, Collection<String>> AMBIGUOUS_ACTUALS =
+            DiagnosticFactory2.create(ERROR, INCOMPATIBLE_DECLARATION);
+    DiagnosticFactory2<KtNamedDeclaration, DeclarationDescriptor, Collection<String>> AMBIGUOUS_EXPECTS =
             DiagnosticFactory2.create(ERROR, INCOMPATIBLE_DECLARATION);
 
     DiagnosticFactory2<KtNamedDeclaration, ClassDescriptor,

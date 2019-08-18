@@ -28,7 +28,12 @@ val projectsToShadow by extra(listOf(
         ":core:descriptors",
         ":core:descriptors.jvm",
         ":core:deserialization",
-        ":idea:eval4j",
+        ":idea:jvm-debugger:eval4j",
+        ":idea:jvm-debugger:jvm-debugger-util",
+        ":idea:jvm-debugger:jvm-debugger-core",
+        ":idea:jvm-debugger:jvm-debugger-evaluation",
+        ":idea:jvm-debugger:jvm-debugger-sequence",
+        ":idea:idea-j2k",
         ":idea:formatter",
         ":compiler:psi",
         ":compiler:fir:cones",
@@ -69,23 +74,40 @@ val projectsToShadow by extra(listOf(
         ":j2k",
         ":nj2k",
         ":nj2k:nj2k-services",
-        ":kotlin-allopen-compiler-plugin",
-        ":kotlin-noarg-compiler-plugin",
-        ":kotlin-sam-with-receiver-compiler-plugin",
         ":kotlin-scripting-idea",
-        ":kotlinx-serialization-compiler-plugin",
         ":kotlinx-serialization-ide-plugin",
         ":idea:idea-android",
         ":idea:idea-android-output-parser",
         ":idea:idea-jvm",
         ":idea:idea-git",
         ":idea:idea-jps-common",
-        ":plugins:android-extensions-compiler",
         *if (Ide.IJ())
             arrayOf(":idea:idea-maven")
         else
             emptyArray<String>()
 ))
+
+// Projects published to maven copied to the plugin as separate jars
+val libraryProjects = listOf(
+    ":kotlin-reflect",
+    ":kotlin-compiler-client-embeddable",
+    ":kotlin-daemon-client",
+    ":kotlin-daemon-client-new",
+    ":kotlin-daemon",
+    ":kotlin-script-runtime",
+    ":kotlin-script-util",
+    ":kotlin-scripting-common",
+    ":kotlin-scripting-compiler-impl",
+    ":kotlin-scripting-intellij",
+    ":kotlin-scripting-jvm",
+    ":kotlin-util-io",
+    ":kotlin-util-klib",
+    ":kotlin-allopen-compiler-plugin",
+    ":kotlin-noarg-compiler-plugin",
+    ":kotlin-sam-with-receiver-compiler-plugin",
+    ":plugins:android-extensions-compiler",
+    ":kotlinx-serialization-compiler-plugin"
+)
 
 // Gradle tooling model jars are loaded into Gradle during import and should present in plugin as separate jar
 val gradleToolingModel by configurations.creating
@@ -117,19 +139,10 @@ dependencies {
     libraries(commonDep("io.javaslang", "javaslang"))
 
     libraries(kotlinStdlib("jdk8"))
-    libraries(project(":kotlin-reflect"))
-    libraries(project(":kotlin-compiler-client-embeddable"))
-    libraries(project(":kotlin-daemon-client"))
-    libraries(project(":kotlin-daemon-client-new"))
-    libraries(project(":kotlin-daemon")) {
-        isTransitive = false
+
+    libraryProjects.forEach {
+        libraries(project(it)) { isTransitive = false }
     }
-    libraries(project(":kotlin-script-runtime"))
-    libraries(project(":kotlin-script-util"))
-    libraries(project(":kotlin-scripting-common"))
-    libraries(project(":kotlin-scripting-compiler-impl"))
-    libraries(project(":kotlin-scripting-intellij"))
-    libraries(project(":kotlin-scripting-jvm"))
 
     gradleToolingModel(project(":idea:kotlin-gradle-tooling")) { isTransitive = false }
     gradleToolingModel(project(":sam-with-receiver-ide-plugin")) { isTransitive = false }
@@ -138,7 +151,7 @@ dependencies {
     gradleToolingModel(project(":noarg-ide-plugin")) { isTransitive = false }
     gradleToolingModel(project(":allopen-ide-plugin")) { isTransitive = false }
 
-    jpsPlugin(project(":kotlin-jps-plugin"))
+    jpsPlugin(project(":kotlin-jps-plugin")) { isTransitive = false }
 }
 
 val jar = runtimeJar {
@@ -161,4 +174,5 @@ tasks.register<Sync>("ideaPlugin") {
     }
 
     rename(quote("-$version"), "")
+    rename(quote("-$bootstrapKotlinVersion"), "")
 }

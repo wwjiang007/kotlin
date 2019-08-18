@@ -27,6 +27,9 @@ dependencies {
     testCompile(project(":compiler:frontend.java"))
     testCompile(projectTests(":compiler:tests-common"))
     testCompile(commonDep("junit:junit"))
+
+    testRuntimeOnly(intellijCoreDep()) { includeJars("intellij-core") }
+    testRuntimeOnly(intellijDep()) { includeJars("jps-model") }
 }
 
 sourceSets {
@@ -44,11 +47,11 @@ tasks.withType<org.jetbrains.kotlin.gradle.dsl.KotlinCompile<*>> {
 
 publish()
 
-val jar = runtimeJar {}
+runtimeJar()
 sourcesJar()
 javadocJar()
 
-dist()
+testsJar()
 
 projectTest {
     workingDir = rootDir

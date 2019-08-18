@@ -45,12 +45,13 @@ import org.jetbrains.kotlin.idea.framework.KotlinSdkType
 import org.jetbrains.kotlin.idea.framework.detectLibraryKind
 import org.jetbrains.kotlin.idea.maven.configuration.KotlinMavenConfigurator
 import org.jetbrains.kotlin.idea.platform.tooling
-import org.jetbrains.kotlin.platform.IdePlatform
 import org.jetbrains.kotlin.platform.IdePlatformKind
+import org.jetbrains.kotlin.platform.TargetPlatform
 import org.jetbrains.kotlin.platform.impl.CommonIdePlatformKind
 import org.jetbrains.kotlin.platform.impl.JsIdePlatformKind
 import org.jetbrains.kotlin.platform.impl.JvmIdePlatformKind
 import org.jetbrains.kotlin.platform.impl.isCommon
+import org.jetbrains.kotlin.platform.isCommon
 import org.jetbrains.kotlin.utils.SmartList
 import org.jetbrains.kotlin.utils.addIfNotNull
 import java.io.File
@@ -120,7 +121,7 @@ class KotlinMavenImporter : MavenImporter(KOTLIN_PLUGIN_GROUP_ID, KOTLIN_PLUGIN_
             }
         }
 
-        configureFacet(mavenProject, modifiableModelsProvider, module)
+        configureFacet(mavenProject, modifiableModelsProvider, module, false) //HMPP is not supported currently for maven
     }
 
     private fun scheduleDownloadStdlibSources(mavenProject: MavenProject, module: Module) {
@@ -179,7 +180,7 @@ class KotlinMavenImporter : MavenImporter(KOTLIN_PLUGIN_GROUP_ID, KOTLIN_PLUGIN_
     private fun getCompilerArgumentsByConfigurationElement(
         mavenProject: MavenProject,
         configuration: Element?,
-        platform: IdePlatform<*, *>
+        platform: TargetPlatform
     ): List<String> {
         val arguments = platform.createArguments()
 
@@ -242,7 +243,7 @@ class KotlinMavenImporter : MavenImporter(KOTLIN_PLUGIN_GROUP_ID, KOTLIN_PLUGIN_
         PomFile.KotlinGoals.MetaData
     )
 
-    private fun configureFacet(mavenProject: MavenProject, modifiableModelsProvider: IdeModifiableModelsProvider, module: Module) {
+    private fun configureFacet(mavenProject: MavenProject, modifiableModelsProvider: IdeModifiableModelsProvider, module: Module, isHmppModule: Boolean) {
         val mavenPlugin = mavenProject.findPlugin(KotlinMavenConfigurator.GROUP_ID, KotlinMavenConfigurator.MAVEN_PLUGIN_ID) ?: return
         val compilerVersion = mavenPlugin.version ?: LanguageVersion.LATEST_STABLE.versionString
         val kotlinFacet = module.getOrCreateFacet(
@@ -254,9 +255,16 @@ class KotlinMavenImporter : MavenImporter(KOTLIN_PLUGIN_GROUP_ID, KOTLIN_PLUGIN_
         // TODO There should be a way to figure out the correct platform version
         val platform = detectPlatform(mavenProject)?.defaultPlatform
 
-        kotlinFacet.configureFacet(compilerVersion, LanguageFeature.Coroutines.defaultState, platform, modifiableModelsProvider)
+        kotlinFacet.configureFacet(
+            compilerVersion,
+            LanguageFeature.Coroutines.defaultState,
+            platform,
+            modifiableModelsProvider,
+            hmppEnabled = isHmppModule,
+            pureKotlinSourceFolders = emptyList()
+        )
         val facetSettings = kotlinFacet.configuration.settings
-        val configuredPlatform = kotlinFacet.configuration.settings.platform!!
+        val configuredPlatform = kotlinFacet.configuration.settings.targetPlatform!!
         val configuration = mavenPlugin.configurationElement
         val sharedArguments = getCompilerArgumentsByConfigurationElement(mavenProject, configuration, configuredPlatform)
         val executionArguments = mavenPlugin.executions
@@ -369,7 +377,7 @@ class KotlinMavenImporter : MavenImporter(KOTLIN_PLUGIN_GROUP_ID, KOTLIN_PLUGIN_
         }.distinct()
 
     private fun setImplementedModuleName(kotlinFacet: KotlinFacet, mavenProject: MavenProject, module: Module) {
-        if (kotlinFacet.configuration.settings.platform.isCommon) {
+        if (kotlinFacet.configuration.settings.targetPlatform.isCommon()) {
             kotlinFacet.configuration.settings.implementedModuleNames = emptyList()
         } else {
             val manager = MavenProjectsManager.getInstance(module.project)

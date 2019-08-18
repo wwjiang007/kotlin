@@ -14,11 +14,12 @@ import com.intellij.psi.PsiManager
 import com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.idea.completion.test.AbstractJvmBasicCompletionTest
 import org.jetbrains.kotlin.idea.completion.test.testCompletion
+import org.jetbrains.kotlin.idea.debugger.getContextElement
 import org.jetbrains.kotlin.idea.test.SdkAndMockLibraryProjectDescriptor
+import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtPsiFactory
-import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
 import org.jetbrains.kotlin.test.JUnit3WithIdeaConfigurationRunner
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.junit.runner.RunWith
@@ -33,7 +34,7 @@ class CodeFragmentCompletionInLibraryTest : AbstractJvmBasicCompletionTest() {
         override fun configureModule(module: Module, model: ModifiableRootModel) {
             super.configureModule(module, model)
 
-            val library = model.moduleLibraryTable.getLibraryByName(SdkAndMockLibraryProjectDescriptor.LIBRARY_NAME)!!
+            val library = model.moduleLibraryTable.getLibraryByName(LIBRARY_NAME)!!
             val modifiableModel = library.modifiableModel
 
             modifiableModel.addRoot(findLibrarySourceDir(), OrderRootType.SOURCES)
@@ -60,7 +61,8 @@ class CodeFragmentCompletionInLibraryTest : AbstractJvmBasicCompletionTest() {
     private fun testCompletionInLibraryCodeFragment(fragmentText: String, vararg completionDirectives: String) {
         setupFixtureByCodeFragment(fragmentText)
         val directives = completionDirectives.map { "//$it" }.joinToString(separator = "\n")
-        testCompletion(directives, JvmPlatform, { completionType, count -> myFixture.complete(completionType, count) })
+        testCompletion(directives,
+                       JvmPlatforms.unspecifiedJvmPlatform, { completionType, count -> myFixture.complete(completionType, count) })
     }
 
     private fun setupFixtureByCodeFragment(fragmentText: String) {
@@ -68,8 +70,8 @@ class CodeFragmentCompletionInLibraryTest : AbstractJvmBasicCompletionTest() {
         val jetFile = PsiManager.getInstance(project).findFile(sourceFile) as KtFile
         val fooFunctionFromLibrary = jetFile.declarations.first() as KtFunction
         val codeFragment = KtPsiFactory(fooFunctionFromLibrary).createExpressionCodeFragment(
-                fragmentText,
-                KotlinCodeFragmentFactory.getContextElement(fooFunctionFromLibrary.bodyExpression)
+            fragmentText,
+            getContextElement(fooFunctionFromLibrary.bodyExpression)
         )
         codeFragment.forceResolveScope(GlobalSearchScope.allScope(project))
         myFixture.configureFromExistingVirtualFile(codeFragment.virtualFile)

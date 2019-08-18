@@ -7,14 +7,11 @@ package org.jetbrains.kotlin.fir.resolve
 
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.FirRegularClass
-import org.jetbrains.kotlin.fir.declarations.FirTypeParameter
 import org.jetbrains.kotlin.fir.resolve.transformers.firSafeNullable
-import org.jetbrains.kotlin.fir.resolve.transformers.firUnsafe
 import org.jetbrains.kotlin.fir.scopes.FirScope
 import org.jetbrains.kotlin.fir.scopes.impl.FirClassSubstitutionScope
 import org.jetbrains.kotlin.fir.scopes.impl.FirCompositeScope
 import org.jetbrains.kotlin.fir.symbols.ConeTypeParameterSymbol
-import org.jetbrains.kotlin.fir.symbols.FirBasedSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirClassSymbol
 import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.fir.types.impl.ConeClassTypeImpl
@@ -29,15 +26,11 @@ fun ConeKotlinType.scope(useSiteSession: FirSession, scopeSession: ScopeSession)
             // For ConeClassLikeType they might be a type alias instead of a regular class
             // TODO: support that case and switch back to `firUnsafe` instead of `firSafeNullable`
             val fir = this.lookupTag.toSymbol(useSiteSession)?.firSafeNullable<FirRegularClass>() ?: return null
-            val companionScope = fir.companionObject?.buildUseSiteScope(useSiteSession, scopeSession)
-            val ownScope = wrapSubstitutionScopeIfNeed(useSiteSession, fir.buildUseSiteScope(useSiteSession, scopeSession)!!, scopeSession)
-            if (companionScope != null) FirCompositeScope(mutableListOf(ownScope, companionScope)) else ownScope
-
+            wrapSubstitutionScopeIfNeed(useSiteSession, fir.buildUseSiteScope(useSiteSession, scopeSession)!!, scopeSession)
         }
         is ConeTypeParameterType -> {
             // TODO: support LibraryTypeParameterSymbol or get rid of it
-            val toSymbol = this.lookupTag.toSymbol(useSiteSession)?.takeIf { it is FirBasedSymbol<*> } ?: return null
-            val fir = toSymbol.firUnsafe<FirTypeParameter>()
+            val fir = lookupTag.toSymbol().fir
             FirCompositeScope(
                 fir.bounds.mapNotNullTo(mutableListOf()) {
                     it.coneTypeUnsafe<ConeKotlinType>().scope(useSiteSession, scopeSession)
@@ -63,7 +56,7 @@ fun ConeClassLikeType.wrapSubstitutionScopeIfNeed(
             typeParameter.symbol to (typeArgument as? ConeTypedProjection)?.type
         }.filter { (_, type) -> type != null }.toMap() as Map<ConeTypeParameterSymbol, ConeKotlinType>
 
-        FirClassSubstitutionScope(session, useSiteScope, substitution)
+        FirClassSubstitutionScope(session, useSiteScope, builder, substitution)
     }
 }
 

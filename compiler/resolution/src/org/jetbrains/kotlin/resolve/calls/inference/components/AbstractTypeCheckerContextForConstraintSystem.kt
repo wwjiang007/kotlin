@@ -100,10 +100,14 @@ abstract class AbstractTypeCheckerContextForConstraintSystem : AbstractTypeCheck
             return null
         }
 
-        return if (projection.getVariance() == TypeVariance.OUT)
-            projection.getType().takeIf { it is SimpleTypeMarker && isMyTypeVariable(it) }?.asSimpleType()
-        else
-            null
+        return if (projection.getVariance() == TypeVariance.OUT) {
+            val type = projection.getType()
+            when {
+                type is SimpleTypeMarker && isMyTypeVariable(type) -> type.asSimpleType()
+                type is FlexibleTypeMarker && isMyTypeVariable(type.lowerBound()) -> type.asFlexibleType()?.lowerBound()
+                else -> null
+            }
+        } else null
     }
 
     /**
@@ -253,6 +257,7 @@ abstract class AbstractTypeCheckerContextForConstraintSystem : AbstractTypeCheck
         AbstractTypeChecker.isSubtypeOf(this as AbstractTypeCheckerContext, subType, superType)
 
     private fun assertInputTypes(subType: KotlinTypeMarker, superType: KotlinTypeMarker) {
+        if (!AbstractTypeChecker.RUN_SLOW_ASSERTIONS) return
         fun correctSubType(subType: SimpleTypeMarker) =
             subType.isSingleClassifierType() || subType.typeConstructor().isIntersection() || isMyTypeVariable(subType) || subType.isError() || subType.isIntegerLiteralType()
 

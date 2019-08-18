@@ -37,16 +37,18 @@ dependencies {
     Ide.IJ {
         testCompile(intellijDep("devkit"))
     }
-    if (Platform[181].orHigher()) {
-        testCompileOnly(intellijDep()) { includeJars("openapi", "idea", "platform-api", "log4j") }
-    } else {
-        testCompileOnly(intellijDep()) { includeJars("openapi", "idea", "log4j") }
-    }
+
+    testCompile(intellijDep())
+
     testCompile(jpsBuildTest())
     compilerModules.forEach {
         testRuntime(project(it))
     }
-    testRuntime(intellijDep())
+
+    Platform[192].orHigher {
+        testRuntimeOnly(intellijPluginDep("java"))
+    }
+
     testRuntime(project(":kotlin-reflect"))
     testRuntime(project(":kotlin-script-runtime"))
 }

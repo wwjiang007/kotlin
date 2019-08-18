@@ -25,10 +25,13 @@ import com.intellij.psi.impl.source.tree.TreeUtil
 import com.intellij.psi.search.PsiSearchScopeUtil
 import com.intellij.psi.search.SearchScope
 import com.intellij.psi.util.PsiTreeUtil
+import org.jetbrains.kotlin.KtNodeTypes
 import org.jetbrains.kotlin.diagnostics.PsiDiagnosticUtils
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import java.util.*
+import kotlin.contracts.ExperimentalContracts
+import kotlin.contracts.contract
 
 // NOTE: in this file we collect only LANGUAGE INDEPENDENT methods working with PSI and not modifying it
 
@@ -440,6 +443,7 @@ fun KtModifierList.hasExpectModifier() = hasModifier(KtTokens.HEADER_KEYWORD) ||
 
 fun KtModifierListOwner.hasActualModifier() = hasModifier(KtTokens.IMPL_KEYWORD) || hasModifier(KtTokens.ACTUAL_KEYWORD)
 fun KtModifierList.hasActualModifier() = hasModifier(KtTokens.IMPL_KEYWORD) || hasModifier(KtTokens.ACTUAL_KEYWORD)
+fun KtModifierList.hasSuspendModifier() = hasModifier(KtTokens.SUSPEND_KEYWORD)
 
 fun ASTNode.children() = generateSequence(firstChildNode) { node -> node.treeNext }
 fun ASTNode.parents() = generateSequence(treeParent) { node -> node.treeParent }
@@ -476,4 +480,12 @@ fun LazyParseablePsiElement.getContainingKtFile(): KtFile {
 
     val fileString = if (file != null && file.isValid) file.text else ""
     throw IllegalStateException("KtElement not inside KtFile: $file with text \"$fileString\" for element $this of type ${this::class.java} node = ${this.node}")
+}
+
+@UseExperimental(ExperimentalContracts::class)
+fun KtExpression.isNull(): Boolean {
+    contract {
+        returns(true) implies (this@isNull is KtConstantExpression)
+    }
+    return this is KtConstantExpression && this.node.elementType == KtNodeTypes.NULL
 }

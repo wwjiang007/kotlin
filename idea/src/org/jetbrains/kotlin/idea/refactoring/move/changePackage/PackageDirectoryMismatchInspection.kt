@@ -10,8 +10,8 @@ import com.intellij.codeInspection.LocalQuickFix
 import com.intellij.codeInspection.ProblemDescriptor
 import com.intellij.codeInspection.ProblemsHolder
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.roots.JavaProjectRootsUtil
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiManager
 import com.intellij.refactoring.PackageWrapper
 import com.intellij.refactoring.move.moveClassesOrPackages.AutocreatingSingleSourceRootMoveDestination
@@ -24,11 +24,13 @@ import org.jetbrains.kotlin.idea.core.packageMatchesDirectoryOrImplicit
 import org.jetbrains.kotlin.idea.inspections.AbstractKotlinInspection
 import org.jetbrains.kotlin.idea.refactoring.hasIdentifiersOnly
 import org.jetbrains.kotlin.idea.refactoring.isInjectedFragment
+import org.jetbrains.kotlin.idea.roots.getSuitableDestinationSourceRoots
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPackageDirective
 import org.jetbrains.kotlin.psi.packageDirectiveVisitor
+import org.jetbrains.kotlin.psi.psiUtil.startOffset
 
 class PackageDirectoryMismatchInspection : AbstractKotlinInspection() {
     override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean) = packageDirectiveVisitor(fun(directive: KtPackageDirective) {
@@ -51,9 +53,12 @@ class PackageDirectoryMismatchInspection : AbstractKotlinInspection() {
             fixes += ChangePackageFix("'${fqNameWithImplicitPrefix.asString()}'", fqNameWithImplicitPrefix)
         }
 
+        val textRange = if (directive.textLength != 0) directive.textRange else file.declarations.firstOrNull()?.let {
+            TextRange.from(it.startOffset, 1)
+        }
         holder.registerProblem(
             file,
-            directive.textRange,
+            textRange,
             "Package directive doesn't match file location",
             *fixes.toTypedArray()
         )
@@ -70,7 +75,7 @@ class PackageDirectoryMismatchInspection : AbstractKotlinInspection() {
             val file = descriptor.psiElement as? KtFile ?: return
             val directive = file.packageDirective ?: return
 
-            val sourceRoots = JavaProjectRootsUtil.getSuitableDestinationSourceRoots(project)
+            val sourceRoots = getSuitableDestinationSourceRoots(project)
             val packageWrapper = PackageWrapper(PsiManager.getInstance(project), directive.qualifiedName)
             val fileToMove = directive.containingFile
             val chosenRoot =

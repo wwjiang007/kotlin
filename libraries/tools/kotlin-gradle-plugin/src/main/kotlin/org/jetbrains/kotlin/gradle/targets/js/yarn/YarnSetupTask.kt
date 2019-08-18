@@ -9,7 +9,7 @@ import de.undercouch.gradle.tasks.download.DownloadAction
 import org.gradle.api.DefaultTask
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputDirectory
-import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootExtension
+import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin
 import java.io.File
 import javax.xml.ws.Action
 
@@ -26,8 +26,8 @@ open class YarnSetupTask : DefaultTask() {
         @OutputDirectory get() = env.home
 
     init {
-        group = NodeJsRootExtension.NODE_JS
-        description = "Download and install a local yarn version."
+        group = NodeJsRootPlugin.TASKS_GROUP_NAME
+        description = "Download and install a local yarn version"
 
         onlyIf {
             !settings.installationDir.exists()
@@ -50,7 +50,7 @@ open class YarnSetupTask : DefaultTask() {
     }
 
     private fun extract(archive: File, destination: File) {
-        val dirInTar = archive.name.removeSuffix(".tar.gz") + File.separator
+        val dirInTar = archive.name.removeSuffix(".tar.gz")
         project.copy {
             it.from(project.tarTree(archive))
             it.into(destination)
@@ -62,6 +62,6 @@ open class YarnSetupTask : DefaultTask() {
     }
 
     companion object {
-        const val NAME: String = "yarnSetup"
+        const val NAME: String = "kotlinYarnSetup"
     }
 }

@@ -4618,6 +4618,11 @@ public class LoadJavaTestGenerated extends AbstractLoadJavaTest {
                 runTest("compiler/testData/loadJava/compiledKotlinWithStdlib/annotations/ConstValInMultifileClass.kt");
             }
 
+            @TestMetadata("JvmFieldInInterfaceCompanion.kt")
+            public void testJvmFieldInInterfaceCompanion() throws Exception {
+                runTest("compiler/testData/loadJava/compiledKotlinWithStdlib/annotations/JvmFieldInInterfaceCompanion.kt");
+            }
+
             @TestMetadata("WithUnsignedTypeParameters.kt")
             public void testWithUnsignedTypeParameters() throws Exception {
                 runTest("compiler/testData/loadJava/compiledKotlinWithStdlib/annotations/WithUnsignedTypeParameters.kt");
@@ -5045,6 +5050,11 @@ public class LoadJavaTestGenerated extends AbstractLoadJavaTest {
         @TestMetadata("InheritParameterName.kt")
         public void testInheritParameterName() throws Exception {
             runTest("compiler/testData/loadJava/kotlinAgainstCompiledJavaWithKotlin/InheritParameterName.kt");
+        }
+
+        @TestMetadata("javaGetterImplementsKotlinProperty.kt")
+        public void testJavaGetterImplementsKotlinProperty() throws Exception {
+            runTest("compiler/testData/loadJava/kotlinAgainstCompiledJavaWithKotlin/javaGetterImplementsKotlinProperty.kt");
         }
 
         @TestMetadata("javaRefersToKotlin.kt")

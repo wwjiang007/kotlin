@@ -1,27 +1,17 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.backend.jvm.codegen
 
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
-import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
+import org.jetbrains.kotlin.backend.jvm.lower.MultifileFacadeFileEntry
 import org.jetbrains.kotlin.backend.jvm.lower.constantValue
 import org.jetbrains.kotlin.codegen.*
-import org.jetbrains.kotlin.codegen.binding.CodegenBinding.ASM_TYPE
+import org.jetbrains.kotlin.codegen.binding.CodegenBinding
 import org.jetbrains.kotlin.codegen.inline.DefaultSourceMapper
+import org.jetbrains.kotlin.codegen.inline.ReifiedTypeParametersUsages
 import org.jetbrains.kotlin.codegen.inline.SourceMapper
 import org.jetbrains.kotlin.codegen.serialization.JvmSerializationBindings
 import org.jetbrains.kotlin.codegen.serialization.JvmSerializerExtension
@@ -33,9 +23,9 @@ import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.load.java.JvmAbi
+import org.jetbrains.kotlin.load.java.JvmAnnotationNames
 import org.jetbrains.kotlin.load.kotlin.header.KotlinClassHeader
 import org.jetbrains.kotlin.name.SpecialNames
-import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.jvm.AsmTypes
 import org.jetbrains.kotlin.resolve.jvm.annotations.JVM_SYNTHETIC_ANNOTATION_FQ_NAME
 import org.jetbrains.kotlin.resolve.jvm.annotations.TRANSIENT_ANNOTATION_FQ_NAME
@@ -51,35 +41,27 @@ import java.io.File
 open class ClassCodegen protected constructor(
     internal val irClass: IrClass,
     val context: JvmBackendContext,
-    private val parentClassCodegen: ClassCodegen? = null
+    private val parentClassCodegen: ClassCodegen? = null,
+    private val withinInline: Boolean = false
 ) : InnerClassConsumer {
-
     private val innerClasses = mutableListOf<IrClass>()
 
     val state = context.state
 
-    val typeMapper = IrTypeMapper(context.state.typeMapper)
+    val typeMapper = context.typeMapper
 
     val descriptor = irClass.descriptor
 
-    private val isAnonymous = irClass.isAnonymousObject
-
-    val type: Type = if (isAnonymous)
-        state.bindingContext.get(ASM_TYPE, descriptor)!!
-    else typeMapper.mapType(irClass)
-
-    private val sourceManager = context.psiSourceManager
-
-    private val fileEntry = sourceManager.getFileEntry(irClass.fileParent)
-
-    val psiElement = irClass.descriptor.psiElement
+    val type: Type = typeMapper.mapClass(irClass)
 
     val visitor: ClassBuilder = createClassBuilder()
 
+    val reifiedTypeParametersUsages = ReifiedTypeParametersUsages()
+
     open fun createClassBuilder() = state.factory.newVisitor(
-        OtherOrigin(psiElement, descriptor),
+        OtherOrigin(descriptor.psiElement, descriptor),
         type,
-        listOf(File(fileEntry.name))
+        irClass.fileParent.loadSourceFilesInfo()
     )
 
     private var sourceMapper: DefaultSourceMapper? = null
@@ -92,12 +74,15 @@ open class ClassCodegen protected constructor(
             else -> null
         }
 
-    fun generate() {
+    fun generate(): ReifiedTypeParametersUsages {
+        if (withinInline) {
+            getOrCreateSourceMapper() //initialize default mapping that would be later written in class file
+        }
         val superClassInfo = irClass.getSuperClassInfo(typeMapper)
         val signature = getSignature(irClass, type, superClassInfo, typeMapper)
 
         visitor.defineClass(
-            psiElement,
+            descriptor.psiElement,
             state.classFileVersion,
             irClass.flags,
             signature.name,
@@ -106,9 +91,6 @@ open class ClassCodegen protected constructor(
             signature.interfaces.toTypedArray()
         )
         AnnotationCodegen(this, context.state, visitor.visitor::visitAnnotation).genAnnotations(irClass, null)
-        /* TODO: Temporary workaround: ClassBuilder needs a pathless name. */
-        val shortName = File(fileEntry.name).name
-        visitor.visitSource(shortName, null)
 
         val nestedClasses = irClass.declarations.mapNotNull { declaration ->
             if (declaration is IrClass) {
@@ -116,24 +98,48 @@ open class ClassCodegen protected constructor(
             } else null
         }
 
-        val companionObjectCodegen = nestedClasses.firstOrNull { it.irClass.isCompanion }
+        // Suspend function state-machine builder requires half-built continuation class
+        val continuationCodegens = nestedClasses.filter { it.irClass in context.suspendFunctionContinuations.values }
+        for (continuationCodegen in continuationCodegens) {
+            continuationCodegen.generate()
+        }
+
+        val fileEntry = context.psiSourceManager.getFileEntry(irClass.fileParent)
+        if (fileEntry != null) {
+            /* TODO: Temporary workaround: ClassBuilder needs a pathless name. */
+            val shortName = File(fileEntry.name).name
+            visitor.visitSource(shortName, null)
+        }
 
         for (declaration in irClass.declarations) {
-            generateDeclaration(declaration, companionObjectCodegen)
+            generateDeclaration(declaration)
         }
 
         // Generate nested classes at the end, to ensure that codegen for companion object will have the necessary JVM signatures in its
         // trace for properties moved to the outer class
-        for (codegen in nestedClasses) {
+        for (codegen in (nestedClasses - continuationCodegens)) {
             codegen.generate()
         }
 
         generateKotlinMetadataAnnotation()
 
-        done()
+        if (irClass in context.suspendFunctionContinuations.values) {
+            context.continuationClassBuilders[irClass] = visitor
+        } else {
+            done()
+        }
+        return reifiedTypeParametersUsages
     }
 
     private fun generateKotlinMetadataAnnotation() {
+        val localDelegatedProperties = (irClass.attributeOwnerId as? IrClass)?.let(context.localDelegatedProperties::get)
+        if (localDelegatedProperties != null && localDelegatedProperties.isNotEmpty()) {
+            // Remove this check once CodegenAnnotatingVisitor is no longer used in JVM IR
+            if (state.bindingContext.get(CodegenBinding.DELEGATED_PROPERTIES, type).isNullOrEmpty()) {
+                state.bindingTrace.record(CodegenBinding.DELEGATED_PROPERTIES, type, localDelegatedProperties.map { it.descriptor })
+            }
+        }
+
         when (val metadata = irClass.metadata) {
             is MetadataSource.Class -> {
                 val classProto = serializer!!.classProto(metadata.descriptor).build()
@@ -147,13 +153,31 @@ open class ClassCodegen protected constructor(
 
                 serializerExtension.serializeJvmPackage(packageProto, type)
 
-                writeKotlinMetadata(visitor, state, KotlinClassHeader.Kind.FILE_FACADE, 0) {
-                    AsmUtil.writeAnnotationData(it, serializer, packageProto.build())
+                val facadeClassName = context.multifileFacadeForPart[irClass.attributeOwnerId]
+                val kind = if (facadeClassName != null) KotlinClassHeader.Kind.MULTIFILE_CLASS_PART else KotlinClassHeader.Kind.FILE_FACADE
+                writeKotlinMetadata(visitor, state, kind, 0) { av ->
+                    AsmUtil.writeAnnotationData(av, serializer, packageProto.build())
+
+                    if (facadeClassName != null) {
+                        av.visit(JvmAnnotationNames.METADATA_MULTIFILE_CLASS_NAME_FIELD_NAME, facadeClassName.internalName)
+                    }
+
                     // TODO: JvmPackageName
                 }
             }
             else -> {
-                writeSyntheticClassMetadata(visitor, state)
+                val entry = irClass.fileParent.fileEntry
+                if (entry is MultifileFacadeFileEntry) {
+                    val partInternalNames = entry.partFiles.mapNotNull { partFile ->
+                        val fileClass = partFile.declarations.singleOrNull { it.origin == IrDeclarationOrigin.FILE_CLASS } as IrClass?
+                        if (fileClass != null) typeMapper.mapClass(fileClass).internalName else null
+                    }
+                    MultifileClassCodegenImpl.writeMetadata(
+                        visitor, state, 0 /* TODO */, partInternalNames, type, irClass.fqNameWhenAvailable!!.parent()
+                    )
+                } else {
+                    writeSyntheticClassMetadata(visitor, state)
+                }
             }
         }
     }
@@ -167,6 +191,14 @@ open class ClassCodegen protected constructor(
         }
 
         visitor.done()
+    }
+
+    private fun IrFile.loadSourceFilesInfo(): List<File> {
+        val entry = fileEntry
+        if (entry is MultifileFacadeFileEntry) {
+            return entry.partFiles.flatMap { it.loadSourceFilesInfo() }
+        }
+        return listOf(File(context.psiSourceManager.getFileEntry(this)!!.name))
     }
 
     companion object {
@@ -187,10 +219,10 @@ open class ClassCodegen protected constructor(
         }
     }
 
-    private fun generateDeclaration(declaration: IrDeclaration, companionObjectCodegen: ClassCodegen?) {
+    private fun generateDeclaration(declaration: IrDeclaration) {
         when (declaration) {
             is IrField ->
-                generateField(declaration, companionObjectCodegen)
+                generateField(declaration)
             is IrFunction -> {
                 generateMethod(declaration)
             }
@@ -204,15 +236,17 @@ open class ClassCodegen protected constructor(
         }
     }
 
-    fun generateLocalClass(klass: IrClass) {
-        ClassCodegen(klass, context, this).generate()
+    fun generateLocalClass(klass: IrClass, withinInline: Boolean): ReifiedTypeParametersUsages {
+        return ClassCodegen(klass, context, this, withinInline = withinInline || this.withinInline).generate()
     }
 
-    private fun generateField(field: IrField, companionObjectCodegen: ClassCodegen?) {
+    private fun generateField(field: IrField) {
         if (field.origin == IrDeclarationOrigin.FAKE_OVERRIDE) return
 
         val fieldType = typeMapper.mapType(field)
-        val fieldSignature = typeMapper.mapFieldSignature(field.type, field)
+        val fieldSignature =
+            if (field.origin == IrDeclarationOrigin.DELEGATE) null
+            else typeMapper.mapFieldSignature(field)
         val fieldName = field.name.asString()
         // The ConstantValue attribute makes the initializer part of the ABI, which is why since 1.4
         // it is no longer set unless the property is explicitly `const`.
@@ -227,10 +261,7 @@ open class ClassCodegen protected constructor(
 
         val descriptor = field.metadata?.descriptor
         if (descriptor != null) {
-            val codegen = if (JvmAbi.isPropertyWithBackingFieldInOuterClass(descriptor)) {
-                companionObjectCodegen ?: error("Class with a property moved from the companion must have a companion:\n${irClass.dump()}")
-            } else this
-            codegen.visitor.serializationBindings.put(JvmSerializationBindings.FIELD_FOR_PROPERTY, descriptor, fieldType to fieldName)
+            state.globalSerializationBindings.put(JvmSerializationBindings.FIELD_FOR_PROPERTY, descriptor, fieldType to fieldName)
         }
     }
 
@@ -239,21 +270,14 @@ open class ClassCodegen protected constructor(
 
         val signature = FunctionCodegen(method, this).generate().asmMethod
 
-        val metadata = method.metadata
-        when (metadata) {
+        when (val metadata = method.metadata) {
             is MetadataSource.Property -> {
                 // We can't check for JvmLoweredDeclarationOrigin.SYNTHETIC_METHOD_FOR_PROPERTY_ANNOTATIONS because for interface methods
                 // moved to DefaultImpls, origin is changed to DEFAULT_IMPLS
                 // TODO: fix origin somehow, because otherwise $annotations methods in interfaces also don't have ACC_SYNTHETIC
                 assert(method.name.asString().endsWith(JvmAbi.ANNOTATED_PROPERTY_METHOD_NAME_SUFFIX)) { method.dump() }
 
-                val codegen = if (DescriptorUtils.isInterface(metadata.descriptor.containingDeclaration)) {
-                    assert(irClass.origin == JvmLoweredDeclarationOrigin.DEFAULT_IMPLS) { irClass.dump() }
-                    parentClassCodegen!!
-                } else {
-                    this
-                }
-                codegen.visitor.serializationBindings.put(
+                state.globalSerializationBindings.put(
                     JvmSerializationBindings.SYNTHETIC_METHOD_FOR_PROPERTY, metadata.descriptor, signature
                 )
             }
@@ -296,7 +320,7 @@ open class ClassCodegen protected constructor(
     // See FileBasedKotlinClass.convertAnnotationVisitor
     override fun addInnerClassInfoFromAnnotation(innerClass: IrClass) {
         var current: IrDeclaration? = innerClass
-        while (current != null) {
+        while (current != null && !current.isTopLevelDeclaration) {
             if (current is IrClass) {
                 innerClasses.add(current)
             }
@@ -320,7 +344,7 @@ open class ClassCodegen protected constructor(
             if (containingDeclaration is IrFunction) {
                 val method = typeMapper.mapAsmMethod(containingDeclaration)
                 visitor.visitOuterClass(outerClassName, method.name, method.descriptor)
-            } else if (isAnonymous) {
+            } else if (irClass.isAnonymousObject) {
                 visitor.visitOuterClass(outerClassName, null, null)
             }
         }
@@ -365,11 +389,8 @@ private val Modality.flags: Int
 private val Visibility.flags: Int
     get() = AsmUtil.getVisibilityAccessFlag(this) ?: throw AssertionError("Unsupported visibility $this")
 
-private val IrField.OtherOrigin: JvmDeclarationOrigin
-    get() = OtherOrigin(descriptor.psiElement, this.descriptor)
-
-internal val IrFunction.OtherOrigin: JvmDeclarationOrigin
-    get() = OtherOrigin(descriptor.psiElement, this.descriptor)
+internal val IrDeclaration.OtherOrigin: JvmDeclarationOrigin
+    get() = OtherOrigin(descriptor)
 
 private fun IrClass.getSuperClassInfo(typeMapper: IrTypeMapper): IrSuperClassInfo {
     if (isInterface) {

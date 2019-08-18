@@ -18,6 +18,7 @@ package org.jetbrains.kotlin.idea.scratch.ui
 
 
 import com.intellij.application.options.ModulesComboBox
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.execution.ui.ConfigurationModuleSelector
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
@@ -43,23 +44,55 @@ import org.jetbrains.kotlin.idea.scratch.actions.ClearScratchAction
 import org.jetbrains.kotlin.idea.scratch.actions.RunScratchAction
 import org.jetbrains.kotlin.idea.scratch.actions.StopScratchAction
 import org.jetbrains.kotlin.idea.scratch.addScratchPanel
+import org.jetbrains.kotlin.idea.scratch.output.ScratchOutputHandlerAdapter
 import org.jetbrains.kotlin.idea.scratch.removeScratchPanel
 import javax.swing.*
 
 class ScratchTopPanel private constructor(val scratchFile: ScratchFile) : JPanel(HorizontalLayout(5)), Disposable {
     override fun dispose() {
+        scratchFile.replScratchExecutor?.stop()
+        scratchFile.compilingScratchExecutor?.stop()
         scratchFile.editor.removeScratchPanel()
     }
 
     companion object {
         fun createPanel(project: Project, virtualFile: VirtualFile, editor: TextEditor) {
             val psiFile = PsiManager.getInstance(project).findFile(virtualFile) ?: return
-            val scratchFile = ScratchFileLanguageProvider.get(psiFile.language)?.createFile(project, editor) ?: return
-            editor.addScratchPanel(ScratchTopPanel(scratchFile))
+            val scratchFile = ScratchFileLanguageProvider.get(psiFile.language)?.newScratchFile(project, editor) ?: return
+            val panel = ScratchTopPanel(scratchFile)
+
+            val toolbarHandler = createUpdateToolbarHandler(panel)
+            scratchFile.replScratchExecutor?.addOutputHandler(object : ScratchOutputHandlerAdapter() {
+                override fun onFinish(file: ScratchFile) {
+                    ApplicationManager.getApplication().invokeLater {
+                        if (!file.project.isDisposed) {
+                            val scratch = file.getPsiFile()
+                            if (scratch?.isValid == true) {
+                                DaemonCodeAnalyzer.getInstance(project).restart(scratch)
+                            }
+                        }
+                    }
+                }
+            })
+            scratchFile.replScratchExecutor?.addOutputHandler(toolbarHandler)
+            scratchFile.compilingScratchExecutor?.addOutputHandler(toolbarHandler)
+
+            editor.addScratchPanel(panel)
+        }
+
+        private fun createUpdateToolbarHandler(panel: ScratchTopPanel) = object : ScratchOutputHandlerAdapter() {
+            override fun onStart(file: ScratchFile) {
+                panel.updateToolbar()
+            }
+
+            override fun onFinish(file: ScratchFile) {
+                panel.updateToolbar()
+            }
         }
     }
 
     private val moduleChooser: ModulesComboBox
+    private val moduleChooserLabel: JLabel
     private val isReplCheckbox: JCheckBox
     private val isMakeBeforeRunCheckbox: JCheckBox
     private val isInteractiveCheckbox: JCheckBox
@@ -72,10 +105,11 @@ class ScratchTopPanel private constructor(val scratchFile: ScratchFile) : JPanel
         add(actionsToolbar.component)
 
         moduleChooser = createModuleChooser(scratchFile.project)
-        add(JLabel("Use classpath of module"))
+        moduleChooserLabel = JLabel("Use classpath of module")
+        add(moduleChooserLabel)
         add(moduleChooser)
 
-        isMakeBeforeRunCheckbox = JCheckBox("Make before Run")
+        isMakeBeforeRunCheckbox = JCheckBox("Make module before Run")
         add(isMakeBeforeRunCheckbox)
         isMakeBeforeRunCheckbox.addItemListener {
             scratchFile.saveOptions {
@@ -104,6 +138,13 @@ class ScratchTopPanel private constructor(val scratchFile: ScratchFile) : JPanel
             scratchFile.saveOptions {
                 copy(isRepl = isReplCheckbox.isSelected)
             }
+            if (isReplCheckbox.isSelected) {
+                // TODO start REPL process when checkbox is selected to speed up execution
+                // Now it is switched off due to KT-18355: REPL process is keep alive if no command is executed
+                //scratchFile.replScratchExecutor?.start()
+            } else {
+                scratchFile.replScratchExecutor?.stop()
+            }
         }
 
         add(JSeparator(SwingConstants.VERTICAL))
@@ -119,6 +160,11 @@ class ScratchTopPanel private constructor(val scratchFile: ScratchFile) : JPanel
 
     fun setModule(module: Module) {
         moduleChooser.selectedModule = module
+    }
+
+    fun hideModuleSelector() {
+        moduleChooser.isVisible = false
+        moduleChooserLabel.isVisible = false
     }
 
     fun addModuleListener(f: (PsiFile, Module?) -> Unit) {
@@ -148,6 +194,9 @@ class ScratchTopPanel private constructor(val scratchFile: ScratchFile) : JPanel
     fun setInteractiveMode(isSelected: Boolean) {
         isInteractiveCheckbox.isSelected = isSelected
     }
+
+    @TestOnly
+    fun isModuleSelectorVisible(): Boolean = moduleChooser.isVisible && moduleChooserLabel.isVisible
 
     private fun changeMakeModuleCheckboxVisibility(isVisible: Boolean) {
         isMakeBeforeRunCheckbox.isVisible = isVisible

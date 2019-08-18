@@ -1,4 +1,3 @@
-
 plugins {
     kotlin("jvm")
     id("jps-compatible")
@@ -19,6 +18,13 @@ dependencies {
     compile(project(":idea:idea-jps-common"))
 
     compileOnly(intellijDep())
+    Platform[192].orHigher {
+        compileOnly(intellijPluginDep("java"))
+        testCompileOnly(intellijPluginDep("java"))
+        testRuntimeOnly(intellijPluginDep("java"))
+        testRuntimeOnly(intellijPluginDep("java-ide-customization"))
+    }
+    
     excludeInAndroidStudio(rootProject) { compileOnly(intellijPluginDep("maven")) }
 
     testCompile(projectTests(":idea"))

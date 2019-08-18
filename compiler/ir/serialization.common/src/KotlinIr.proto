@@ -1,6 +1,7 @@
 syntax = "proto2";
-package org.jetbrains.kotlin.backend.common.serialization;
+package org.jetbrains.kotlin.backend.common.serialization.proto;
 
+option java_multiple_files = true;
 option java_outer_classname = "KotlinIr";
 option optimize_for = LITE_RUNTIME;
 
@@ -97,9 +98,6 @@ message IrFile {
 message IrModule {
   required String name = 1;
   repeated IrFile file = 2;
-  required IrSymbolTable symbol_table = 3;
-  required IrTypeTable type_table = 4;
-  required StringTable string_table = 5;
 }
 
 /* ------ String Table ------------------------------------------ */
@@ -128,6 +126,8 @@ enum IrSymbolKind {
   STANDALONE_FIELD_SYMBOL = 11; // For fields without properties. WrappedFieldDescriptor, rather than WrappedPropertyDescriptor.
   RECEIVER_PARAMETER_SYMBOL = 12; // ReceiverParameterDescriptor rather than ValueParameterDescriptor.
   PROPERTY_SYMBOL = 13;
+  LOCAL_DELEGATED_PROPERTY_SYMBOL = 14;
+  TYPEALIAS_SYMBOL = 15;
 }
 
 message IrSymbolData {
@@ -183,6 +183,14 @@ message IrSimpleType {
   required IrSymbol classifier = 2;
   required bool has_question_mark = 3;
   repeated IrTypeArgument argument = 4;
+  optional IrTypeAbbreviation abbreviation = 5;
+}
+
+message IrTypeAbbreviation {
+  required Annotations annotations = 1;
+  required IrSymbol type_alias = 2;
+  required bool has_question_mark = 3;
+  repeated IrTypeArgument argument = 4;
 }
 
 message IrDynamicType {
@@ -229,16 +237,10 @@ message MemberAccessCommon {
 }
 
 message IrCall {
-  enum Primitive {
-    NOT_PRIMITIVE = 1;
-    NULLARY = 2;
-    BINARY = 4;
-  }
-  required Primitive kind = 1;
-  required IrSymbol symbol = 2;
-  required MemberAccessCommon member_access = 3;
-  optional IrSymbol super = 4;
-  optional IrStatementOrigin origin = 5;
+  required IrSymbol symbol = 1;
+  required MemberAccessCommon member_access = 2;
+  optional IrSymbol super = 3;
+  optional IrStatementOrigin origin = 4;
 }
 
 message IrConstructorCall {
@@ -417,6 +419,11 @@ message IrWhile {
   required Loop loop = 1;
 }
 
+message IrFunctionExpression {
+  required IrFunction function = 1;
+  required IrStatementOrigin origin = 2;
+}
+
 /* ------ Dynamic expression --------------------------------------------- */
 
 message IrDynamicMemberExpression {
@@ -501,6 +508,7 @@ message IrOperation {
     IrDynamicOperatorExpression dynamic_operator = 30;
     IrLocalDelegatedPropertyReference local_delegated_property_reference = 31;
     IrConstructorCall constructor_call = 32;
+    IrFunctionExpression function_expression = 33;
   }
 }
 
@@ -514,6 +522,7 @@ enum IrTypeOperator {
   INSTANCEOF = 7;
   NOT_INSTANCEOF = 8;
   SAM_CONVERSION = 9;
+  IMPLICIT_DYNAMIC_CAST = 10;
 }
 
 
@@ -529,42 +538,44 @@ message NullableIrExpression {
 
 /* ------ Declarations --------------------------------------------- */
 
-message IrTypeAlias {
-  // Nothing for now.
-}
-
-message IrFunction {
+message IrDeclarationBase {
   required IrSymbol symbol = 1;
-  required IrFunctionBase base = 2;
-  required ModalityKind modality = 3;
-  required bool is_tailrec = 4;
-  required bool is_suspend = 5;
-  repeated IrSymbol overridden = 6;
-  //optional UniqId corresponding_property = 7;
+  required IrDeclarationOrigin origin = 2;
+  required Coordinates coordinates = 3;
+  required Annotations annotations = 4;
 }
 
 message IrFunctionBase {
-  required String name = 1;
-  required Visibility visibility = 2;
-  required bool is_inline = 3;
-  required bool is_external = 4;
-  required IrTypeParameterContainer type_parameters = 5;
-  optional IrDeclaration dispatch_receiver = 6;
-  optional IrDeclaration extension_receiver = 7;
-  repeated IrDeclaration value_parameter = 8;
-  optional IrStatement body = 9;
-  required IrTypeIndex return_type = 10;
+  required IrDeclarationBase base = 1;
+  required String name = 2;
+  required Visibility visibility = 3;
+  required bool is_inline = 4;
+  required bool is_external = 5;
+  required IrTypeParameterContainer type_parameters = 6;
+  optional IrValueParameter dispatch_receiver = 7;
+  optional IrValueParameter extension_receiver = 8;
+  repeated IrValueParameter value_parameter = 9;
+  optional IrStatement body = 10;
+  required IrTypeIndex return_type = 11;
+}
+
+message IrFunction {
+  required IrFunctionBase base = 1;
+  required ModalityKind modality = 2;
+  required bool is_tailrec = 3;
+  required bool is_suspend = 4;
+  repeated IrSymbol overridden = 5;
+  //optional UniqId corresponding_property = 7;
 }
 
 message IrConstructor {
-  required IrSymbol symbol = 1;
-  required IrFunctionBase base = 2;
-  required bool is_primary = 3;
+  required IrFunctionBase base = 1;
+  required bool is_primary = 2;
 
 }
 
 message IrField {
-  required IrSymbol symbol = 1;
+  required IrDeclarationBase base = 1;
   optional IrExpression initializer = 2;
   required String name = 3;
   required Visibility visibility = 4;
@@ -575,17 +586,17 @@ message IrField {
 }
 
 message IrLocalDelegatedProperty {
-  required String name = 1;
-  required IrTypeIndex type = 2;
-  required bool is_var = 3;
-  required IrVariable delegate = 4;
-  optional IrFunction getter = 5;
-  optional IrFunction setter = 6;
-  required IrSymbol symbol = 7;
+  required IrDeclarationBase base = 1;
+  required String name = 2;
+  required IrTypeIndex type = 3;
+  required bool is_var = 4;
+  required IrVariable delegate = 5;
+  optional IrFunction getter = 6;
+  optional IrFunction setter = 7;
 }
 
 message IrProperty {
-  required IrSymbol symbol = 1;
+  required IrDeclarationBase base = 1;
   required String name = 2;
   required Visibility visibility = 3;
   required ModalityKind modality = 4;
@@ -600,8 +611,8 @@ message IrProperty {
 }
 
 message IrVariable {
-  required String name = 1;
-  required IrSymbol symbol = 2;
+  required IrDeclarationBase base = 1;
+  required String name = 2;
   required IrTypeIndex type = 3;
   required bool is_var = 4;
   required bool is_const = 5;
@@ -626,7 +637,7 @@ enum ModalityKind { // It is ModalityKind to not clash with Modality in descript
 }
 
 message IrValueParameter {
-  required IrSymbol symbol = 1;
+  required IrDeclarationBase base = 1;
   required String name = 2;
   required int32 index = 3;
   required IrTypeIndex type = 4;
@@ -637,7 +648,7 @@ message IrValueParameter {
 }
 
 message IrTypeParameter {
-  required IrSymbol symbol = 1;
+  required IrDeclarationBase base = 1;
   required String name = 2;
   required int32 index = 3;
   required IrTypeVariance variance = 4;
@@ -646,11 +657,11 @@ message IrTypeParameter {
 }
 
 message IrTypeParameterContainer {
-  repeated IrDeclaration type_parameter = 1;
+  repeated IrTypeParameter type_parameter = 1;
 }
 
 message IrClass {
-  required IrSymbol symbol = 1;
+  required IrDeclarationBase base = 1;
   required String name = 2;
   required ClassKind kind = 3;
   required Visibility visibility = 4;
@@ -661,27 +672,37 @@ message IrClass {
   required bool is_data = 8;
   required bool is_external = 9;
   required bool is_inline = 10;
-  optional IrDeclaration this_receiver = 11;
+  optional IrValueParameter this_receiver = 11;
   required IrTypeParameterContainer type_parameters = 12;
   required IrDeclarationContainer declaration_container = 13;
   repeated IrTypeIndex super_type = 14;
 }
 
+message IrTypeAlias {
+  required IrDeclarationBase base = 1;
+  required String name = 2;
+  required Visibility visibility = 3;
+  required IrTypeParameterContainer type_parameters = 4;
+  required IrTypeIndex expanded_type = 5;
+  required bool is_actual = 6;
+}
+
 message IrEnumEntry {
-  required IrSymbol symbol = 1;
+  required IrDeclarationBase base = 1;
   optional IrExpression initializer = 2;
-  optional IrDeclaration corresponding_class = 3;
+  optional IrClass corresponding_class = 3;
   required String name = 4;
 }
 
 message IrAnonymousInit {
-  required IrSymbol symbol = 1;
+  required IrDeclarationBase base = 1;
   required IrStatement body = 2;
 }
 
 // TODO: we need an extension mechanism to accomodate new
 // IR operators in upcoming releases.
-message IrDeclarator {
+
+message IrDeclaration {
   oneof declarator {
     IrAnonymousInit ir_anonymous_init = 1;
     IrClass ir_class = 2;
@@ -690,19 +711,12 @@ message IrDeclarator {
     IrField ir_field = 5;
     IrFunction ir_function = 6;
     IrProperty ir_property = 7;
-    IrTypeAlias ir_type_alias = 8;
-    IrTypeParameter ir_type_parameter = 9;
-    IrVariable ir_variable = 10;
-    IrValueParameter ir_value_parameter = 11;
-    IrLocalDelegatedProperty ir_local_delegated_property = 12;
+    IrTypeParameter ir_type_parameter = 8;
+    IrVariable ir_variable = 9;
+    IrValueParameter ir_value_parameter = 10;
+    IrLocalDelegatedProperty ir_local_delegated_property = 11;
+    IrTypeAlias ir_type_alias = 12;
   }
-}
-
-message IrDeclaration {
-  required IrDeclarationOrigin origin = 1;
-  required Coordinates coordinates = 2;
-  required Annotations annotations = 3;
-  required IrDeclarator declarator = 4;
 }
 
 /* ------- IrStatements --------------------------------------------- */
@@ -717,7 +731,7 @@ message IrBlockBody {
 }
 
 message IrCatch {
-  required IrDeclaration catch_parameter = 1;
+  required IrVariable catch_parameter = 1;
   required IrExpression result = 2;
 }
 

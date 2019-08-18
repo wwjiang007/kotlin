@@ -65,6 +65,7 @@ interface KotlinGradleModel : Serializable {
     val platformPluginId: String?
     val implements: List<String>
     val kotlinTarget: String?
+    val kotlinTaskProperties: KotlinTaskPropertiesBySourceSet
 }
 
 data class KotlinGradleModelImpl(
@@ -73,16 +74,20 @@ data class KotlinGradleModelImpl(
     override val coroutines: String?,
     override val platformPluginId: String?,
     override val implements: List<String>,
-    override val kotlinTarget: String? = null
+    override val kotlinTarget: String? = null,
+    override val kotlinTaskProperties: KotlinTaskPropertiesBySourceSet
 ) : KotlinGradleModel
 
 abstract class AbstractKotlinGradleModelBuilder : ModelBuilderService {
     companion object {
-        val kotlinCompileTaskClasses = listOf(
+        val kotlinCompileJvmTaskClasses = listOf(
             "org.jetbrains.kotlin.gradle.tasks.KotlinCompile_Decorated",
+            "org.jetbrains.kotlin.gradle.tasks.KotlinCompileWithWorkers_Decorated"
+        )
+
+        val kotlinCompileTaskClasses = kotlinCompileJvmTaskClasses + listOf(
             "org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompile_Decorated",
             "org.jetbrains.kotlin.gradle.tasks.KotlinCompileCommon_Decorated",
-            "org.jetbrains.kotlin.gradle.tasks.KotlinCompileWithWorkers_Decorated",
             "org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompileWithWorkers_Decorated",
             "org.jetbrains.kotlin.gradle.tasks.KotlinCompileCommonWithWorkers_Decorated"
         )
@@ -93,6 +98,11 @@ abstract class AbstractKotlinGradleModelBuilder : ModelBuilderService {
         )
         val kotlinPluginIds = listOf("kotlin", "kotlin2js", "kotlin-android")
         val ABSTRACT_KOTLIN_COMPILE_CLASS = "org.jetbrains.kotlin.gradle.tasks.AbstractKotlinCompile"
+
+        val kotlinProjectExtensionClass = "org.jetbrains.kotlin.gradle.dsl.KotlinProjectExtension"
+        val kotlinSourceSetClass = "org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet"
+
+        val kotlinPluginWrapper = "org.jetbrains.kotlin.gradle.plugin.KotlinPluginWrapperKt"
 
         fun Task.getSourceSetName(): String {
             return try {
@@ -169,6 +179,7 @@ class KotlinGradleModelBuilder : AbstractKotlinGradleModelBuilder() {
         val platformPluginId = platformPluginIds.singleOrNull { project.plugins.findPlugin(it) != null }
 
         val compilerArgumentsBySourceSet = LinkedHashMap<String, ArgsInfo>()
+        val extraProperties = HashMap<String, KotlinTaskProperties>()
 
         project.getAllTasks(false)[project]?.forEach { compileTask ->
             if (compileTask.javaClass.name !in kotlinCompileTaskClasses) return@forEach
@@ -179,6 +190,7 @@ class KotlinGradleModelBuilder : AbstractKotlinGradleModelBuilder() {
             val defaultArguments = compileTask.getCompilerArguments("getDefaultSerializedCompilerArguments").orEmpty()
             val dependencyClasspath = compileTask.getDependencyClasspath()
             compilerArgumentsBySourceSet[sourceSetName] = ArgsInfoImpl(currentArguments, defaultArguments, dependencyClasspath)
+            extraProperties.acknowledgeTask(compileTask)
         }
 
         val platform = platformPluginId ?: pluginToPlatform.entries.singleOrNull { project.plugins.findPlugin(it.key) != null }?.value
@@ -190,7 +202,8 @@ class KotlinGradleModelBuilder : AbstractKotlinGradleModelBuilder() {
             getCoroutines(project),
             platform,
             implementedProjects.map { it.pathOrName() },
-            platform ?: kotlinPluginId
+            platform ?: kotlinPluginId,
+            extraProperties
         )
     }
 }

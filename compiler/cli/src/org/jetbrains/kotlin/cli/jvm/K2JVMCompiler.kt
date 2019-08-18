@@ -22,7 +22,6 @@ import org.jetbrains.kotlin.backend.jvm.jvmPhases
 import org.jetbrains.kotlin.cli.common.*
 import org.jetbrains.kotlin.cli.common.ExitCode.*
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
-import org.jetbrains.kotlin.cli.common.config.addKotlinSourceRoot
 import org.jetbrains.kotlin.cli.common.extensions.ScriptEvaluationExtension
 import org.jetbrains.kotlin.cli.common.extensions.ShellExtension
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.*
@@ -41,12 +40,11 @@ import org.jetbrains.kotlin.codegen.CompilationException
 import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.incremental.components.ExpectActualTracker
 import org.jetbrains.kotlin.incremental.components.LookupTracker
-import org.jetbrains.kotlin.javac.JavacWrapper
 import org.jetbrains.kotlin.load.java.JavaClassesTracker
-import org.jetbrains.kotlin.load.java.JvmAbi
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCompilationComponents
 import org.jetbrains.kotlin.metadata.deserialization.BinaryVersion
 import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmMetadataVersion
+import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmProtoBufUtil
 import org.jetbrains.kotlin.modules.JavaRootPath
 import org.jetbrains.kotlin.utils.KotlinPaths
 import org.jetbrains.kotlin.utils.PathUtil
@@ -71,10 +69,10 @@ class K2JVMCompiler : CLICompiler<K2JVMCompilerArguments>() {
 
         configuration.put(JVMConfigurationKeys.DISABLE_STANDARD_SCRIPT_DEFINITION, arguments.disableStandardScript)
 
-        val pluginLoadResult = loadPlugins(arguments, configuration)
+        val pluginLoadResult = loadPlugins(paths, arguments, configuration)
         if (pluginLoadResult != ExitCode.OK) return pluginLoadResult
 
-        val moduleName = arguments.moduleName ?: JvmAbi.DEFAULT_MODULE_NAME
+        val moduleName = arguments.moduleName ?: JvmProtoBufUtil.DEFAULT_MODULE_NAME
         configuration.put(CommonConfigurationKeys.MODULE_NAME, moduleName)
 
         configuration.configureExplicitContentRoots(arguments)
@@ -199,7 +197,7 @@ class K2JVMCompiler : CLICompiler<K2JVMCompilerArguments>() {
         }
     }
 
-    private fun loadPlugins(arguments: K2JVMCompilerArguments, configuration: CompilerConfiguration): ExitCode {
+    private fun loadPlugins(paths: KotlinPaths?, arguments: K2JVMCompilerArguments, configuration: CompilerConfiguration): ExitCode {
         var pluginClasspaths: Iterable<String> = arguments.pluginClasspaths?.asIterable() ?: emptyList()
         val pluginOptions = arguments.pluginOptions?.toMutableList() ?: ArrayList()
 
@@ -215,7 +213,8 @@ class K2JVMCompiler : CLICompiler<K2JVMCompilerArguments>() {
             // if scripting plugin is not enabled explicitly (probably from another path) and not in the classpath already,
             // try to find and enable it implicitly
             if (!explicitOrLoadedScriptingPlugin) {
-                val libPath = PathUtil.kotlinPathsForCompiler.libPath.takeIf { it.exists() && it.isDirectory } ?: File(".")
+                val kotlinPaths = paths ?: PathUtil.kotlinPathsForCompiler
+                val libPath = kotlinPaths.libPath.takeIf { it.exists() && it.isDirectory } ?: File(".")
                 val (jars, missingJars) =
                     PathUtil.KOTLIN_SCRIPTING_PLUGIN_CLASSPATH_JARS.mapNotNull { File(libPath, it) }.partition { it.exists() }
                 if (missingJars.isEmpty()) {

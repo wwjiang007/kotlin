@@ -67,9 +67,9 @@ class TextDiagnostic(
         return result
     }
 
-    fun asString(): String {
+    fun asString(withNewInference: Boolean = true, renderParameters: Boolean = true): String {
         val result = StringBuilder()
-        if (inferenceCompatibility.abbreviation != null) {
+        if (withNewInference && inferenceCompatibility.abbreviation != null) {
             result.append(inferenceCompatibility.abbreviation)
             result.append(";")
         }
@@ -78,9 +78,10 @@ class TextDiagnostic(
             result.append(":")
         }
         result.append(name)
-        if (parameters != null) {
+
+        if (renderParameters && parameters != null) {
             result.append("(")
-            result.append(StringUtil.join(parameters, { "\"$it\"" }, ", "))
+            result.append(StringUtil.join(parameters, { "\"" + crossPlatformLineBreak.matcher(it).replaceAll(" ") + "\"" }, ", "))
             result.append(")")
         }
         return result.toString()
@@ -91,6 +92,8 @@ class TextDiagnostic(
     }
 
     companion object {
+        private val crossPlatformLineBreak = Pattern.compile("""\r?\n""")
+
         fun parseDiagnostic(text: String): TextDiagnostic {
             val matcher = CheckerTestUtil.individualDiagnosticPattern.matcher(text)
             if (!matcher.find())

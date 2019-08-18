@@ -65,6 +65,7 @@ import com.intellij.util.lang.UrlClassLoader
 import org.jetbrains.annotations.TestOnly
 import org.jetbrains.kotlin.asJava.KotlinAsJavaSupport
 import org.jetbrains.kotlin.asJava.LightClassGenerationSupport
+import org.jetbrains.kotlin.asJava.classes.FacadeCache
 import org.jetbrains.kotlin.asJava.classes.KtLightClassForFacade
 import org.jetbrains.kotlin.asJava.finder.JavaElementFinder
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
@@ -290,6 +291,11 @@ class KotlinCoreEnvironment private constructor(
             unprocessedSources = allNewSources.filterNot { processedSources.contains(it) }.distinct()
             sourceFiles += unprocessedSources
         }
+    }
+
+    fun addKotlinSourceRoots(rootDirs: List<File>) {
+        val roots = rootDirs.map { KotlinSourceRoot(it.absolutePath, isCommon = false) }
+        sourceFiles += createSourceFilesFromSourceRoots(configuration, project, roots)
     }
 
     fun createPackagePartProvider(scope: GlobalSearchScope): JvmPackagePartProvider {
@@ -557,7 +563,7 @@ class KotlinCoreEnvironment private constructor(
                 configuration.get(CLIConfigurationKeys.INTELLIJ_PLUGIN_ROOT)?.let(::File)
                     ?: PathUtil.getResourcePathForClass(this::class.java).takeIf { it.hasConfigFile(configFilePath) }
                     // hack for load extensions when compiler run directly from project directory (e.g. in tests)
-                    ?: File("idea/resources").takeIf { it.hasConfigFile(configFilePath) }
+                    ?: File("compiler/cli/cli-common/resources").takeIf { it.hasConfigFile(configFilePath) }
                     ?: throw IllegalStateException(
                         "Unable to find extension point configuration $configFilePath " +
                                 "(cp:\n  ${(Thread.currentThread().contextClassLoader as? UrlClassLoader)?.urls?.joinToString("\n  ") { it.file }})"
@@ -679,7 +685,7 @@ class KotlinCoreEnvironment private constructor(
         fun registerProjectServices(project: MockProject) {
             with(project) {
                 registerService(KotlinJavaPsiFacade::class.java, KotlinJavaPsiFacade(this))
-                registerService(KtLightClassForFacade.FacadeStubCache::class.java, KtLightClassForFacade.FacadeStubCache(this))
+                registerService(FacadeCache::class.java, FacadeCache(this))
                 registerService(ModuleAnnotationsResolver::class.java, CliModuleAnnotationsResolver())
             }
         }

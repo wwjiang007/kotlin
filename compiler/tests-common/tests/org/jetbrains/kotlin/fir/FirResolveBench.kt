@@ -8,12 +8,11 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.fir.builder.RawFirBuilder
 import org.jetbrains.kotlin.fir.declarations.FirFile
+import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
+import org.jetbrains.kotlin.fir.expressions.FirQualifiedAccessExpression
 import org.jetbrains.kotlin.fir.resolve.FirProvider
 import org.jetbrains.kotlin.fir.resolve.impl.FirProviderImpl
-import org.jetbrains.kotlin.fir.types.ConeClassErrorType
-import org.jetbrains.kotlin.fir.types.ConeKotlinErrorType
-import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
-import org.jetbrains.kotlin.fir.types.FirTypeRef
+import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.fir.visitors.FirTransformer
 import org.jetbrains.kotlin.fir.visitors.FirVisitorVoid
 import org.jetbrains.kotlin.psi.KtFile
@@ -25,7 +24,7 @@ import kotlin.system.measureNanoTime
 
 
 fun checkFirProvidersConsistency(firFiles: List<FirFile>) {
-    for ((session, files) in firFiles.groupBy { it.session }) {
+    for ((session, files) in firFiles.groupBy { it.fileSession }) {
         val provider = session.service<FirProvider>() as FirProviderImpl
         provider.ensureConsistent(files)
     }
@@ -41,6 +40,8 @@ class FirResolveBench(val withProgress: Boolean) {
     var resolvedTypes = 0
     var errorTypes = 0
     var unresolvedTypes = 0
+    var errorFunctionCallTypes = 0
+    var errorQualifiedAccessTypes = 0
     var implicitTypes = 0
     var fileCount = 0
 
@@ -116,6 +117,30 @@ class FirResolveBench(val withProgress: Boolean) {
                         element.acceptChildren(this)
                     }
 
+                    override fun visitFunctionCall(functionCall: FirFunctionCall) {
+                        val typeRef = functionCall.typeRef
+                        if (typeRef is FirResolvedTypeRef) {
+                            val type = typeRef.type
+                            if (type is ConeKotlinErrorType) {
+                                errorFunctionCallTypes++
+                            }
+                        }
+
+                        super.visitFunctionCall(functionCall)
+                    }
+
+                    override fun visitQualifiedAccessExpression(qualifiedAccessExpression: FirQualifiedAccessExpression) {
+                        val typeRef = qualifiedAccessExpression.typeRef
+                        if (typeRef is FirResolvedTypeRef) {
+                            val type = typeRef.type
+                            if (type is ConeKotlinErrorType) {
+                                errorQualifiedAccessTypes++
+                            }
+                        }
+
+                        super.visitQualifiedAccessExpression(qualifiedAccessExpression)
+                    }
+
                     override fun visitTypeRef(typeRef: FirTypeRef) {
                         unresolvedTypes++
 
@@ -123,6 +148,14 @@ class FirResolveBench(val withProgress: Boolean) {
                             val psi = typeRef.psi!!
                             val problem = "${typeRef::class.simpleName}: ${typeRef.render()}"
                             reportProblem(problem, psi)
+                        }
+                    }
+
+                    override fun visitImplicitTypeRef(implicitTypeRef: FirImplicitTypeRef) {
+                        if (implicitTypeRef is FirResolvedTypeRef) {
+                            visitResolvedTypeRef(implicitTypeRef)
+                        } else {
+                            visitTypeRef(implicitTypeRef)
                         }
                     }
 
@@ -162,11 +195,19 @@ class FirResolveBench(val withProgress: Boolean) {
                 stream.println(it.report)
             }
 
-        stream.println("UNRESOLVED TYPES: $unresolvedTypes")
-        stream.println("RESOLVED TYPES: $resolvedTypes")
-        stream.println("GOOD TYPES: ${resolvedTypes - errorTypes}")
-        stream.println("ERROR TYPES: $errorTypes")
-        stream.println("IMPLICIT TYPES: $implicitTypes")
+        infix fun Int.percentOf(other: Int): String {
+            return String.format("%.1f%%", this * 100.0 / other)
+        }
+
+        val totalTypes = unresolvedTypes + resolvedTypes
+        stream.println("UNRESOLVED (UNTOUCHED) IMPLICIT TYPES: $unresolvedTypes (${unresolvedTypes percentOf totalTypes})")
+        stream.println("RESOLVED TYPES: $resolvedTypes (${resolvedTypes percentOf totalTypes})")
+        val goodTypes = resolvedTypes - errorTypes - implicitTypes
+        stream.println("CORRECTLY RESOLVED TYPES: $goodTypes (${goodTypes percentOf resolvedTypes} of resolved)")
+        stream.println("ERRONEOUSLY RESOLVED TYPES: $errorTypes (${errorTypes percentOf resolvedTypes} of resolved)")
+        stream.println("   - unresolved calls: $errorFunctionCallTypes")
+        stream.println("   - unresolved q.accesses: $errorQualifiedAccessTypes")
+        stream.println("ERRONEOUSLY RESOLVED IMPLICIT TYPES: $implicitTypes (${implicitTypes percentOf resolvedTypes} of resolved)")
         stream.println("UNIQUE ERROR TYPES: ${errorTypesReports.size}")
 
 

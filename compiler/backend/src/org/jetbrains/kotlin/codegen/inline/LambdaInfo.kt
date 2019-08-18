@@ -188,23 +188,9 @@ internal fun Type.boxReceiverForBoundReference() =
 internal fun Type.boxReceiverForBoundReference(kotlinType: KotlinType, typeMapper: KotlinTypeMapper) =
     AsmUtil.boxType(this, kotlinType, typeMapper)
 
-abstract class ExpressionLambda(protected val typeMapper: KotlinTypeMapper, isCrossInline: Boolean) : LambdaInfo(isCrossInline) {
-
+abstract class ExpressionLambda(isCrossInline: Boolean) : LambdaInfo(isCrossInline) {
     override fun generateLambdaBody(sourceCompiler: SourceCompilerForInline, reifiedTypeInliner: ReifiedTypeInliner) {
-        val jvmMethodSignature = typeMapper.mapSignatureSkipGeneric(invokeMethodDescriptor)
-        val asmMethod = jvmMethodSignature.asmMethod
-        val methodNode = MethodNode(
-            Opcodes.API_VERSION, AsmUtil.getMethodAsmFlags(invokeMethodDescriptor, OwnerKind.IMPLEMENTATION, sourceCompiler.state),
-            asmMethod.name, asmMethod.descriptor, null, null
-        )
-
-        node = wrapWithMaxLocalCalc(methodNode).let { adapter ->
-            val smap = sourceCompiler.generateLambdaBody(
-                adapter, jvmMethodSignature, this
-            )
-            adapter.visitMaxs(-1, -1)
-            SMAPAndMethodNode(methodNode, smap)
-        }
+        node = sourceCompiler.generateLambdaBody(this)
     }
 }
 
@@ -214,7 +200,7 @@ class PsiExpressionLambda(
     languageVersionSettings: LanguageVersionSettings,
     isCrossInline: Boolean,
     override val isBoundCallableReference: Boolean
-) : ExpressionLambda(typeMapper, isCrossInline) {
+) : ExpressionLambda(isCrossInline) {
 
     override val lambdaClassType: Type
 

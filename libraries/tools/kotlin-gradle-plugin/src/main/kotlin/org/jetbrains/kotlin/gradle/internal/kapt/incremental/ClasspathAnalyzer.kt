@@ -26,10 +26,7 @@ class StructureArtifactTransform : ArtifactTransform() {
             val dataFile = outputDirectory.resolve("output.bin")
             data.saveTo(dataFile)
 
-            val lazyStructureFile = outputDirectory.resolve("lazy-output.bin")
-            LazyClasspathEntryData(input, dataFile).saveToFile(lazyStructureFile)
-
-            return mutableListOf(lazyStructureFile)
+            return mutableListOf(dataFile)
         } catch (e: Throwable) {
             throw e
         }
@@ -43,7 +40,9 @@ private fun visitDirectory(directory: File): ClasspathEntryData {
         it.extension == "class" && !it.relativeTo(directory).toString().toLowerCase().startsWith("meta-inf")
     }.forEach {
         val internalName = it.relativeTo(directory).invariantSeparatorsPath.dropLast(".class".length)
-        analyzeInputStream(it.inputStream(), internalName, entryData)
+        BufferedInputStream(it.inputStream()).use { inputStream ->
+            analyzeInputStream(inputStream, internalName, entryData)
+        }
     }
 
     return entryData
@@ -58,7 +57,9 @@ private fun visitJar(jar: File): ClasspathEntryData {
             val entry = entries.nextElement()
 
             if (entry.name.endsWith("class") && !entry.name.toLowerCase().startsWith("meta-inf")) {
-                analyzeInputStream(zipFile.getInputStream(entry), entry.name.dropLast(".class".length), entryData)
+                BufferedInputStream(zipFile.getInputStream(entry)).use { inputStream ->
+                    analyzeInputStream(inputStream, entry.name.dropLast(".class".length), entryData)
+                }
             }
         }
     }
@@ -69,7 +70,7 @@ private fun visitJar(jar: File): ClasspathEntryData {
 private fun analyzeInputStream(input: InputStream, internalName: String, entryData: ClasspathEntryData) {
     val abiExtractor = ClassAbiExtractor(ClassWriter(0))
     val typeDependenciesExtractor = ClassTypeExtractorVisitor(abiExtractor)
-    ClassReader(BufferedInputStream(input).readBytes()).accept(
+    ClassReader(input.readBytes()).accept(
         typeDependenciesExtractor,
         ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES
     )
@@ -80,25 +81,6 @@ private fun analyzeInputStream(input: InputStream, internalName: String, entryDa
     entryData.classAbiHash[internalName] = digest
     entryData.classDependencies[internalName] =
         ClassDependencies(typeDependenciesExtractor.getAbiTypes(), typeDependenciesExtractor.getPrivateTypes())
-}
-
-class LazyClasspathEntryData(val classpathEntry: File, private val dataFile: File) : Serializable {
-
-    object LazyClasspathEntrySerializer {
-        fun loadFromFile(file: File): LazyClasspathEntryData {
-            ObjectInputStream(BufferedInputStream(file.inputStream())).use {
-                return it.readObject() as LazyClasspathEntryData
-            }
-        }
-    }
-
-    fun saveToFile(file: File) {
-        ObjectOutputStream(BufferedOutputStream(file.outputStream())).use {
-            it.writeObject(this)
-        }
-    }
-
-    fun getClasspathEntryData(): ClasspathEntryData = ClasspathEntryData.ClasspathEntrySerializer.loadFrom(dataFile)
 }
 
 class ClasspathEntryData : Serializable {

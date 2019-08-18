@@ -635,6 +635,11 @@ public class WriteFlagsTestGenerated extends AbstractWriteFlagsTest {
             KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/writeFlags/inline"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM, true);
         }
 
+        @TestMetadata("inlineOnly.kt")
+        public void testInlineOnly() throws Exception {
+            runTest("compiler/testData/writeFlags/inline/inlineOnly.kt");
+        }
+
         @TestMetadata("lostInnerClass.kt")
         public void testLostInnerClass() throws Exception {
             runTest("compiler/testData/writeFlags/inline/lostInnerClass.kt");
@@ -1034,6 +1039,11 @@ public class WriteFlagsTestGenerated extends AbstractWriteFlagsTest {
                     runTest("compiler/testData/writeFlags/property/classObject/trait/noBackingField.kt");
                 }
 
+                @TestMetadata("privateConstVal.kt")
+                public void testPrivateConstVal() throws Exception {
+                    runTest("compiler/testData/writeFlags/property/classObject/trait/privateConstVal.kt");
+                }
+
                 @TestMetadata("privateVal.kt")
                 public void testPrivateVal() throws Exception {
                     runTest("compiler/testData/writeFlags/property/classObject/trait/privateVal.kt");
@@ -1149,6 +1159,11 @@ public class WriteFlagsTestGenerated extends AbstractWriteFlagsTest {
             @TestMetadata("publicProperty.kt")
             public void testPublicProperty() throws Exception {
                 runTest("compiler/testData/writeFlags/property/syntheticAnnotationsMethod/publicProperty.kt");
+            }
+
+            @TestMetadata("withGetterJvmName.kt")
+            public void testWithGetterJvmName() throws Exception {
+                runTest("compiler/testData/writeFlags/property/syntheticAnnotationsMethod/withGetterJvmName.kt");
             }
         }
 

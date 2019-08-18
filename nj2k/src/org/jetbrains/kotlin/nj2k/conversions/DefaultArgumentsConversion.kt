@@ -5,24 +5,26 @@
 
 package org.jetbrains.kotlin.nj2k.conversions
 
-import org.jetbrains.kotlin.nj2k.NewJ2kConverterContext
-import org.jetbrains.kotlin.nj2k.copyTreeAndDetach
-import org.jetbrains.kotlin.nj2k.jvmAnnotation
+import org.jetbrains.kotlin.nj2k.*
+import org.jetbrains.kotlin.nj2k.symbols.JKUniverseMethodSymbol
 import org.jetbrains.kotlin.nj2k.tree.*
 import org.jetbrains.kotlin.nj2k.tree.impl.JKFieldAccessExpressionImpl
-import org.jetbrains.kotlin.nj2k.tree.impl.JKUniverseMethodSymbol
 import org.jetbrains.kotlin.nj2k.tree.impl.psi
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 class DefaultArgumentsConversion(private val context: NewJ2kConverterContext) : RecursiveApplicableConversionBase() {
+    private fun JKMethod.canBeGetterOrSetter() =
+        name.value.asGetterName() != null
+                || name.value.asSetterName() != null
 
     private fun JKMethod.canNotBeMerged(): Boolean =
         modality == Modality.ABSTRACT
-                || modality == Modality.OVERRIDE
-                || hasExtraModifier(ExtraModifier.NATIVE)
-                || hasExtraModifier(ExtraModifier.SYNCHRONIZED)
+                || hasOtherModifier(OtherModifier.OVERRIDE)
+                || hasOtherModifier(OtherModifier.NATIVE)
+                || hasOtherModifier(OtherModifier.SYNCHRONIZED)
                 || context.converter.converterServices.oldServices.referenceSearcher.hasOverrides(psi()!!)
                 || annotationList.annotations.isNotEmpty()
+                || canBeGetterOrSetter()
 
 
     override fun applyToElement(element: JKTreeElement): JKTreeElement {
@@ -102,10 +104,10 @@ class DefaultArgumentsConversion(private val context: NewJ2kConverterContext) : 
 
                     return applyRecursive(on, ::remapParameterSymbol)
                 }
-
                 parameter.initializer = remapParameterSymbol(defaultValue) as JKExpression
             }
             element.declarations -= method
+            calledMethod.appendNonCodeElementsFrom(method)
         }
 
         for (method in element.declarations) {

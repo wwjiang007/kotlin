@@ -5,9 +5,11 @@
 
 package org.jetbrains.kotlin.fir.expressions
 
+import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.fir.expressions.impl.FirCallWithArgumentList
 import org.jetbrains.kotlin.fir.visitors.FirVisitor
 
-interface FirStringConcatenationCall : FirCall {
+abstract class FirStringConcatenationCall(psi: PsiElement?) : FirCallWithArgumentList(psi) {
     override fun <R, D> accept(visitor: FirVisitor<R, D>, data: D): R =
         visitor.visitStringConcatenationCall(this, data)
 }

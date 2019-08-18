@@ -1,19 +1,23 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.backend.jvm.codegen
 
+import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns.FQ_NAMES
-import org.jetbrains.kotlin.codegen.*
+import org.jetbrains.kotlin.codegen.AsmUtil
+import org.jetbrains.kotlin.codegen.ClassBuilderMode
+import org.jetbrains.kotlin.codegen.OwnerKind
 import org.jetbrains.kotlin.codegen.state.GenerationState
+import org.jetbrains.kotlin.codegen.visitAnnotableParameterCount
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.resolve.jvm.AsmTypes
+import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.resolve.jvm.annotations.JVM_SYNTHETIC_ANNOTATION_FQ_NAME
 import org.jetbrains.kotlin.resolve.jvm.annotations.STRICTFP_ANNOTATION_FQ_NAME
 import org.jetbrains.kotlin.resolve.jvm.annotations.SYNCHRONIZED_ANNOTATION_FQ_NAME
@@ -37,18 +41,23 @@ open class FunctionCodegen(
         try {
             doGenerate()
         } catch (e: Throwable) {
-            throw RuntimeException("${e.message} while generating code for:\n${irFunction.dump()}", e)
+            throw RuntimeException("Exception while generating code for:\n${irFunction.dump()}", e)
         }
 
     private fun doGenerate(): JvmMethodGenericSignature {
         val signature = classCodegen.typeMapper.mapSignatureWithGeneric(irFunction, OwnerKind.IMPLEMENTATION)
 
         val flags = calculateMethodFlags(irFunction.isStatic)
-        val methodVisitor = createMethod(flags, signature)
+        var methodVisitor = createMethod(flags, signature)
 
-        generateParameterNames(irFunction.descriptor, methodVisitor, signature, state, flags.and(Opcodes.ACC_SYNTHETIC) != 0)
+        val hasSyntheticFlag = flags.and(Opcodes.ACC_SYNTHETIC) != 0
+        generateParameterNames(irFunction, methodVisitor, signature, state, hasSyntheticFlag)
 
-        if (irFunction.origin != IrDeclarationOrigin.FUNCTION_FOR_DEFAULT_PARAMETER) {
+        if (!hasSyntheticFlag ||
+            irFunction.origin == JvmLoweredDeclarationOrigin.SYNTHETIC_METHOD_FOR_PROPERTY_ANNOTATIONS ||
+            //TODO: investigate this case: annotation here is generated twice in lowered function and in interface method overload
+            irFunction.origin == JvmLoweredDeclarationOrigin.GENERATED_SAM_IMPLEMENTATION
+        ) {
             AnnotationCodegen(classCodegen, state, methodVisitor::visitAnnotation).genAnnotations(
                 irFunction,
                 signature.asmMethod.returnType
@@ -58,11 +67,26 @@ open class FunctionCodegen(
 
         if (!state.classBuilderMode.generateBodies || flags.and(Opcodes.ACC_ABSTRACT) != 0 || irFunction.isExternal) {
             generateAnnotationDefaultValueIfNeeded(methodVisitor)
-            methodVisitor.visitEnd()
         } else {
             val frameMap = createFrameMapWithReceivers(signature)
+            val irClass = classCodegen.context.suspendFunctionContinuations[irFunction]
+            val element = (irFunction.symbol.descriptor.psiElement
+                ?: classCodegen.context.suspendLambdaToOriginalFunctionMap[irFunction.parent]?.symbol?.descriptor?.psiElement) as? KtElement
+            val continuationClassBuilder = classCodegen.context.continuationClassBuilders[irClass]
+            methodVisitor = when {
+                irFunction.isSuspend -> generateStateMachineForNamedFunction(
+                    irFunction, classCodegen, methodVisitor, flags, signature, continuationClassBuilder, element!!
+                )
+                irFunction.isInvokeSuspendOfLambda(classCodegen.context) -> generateStateMachineForLambda(
+                    classCodegen, methodVisitor, flags, signature, element!!
+                )
+                else -> methodVisitor
+            }
             ExpressionCodegen(irFunction, frameMap, InstructionAdapter(methodVisitor), classCodegen, isInlineLambda).generate()
+            methodVisitor.visitMaxs(-1, -1)
+            continuationClassBuilder?.done()
         }
+        methodVisitor.visitEnd()
 
         return signature
     }
@@ -118,7 +142,7 @@ open class FunctionCodegen(
             irFunction.OtherOrigin,
             flags,
             signature.asmMethod.name, signature.asmMethod.descriptor,
-            if (irFunction.origin == IrDeclarationOrigin.BRIDGE) null else signature.genericsSignature,
+            if (flags.and(Opcodes.ACC_SYNTHETIC) != 0) null else signature.genericsSignature,
             exceptions
         )
     }
@@ -144,12 +168,17 @@ open class FunctionCodegen(
             ?.expression
     }
 
+    private fun IrFrameMap.enterDispatchReceiver(parameter: IrValueParameter) {
+        val type = classCodegen.typeMapper.mapTypeAsDeclaration(parameter.type)
+        enter(parameter, type)
+    }
+
     private fun createFrameMapWithReceivers(signature: JvmMethodSignature): IrFrameMap {
         val frameMap = IrFrameMap()
         if (irFunction is IrConstructor) {
-            frameMap.enter((irFunction.parent as IrClass).thisReceiver!!, AsmTypes.OBJECT_TYPE)
+            frameMap.enterDispatchReceiver(irFunction.constructedClass.thisReceiver!!)
         } else if (irFunction.dispatchReceiverParameter != null) {
-            frameMap.enter(irFunction.dispatchReceiverParameter!!, AsmTypes.OBJECT_TYPE)
+            frameMap.enterDispatchReceiver(irFunction.dispatchReceiverParameter!!)
         }
 
         for (parameter in signature.valueParameters) {

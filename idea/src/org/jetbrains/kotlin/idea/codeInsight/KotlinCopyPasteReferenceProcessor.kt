@@ -33,12 +33,13 @@ import org.jetbrains.annotations.TestOnly
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.PackageFragmentDescriptor
+import org.jetbrains.kotlin.idea.caches.resolve.allowResolveInWriteAction
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveImportReference
 import org.jetbrains.kotlin.idea.codeInsight.shorten.performDelayedRefactoringRequests
-import org.jetbrains.kotlin.idea.conversion.copy.end
-import org.jetbrains.kotlin.idea.conversion.copy.range
-import org.jetbrains.kotlin.idea.conversion.copy.start
+import org.jetbrains.kotlin.idea.core.util.end
+import org.jetbrains.kotlin.idea.core.util.range
+import org.jetbrains.kotlin.idea.core.util.start
 import org.jetbrains.kotlin.idea.imports.importableFqName
 import org.jetbrains.kotlin.idea.kdoc.KDocReference
 import org.jetbrains.kotlin.idea.references.*
@@ -132,7 +133,10 @@ class KotlinCopyPasteReferenceProcessor : CopyPastePostProcessor<KotlinReference
         })
 
         val allElementsToResolve = elementsByRange.values.flatten().flatMap { it.collectDescendantsOfType<KtElement>() }
-        val bindingContext = file.getResolutionFacade().analyze(allElementsToResolve, BodyResolveMode.PARTIAL)
+        val bindingContext =
+            allowResolveInWriteAction {
+                file.getResolutionFacade().analyze(allElementsToResolve, BodyResolveMode.PARTIAL)
+            }
 
         val result = ArrayList<KotlinReferenceData>()
         for ((range, elements) in elementsByRange) {
@@ -169,7 +173,7 @@ class KotlinCopyPasteReferenceProcessor : CopyPastePostProcessor<KotlinReference
 
                 if (!reference.canBeResolvedViaImport(descriptor, bindingContext)) continue
 
-                val fqName = descriptor.importableFqName!!
+                val fqName = descriptor.importableFqName ?: continue
                 val kind = KotlinReferenceData.Kind.fromDescriptor(descriptor) ?: continue
                 val isQualifiable = KotlinReferenceData.isQualifiable(ktElement, descriptor)
                 val relativeStart = ktElement.range.start - startOffset

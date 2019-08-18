@@ -255,3 +255,17 @@ messages/**)
 
 # used in LazyScriptDescriptor
 -keep class org.jetbrains.kotlin.utils.addToStdlib.AddToStdlibKt { *; }
+
+-keep class com.intellij.openapi.vfs.impl.jar.CoreJarFileSystem { *; }
+
+# used in REPL
+# TODO: pack jline directly to scripting-compiler jars instead
+-keep class org.jline.reader.LineReaderBuilder { *; }
+-keep class org.jline.reader.LineReader { *; }
+-keep class org.jline.reader.History { *; }
+-keep class org.jline.reader.EndOfFileException { *; }
+-keep class org.jline.reader.UserInterruptException { *; }
+
+-keepclassmembers class * implements java.io.Serializable {
+    static final long serialVersionUID;
+}

@@ -9,12 +9,13 @@ import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.TypeAliasDescriptor
 import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.ir.declarations.IrTypeParametersContainer
-import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.IrTypeAbbreviation
 import org.jetbrains.kotlin.ir.types.IrTypeProjection
 import org.jetbrains.kotlin.ir.types.impl.*
 import org.jetbrains.kotlin.types.*
@@ -57,11 +58,11 @@ class TypeTranslator(
         typeParametersResolver.resolveScopedTypeParameter(typeParameterDescriptor)
             ?: symbolTable.referenceTypeParameter(typeParameterDescriptor)
 
-    fun translateType(ktType: KotlinType): IrType =
-        translateType(ktType, Variance.INVARIANT).type
+    fun translateType(kotlinType: KotlinType): IrType =
+        translateType(kotlinType, Variance.INVARIANT).type
 
-    private fun translateType(ktType: KotlinType, variance: Variance): IrTypeProjection {
-        val approximatedType = LegacyTypeApproximation().approximate(ktType)
+    private fun translateType(kotlinType: KotlinType, variance: Variance): IrTypeProjection {
+        val approximatedType = LegacyTypeApproximation().approximate(kotlinType)
 
         when {
             approximatedType.isError ->
@@ -77,9 +78,10 @@ class TypeTranslator(
             ?: throw AssertionError("No descriptor for type $approximatedType")
 
         return IrSimpleTypeBuilder().apply {
-            kotlinType = approximatedType
+            this.kotlinType = kotlinType
             hasQuestionMark = approximatedType.isMarkedNullable
             this.variance = variance
+            this.abbreviation = approximatedType.getAbbreviation()?.toIrTypeAbbreviation()
             when (ktTypeDescriptor) {
                 is TypeParameterDescriptor -> {
                     classifier = resolveTypeParameter(ktTypeDescriptor)
@@ -96,6 +98,19 @@ class TypeTranslator(
                     throw AssertionError("Unexpected type descriptor $ktTypeDescriptor :: ${ktTypeDescriptor::class}")
             }
         }.buildTypeProjection()
+    }
+
+    private fun SimpleType.toIrTypeAbbreviation(): IrTypeAbbreviation {
+        val typeAliasDescriptor = constructor.declarationDescriptor.let {
+            it as? TypeAliasDescriptor
+                ?: throw AssertionError("TypeAliasDescriptor expected: $it")
+        }
+        return IrTypeAbbreviationImpl(
+            symbolTable.referenceTypeAlias(typeAliasDescriptor),
+            isMarkedNullable,
+            translateTypeArguments(this.arguments),
+            translateTypeAnnotations(this.annotations)
+        )
     }
 
     private inner class LegacyTypeApproximation {
@@ -131,9 +146,8 @@ class TypeTranslator(
 
     }
 
-
     private fun translateTypeAnnotations(annotations: Annotations): List<IrConstructorCall> =
-        annotations.map(constantValueGenerator::generateAnnotationConstructorCall)
+        annotations.mapNotNull(constantValueGenerator::generateAnnotationConstructorCall)
 
     private fun translateTypeArguments(arguments: List<TypeProjection>) =
         arguments.map {

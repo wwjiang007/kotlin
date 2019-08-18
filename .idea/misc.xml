@@ -39,13 +39,6 @@
     <option name="LOCALE" />
     <option name="OPEN_IN_BROWSER" value="true" />
   </component>
-  <component name="MavenProjectsManager">
-    <option name="originalFiles">
-      <list>
-        <option value="$PROJECT_DIR$/libraries/pom.xml" />
-      </list>
-    </option>
-  </component>
   <component name="NullableNotNullManager">
     <option name="myDefaultNullable" value="org.jetbrains.annotations.Nullable" />
     <option name="myDefaultNotNull" value="org.jetbrains.annotations.NotNull" />
@@ -104,5 +97,8 @@
     <option name="selectedProfile" value="" />
     <option name="autoscroll" value="false" />
     <option name="showOnlyWarnings" value="false" />
+  </component>
+  <component name="intellij-api-watcher-check-current-project">
+    <option name="shouldCheckCurrentProject" value="true" />
   </component>
 </project>

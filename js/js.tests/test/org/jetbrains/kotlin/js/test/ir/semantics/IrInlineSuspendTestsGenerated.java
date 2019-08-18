@@ -88,6 +88,11 @@ public class IrInlineSuspendTestsGenerated extends AbstractIrInlineSuspendTests 
         runTest("compiler/testData/codegen/boxInline/suspend/kt26658.kt");
     }
 
+    @TestMetadata("maxStackWithCrossinline.kt")
+    public void testMaxStackWithCrossinline_1_3() throws Exception {
+        runTestWithPackageReplacement("compiler/testData/codegen/boxInline/suspend/maxStackWithCrossinline.kt", "kotlin.coroutines");
+    }
+
     @TestMetadata("multipleLocals.kt")
     public void testMultipleLocals_1_3() throws Exception {
         runTestWithPackageReplacement("compiler/testData/codegen/boxInline/suspend/multipleLocals.kt", "kotlin.coroutines");
@@ -352,6 +357,11 @@ public class IrInlineSuspendTestsGenerated extends AbstractIrInlineSuspendTests 
         @TestMetadata("passParameter.kt")
         public void testPassParameter_1_3() throws Exception {
             runTestWithPackageReplacement("compiler/testData/codegen/boxInline/suspend/stateMachine/passParameter.kt", "kotlin.coroutines");
+        }
+
+        @TestMetadata("unreachableSuspendMarker.kt")
+        public void testUnreachableSuspendMarker_1_3() throws Exception {
+            runTestWithPackageReplacement("compiler/testData/codegen/boxInline/suspend/stateMachine/unreachableSuspendMarker.kt", "kotlin.coroutines");
         }
     }
 }

@@ -6,9 +6,7 @@
 package org.jetbrains.kotlin.fir.expressions.impl
 
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.fir.FirAbstractElement
 import org.jetbrains.kotlin.fir.FirElement
-import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.expressions.FirExpression
 import org.jetbrains.kotlin.fir.expressions.FirThrowExpression
 import org.jetbrains.kotlin.fir.transformSingle
@@ -17,14 +15,16 @@ import org.jetbrains.kotlin.fir.types.impl.FirImplicitNothingTypeRef
 import org.jetbrains.kotlin.fir.visitors.FirTransformer
 
 class FirThrowExpressionImpl(
-    session: FirSession,
     psi: PsiElement?,
     override var exception: FirExpression
-) : FirAbstractExpression(session, psi), FirThrowExpression {
+) : FirThrowExpression(psi) {
+    override fun replaceTypeRef(newTypeRef: FirTypeRef) {}
+
     override fun <D> transformChildren(transformer: FirTransformer<D>, data: D): FirElement {
         exception = exception.transformSingle(transformer, data)
-        return super<FirAbstractExpression>.transformChildren(transformer, data)
+        typeRef = typeRef.transformSingle(transformer, data)
+        return super.transformChildren(transformer, data)
     }
 
-    override var typeRef: FirTypeRef = FirImplicitNothingTypeRef(session, psi)
+    override var typeRef: FirTypeRef = FirImplicitNothingTypeRef(psi)
 }

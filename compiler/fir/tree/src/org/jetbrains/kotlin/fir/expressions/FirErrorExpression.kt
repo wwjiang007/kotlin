@@ -5,10 +5,12 @@
 
 package org.jetbrains.kotlin.fir.expressions
 
+import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.fir.expressions.impl.FirUnknownTypeExpression
 import org.jetbrains.kotlin.fir.visitors.FirVisitor
 
-interface FirErrorExpression : FirExpression {
-    val reason: String
+abstract class FirErrorExpression(psi: PsiElement?) : FirUnknownTypeExpression(psi) {
+    abstract val reason: String
 
     override fun <R, D> accept(visitor: FirVisitor<R, D>, data: D): R {
         return visitor.visitErrorExpression(this, data)

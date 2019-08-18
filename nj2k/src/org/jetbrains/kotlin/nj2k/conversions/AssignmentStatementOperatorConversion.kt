@@ -9,28 +9,29 @@ import com.intellij.psi.JavaTokenType
 import org.jetbrains.kotlin.nj2k.copyTreeAndDetach
 import org.jetbrains.kotlin.nj2k.tree.JKKtAssignmentStatement
 import org.jetbrains.kotlin.nj2k.tree.JKTreeElement
-import org.jetbrains.kotlin.nj2k.tree.detached
-import org.jetbrains.kotlin.nj2k.tree.impl.*
+import org.jetbrains.kotlin.nj2k.tree.impl.JKBinaryExpressionImpl
+import org.jetbrains.kotlin.nj2k.tree.impl.JKJavaOperatorImpl
+import org.jetbrains.kotlin.nj2k.tree.impl.JKJavaOperatorToken
 
 class AssignmentStatementOperatorConversion : RecursiveApplicableConversionBase() {
     override fun applyToElement(element: JKTreeElement): JKTreeElement {
         if (element !is JKKtAssignmentStatement) return recurse(element)
         val operator = element.operator as? JKJavaOperatorImpl ?: return recurse(element)
-        operator.token.correnspondingBinaryOperation()
+        operator.token.correspondingBinaryOperation()
             ?.apply {
                 val expression = element.expression.copyTreeAndDetach()
                 element.expression =
-                        JKBinaryExpressionImpl(
-                            element.field.copyTreeAndDetach(),
-                            expression,
-                            this
-                        )
+                    JKBinaryExpressionImpl(
+                        element.field.copyTreeAndDetach(),
+                        expression,
+                        this
+                    )
                 element.operator = JKJavaOperatorImpl.tokenToOperator[JavaTokenType.EQ]!!
             }
         return recurse(element)
     }
 
-    private fun JKJavaOperatorToken.correnspondingBinaryOperation() =
+    private fun JKJavaOperatorToken.correspondingBinaryOperation() =
         when (psiToken) {
             JavaTokenType.OREQ -> JavaTokenType.OR
             JavaTokenType.ANDEQ -> JavaTokenType.AND

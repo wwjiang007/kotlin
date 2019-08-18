@@ -6,21 +6,19 @@ plugins {
 }
 
 dependencies {
-    if (!kotlinBuildProperties.isInJpsBuildIdeaSync) {
-        testCompile(projectRuntimeJar(":kotlin-main-kts")) // runtimeJar needed to for proper dependency on the jar with relocations
-    }
-
-    testCompile(project(":kotlin-scripting-jvm-host-embeddable"))
+    testCompile(project(":kotlin-main-kts"))
+    testCompileOnly(project(":compiler:cli"))
+    testCompileOnly(project(":kotlin-scripting-jvm-host"))
     testCompile(commonDep("junit"))
-    compileOnly("org.apache.ivy:ivy:2.4.0") // for jps/pill
-
-    if (kotlinBuildProperties.isInJpsBuildIdeaSync) {
-        testCompile(project(":kotlin-scripting-jvm-host"))
-        testCompile(project(":kotlin-main-kts"))
-    }
+    testCompile(projectTests(":kotlin-scripting-compiler")) { isTransitive = false }
 }
 
 sourceSets {
     "main" { }
     "test" { projectDefault() }
+}
+
+projectTest(parallel = true) {
+    dependsOn(":dist")
+    workingDir = rootDir
 }

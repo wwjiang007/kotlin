@@ -14,6 +14,7 @@ class A {
         int f = map.keySet().size();
         int g = map.values().size();
         int h = map.entrySet().size();
+        int i = map.entrySet().iterator().next().getKey() + 1
     }
 
     void bar(List<String> list, HashMap<String, Integer> map) {
@@ -34,10 +35,23 @@ class A {
         }
 
         for (Map.Entry<String, Integer> entry : map.entrySet()) {
+            String key = entry.getKey();
             Integer value = entry.getValue();
-            if (entry.getKey() != null) {
-                println(value + 1)
-            }
+            entry.setValue(value + 1);
         }
+    }
+
+    void kt21504() {
+        byte b = Byte.parseByte("1");
+        short s = Short.parseShort("1");
+        int i  = Integer.parseInt("1");
+        long l = Long.parseLong("1");
+        float f = Float.parseFloat("1");
+        double d = Double.parseDouble("1");
+
+        byte b2 = Byte.parseByte("1", 10);
+        short s2 = Short.parseShort("1", 10);
+        int i2  = Integer.parseInt("1", 10);
+        long l2 = Long.parseLong("1", 10);
     }
 }

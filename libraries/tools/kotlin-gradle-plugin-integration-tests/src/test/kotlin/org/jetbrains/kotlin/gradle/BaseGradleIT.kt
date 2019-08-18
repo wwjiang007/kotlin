@@ -33,7 +33,8 @@ abstract class BaseGradleIT {
 
     @Before
     fun setUp() {
-        workingDir = createTempDir("BaseGradleIT")
+        // Aapt2 from Android Gradle Plugin 3.2 and below does not handle long paths on Windows.
+        workingDir = createTempDir(if (isWindows) "" else "BaseGradleIT")
         acceptAndroidSdkLicenses()
     }
 
@@ -286,7 +287,12 @@ abstract class BaseGradleIT {
         build(*params, options = options.copy(kotlinDaemonDebugPort = debugPort), check = check)
     }
 
-    fun Project.build(vararg params: String, options: BuildOptions = defaultBuildOptions(), check: CompiledProject.() -> Unit) {
+    fun Project.build(
+        vararg params: String,
+        options: BuildOptions = defaultBuildOptions(),
+        projectDir: File = File(workingDir, projectName),
+        check: CompiledProject.() -> Unit
+    ) {
         val wrapperVersion = chooseWrapperVersionOrFinishTest()
 
         val env = createEnvironmentVariablesMap(options)
@@ -295,7 +301,6 @@ abstract class BaseGradleIT {
 
         println("<=== Test build: ${this.projectName} $cmd ===>")
 
-        val projectDir = File(workingDir, projectName)
         if (!projectDir.exists()) {
             setupWorkingDir()
         }
@@ -517,6 +522,12 @@ abstract class BaseGradleIT {
         assertTasksNotRealized(*tasks)
     }
 
+    fun CompiledProject.assertTasksSkipped(vararg tasks: String) {
+        for (task in tasks) {
+            assertContains("Skipping task '$task'")
+        }
+    }
+
     fun CompiledProject.getOutputForTask(taskName: String): String {
         val taskOutputRegex = ("(?:\\[LIFECYCLE] \\[class org\\.gradle(?:\\.internal\\.buildevents)?\\.TaskExecutionLogger] :$taskName|" +
                 "\\[org\\.gradle\\.execution\\.plan\\.DefaultPlanExecutor\\] :$taskName.*?started)" +
@@ -601,30 +612,35 @@ abstract class BaseGradleIT {
      * @param assertionFileName path to xml with expected test results, relative to test resources root
      */
     fun CompiledProject.assertTestResults(
-            @TestDataFile assertionFileName: String,
-            testReportName: String
+        @TestDataFile assertionFileName: String,
+        vararg testReportNames: String
     ) {
         val projectDir = project.projectDir
-        val testReportDir = projectDir.resolve("build/test-results/$testReportName")
+        val testReportDirs = testReportNames.map { projectDir.resolve("build/test-results/$it") }
 
-        if (!testReportDir.isDirectory) {
-            error("Test report dir $testReportDir was not created")
+        testReportDirs.forEach {
+            if (!it.isDirectory) {
+                error("Test report dir $it was not created")
+            }
         }
 
-        val actualTestResults = readAndCleanupTestResults(testReportDir, projectDir)
+        val actualTestResults = readAndCleanupTestResults(testReportDirs, projectDir)
         val expectedTestResults = prettyPrintXml(resourcesRootFile.resolve(assertionFileName).readText())
 
         assertEquals(expectedTestResults, actualTestResults)
     }
 
-    private fun readAndCleanupTestResults(testReportDir: File, projectDir: File): String {
-        val files = testReportDir
-                .listFiles()
-                .filter { it.isFile && it.name.endsWith(".xml") }
-                .sortedBy {
-                    // let containing test suite be first
-                    it.name.replace(".xml", ".A.xml")
+    private fun readAndCleanupTestResults(testReportDirs: List<File>, projectDir: File): String {
+        val files = testReportDirs
+            .flatMap {
+                (it.listFiles() ?: arrayOf()).filter {
+                    it.isFile && it.name.endsWith(".xml")
                 }
+            }
+            .sortedBy {
+                // let containing test suite be first
+                it.name.replace(".xml", ".A.xml")
+            }
 
         val xmlString = buildString {
             appendln("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
@@ -719,7 +735,6 @@ abstract class BaseGradleIT {
 
             // Workaround: override a console type set in the user machine gradle.properties (since Gradle 4.3):
             add("--console=plain")
-            add("-Dkotlin.daemon.ea=true")
             addAll(options.freeCommandLineArgs)
         }
 

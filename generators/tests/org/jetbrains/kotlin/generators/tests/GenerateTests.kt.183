@@ -34,7 +34,9 @@ import org.jetbrains.kotlin.android.synthetic.test.AbstractAndroidBytecodeShapeT
 import org.jetbrains.kotlin.android.synthetic.test.AbstractAndroidSyntheticPropertyDescriptorTest
 import org.jetbrains.kotlin.asJava.classes.AbstractUltraLightClassLoadingTest
 import org.jetbrains.kotlin.asJava.classes.AbstractUltraLightClassSanityTest
+import org.jetbrains.kotlin.asJava.classes.AbstractUltraLightFacadeClassTest
 import org.jetbrains.kotlin.checkers.*
+import org.jetbrains.kotlin.copyright.AbstractUpdateKotlinCopyrightTest
 import org.jetbrains.kotlin.findUsages.AbstractFindUsagesTest
 import org.jetbrains.kotlin.findUsages.AbstractKotlinFindUsagesWithLibraryTest
 import org.jetbrains.kotlin.formatter.AbstractFormatterTest
@@ -48,10 +50,7 @@ import org.jetbrains.kotlin.idea.AbstractExpressionSelectionTest
 import org.jetbrains.kotlin.idea.index.AbstractKotlinTypeAliasByExpansionShortNameIndexTest
 import org.jetbrains.kotlin.idea.AbstractSmartSelectionTest
 import org.jetbrains.kotlin.idea.actions.AbstractGotoTestOrCodeActionTest
-import org.jetbrains.kotlin.idea.caches.resolve.AbstractIdeCompiledLightClassTest
-import org.jetbrains.kotlin.idea.caches.resolve.AbstractIdeLightClassTest
-import org.jetbrains.kotlin.idea.caches.resolve.AbstractMultiModuleLineMarkerTest
-import org.jetbrains.kotlin.idea.caches.resolve.AbstractMultiPlatformHighlightingTest
+import org.jetbrains.kotlin.idea.caches.resolve.*
 import org.jetbrains.kotlin.idea.codeInsight.*
 import org.jetbrains.kotlin.idea.codeInsight.generate.AbstractCodeInsightActionTest
 import org.jetbrains.kotlin.idea.codeInsight.generate.AbstractGenerateHashCodeAndEqualsActionTest
@@ -130,6 +129,7 @@ import org.jetbrains.kotlin.idea.refactoring.safeDelete.AbstractMultiModuleSafeD
 import org.jetbrains.kotlin.idea.refactoring.safeDelete.AbstractSafeDeleteTest
 import org.jetbrains.kotlin.idea.repl.AbstractIdeReplCompletionTest
 import org.jetbrains.kotlin.idea.resolve.*
+import org.jetbrains.kotlin.idea.scratch.AbstractScratchLineMarkersTest
 import org.jetbrains.kotlin.idea.scratch.AbstractScratchRunActionTest
 import org.jetbrains.kotlin.idea.script.AbstractScriptConfigurationCompletionTest
 import org.jetbrains.kotlin.idea.script.AbstractScriptConfigurationHighlightingTest
@@ -158,7 +158,10 @@ import org.jetbrains.kotlin.kapt.cli.test.AbstractKaptToolIntegrationTest
 import org.jetbrains.kotlin.kapt3.test.AbstractClassFileToSourceStubConverterTest
 import org.jetbrains.kotlin.kapt3.test.AbstractKotlinKaptContextTest
 import org.jetbrains.kotlin.nj2k.AbstractNewJavaToKotlinConverterSingleFileTest
-import org.jetbrains.kotlin.nj2k.AbstractNullabilityAnalysisTest
+import org.jetbrains.kotlin.nj2k.AbstractNewJavaToKotlinCopyPasteConversionTest
+import org.jetbrains.kotlin.nj2k.AbstractTextNewJavaToKotlinCopyPasteConversionTest
+import org.jetbrains.kotlin.nj2k.inference.common.AbstractCommonConstraintCollectorTest
+import org.jetbrains.kotlin.nj2k.inference.nullability.AbstractNullabilityInferenceTest
 import org.jetbrains.kotlin.noarg.AbstractBlackBoxCodegenTestForNoArg
 import org.jetbrains.kotlin.noarg.AbstractBytecodeListingTestForNoArg
 import org.jetbrains.kotlin.psi.patternMatching.AbstractPsiUnifierTest
@@ -168,6 +171,9 @@ import org.jetbrains.kotlin.search.AbstractAnnotatedMembersSearchTest
 import org.jetbrains.kotlin.search.AbstractInheritorsSearchTest
 import org.jetbrains.kotlin.shortenRefs.AbstractShortenRefsTest
 import org.jetbrains.kotlin.test.TargetBackend
+import org.jetbrains.kotlinx.serialization.AbstractSerializationPluginBytecodeListingTest
+import org.jetbrains.kotlinx.serialization.AbstractSerializationPluginDiagnosticTest
+import org.jetbrains.kotlinx.serialization.AbstractSerializationIrBytecodeListingTest
 
 fun main(args: Array<String>) {
     System.setProperty("java.awt.headless", "true")
@@ -561,6 +567,10 @@ fun main(args: Array<String>) {
             model("copyPaste/moveDeclarations", pattern = KT_WITHOUT_DOTS_IN_NAME, testMethod = "doTest")
         }
 
+        testClass<AbstractUpdateKotlinCopyrightTest> {
+            model("copyright", pattern = KT_OR_KTS, testMethod = "doTest")
+        }
+
         testClass<AbstractHighlightExitPointsTest> {
             model("exitPoints")
         }
@@ -677,6 +687,10 @@ fun main(args: Array<String>) {
 
         testClass<AbstractMultiPlatformHighlightingTest> {
             model("multiModuleHighlighting/multiplatform/", recursive = false, extension = null)
+        }
+
+        testClass<AbstractHierarchicalExpectActualTest> {
+            model("multiModuleHighlighting/hierarchicalExpectActualMatching/", recursive = false, extension = null)
         }
 
         testClass<AbstractQuickFixMultiModuleTest> {
@@ -808,6 +822,10 @@ fun main(args: Array<String>) {
             model("scratch/multiFile", extension = null, testMethod = "doMultiFileTest", recursive = false)
         }
 
+        testClass<AbstractScratchLineMarkersTest> {
+            model("scratch/lineMarker", testMethod = "doScratchTest", pattern = KT_OR_KTS)
+        }
+
         testClass<AbstractFirMultiModuleResolveTest> {
             model("fir/multiModule", recursive = false, extension = null)
         }
@@ -849,6 +867,10 @@ fun main(args: Array<String>) {
         }
         testClass<AbstractUltraLightClassLoadingTest> {
             model("asJava/ultraLightClasses", pattern = KT_OR_KTS)
+        }
+
+        testClass<AbstractUltraLightFacadeClassTest> {
+            model("asJava/ultraLightFacades", pattern = KT_OR_KTS)
         }
 
         testClass<AbstractIdeCompiledLightClassTest> {
@@ -967,9 +989,21 @@ fun main(args: Array<String>) {
         }
     }
 
-    testGroup("nj2k/tests", "nj2k/testData/") {
-        testClass<AbstractNullabilityAnalysisTest> {
-            model("nullabilityAnalysis")
+    testGroup("nj2k/tests", "nj2k/testData") {
+        testClass<AbstractNewJavaToKotlinConverterSingleFileTest> {
+            model("newJ2k", pattern = """^([^\.]+)\.java$""")
+        }
+        testClass<AbstractCommonConstraintCollectorTest> {
+            model("inference/common")
+        }
+        testClass<AbstractNullabilityInferenceTest> {
+            model("inference/nullability")
+        }
+        testClass<AbstractNewJavaToKotlinCopyPasteConversionTest> {
+            model("copyPaste", pattern = """^([^\.]+)\.java$""")
+        }
+        testClass<AbstractTextNewJavaToKotlinCopyPasteConversionTest> {
+            model("copyPastePlainText", pattern = """^([^\.]+)\.txt$""")
         }
     }
 
@@ -1048,6 +1082,12 @@ fun main(args: Array<String>) {
         }
 
         testClass<AbstractIncrementalJsCompilerRunnerTest> {
+            model("incremental/pureKotlin", extension = null, recursive = false)
+            model("incremental/classHierarchyAffected", extension = null, recursive = false)
+            model("incremental/js", extension = null, excludeParentDirs = true)
+        }
+
+        testClass<AbstractIncrementalJsKlibCompilerRunnerTest> {
             model("incremental/pureKotlin", extension = null, recursive = false)
             model("incremental/classHierarchyAffected", extension = null, recursive = false)
             model("incremental/js", extension = null, excludeParentDirs = true)
@@ -1140,6 +1180,23 @@ fun main(args: Array<String>) {
         }
         testClass<AbstractSamWithReceiverScriptTest> {
             model("script", extension = "kts")
+        }
+    }
+
+    testGroup(
+        "plugins/kotlin-serialization/kotlin-serialization-compiler/test",
+        "plugins/kotlin-serialization/kotlin-serialization-compiler/testData"
+    ) {
+        testClass<AbstractSerializationPluginDiagnosticTest> {
+            model("diagnostics")
+        }
+
+        testClass<AbstractSerializationPluginBytecodeListingTest> {
+            model("codegen")
+        }
+
+        testClass<AbstractSerializationIrBytecodeListingTest> {
+            model("codegen")
         }
     }
 

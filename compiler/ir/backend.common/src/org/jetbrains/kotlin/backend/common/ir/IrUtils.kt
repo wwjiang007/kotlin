@@ -16,12 +16,15 @@
 
 package org.jetbrains.kotlin.backend.common.ir
 
+import org.jetbrains.kotlin.backend.common.CommonBackendContext
 import org.jetbrains.kotlin.backend.common.DumpIrTreeWithDescriptorsVisitor
 import org.jetbrains.kotlin.backend.common.deepCopyWithVariables
 import org.jetbrains.kotlin.backend.common.descriptors.*
+import org.jetbrains.kotlin.backend.common.lower.VariableRemapper
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.builders.Scope
@@ -112,6 +115,14 @@ val IrSimpleFunction.isOverridable: Boolean
 
 val IrSimpleFunction.isOverridableOrOverrides: Boolean get() = isOverridable || overriddenSymbols.isNotEmpty()
 
+fun IrReturnTarget.returnType(context: CommonBackendContext) =
+    when (this) {
+        is IrConstructor -> context.irBuiltIns.unitType
+        is IrFunction -> returnType
+        is IrReturnableBlock -> type
+        else -> error("Unknown ReturnTarget: $this")
+    }
+
 val IrClass.isFinalClass: Boolean
     get() = modality == Modality.FINAL && kind != ClassKind.ENUM_CLASS
 
@@ -142,7 +153,11 @@ fun IrValueParameter.copyTo(
     isCrossinline: Boolean = this.isCrossinline,
     isNoinline: Boolean = this.isNoinline
 ): IrValueParameter {
-    val descriptor = WrappedValueParameterDescriptor(symbol.descriptor.annotations, symbol.descriptor.source)
+    val descriptor = if (index < 0) {
+        WrappedReceiverParameterDescriptor(this.descriptor.annotations, this.descriptor.source)
+    } else {
+        WrappedValueParameterDescriptor(this.descriptor.annotations, this.descriptor.source)
+    }
     val symbol = IrValueParameterSymbolImpl(descriptor)
     val defaultValueCopy = defaultValue?.deepCopyWithVariables()
     defaultValueCopy?.patchDeclarationParents(irFunction)
@@ -170,10 +185,7 @@ fun IrTypeParameter.copyToWithoutSuperTypes(
     }
 }
 
-fun IrFunction.copyParameterDeclarationsFrom(from: IrFunction) {
-    assert(typeParameters.isEmpty())
-    copyTypeParametersFrom(from)
-
+fun IrFunction.copyValueParametersFrom(from: IrFunction) {
     // TODO: should dispatch receiver be copied?
     dispatchReceiverParameter = from.dispatchReceiverParameter?.let {
         IrValueParameterImpl(it.startOffset, it.endOffset, it.origin, it.descriptor, it.type, it.varargElementType).also {
@@ -186,22 +198,32 @@ fun IrFunction.copyParameterDeclarationsFrom(from: IrFunction) {
     valueParameters += from.valueParameters.map { it.copyTo(this, index = it.index + shift) }
 }
 
-fun IrTypeParametersContainer.copyTypeParametersFrom(
-    source: IrTypeParametersContainer,
+fun IrFunction.copyParameterDeclarationsFrom(from: IrFunction) {
+    assert(typeParameters.isEmpty())
+    copyTypeParametersFrom(from)
+    copyValueParametersFrom(from)
+}
+
+fun IrTypeParametersContainer.copyTypeParameters(
+    srcTypeParameters: List<IrTypeParameter>,
     origin: IrDeclarationOrigin? = null
 ) {
-    val target = this
-    val shift = target.typeParameters.size
+    val shift = typeParameters.size
     // Any type parameter can figure in a boundary type for any other parameter.
     // Therefore, we first copy the parameters themselves, then set up their supertypes.
-    source.typeParameters.forEachIndexed { i, sourceParameter ->
+    srcTypeParameters.forEachIndexed { i, sourceParameter ->
         assert(sourceParameter.index == i)
-        target.typeParameters.add(sourceParameter.copyToWithoutSuperTypes(target, shift = shift, origin = origin ?: sourceParameter.origin))
+        typeParameters.add(sourceParameter.copyToWithoutSuperTypes(this, shift = shift, origin = origin ?: sourceParameter.origin))
     }
-    source.typeParameters.zip(target.typeParameters.drop(shift)).forEach { (srcParameter, dstParameter) ->
+    srcTypeParameters.zip(typeParameters.drop(shift)).forEach { (srcParameter, dstParameter) ->
         dstParameter.copySuperTypesFrom(srcParameter)
     }
 }
+
+fun IrTypeParametersContainer.copyTypeParametersFrom(
+    source: IrTypeParametersContainer,
+    origin: IrDeclarationOrigin? = null
+) = copyTypeParameters(source.typeParameters, origin)
 
 private fun IrTypeParameter.copySuperTypesFrom(source: IrTypeParameter) {
     val target = this
@@ -328,8 +350,11 @@ val IrFunction.isStatic: Boolean
     get() = parent is IrClass && dispatchReceiverParameter == null
 
 val IrDeclaration.isTopLevel: Boolean
-    get() = parent is IrPackageFragment
-
+    get() {
+        if (parent is IrPackageFragment) return true
+        val parentClass = parent as? IrClass
+        return parentClass?.origin == IrDeclarationOrigin.FILE_CLASS && parentClass.parent is IrPackageFragment
+    }
 
 fun Scope.createTemporaryVariableWithWrappedDescriptor(
     irExpression: IrExpression,
@@ -445,6 +470,7 @@ fun IrClass.addFakeOverrides() {
             irClass.declarations
                 .flatMap { it.toList() }
                 .filter { it !in overriddenFunctions }
+                .filter { it.visibility != Visibilities.PRIVATE }
         }
         .toMutableSet()
 
@@ -461,7 +487,7 @@ fun IrClass.addFakeOverrides() {
                 IrSimpleFunctionSymbolImpl(descriptor),
                 irFunction.name,
                 Visibilities.INHERITED,
-                Modality.OPEN,
+                irFunction.modality,
                 irFunction.returnType,
                 irFunction.isInline,
                 irFunction.isExternal,
@@ -483,5 +509,62 @@ fun IrClass.addFakeOverrides() {
     declarations += fakeOverriddenFunctions.values
 }
 
-fun IrValueParameter.isInlineParameter() =
-    !isNoinline && !type.isNullable() && type.isFunctionOrKFunction()
+fun createStaticFunctionWithReceivers(
+    irParent: IrDeclarationParent,
+    name: Name,
+    oldFunction: IrFunction,
+    dispatchReceiverType: IrType? = oldFunction.dispatchReceiverParameter?.type,
+    origin: IrDeclarationOrigin = oldFunction.origin,
+    copyBody: Boolean = true
+): IrSimpleFunction {
+    val descriptor = WrappedSimpleFunctionDescriptor(Annotations.EMPTY, oldFunction.descriptor.source)
+    return IrFunctionImpl(
+        oldFunction.startOffset, oldFunction.endOffset,
+        origin,
+        IrSimpleFunctionSymbolImpl(descriptor),
+        name,
+        oldFunction.visibility,
+        Modality.FINAL,
+        oldFunction.returnType,
+        isInline = oldFunction.isInline,
+        isExternal = false, isTailrec = false, isSuspend = false
+    ).apply {
+        descriptor.bind(this)
+        parent = irParent
+
+        copyTypeParametersFrom(oldFunction)
+
+        annotations.addAll(oldFunction.annotations)
+
+        var offset = 0
+        val dispatchReceiver = oldFunction.dispatchReceiverParameter?.copyTo(
+            this,
+            name = Name.identifier("this"),
+            index = offset++,
+            type = dispatchReceiverType!!
+        )
+        val extensionReceiver = oldFunction.extensionReceiverParameter?.copyTo(
+            this,
+            name = Name.identifier("receiver"),
+            index = offset++
+        )
+        valueParameters.addAll(listOfNotNull(dispatchReceiver, extensionReceiver) +
+                                       oldFunction.valueParameters.map { it.copyTo(this, index = it.index + offset) }
+        )
+
+        if (copyBody) {
+            copyBodyToStatic(oldFunction, this)
+        }
+
+        metadata = oldFunction.metadata
+    }
+}
+
+fun copyBodyToStatic(oldFunction: IrFunction, staticFunction: IrFunction) {
+    val mapping: Map<IrValueParameter, IrValueParameter> =
+        (listOfNotNull(oldFunction.dispatchReceiverParameter, oldFunction.extensionReceiverParameter) + oldFunction.valueParameters)
+            .zip(staticFunction.valueParameters).toMap()
+    staticFunction.body = oldFunction.body
+            ?.transform(VariableRemapper(mapping), null)
+            ?.patchDeclarationParents(staticFunction)
+}

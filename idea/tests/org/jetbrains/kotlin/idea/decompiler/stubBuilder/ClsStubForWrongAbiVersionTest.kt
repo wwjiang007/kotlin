@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.idea.decompiler.stubBuilder
 
+import com.intellij.openapi.module.Module
 import com.intellij.testFramework.LightProjectDescriptor
 import org.jetbrains.kotlin.idea.decompiler.textBuilder.findTestLibraryRoot
 import org.jetbrains.kotlin.idea.test.KotlinJdkAndLibraryProjectDescriptor
@@ -15,13 +16,14 @@ import java.io.File
 
 @RunWith(JUnit3WithIdeaConfigurationRunner::class)
 class ClsStubBuilderForWrongAbiVersionTest : AbstractClsStubBuilderTest() {
+    val module: Module get() = myModule
 
     fun testPackage() = testStubsForFileWithWrongAbiVersion("Wrong_packageKt")
 
     fun testClass() = testStubsForFileWithWrongAbiVersion("ClassWithWrongAbiVersion")
 
     private fun testStubsForFileWithWrongAbiVersion(className: String) {
-        val root = findTestLibraryRoot(myModule!!)!!
+        val root = findTestLibraryRoot(module!!)!!
         val result = root.findClassFileByName(className)
         testClsStubsForFile(result, null)
     }

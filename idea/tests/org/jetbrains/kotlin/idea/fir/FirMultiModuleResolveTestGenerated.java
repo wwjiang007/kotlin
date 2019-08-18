@@ -64,6 +64,16 @@ public class FirMultiModuleResolveTestGenerated extends AbstractFirMultiModuleRe
         runTest("idea/testData/fir/multiModule/fullWithJavaPredefinedSignature/");
     }
 
+    @TestMetadata("javaGetPrefixConflict")
+    public void testJavaGetPrefixConflict() throws Exception {
+        runTest("idea/testData/fir/multiModule/javaGetPrefixConflict/");
+    }
+
+    @TestMetadata("javaInheritsKotlinDerived")
+    public void testJavaInheritsKotlinDerived() throws Exception {
+        runTest("idea/testData/fir/multiModule/javaInheritsKotlinDerived/");
+    }
+
     @TestMetadata("javaInheritsKotlinExtension")
     public void testJavaInheritsKotlinExtension() throws Exception {
         runTest("idea/testData/fir/multiModule/javaInheritsKotlinExtension/");
@@ -77,6 +87,11 @@ public class FirMultiModuleResolveTestGenerated extends AbstractFirMultiModuleRe
     @TestMetadata("javaInheritsRawKotlin")
     public void testJavaInheritsRawKotlin() throws Exception {
         runTest("idea/testData/fir/multiModule/javaInheritsRawKotlin/");
+    }
+
+    @TestMetadata("javaSyntheticProperty")
+    public void testJavaSyntheticProperty() throws Exception {
+        runTest("idea/testData/fir/multiModule/javaSyntheticProperty/");
     }
 
     @TestMetadata("mppFakeOverrides")

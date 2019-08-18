@@ -9,12 +9,15 @@ import org.jetbrains.kotlin.resolve.calls.components.PostponedArgumentsAnalyzer
 import org.jetbrains.kotlin.resolve.calls.inference.*
 import org.jetbrains.kotlin.resolve.calls.inference.components.ConstraintInjector
 import org.jetbrains.kotlin.resolve.calls.inference.components.KotlinConstraintSystemCompleter
-import org.jetbrains.kotlin.resolve.calls.inference.components.NewTypeSubstitutor
 import org.jetbrains.kotlin.resolve.calls.inference.components.ResultTypeResolver
 import org.jetbrains.kotlin.resolve.calls.model.KotlinCallDiagnostic
-import org.jetbrains.kotlin.types.checker.NewCapturedType
+import org.jetbrains.kotlin.resolve.calls.model.OnlyInputTypesDiagnostic
+import org.jetbrains.kotlin.types.IntersectionTypeConstructor
+import org.jetbrains.kotlin.types.KotlinType
+import org.jetbrains.kotlin.types.checker.NewKotlinTypeChecker
 import org.jetbrains.kotlin.types.model.*
 import org.jetbrains.kotlin.utils.SmartList
+import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import kotlin.math.max
 
 class NewConstraintSystemImpl(
@@ -179,8 +182,8 @@ class NewConstraintSystemImpl(
         return !type.contains {
             val capturedType = it.asSimpleType()?.asCapturedType()
             // TODO: change NewCapturedType to markered one for FE-IR
-            val typeToCheck = if (capturedType is NewCapturedType && capturedType.captureStatus() == CaptureStatus.FROM_EXPRESSION)
-                capturedType.constructor.projection.type
+            val typeToCheck = if (capturedType is CapturedTypeMarker && capturedType.captureStatus() == CaptureStatus.FROM_EXPRESSION)
+                capturedType.typeConstructorProjection().getType()
             else
                 it
 
@@ -247,7 +250,8 @@ class NewConstraintSystemImpl(
         checkState(State.BUILDING, State.COMPLETION)
 
         constraintInjector.addInitialEqualityConstraint(this, variable.defaultType(), resultType, FixVariableConstraintPosition(variable))
-        notFixedTypeVariables.remove(variable.freshTypeConstructor())
+        val variableWithConstraints = notFixedTypeVariables.remove(variable.freshTypeConstructor())
+        checkOnlyInputTypesAnnotation(variableWithConstraints, resultType)
 
         for (variableWithConstraint in notFixedTypeVariables.values) {
             variableWithConstraint.removeConstrains {
@@ -256,6 +260,25 @@ class NewConstraintSystemImpl(
         }
 
         storage.fixedTypeVariables[variable.freshTypeConstructor()] = resultType
+    }
+
+    private fun checkOnlyInputTypesAnnotation(
+        variableWithConstraints: MutableVariableWithConstraints?,
+        resultType: KotlinTypeMarker
+    ) {
+        if (resultType !is KotlinType) return
+        if (variableWithConstraints == null || variableWithConstraints.typeVariable.safeAs<NewTypeVariable>()?.hasOnlyInputTypesAnnotation() != true ) return
+        val projectedInputCallTypes = variableWithConstraints.projectedInputCallTypes
+        val resultTypeIsInputType = projectedInputCallTypes.any { inputType ->
+            val constructor = inputType.constructor
+            if (constructor is IntersectionTypeConstructor)
+                constructor.supertypes.any { NewKotlinTypeChecker.Default.equalTypes(resultType, it) }
+            else
+                NewKotlinTypeChecker.Default.equalTypes(resultType, inputType)
+        }
+        if (!resultTypeIsInputType) {
+            addError(OnlyInputTypesDiagnostic(variableWithConstraints.typeVariable as NewTypeVariable))
+        }
     }
 
     // KotlinConstraintSystemCompleter.Context, PostponedArgumentsAnalyzer.Context

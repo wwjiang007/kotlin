@@ -6,23 +6,21 @@
 package org.jetbrains.kotlin.fir.types.impl
 
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.FirAbstractElement
+import org.jetbrains.kotlin.fir.FirPureAbstractElement
 import org.jetbrains.kotlin.fir.expressions.FirAnnotationCall
 import org.jetbrains.kotlin.fir.types.FirImplicitTypeRef
 
 class FirImplicitTypeRefImpl(
-    override val session: FirSession,
-    override val psi: PsiElement?
-) : FirImplicitTypeRef {
+    psi: PsiElement?
+) : FirImplicitTypeRef, FirAbstractElement(psi) {
     override val annotations: List<FirAnnotationCall>
         get() = emptyList()
 }
 
-object FirComputingImplicitTypeRef : FirImplicitTypeRef {
+object FirComputingImplicitTypeRef : FirImplicitTypeRef, FirPureAbstractElement() {
     override val psi: PsiElement?
         get() = null
-    override val session: FirSession
-        get() = error("Session independent")
     override val annotations: List<FirAnnotationCall>
         get() = emptyList()
 

@@ -11,12 +11,8 @@ import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.declarations.impl.*
 import org.jetbrains.kotlin.fir.expressions.FirExpression
 import org.jetbrains.kotlin.fir.expressions.impl.FirExpressionStub
-import org.jetbrains.kotlin.fir.resolve.transformers.firUnsafe
 import org.jetbrains.kotlin.fir.symbols.CallableId
-import org.jetbrains.kotlin.fir.symbols.impl.FirFunctionSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirTypeAliasSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirTypeParameterSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.*
 import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.fir.types.impl.ConeClassTypeImpl
 import org.jetbrains.kotlin.fir.types.impl.ConeTypeParameterTypeImpl
@@ -140,13 +136,13 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
             Flags.IS_EXPECT_CLASS.get(flags),
             false,
             FirResolvedTypeRefImpl(
-                c.session,
                 null,
                 local.typeDeserializer.type(proto.underlyingType(c.typeTable)),
                 emptyList() /* TODO */
             )
         ).apply {
-            typeParameters += local.typeDeserializer.ownTypeParameters.map { it.firUnsafe() }
+            resolvePhase = FirResolvePhase.DECLARATIONS
+            typeParameters += local.typeDeserializer.ownTypeParameters.map { it.fir }
         }
     }
 
@@ -159,6 +155,7 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
 
         val getterFlags = if (proto.hasGetterFlags()) proto.getterFlags else flags
         val setterFlags = if (proto.hasSetterFlags()) proto.setterFlags else flags
+        val isVar = Flags.IS_VAR.get(flags)
 
         return FirMemberPropertyImpl(
             c.session,
@@ -174,14 +171,17 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
             isLateInit = Flags.IS_LATEINIT.get(flags),
             receiverTypeRef = proto.receiverType(c.typeTable)?.toTypeRef(local),
             returnTypeRef = returnTypeRef,
-            isVar = Flags.IS_VAR.get(flags),
+            isVar = isVar,
             initializer = null,
-            getter = FirDefaultPropertyGetter(c.session, null, returnTypeRef, ProtoEnumFlags.visibility(Flags.VISIBILITY.get(getterFlags))),
-            setter = FirDefaultPropertySetter(c.session, null, returnTypeRef, ProtoEnumFlags.visibility(Flags.VISIBILITY.get(setterFlags))),
             delegate = null
         ).apply {
-            typeParameters += local.typeDeserializer.ownTypeParameters.map { it.firUnsafe() }
+            resolvePhase = FirResolvePhase.DECLARATIONS
+            typeParameters += local.typeDeserializer.ownTypeParameters.map { it.fir }
             annotations += c.annotationDeserializer.loadPropertyAnnotations(proto, local.nameResolver)
+            getter = FirDefaultPropertyGetter(c.session, null, returnTypeRef, ProtoEnumFlags.visibility(Flags.VISIBILITY.get(getterFlags)))
+            setter = if (isVar) {
+                FirDefaultPropertySetter(c.session, null, returnTypeRef, ProtoEnumFlags.visibility(Flags.VISIBILITY.get(setterFlags)))
+            } else null
         }
     }
 
@@ -197,7 +197,7 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
             c.versionRequirementTable
 
         val callableName = c.nameResolver.getName(proto.name)
-        val symbol = FirFunctionSymbol(CallableId(c.packageFqName, c.relativeClassName, callableName))
+        val symbol = FirNamedFunctionSymbol(CallableId(c.packageFqName, c.relativeClassName, callableName))
         val local = c.childContext(proto.typeParameterList)
 
         // TODO: support contracts
@@ -220,7 +220,8 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
             receiverTypeRef = proto.receiverType(local.typeTable)?.toTypeRef(local),
             returnTypeRef = proto.returnType(local.typeTable).toTypeRef(local)
         ).apply {
-            typeParameters += local.typeDeserializer.ownTypeParameters.map { it.firUnsafe() }
+            resolvePhase = FirResolvePhase.DECLARATIONS
+            typeParameters += local.typeDeserializer.ownTypeParameters.map { it.fir }
             valueParameters += local.memberDeserializer.valueParameters(proto.valueParameterList)
             annotations += local.annotationDeserializer.loadFunctionAnnotations(proto, local.nameResolver)
         }
@@ -229,7 +230,7 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
     fun loadConstructor(proto: ProtoBuf.Constructor, klass: FirRegularClass): FirConstructor {
         val flags = proto.flags
         val relativeClassName = c.relativeClassName!!
-        val symbol = FirFunctionSymbol(CallableId(c.packageFqName, relativeClassName, relativeClassName.shortName()))
+        val symbol = FirConstructorSymbol(CallableId(c.packageFqName, relativeClassName, relativeClassName.shortName()))
         val local = c.childContext(emptyList())
         val isPrimary = !Flags.IS_SECONDARY.get(flags)
 
@@ -240,11 +241,10 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
         }
 
         val delegatedSelfType = FirResolvedTypeRefImpl(
-            c.session,
             null,
             ConeClassTypeImpl(
                 klass.symbol.toLookupTag(),
-                typeParameters.map { ConeTypeParameterTypeImpl(it.symbol, false) }.toTypedArray(),
+                typeParameters.map { ConeTypeParameterTypeImpl(it.symbol.toLookupTag(), false) }.toTypedArray(),
                 false
             )
         )
@@ -272,6 +272,7 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
                 null
             )
         }.apply {
+            resolvePhase = FirResolvePhase.DECLARATIONS
             this.typeParameters += typeParameters
             valueParameters += local.memberDeserializer.valueParameters(proto.valueParameterList)
             annotations += local.annotationDeserializer.loadConstructorAnnotations(proto, local.nameResolver)
@@ -281,7 +282,7 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
 
     private fun defaultValue(flags: Int): FirExpression? {
         if (Flags.DECLARES_DEFAULT_VALUE.get(flags)) {
-            return FirExpressionStub(c.session, null)
+            return FirExpressionStub(null)
         }
         return null
     }
@@ -307,7 +308,7 @@ class FirMemberDeserializer(private val c: FirDeserializationContext) {
     private fun ProtoBuf.Type.toTypeRef(context: FirDeserializationContext): FirTypeRef {
         val coneType = context.typeDeserializer.type(this)
         return FirResolvedTypeRefImpl(
-            context.session, null, coneType,
+            null, coneType,
             context.annotationDeserializer.loadTypeAnnotations(this, context.nameResolver)
         )
     }

@@ -42,9 +42,9 @@ abstract class DeclarationTable(val builtIns: IrBuiltIns, val descriptorTable: D
         val index = if (value.origin == IrDeclarationOrigin.FAKE_OVERRIDE ||
             !value.isExported()
             || value is IrVariable
-            || (value is IrTypeParameter && value.parent !is IrClass)
             || value is IrValueParameter
-            || value is IrAnonymousInitializerImpl
+            || value is IrAnonymousInitializer
+            || value is IrLocalDelegatedProperty
         ) {
             UniqId(currentIndex++, true)
         } else {

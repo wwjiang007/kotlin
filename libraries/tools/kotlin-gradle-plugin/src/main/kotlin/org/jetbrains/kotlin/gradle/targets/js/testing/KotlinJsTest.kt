@@ -6,16 +6,13 @@
 package org.jetbrains.kotlin.gradle.targets.js.testing
 
 import groovy.lang.Closure
-import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.InputFile
-import org.gradle.api.tasks.Internal
-import org.gradle.api.tasks.SkipWhenEmpty
+import org.gradle.api.file.FileCollection
+import org.gradle.api.tasks.*
 import org.gradle.process.internal.DefaultProcessForkOptions
 import org.gradle.util.ConfigureUtil
 import org.jetbrains.kotlin.gradle.internal.testing.TCServiceMessagesTestExecutionSpec
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJsCompilation
-import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsPlugin
-import org.jetbrains.kotlin.gradle.targets.js.npm.NpmResolver
+import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin
 import org.jetbrains.kotlin.gradle.targets.js.RequiredKotlinJsDependency
 import org.jetbrains.kotlin.gradle.targets.js.npm.RequiresNpmDependencies
 import org.jetbrains.kotlin.gradle.targets.js.npm.npmProject
@@ -23,13 +20,14 @@ import org.jetbrains.kotlin.gradle.targets.js.testing.karma.KotlinKarma
 import org.jetbrains.kotlin.gradle.targets.js.testing.mocha.KotlinMocha
 import org.jetbrains.kotlin.gradle.targets.js.testing.nodejs.KotlinNodeJsTestRunner
 import org.jetbrains.kotlin.gradle.tasks.KotlinTest
-import java.io.File
 
 open class KotlinJsTest : KotlinTest(), RequiresNpmDependencies {
-    @Internal
-    @SkipWhenEmpty
+    private val nodeJs get() = NodeJsRootPlugin.apply(project.rootProject)
+
+    @get:Internal
     internal var testFramework: KotlinJsTestFramework? = null
 
+    @Suppress("unused")
     val testFrameworkSettings: String
         @Input get() = testFramework!!.settingsState
 
@@ -39,9 +37,11 @@ open class KotlinJsTest : KotlinTest(), RequiresNpmDependencies {
     @Internal
     override lateinit var compilation: KotlinJsCompilation
 
-    val entry: File
-        @InputFile get() = compilation.compileKotlinTask.outputFile
+    @Suppress("unused")
+    val runtimeClasspath: FileCollection
+        @InputFiles get() = compilation.runtimeDependencyFiles
 
+    @Suppress("unused")
     val compilationId: String
         @Input get() = compilation.let {
             val target = it.target
@@ -51,9 +51,13 @@ open class KotlinJsTest : KotlinTest(), RequiresNpmDependencies {
     val nodeModulesToLoad: List<String>
         @Internal get() = listOf("./" + compilation.npmProject.main)
 
-    override val requiredNpmDependencies: Collection<RequiredKotlinJsDependency>
-        get() = testFramework!!.requiredNpmDependencies
+    override val nodeModulesRequired: Boolean
+        @Internal get() = testFramework!!.nodeModulesRequired
 
+    override val requiredNpmDependencies: Collection<RequiredKotlinJsDependency>
+        @Internal get() = testFramework!!.requiredNpmDependencies
+
+    fun useNodeJs() = useNodeJs {}
     fun useNodeJs(body: KotlinNodeJsTestRunner.() -> Unit) = use(KotlinNodeJsTestRunner(compilation), body)
     fun useNodeJs(fn: Closure<*>) {
         useNodeJs {
@@ -61,6 +65,7 @@ open class KotlinJsTest : KotlinTest(), RequiresNpmDependencies {
         }
     }
 
+    fun useMocha() = useMocha {}
     fun useMocha(body: KotlinMocha.() -> Unit) = use(KotlinMocha(compilation), body)
     fun useMocha(fn: Closure<*>) {
         useMocha {
@@ -68,6 +73,7 @@ open class KotlinJsTest : KotlinTest(), RequiresNpmDependencies {
         }
     }
 
+    fun useKarma() = useKarma {}
     fun useKarma(body: KotlinKarma.() -> Unit) = use(KotlinKarma(compilation), body)
     fun useKarma(fn: Closure<*>) {
         useKarma {
@@ -87,14 +93,14 @@ open class KotlinJsTest : KotlinTest(), RequiresNpmDependencies {
     }
 
     override fun executeTests() {
-        NpmResolver.checkRequiredDependencies(project, this)
+        nodeJs.npmResolutionManager.checkRequiredDependencies(this)
         super.executeTests()
     }
 
     override fun createTestExecutionSpec(): TCServiceMessagesTestExecutionSpec {
         val forkOptions = DefaultProcessForkOptions(fileResolver)
         forkOptions.workingDir = compilation.npmProject.dir
-        forkOptions.executable = NodeJsPlugin.apply(project).root.environment.nodeExecutable
+        forkOptions.executable = nodeJs.environment.nodeExecutable
 
         val nodeJsArgs = mutableListOf<String>()
 

@@ -10,10 +10,10 @@ import com.intellij.codeInsight.lookup.LookupElement
 import org.jetbrains.kotlin.idea.completion.KeywordLookupObject
 import org.jetbrains.kotlin.idea.test.KotlinLightProjectDescriptor
 import org.jetbrains.kotlin.idea.test.KotlinProjectDescriptorWithFacet
-import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
+import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
 
 abstract class AbstractKeywordCompletionTest : KotlinFixtureCompletionBaseTestCase() {
-    override fun getPlatform() = JvmPlatform
+    override fun getPlatform() = JvmPlatforms.unspecifiedJvmPlatform
 
     override fun defaultCompletionType() = CompletionType.BASIC
 
@@ -22,12 +22,10 @@ abstract class AbstractKeywordCompletionTest : KotlinFixtureCompletionBaseTestCa
         return items.filter { it.`object` is KeywordLookupObject }.toTypedArray()
     }
 
-    override fun getProjectDescriptor(): KotlinLightProjectDescriptor {
-        when {
-            "LangLevel10" in fileName() -> return KotlinProjectDescriptorWithFacet.KOTLIN_10
-            "LangLevel11" in fileName() -> return KotlinProjectDescriptorWithFacet.KOTLIN_11
-            else -> return KotlinProjectDescriptorWithFacet.KOTLIN_STABLE_WITH_MULTIPLATFORM
-        }
+    override fun getProjectDescriptor(): KotlinLightProjectDescriptor = when {
+        "LangLevel10" in fileName() -> KotlinProjectDescriptorWithFacet.KOTLIN_10
+        "LangLevel11" in fileName() -> KotlinProjectDescriptorWithFacet.KOTLIN_11
+        else -> KotlinProjectDescriptorWithFacet.KOTLIN_STABLE_WITH_MULTIPLATFORM
     }
 
     override fun defaultInvocationCount() = 1

@@ -8,14 +8,20 @@ package org.jetbrains.kotlin.backend.common.lower
 import org.jetbrains.kotlin.backend.common.*
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.ir.builders.*
-import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.declarations.IrEnumEntry
+import org.jetbrains.kotlin.ir.declarations.IrFile
+import org.jetbrains.kotlin.ir.declarations.IrVariable
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrGetValueImpl
 import org.jetbrains.kotlin.ir.types.classifierOrNull
 import org.jetbrains.kotlin.ir.types.getClass
-import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.ir.types.isNullable
+import org.jetbrains.kotlin.ir.util.dump
+import org.jetbrains.kotlin.ir.util.getPropertyGetter
+import org.jetbrains.kotlin.ir.util.isNullConst
+import org.jetbrains.kotlin.ir.util.parentAsClass
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 
 /** Look for when-constructs where subject is enum entry.
@@ -26,7 +32,7 @@ open class EnumWhenLowering(protected val context: CommonBackendContext) : IrEle
     private val subjectWithOrdinalStack = mutableListOf<Pair<IrVariable, Lazy<IrVariable>>>()
 
     protected open fun mapConstEnumEntry(entry: IrEnumEntry): Int =
-        entry.parentAsClass.declarations.filterIsInstance<IrEnumEntry>().indexOf(this).also {
+        entry.parentAsClass.declarations.filterIsInstance<IrEnumEntry>().indexOf(entry).also {
             assert(it >= 0) { "enum entry ${entry.dump()} not in parent class" }
         }
 

@@ -49,6 +49,7 @@ interface TypeSystemBuiltInsContext {
     fun nullableNothingType(): SimpleTypeMarker
     fun nullableAnyType(): SimpleTypeMarker
     fun nothingType(): SimpleTypeMarker
+    fun anyType(): SimpleTypeMarker
 }
 
 interface TypeSystemTypeFactoryContext {
@@ -75,7 +76,12 @@ interface TypeSystemCommonSuperTypesContext : TypeSystemContext, TypeSystemTypeF
     fun KotlinTypeMarker.canHaveUndefinedNullability(): Boolean
 
     fun SimpleTypeMarker.typeDepth(): Int
-    fun KotlinTypeMarker.typeDepth(): Int
+
+    fun KotlinTypeMarker.typeDepth(): Int = when (this) {
+        is SimpleTypeMarker -> typeDepth()
+        is FlexibleTypeMarker -> maxOf(lowerBound().typeDepth(), upperBound().typeDepth())
+        else -> error("Type should be simple or flexible: $this")
+    }
 
     fun findCommonIntegerLiteralTypesSuperType(explicitSupertypes: List<SimpleTypeMarker>): SimpleTypeMarker?
 }
@@ -121,15 +127,10 @@ interface TypeSystemInferenceExtensionContext : TypeSystemContext, TypeSystemBui
 
     fun TypeVariableMarker.freshTypeConstructor(): TypeConstructorMarker
 
+    fun KotlinTypeMarker.mayBeTypeVariable(): Boolean
 
     fun CapturedTypeMarker.typeConstructorProjection(): TypeArgumentMarker
     fun CapturedTypeMarker.captureStatus(): CaptureStatus
-
-    fun KotlinTypeMarker.isNullableType(): Boolean
-
-    fun KotlinTypeMarker.isNullableAny() = this.typeConstructor().isAnyConstructor() && this.isNullableType()
-    fun KotlinTypeMarker.isNothing() = this.typeConstructor().isNothingConstructor() && !this.isNullableType()
-    fun KotlinTypeMarker.isNullableNothing() = this.typeConstructor().isNothingConstructor() && this.isNullableType()
 
     fun DefinitelyNotNullTypeMarker.original(): SimpleTypeMarker
 
@@ -167,8 +168,8 @@ interface TypeSystemContext : TypeSystemOptimizationContext {
     fun SimpleTypeMarker.withNullability(nullable: Boolean): SimpleTypeMarker
     fun SimpleTypeMarker.typeConstructor(): TypeConstructorMarker
 
-    fun SimpleTypeMarker.argumentsCount(): Int
-    fun SimpleTypeMarker.getArgument(index: Int): TypeArgumentMarker
+    fun KotlinTypeMarker.argumentsCount(): Int
+    fun KotlinTypeMarker.getArgument(index: Int): TypeArgumentMarker
 
     fun SimpleTypeMarker.getArgumentOrNull(index: Int): TypeArgumentMarker? {
         if (index in 0 until argumentsCount()) return getArgument(index)
@@ -215,7 +216,15 @@ interface TypeSystemContext : TypeSystemOptimizationContext {
     fun KotlinTypeMarker.typeConstructor(): TypeConstructorMarker =
         (asSimpleType() ?: lowerBoundIfFlexible()).typeConstructor()
 
+    fun KotlinTypeMarker.isNullableType(): Boolean
+
+    fun KotlinTypeMarker.isNullableAny() = this.typeConstructor().isAnyConstructor() && this.isNullableType()
+    fun KotlinTypeMarker.isNothing() = this.typeConstructor().isNothingConstructor() && !this.isNullableType()
+    fun KotlinTypeMarker.isNullableNothing() = this.typeConstructor().isNothingConstructor() && this.isNullableType()
+
     fun SimpleTypeMarker.isClassType(): Boolean = typeConstructor().isClassTypeConstructor()
+
+    fun SimpleTypeMarker.fastCorrespondingSupertypes(constructor: TypeConstructorMarker): List<SimpleTypeMarker>? = null
 
     fun SimpleTypeMarker.isIntegerLiteralType(): Boolean = typeConstructor().isIntegerLiteralTypeConstructor()
 
@@ -250,8 +259,6 @@ interface TypeSystemContext : TypeSystemOptimizationContext {
 
     fun TypeConstructorMarker.isAnyConstructor(): Boolean
     fun TypeConstructorMarker.isNothingConstructor(): Boolean
-
-    fun KotlinTypeMarker.isNotNullNothing(): Boolean
 
     /**
      *

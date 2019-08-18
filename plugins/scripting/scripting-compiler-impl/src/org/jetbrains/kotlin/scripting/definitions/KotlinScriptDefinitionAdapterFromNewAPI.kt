@@ -17,6 +17,7 @@ import kotlin.script.experimental.api.*
 import kotlin.script.experimental.dependencies.DependenciesResolver
 import kotlin.script.experimental.host.ScriptingHostConfiguration
 import kotlin.script.experimental.host.getScriptingClass
+import kotlin.script.experimental.jvm.compat.mapToLegacyExpectedLocations
 import kotlin.script.experimental.jvm.impl.BridgeDependenciesResolver
 import kotlin.script.experimental.location.ScriptExpectedLocation
 import kotlin.script.experimental.util.getOrError
@@ -55,12 +56,14 @@ abstract class KotlinScriptDefinitionAdapterFromNewAPIBase : KotlinScriptDefinit
     }
 
     override val acceptedAnnotations: List<KClass<out Annotation>> by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        scriptCompilationConfiguration[ScriptCompilationConfiguration.refineConfigurationOnAnnotations]?.annotations
-            .orEmpty()
-            .map {
-                @Suppress("UNCHECKED_CAST")
-                getScriptingClass(it) as KClass<out Annotation>
+        scriptCompilationConfiguration[ScriptCompilationConfiguration.refineConfigurationOnAnnotations]
+            ?.flatMap {
+                it.annotations.map { ann ->
+                    @Suppress("UNCHECKED_CAST")
+                    getScriptingClass(ann) as KClass<out Annotation>
+                }
             }
+            .orEmpty()
     }
 
     override val implicitReceivers: List<KType> by lazy(LazyThreadSafetyMode.PUBLICATION) {
@@ -80,15 +83,8 @@ abstract class KotlinScriptDefinitionAdapterFromNewAPIBase : KotlinScriptDefinit
 
     @Suppress("DEPRECATION")
     override val scriptExpectedLocations: List<ScriptExpectedLocation>
-        get() = scriptCompilationConfiguration[ScriptCompilationConfiguration.ide.acceptedLocations]?.map {
-            when (it) {
-                ScriptAcceptedLocation.Sources -> ScriptExpectedLocation.SourcesOnly
-                ScriptAcceptedLocation.Tests -> ScriptExpectedLocation.TestsOnly
-                ScriptAcceptedLocation.Libraries -> ScriptExpectedLocation.Libraries
-                ScriptAcceptedLocation.Project -> ScriptExpectedLocation.Project
-                ScriptAcceptedLocation.Everywhere -> ScriptExpectedLocation.Everywhere
-            }
-        } ?: listOf(ScriptExpectedLocation.SourcesOnly, ScriptExpectedLocation.TestsOnly)
+        get() = scriptCompilationConfiguration[ScriptCompilationConfiguration.ide.acceptedLocations]?.mapToLegacyExpectedLocations()
+            ?: listOf(ScriptExpectedLocation.SourcesOnly, ScriptExpectedLocation.TestsOnly)
 
     private val scriptingClassGetter by lazy(LazyThreadSafetyMode.PUBLICATION) {
         hostConfiguration[ScriptingHostConfiguration.getScriptingClass]

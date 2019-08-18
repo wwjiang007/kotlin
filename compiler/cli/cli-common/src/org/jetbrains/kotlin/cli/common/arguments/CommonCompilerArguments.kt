@@ -129,6 +129,18 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
     var newInference: Boolean by FreezableVar(false)
 
     @Argument(
+        value = "-Xinline-classes",
+        description = "Enable experimental inline classes"
+    )
+    var inlineClasses: Boolean by FreezableVar(false)
+
+    @Argument(
+        value = "-Xpolymorphic-signature",
+        description = "Enable experimental support for @PolymorphicSignature (MethodHandle/VarHandle)"
+    )
+    var polymorphicSignature: Boolean by FreezableVar(false)
+
+    @Argument(
         value = "-Xlegacy-smart-cast-after-try",
         description = "Allow var smart casts despite assignment in try block"
     )
@@ -286,6 +298,12 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
     )
     var checkStickyPhaseConditions: Boolean by FreezableVar(false)
 
+    @Argument(
+        value = "-Xuse-fir",
+        description = "Compile using Front-end IR. Warning: this feature is far from being production-ready"
+    )
+    var useFir: Boolean by FreezableVar(false)
+
     open fun configureAnalysisFlags(collector: MessageCollector): MutableMap<AnalysisFlag<*>, Any> {
         return HashMap<AnalysisFlag<*>, Any>().apply {
             put(AnalysisFlags.skipMetadataVersionCheck, skipMetadataVersionCheck)
@@ -317,6 +335,16 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
 
             if (newInference) {
                 put(LanguageFeature.NewInference, LanguageFeature.State.ENABLED)
+                put(LanguageFeature.SamConversionPerArgument, LanguageFeature.State.ENABLED)
+                put(LanguageFeature.FunctionReferenceWithDefaultValueAsOtherType, LanguageFeature.State.ENABLED)
+            }
+
+            if (inlineClasses) {
+                put(LanguageFeature.InlineClasses, LanguageFeature.State.ENABLED)
+            }
+
+            if (polymorphicSignature) {
+                put(LanguageFeature.PolymorphicSignature, LanguageFeature.State.ENABLED)
             }
 
             if (legacySmartCastAfterTry) {
@@ -354,11 +382,31 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
     private fun HashMap<LanguageFeature, LanguageFeature.State>.configureLanguageFeaturesFromInternalArgs(collector: MessageCollector) {
         val featuresThatForcePreReleaseBinaries = mutableListOf<LanguageFeature>()
 
+        var standaloneSamConversionFeaturePassedExplicitly = false
+        var functionReferenceWithDefaultValueFeaturePassedExplicitly = false
         for ((feature, state) in internalArguments.filterIsInstance<ManualLanguageFeatureSetting>()) {
             put(feature, state)
             if (state == LanguageFeature.State.ENABLED && feature.forcesPreReleaseBinariesIfEnabled()) {
                 featuresThatForcePreReleaseBinaries += feature
             }
+
+            when (feature) {
+                LanguageFeature.SamConversionPerArgument ->
+                    standaloneSamConversionFeaturePassedExplicitly = true
+
+                LanguageFeature.FunctionReferenceWithDefaultValueAsOtherType ->
+                    functionReferenceWithDefaultValueFeaturePassedExplicitly = true
+
+                else -> {}
+            }
+        }
+
+        if (this[LanguageFeature.NewInference] == LanguageFeature.State.ENABLED) {
+            if (!standaloneSamConversionFeaturePassedExplicitly)
+                put(LanguageFeature.SamConversionPerArgument, LanguageFeature.State.ENABLED)
+
+            if (!functionReferenceWithDefaultValueFeaturePassedExplicitly)
+                put(LanguageFeature.FunctionReferenceWithDefaultValueAsOtherType, LanguageFeature.State.ENABLED)
         }
 
         if (featuresThatForcePreReleaseBinaries.isNotEmpty()) {

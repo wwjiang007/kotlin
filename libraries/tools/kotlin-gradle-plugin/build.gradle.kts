@@ -22,7 +22,7 @@ javadocJar()
 
 repositories {
     google()
-    maven(url = "https://plugins.gradle.org/m2/")
+    maven("https://plugins.gradle.org/m2/")
 }
 
 pill {
@@ -37,13 +37,14 @@ dependencies {
     compileOnly(project(":daemon-common"))
 
     compile(kotlinStdlib())
+    compile(project(":kotlin-native:kotlin-native-utils"))
     compileOnly(project(":kotlin-reflect-api"))
     compileOnly(project(":kotlin-android-extensions"))
     compileOnly(project(":kotlin-build-common"))
     compileOnly(project(":kotlin-compiler-runner"))
     compileOnly(project(":kotlin-annotation-processing"))
     compileOnly(project(":kotlin-annotation-processing-gradle"))
-    compileOnly(project(":kotlin-scripting-compiler-impl"))
+    compileOnly(project(":kotlin-scripting-compiler"))
 
     compile("com.google.code.gson:gson:${rootProject.extra["versions.jar.gson"]}")
     compile("de.undercouch:gradle-download-task:3.4.3")
@@ -68,17 +69,14 @@ dependencies {
     jarContents(compileOnly(intellijDep()) {
         includeJars("asm-all", "serviceMessages", "gson", rootProject = rootProject)
     })
-    
-    jarContents(compileOnly(commonDep("org.jetbrains.kotlin:kotlin-native-shared")) {
-        isTransitive = false
-    })
 
     // com.android.tools.build:gradle has ~50 unneeded transitive dependencies
     compileOnly("com.android.tools.build:gradle:3.0.0") { isTransitive = false }
     compileOnly("com.android.tools.build:gradle-core:3.0.0") { isTransitive = false }
     compileOnly("com.android.tools.build:builder-model:3.0.0") { isTransitive = false }
 
-    testCompileOnly (project(":compiler"))
+    testCompile(intellijDep()) { includeJars("serviceMessages", "junit", rootProject = rootProject) }
+    testCompileOnly(project(":compiler"))
     testCompile(projectTests(":kotlin-build-common"))
     testCompile(project(":kotlin-android-extensions"))
     testCompile(project(":kotlin-compiler-runner"))
@@ -115,8 +113,7 @@ tasks {
     named<ProcessResources>("processResources") {
         val propertiesToExpand = mapOf(
             "projectVersion" to project.version,
-            "kotlinNativeVersion" to project.kotlinNativeVersion,
-            "kotlinNativeSharedVersion" to project.kotlinNativeSharedVersion
+            "kotlinNativeVersion" to project.kotlinNativeVersion
         )
         for ((name, value) in propertiesToExpand) {
             inputs.property(name, value)
@@ -132,6 +129,10 @@ tasks {
 
     named<ValidateTaskProperties>("validateTaskProperties") {
         failOnWarning = true
+    }
+
+    named<Upload>("install") {
+        dependsOn(named("validateTaskProperties"))
     }
 
     named<DokkaTask>("dokka") {

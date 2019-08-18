@@ -29,9 +29,19 @@ public class FirResolveTestCaseGenerated extends AbstractFirResolveTestCase {
         KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/fir/resolve/testData/resolve"), Pattern.compile("^([^.]+)\\.kt$"), TargetBackend.ANY, true, "stdlib");
     }
 
+    @TestMetadata("cast.kt")
+    public void testCast() throws Exception {
+        runTest("compiler/fir/resolve/testData/resolve/cast.kt");
+    }
+
     @TestMetadata("companion.kt")
     public void testCompanion() throws Exception {
         runTest("compiler/fir/resolve/testData/resolve/companion.kt");
+    }
+
+    @TestMetadata("copy.kt")
+    public void testCopy() throws Exception {
+        runTest("compiler/fir/resolve/testData/resolve/copy.kt");
     }
 
     @TestMetadata("derivedClass.kt")
@@ -42,6 +52,11 @@ public class FirResolveTestCaseGenerated extends AbstractFirResolveTestCase {
     @TestMetadata("enum.kt")
     public void testEnum() throws Exception {
         runTest("compiler/fir/resolve/testData/resolve/enum.kt");
+    }
+
+    @TestMetadata("extension.kt")
+    public void testExtension() throws Exception {
+        runTest("compiler/fir/resolve/testData/resolve/extension.kt");
     }
 
     @TestMetadata("F.kt")
@@ -57,6 +72,11 @@ public class FirResolveTestCaseGenerated extends AbstractFirResolveTestCase {
     @TestMetadata("fakeRecursiveTypealias.kt")
     public void testFakeRecursiveTypealias() throws Exception {
         runTest("compiler/fir/resolve/testData/resolve/fakeRecursiveTypealias.kt");
+    }
+
+    @TestMetadata("fib.kt")
+    public void testFib() throws Exception {
+        runTest("compiler/fir/resolve/testData/resolve/fib.kt");
     }
 
     @TestMetadata("ft.kt")
@@ -122,6 +142,11 @@ public class FirResolveTestCaseGenerated extends AbstractFirResolveTestCase {
     @TestMetadata("typeAliasWithGeneric.kt")
     public void testTypeAliasWithGeneric() throws Exception {
         runTest("compiler/fir/resolve/testData/resolve/typeAliasWithGeneric.kt");
+    }
+
+    @TestMetadata("typeFromGetter.kt")
+    public void testTypeFromGetter() throws Exception {
+        runTest("compiler/fir/resolve/testData/resolve/typeFromGetter.kt");
     }
 
     @TestMetadata("typeParameterInPropertyReceiver.kt")
@@ -247,6 +272,11 @@ public class FirResolveTestCaseGenerated extends AbstractFirResolveTestCase {
             runTest("compiler/fir/resolve/testData/resolve/expresssions/objects.kt");
         }
 
+        @TestMetadata("qualifiedExpressions.kt")
+        public void testQualifiedExpressions() throws Exception {
+            runTest("compiler/fir/resolve/testData/resolve/expresssions/qualifiedExpressions.kt");
+        }
+
         @TestMetadata("receiverConsistency.kt")
         public void testReceiverConsistency() throws Exception {
             runTest("compiler/fir/resolve/testData/resolve/expresssions/receiverConsistency.kt");
@@ -340,6 +370,16 @@ public class FirResolveTestCaseGenerated extends AbstractFirResolveTestCase {
             @TestMetadata("implicitTypeOrder.kt")
             public void testImplicitTypeOrder() throws Exception {
                 runTest("compiler/fir/resolve/testData/resolve/expresssions/invoke/implicitTypeOrder.kt");
+            }
+
+            @TestMetadata("propertyFromParameter.kt")
+            public void testPropertyFromParameter() throws Exception {
+                runTest("compiler/fir/resolve/testData/resolve/expresssions/invoke/propertyFromParameter.kt");
+            }
+
+            @TestMetadata("simple.kt")
+            public void testSimple() throws Exception {
+                runTest("compiler/fir/resolve/testData/resolve/expresssions/invoke/simple.kt");
             }
 
             @TestMetadata("threeReceivers.kt")

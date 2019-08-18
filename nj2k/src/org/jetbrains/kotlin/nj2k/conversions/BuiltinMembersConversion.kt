@@ -5,8 +5,12 @@
 
 package org.jetbrains.kotlin.nj2k.conversions
 
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.nj2k.*
+import org.jetbrains.kotlin.nj2k.symbols.JKMethodSymbol
+import org.jetbrains.kotlin.nj2k.symbols.JKUnresolvedField
+import org.jetbrains.kotlin.nj2k.symbols.deepestFqName
 import org.jetbrains.kotlin.nj2k.tree.*
 import org.jetbrains.kotlin.nj2k.tree.impl.*
 import org.jetbrains.kotlin.utils.addToStdlib.cast
@@ -27,6 +31,14 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
         val conversion = selector.getConversion() ?: return null
         val newSelector = conversion.createBuilder().build(selector)
 
+        if (this is JKQualifiedExpression && conversion.replaceType == ReplaceType.REPLACE_WITH_QUALIFIER) {
+            newSelector.rightNonCodeElements =
+                (receiver.leftNonCodeElements +
+                        receiver.rightNonCodeElements +
+                        selector.leftNonCodeElements +
+                        selector.rightNonCodeElements).dropSpacesAtBegining()
+        }
+
         return when (conversion.replaceType) {
             ReplaceType.REPLACE_SELECTOR -> {
                 if (this is JKQualifiedExpression) {
@@ -34,7 +46,7 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
                     this
                 } else newSelector
             }
-            ReplaceType.FULL_REPLACE -> newSelector
+            ReplaceType.REPLACE_WITH_QUALIFIER -> newSelector
         }.let { expression ->
             conversion.actionAfter?.invoke(expression.copyTreeAndDetach()) ?: expression
         }
@@ -54,6 +66,13 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
                 if (conversion.filter?.invoke(this) == false) return@firstOrNull false
                 true
             }
+
+        is JKJavaNewExpression ->
+            conversions[classSymbol.deepestFqName()]?.firstOrNull { conversion ->
+                if (conversion.from !is NewExpression) return@firstOrNull false
+                if (conversion.filter?.invoke(this) == false) return@firstOrNull false
+                true
+            }
         else -> null
     }
 
@@ -70,14 +89,20 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
             when (from) {
                 is JKMethodCallExpression ->
                     JKKtCallExpressionImpl(
-                        context.symbolProvider.provideByFqName(fqName, true),
+                        context.symbolProvider.provideMethodSymbol(fqName),
                         argumentsProvider(from::arguments.detached()),
                         from::typeArgumentList.detached()
                     ).withNonCodeElementsFrom(from)
                 is JKFieldAccessExpression ->
                     JKKtCallExpressionImpl(
-                        context.symbolProvider.provideByFqName(fqName, true),
+                        context.symbolProvider.provideMethodSymbol(fqName),
                         JKArgumentListImpl(),
+                        JKTypeArgumentListImpl()
+                    ).withNonCodeElementsFrom(from)
+                is JKJavaNewExpression ->
+                    JKKtCallExpressionImpl(
+                        context.symbolProvider.provideMethodSymbol(fqName),
+                        argumentsProvider(from::arguments.detached()),
                         JKTypeArgumentListImpl()
                     ).withNonCodeElementsFrom(from)
                 else -> error("Bad conversion")
@@ -91,11 +116,11 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
             when (from) {
                 is JKMethodCallExpression ->
                     JKFieldAccessExpressionImpl(
-                        context.symbolProvider.provideByFqName(fqName, true)
+                        context.symbolProvider.provideFieldSymbol(fqName)
                     ).withNonCodeElementsFrom(from)
                 is JKFieldAccessExpression ->
                     JKFieldAccessExpressionImpl(
-                        context.symbolProvider.provideByFqName(fqName, true)
+                        context.symbolProvider.provideFieldSymbol(fqName)
                     ).withNonCodeElementsFrom(from)
                 else -> error("Bad conversion")
             }
@@ -112,7 +137,7 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
                         arguments.first()::value.detached().parenthesizeIfBinaryExpression(),
                         JKKtQualifierImpl.DOT,
                         JKKtCallExpressionImpl(
-                            context.symbolProvider.provideByFqName(fqName, true),
+                            context.symbolProvider.provideMethodSymbol(fqName),
                             JKArgumentListImpl(arguments.drop(1)),
                             from::typeArgumentList.detached()
                         )
@@ -139,7 +164,7 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
 
 
     private enum class ReplaceType {
-        REPLACE_SELECTOR, FULL_REPLACE
+        REPLACE_SELECTOR, REPLACE_WITH_QUALIFIER
     }
 
 
@@ -149,6 +174,7 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
     }
 
     private data class Method(override val fqName: String) : SymbolInfo
+    private data class NewExpression(override val fqName: String) : SymbolInfo
     private data class Field(override val fqName: String) : SymbolInfo
     private data class ExtensionMethod(override val fqName: String) : SymbolInfo
     private data class CustomExpression(val expressionBuilder: (JKExpression) -> JKExpression) : Info
@@ -179,18 +205,32 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
         copy(argumentsProvider = argumentsProvider)
 
     private infix fun Conversion.andAfter(actionAfter: (JKExpression) -> JKExpression) =
-        copy(actionAfter = actionAfter).also { println() }
+        copy(actionAfter = actionAfter)
 
     private val conversions: Map<String, List<Conversion>> =
         listOf(
-            Method("java.lang.Integer.intValue") convertTo Method("kotlin.Int.toInt"),//TODO do not list all variants
+            Method("java.lang.Short.valueOf") convertTo ExtensionMethod("kotlin.Short.toShort")
+                    withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER,
+
+            Method("java.lang.Byte.parseByte") convertTo ExtensionMethod("kotlin.text.toByte")
+                    withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER,
+            Method("java.lang.Short.parseShort") convertTo ExtensionMethod("kotlin.text.toShort")
+                    withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER,
+            Method("java.lang.Integer.parseInt") convertTo ExtensionMethod("kotlin.text.toInt")
+                    withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER,
+            Method("java.lang.Long.parseLong") convertTo ExtensionMethod("kotlin.text.toLong")
+                    withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER,
+            Method("java.lang.Float.parseFloat") convertTo ExtensionMethod("kotlin.text.toFloat")
+                    withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER,
+            Method("java.lang.Double.parseDouble") convertTo ExtensionMethod("kotlin.text.toDouble")
+                    withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER,
 
             Method("java.io.PrintStream.println") convertTo Method("kotlin.io.println")
-                    withReplaceType ReplaceType.FULL_REPLACE
+                    withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER
                     withFilter ::isSystemOutCall,
 
             Method("java.io.PrintStream.print") convertTo Method("kotlin.io.print")
-                    withReplaceType ReplaceType.FULL_REPLACE
+                    withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER
                     withFilter ::isSystemOutCall,
 
             Method("java.lang.Object.getClass") convertTo Field("kotlin.jvm.javaClass"),
@@ -226,20 +266,41 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
             Method("java.lang.CharSequence.charAt") convertTo Method("kotlin.String.get"),
             Method("java.lang.String.indexOf") convertTo Method("kotlin.text.indexOf"),
             Method("java.lang.String.lastIndexOf") convertTo Method("kotlin.text.lastIndexOf"),
+            Method("java.lang.String.getBytes") convertTo Method("kotlin.text.toByteArray")
+                    withByArgumentsFilter { it.singleOrNull()?.type(context.symbolProvider)?.isStringType() == true }
+                    withArgumentsProvider { arguments ->
+                val argument = arguments.arguments.single()::value.detached()
+                val call = JKKtCallExpressionImpl(
+                    context.symbolProvider.provideMethodSymbol("kotlin.text.charset"),
+                    JKArgumentListImpl(argument)
+                )
+                JKArgumentListImpl(call)
+            },
             Method("java.lang.String.getBytes") convertTo Method("kotlin.text.toByteArray"),
             Method("java.lang.String.valueOf")
                     convertTo ExtensionMethod("kotlin.Any.toString")
-                    withReplaceType ReplaceType.FULL_REPLACE
+                    withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER
                     withByArgumentsFilter { it.isNotEmpty() && it.first().type(context.symbolProvider)?.isArrayType() == false },
+
+            Method("java.lang.String.getChars")
+                    convertTo Method("kotlin.text.toCharArray")
+                    withByArgumentsFilter { it.size == 4 }
+                    withArgumentsProvider { argumentList ->
+                val srcBeginArgument = argumentList.arguments[0]::value.detached()
+                val srcEndArgument = argumentList.arguments[1]::value.detached()
+                val dstArgument = argumentList.arguments[2]::value.detached()
+                val dstBeginArgument = argumentList.arguments[3]::value.detached()
+                JKArgumentListImpl(dstArgument, dstBeginArgument, srcBeginArgument, srcEndArgument)
+            },
 
             Method("java.lang.String.valueOf")
                     convertTo Method("kotlin.String")
-                    withReplaceType ReplaceType.FULL_REPLACE
+                    withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER
                     withByArgumentsFilter { it.isNotEmpty() && it.first().type(context.symbolProvider)?.isArrayType() == true },
 
             Method("java.lang.String.copyValueOf")
                     convertTo Method("kotlin.String")
-                    withReplaceType ReplaceType.FULL_REPLACE
+                    withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER
                     withByArgumentsFilter { it.isNotEmpty() && it.first().type(context.symbolProvider)?.isArrayType() == true },
 
             Method("java.lang.String.replaceAll")
@@ -248,10 +309,7 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
                 val detachedArguments = arguments::arguments.detached()
                 val first =
                     detachedArguments.first()::value.detached().callOn(
-                        context.symbolProvider.provideByFqName(
-                            "kotlin.text.toRegex",
-                            multiResolve = true
-                        )
+                        context.symbolProvider.provideMethodSymbol("kotlin.text.toRegex")
                     )
                 JKArgumentListImpl(listOf(JKArgumentImpl(first)) + detachedArguments.drop(1))
             },
@@ -261,10 +319,8 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
                 val detachedArguments = arguments::arguments.detached()
                 val first =
                     detachedArguments.first()::value.detached().callOn(
-                        context.symbolProvider.provideByFqName(
-                            "kotlin.text.toRegex",
-                            multiResolve = true
-                        )
+                        context.symbolProvider.provideMethodSymbol("kotlin.text.toRegex")
+
                     )
                 JKArgumentListImpl(listOf(JKArgumentImpl(first)) + detachedArguments.drop(1))
             },
@@ -289,7 +345,34 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
                     )
                 )
             },
+            Method("java.lang.String.matches") convertTo Method("kotlin.text.matches"),
+            Method("java.lang.String.regionMatches")
+                    convertTo Method("kotlin.text.regionMatches")
+                    withByArgumentsFilter { it.size == 5 }
+                    withArgumentsProvider { arguments ->
+                val detachedArguments = arguments::arguments.detached()
+                JKArgumentListImpl(
+                    detachedArguments.drop(1) + JKNamedArgumentImpl(
+                        detachedArguments.first()::value.detached().also {
+                            it.clearNonCodeElements()
+                        },
+                        JKNameIdentifierImpl("ignoreCase")
+                    )
+                )
+            },
 
+            Method("java.lang.String.concat") convertTo
+                    CustomExpression { expression ->
+                        if (expression !is JKMethodCallExpression) error("Expression should be JKMethodCallExpression")
+                        val firstArgument = expression.parent.cast<JKQualifiedExpression>()::receiver.detached()
+                        val secondArgument = expression.arguments.arguments.first()::value.detached()
+                        kotlinBinaryExpression(
+                            firstArgument,
+                            secondArgument,
+                            KtTokens.PLUS,
+                            context.symbolProvider
+                        )
+                    } withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER,
 
             Method("java.lang.String.split")
                     convertTo Method("kotlin.text.split")
@@ -309,19 +392,15 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
                                 arguments.arguments = arguments.arguments.dropLast(1)
                             }.let {
                                 it.callOn(
-                                    context.symbolProvider.provideByFqName("kotlin.collections.dropLastWhile", multiResolve = true),
+                                    context.symbolProvider.provideMethodSymbol("kotlin.collections.dropLastWhile"),
                                     JKLambdaExpressionImpl(
                                         JKFieldAccessExpressionImpl(
                                             JKUnresolvedField(//TODO replace with `it` parameter
                                                 "it",
                                                 context.symbolProvider
                                             )
-                                        ).callOn(
-                                            context.symbolProvider.provideByFqName(
-                                                "kotlin.text.isEmpty",
-                                                multiResolve = true
-                                            )
-                                        ).asStatement(),
+                                        ).callOn(context.symbolProvider.provideMethodSymbol("kotlin.text.isEmpty"))
+                                            .asStatement(),
                                         emptyList()
                                     )
                                 )
@@ -330,7 +409,7 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
                     else -> expression.also {
                         val lastArgument = arguments.arguments.last().value.copyTreeAndDetach()
                             .callOn(
-                                context.symbolProvider.provideByFqName("kotlin.ranges.coerceAtLeast"),
+                                context.symbolProvider.provideMethodSymbol("kotlin.ranges.coerceAtLeast"),
                                 JKKtLiteralExpressionImpl("0", JKLiteralExpression.LiteralType.INT)
                             )
                         arguments.arguments = arguments.arguments.dropLast(1) + JKArgumentImpl(lastArgument)
@@ -365,18 +444,28 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
                     )
                 )
             },
+            Method("java.lang.String.format") convertTo CustomExpression { expression ->
+                JKClassAccessExpressionImpl(
+                    context.symbolProvider.provideClassSymbol(KotlinBuiltIns.FQ_NAMES.string)
+                ).callOn(
+                    context.symbolProvider.provideMethodSymbol("kotlin.text.String.format"),
+                    (expression as JKMethodCallExpression).arguments::arguments.detached()
+                )
+            } withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER,
 
+            NewExpression("java.lang.String") convertTo Method("kotlin.text.String"),
+            NewExpression("kotlin.String") convertTo Method("kotlin.text.String"),
 
             Method("java.util.Collections.singletonList") convertTo Method("kotlin.collections.listOf")
-                    withReplaceType ReplaceType.FULL_REPLACE,
+                    withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER,
             Method("java.util.Collections.singleton") convertTo Method("kotlin.collections.setOf")
-                    withReplaceType ReplaceType.FULL_REPLACE,
+                    withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER,
             Method("java.util.Collections.emptyList")
-                    convertTo Method("kotlin.collections.emptyList") withReplaceType ReplaceType.FULL_REPLACE,
+                    convertTo Method("kotlin.collections.emptyList") withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER,
             Method("java.util.Collections.emptySet")
-                    convertTo Method("kotlin.collections.emptySet") withReplaceType ReplaceType.FULL_REPLACE,
+                    convertTo Method("kotlin.collections.emptySet") withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER,
             Method("java.util.Collections.emptyMap")
-                    convertTo Method("kotlin.collections.emptyMap") withReplaceType ReplaceType.FULL_REPLACE
+                    convertTo Method("kotlin.collections.emptyMap") withReplaceType ReplaceType.REPLACE_WITH_QUALIFIER
         ).groupBy { it.from.fqName }
 
 
@@ -412,5 +501,5 @@ class BuiltinMembersConversion(private val context: NewJ2kConverterContext) : Re
 
 
     private fun JKExpression.castToTypedArray() =
-        callOn(context.symbolProvider.provideByFqName("kotlin.collections.toTypedArray", multiResolve = true))
+        callOn(context.symbolProvider.provideMethodSymbol("kotlin.collections.toTypedArray"))
 }

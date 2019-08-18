@@ -5,66 +5,75 @@
 
 package org.jetbrains.kotlin.scripting.definitions
 
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
-import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import java.io.File
 import kotlin.script.experimental.annotations.KotlinScript
-import kotlin.script.experimental.api.KotlinType
-import kotlin.script.experimental.api.ScriptCompilationConfiguration
-import kotlin.script.experimental.api.fileExtension
+import kotlin.script.experimental.api.*
 import kotlin.script.experimental.host.ScriptingHostConfiguration
 import kotlin.script.experimental.host.configurationDependencies
 import kotlin.script.experimental.host.createCompilationConfigurationFromTemplate
+import kotlin.script.experimental.host.createEvaluationConfigurationFromTemplate
 import kotlin.script.experimental.jvm.JvmDependency
-import kotlin.script.experimental.jvm.defaultJvmScriptingHostConfiguration
 
 class LazyScriptDefinitionFromDiscoveredClass internal constructor(
+    baseHostConfiguration: ScriptingHostConfiguration,
     private val annotationsFromAsm: ArrayList<BinAnnData>,
     private val className: String,
     private val classpath: List<File>,
-    private val messageCollector: MessageCollector
-) : KotlinScriptDefinitionAdapterFromNewAPIBase() {
+    private val messageReporter: MessageReporter
+) : ScriptDefinition.FromConfigurationsBase() {
 
     constructor(
+        baseHostConfiguration: ScriptingHostConfiguration,
         classBytes: ByteArray,
         className: String,
         classpath: List<File>,
-        messageCollector: MessageCollector
-    ) : this(loadAnnotationsFromClass(classBytes), className, classpath, messageCollector)
+        messageReporter: MessageReporter
+    ) : this(baseHostConfiguration, loadAnnotationsFromClass(classBytes), className, classpath, messageReporter)
 
     override val hostConfiguration: ScriptingHostConfiguration by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        ScriptingHostConfiguration(defaultJvmScriptingHostConfiguration) {
+        ScriptingHostConfiguration(baseHostConfiguration) {
             configurationDependencies.append(JvmDependency(classpath))
         }
     }
 
-    override val scriptCompilationConfiguration: ScriptCompilationConfiguration by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        messageCollector.report(
-            CompilerMessageSeverity.LOGGING,
+    private val configurations by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        messageReporter(
+            ScriptDiagnostic.Severity.DEBUG,
             "Configure scripting: loading script definition class $className using classpath $classpath\n.  ${Thread.currentThread().stackTrace}"
         )
         try {
-            createCompilationConfigurationFromTemplate(
-                KotlinType(className),
-                hostConfiguration,
-                LazyScriptDefinitionFromDiscoveredClass::class
-            )
+            val compileCfg =
+                createCompilationConfigurationFromTemplate(
+                    KotlinType(className),
+                    hostConfiguration,
+                    LazyScriptDefinitionFromDiscoveredClass::class
+                )
+            val evalCfg =
+                createEvaluationConfigurationFromTemplate(
+                    KotlinType(className),
+                    hostConfiguration,
+                    LazyScriptDefinitionFromDiscoveredClass::class
+                )
+            compileCfg to evalCfg
         } catch (ex: ClassNotFoundException) {
-            messageCollector.report(CompilerMessageSeverity.ERROR, "Cannot find script definition class $className")
+            messageReporter(ScriptDiagnostic.Severity.ERROR, "Cannot find script definition class $className")
             InvalidScriptDefinition
         } catch (ex: Exception) {
-            messageCollector.report(
-                CompilerMessageSeverity.ERROR,
+            messageReporter(
+                ScriptDiagnostic.Severity.ERROR,
                 "Error processing script definition class $className: ${ex.message}\nclasspath:\n${classpath.joinToString("\n", "    ")}"
             )
             InvalidScriptDefinition
         }
     }
 
+    override val compilationConfiguration: ScriptCompilationConfiguration get() = configurations.first
+    override val evaluationConfiguration: ScriptEvaluationConfiguration get() = configurations.second
+
     override val fileExtension: String by lazy(LazyThreadSafetyMode.PUBLICATION) {
         annotationsFromAsm.find { it.name == KotlinScript::class.simpleName }?.args
             ?.find { it.name == "fileExtension" }?.value
-            ?: scriptCompilationConfiguration.let {
+            ?: compilationConfiguration.let {
                 it[ScriptCompilationConfiguration.fileExtension] ?: super.fileExtension
             }
     }
@@ -75,4 +84,4 @@ class LazyScriptDefinitionFromDiscoveredClass internal constructor(
     }
 }
 
-val InvalidScriptDefinition = ScriptCompilationConfiguration()
+val InvalidScriptDefinition = ScriptCompilationConfiguration() to ScriptEvaluationConfiguration()

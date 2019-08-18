@@ -7,6 +7,48 @@ repositories {
     maven("https://jetbrains.bintray.com/markdown")
 }
 
+sourceSets {
+    "main" {
+        projectDefault()
+        java.srcDirs(
+            "idea-completion/src",
+            "idea-live-templates/src",
+            "idea-repl/src"
+        )
+        resources.srcDirs(
+            "idea-completion/resources",
+            "idea-live-templates/resources",
+            "idea-repl/resources"
+        )
+    }
+    "test" {
+        projectDefault()
+        java.srcDirs(
+            "idea-completion/tests",
+            "idea-live-templates/tests"
+        )
+    }
+
+    "performanceTest" {
+        java.srcDirs("performanceTests")
+    }
+}
+
+val performanceTestCompile by configurations
+performanceTestCompile.apply {
+    extendsFrom(configurations["testCompile"])
+}
+
+val performanceTestCompileOnly by configurations
+performanceTestCompileOnly.apply {
+    extendsFrom(configurations["testCompileOnly"])
+}
+
+val performanceTestRuntime by configurations
+performanceTestRuntime.apply {
+    extendsFrom(configurations["testRuntime"])
+}
+
 dependencies {
     testRuntime(intellijDep())
     testRuntime(intellijRuntimeAnnotations())
@@ -16,7 +58,6 @@ dependencies {
     compile(project(":core:descriptors"))
     compile(project(":core:descriptors.jvm"))
     compile(project(":compiler:backend"))
-    compile(project(":compiler:cli-common"))
     compile(project(":compiler:frontend"))
     compile(project(":compiler:frontend.common"))
     compile(project(":compiler:frontend.java"))
@@ -29,10 +70,13 @@ dependencies {
     compile(project(":daemon-common"))
     compile(project(":daemon-common-new"))
     compile(projectRuntimeJar(":kotlin-daemon-client"))
-    compile(project(":kotlin-compiler-runner")) { isTransitive = false }
     compile(project(":compiler:plugin-api"))
-    compile(project(":idea:eval4j"))
+    compile(project(":idea:jvm-debugger:jvm-debugger-util"))
+    compile(project(":idea:jvm-debugger:jvm-debugger-core"))
+    compile(project(":idea:jvm-debugger:jvm-debugger-evaluation"))
+    compile(project(":idea:jvm-debugger:jvm-debugger-sequence"))
     compile(project(":j2k"))
+    compile(project(":idea:idea-j2k"))
     compile(project(":idea:formatter"))
     compile(project(":idea:fir-view"))
     compile(project(":compiler:fir:fir2ir"))
@@ -53,6 +97,12 @@ dependencies {
     compileOnly(project(":kotlin-daemon-client"))
 
     compileOnly(intellijDep())
+    Platform[192].orHigher {
+        compileOnly(intellijPluginDep("java"))
+        testCompileOnly(intellijPluginDep("java"))
+        testRuntime(intellijPluginDep("java"))
+    }
+
     compileOnly(commonDep("org.jetbrains", "markdown"))
     compileOnly(commonDep("com.google.code.findbugs", "jsr305"))
     compileOnly(intellijPluginDep("IntelliLang"))
@@ -125,49 +175,19 @@ dependencies {
     testRuntime(intellijPluginDep("android"))
     testRuntime(intellijPluginDep("smali"))
     testRuntime(intellijPluginDep("testng"))
-}
 
-sourceSets {
-    "main" {
-        projectDefault()
-        java.srcDirs(
-            "idea-completion/src",
-            "idea-live-templates/src",
-            "idea-repl/src"
-        )
-        resources.srcDirs(
-            "idea-completion/resources",
-            "idea-live-templates/resources",
-            "idea-repl/resources"
-        )
-    }
-    "test" {
-        projectDefault()
-        java.srcDirs(
-            "idea-completion/tests",
-            "idea-live-templates/tests"
-        )
+    if (Ide.AS36.orHigher()) {
+        testRuntime(intellijPluginDep("android-layoutlib"))
+        testRuntime(intellijPluginDep("git4idea"))
+        testRuntime(intellijPluginDep("google-cloud-tools-core-as"))
+        testRuntime(intellijPluginDep("google-login-as"))
     }
 
-}
-
-
-val performanceTestCompile by configurations.creating {
-    extendsFrom(configurations["testCompile"])
-}
-
-val performanceTestRuntime by configurations.creating {
-    extendsFrom(configurations["testRuntime"])
-}
-
-val performanceTest by run {
-    sourceSets.creating {
-        compileClasspath += sourceSets["test"].output
-        compileClasspath += sourceSets["main"].output
-        runtimeClasspath += sourceSets["test"].output
-        runtimeClasspath += sourceSets["main"].output
-        java.srcDirs("performanceTests")
-    }
+    performanceTestCompile(sourceSets["test"].output)
+    performanceTestCompile(sourceSets["main"].output)
+    performanceTestCompile(project(":nj2k"))
+    performanceTestCompile(intellijPluginDep("gradle"))
+    performanceTestRuntime(sourceSets["performanceTest"].output)
 }
 
 projectTest(parallel = true) {
@@ -175,12 +195,12 @@ projectTest(parallel = true) {
     workingDir = rootDir
 }
 
-
 projectTest(taskName = "performanceTest") {
     dependsOn(":dist")
-    dependsOn(performanceTest.output)
-    testClassesDirs = performanceTest.output.classesDirs
-    classpath = performanceTest.runtimeClasspath
+    dependsOn(performanceTestRuntime)
+
+    testClassesDirs = sourceSets["performanceTest"].output.classesDirs
+    classpath = performanceTestRuntime
     workingDir = rootDir
 
     jvmArgs?.removeAll { it.startsWith("-Xmx") }
@@ -192,20 +212,14 @@ projectTest(taskName = "performanceTest") {
         "-XX:+UseCompressedOops",
         "-XX:+UseConcMarkSweepGC"
     )
-    jvmArgs("-XX:+UnlockCommercialFeatures", "-XX:+FlightRecorder")
-
-    if (hasProperty("perf.flight.recorder.override")) {
-        jvmArgs(property("perf.flight.recorder.override"))
-    } else {
-        val settings = if (hasProperty("perf.flight.recorder.settings")) ",settings=${property("perf.flight.recorder.settings")}" else ""
-        jvmArgs("-XX:StartFlightRecording=delay=15m,duration=5h,filename=perf.jfr$settings")
-    }
 
     doFirst {
         systemProperty("idea.home.path", intellijRootDir().canonicalPath)
     }
 }
 
-testsJar {}
+testsJar {
+    from(sourceSets["performanceTest"].output)
+}
 
 configureFormInstrumentation()

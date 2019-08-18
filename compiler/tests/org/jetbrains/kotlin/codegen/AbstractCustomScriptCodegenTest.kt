@@ -9,7 +9,7 @@ import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.jvm.config.addJvmClasspathRoots
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.script.loadScriptingPlugin
-import org.jetbrains.kotlin.scripting.configuration.configureScriptDefinitions
+import org.jetbrains.kotlin.scripting.compiler.plugin.configureScriptDefinitions
 import org.jetbrains.kotlin.test.ConfigurationKind
 import org.jetbrains.kotlin.test.InTextDirectivesUtils
 import org.jetbrains.kotlin.test.TestJdkKind
@@ -24,6 +24,7 @@ import kotlin.script.experimental.annotations.KotlinScript
 import kotlin.script.experimental.api.ScriptCompilationConfiguration
 import kotlin.script.experimental.api.implicitReceivers
 import kotlin.script.experimental.api.providedProperties
+import kotlin.script.experimental.jvm.defaultJvmScriptingHostConfiguration
 import kotlin.script.experimental.jvm.util.scriptCompilationClasspathFromContextOrStdlib
 
 abstract class AbstractCustomScriptCodegenTest : CodegenTestCase() {
@@ -37,7 +38,9 @@ abstract class AbstractCustomScriptCodegenTest : CodegenTestCase() {
 
     override fun updateConfiguration(configuration: CompilerConfiguration) {
         if (scriptDefinitions.isNotEmpty()) {
-            configureScriptDefinitions(scriptDefinitions, configuration, this::class.java.classLoader, MessageCollector.NONE, emptyMap())
+            configureScriptDefinitions(
+                scriptDefinitions, configuration, this::class.java.classLoader, MessageCollector.NONE, defaultJvmScriptingHostConfiguration
+            )
         }
 
         configuration.addJvmClasspathRoots(additionalDependencies.orEmpty())
@@ -82,7 +85,7 @@ abstract class AbstractCustomScriptCodegenTest : CodegenTestCase() {
             val expectedFields = extractAllKeyValPairs(content, "expected:")
             checkExpectedFields(expectedFields, scriptClass, scriptInstance)
         } catch (e: Throwable) {
-            println(generateToText())
+            printReport(wholeFile)
             throw e
         }
     }
@@ -146,3 +149,7 @@ abstract class TestScriptWithSimpleEnvVars
 @Suppress("unused")
 @KotlinScript(fileExtension = "customext")
 abstract class TestScriptWithNonKtsExtension(val name: String)
+
+@Suppress("unused")
+@KotlinScript(filePathPattern = "(.*/)?pathPattern[0-9]\\..+")
+abstract class TestScriptWithPathPattern(val name2: String)

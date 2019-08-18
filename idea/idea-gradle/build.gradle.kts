@@ -22,6 +22,12 @@ dependencies {
     compileOnly(intellijPluginDep("junit"))
     compileOnly(intellijPluginDep("testng"))
 
+    Platform[192].orHigher {
+        compileOnly(intellijPluginDep("java"))
+        testCompileOnly(intellijPluginDep("java"))
+        testRuntimeOnly(intellijPluginDep("java"))
+    }
+
     testCompile(projectTests(":idea"))
     testCompile(projectTests(":idea:idea-test-framework"))
 

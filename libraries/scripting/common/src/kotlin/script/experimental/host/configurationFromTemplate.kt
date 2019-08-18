@@ -39,6 +39,7 @@ fun createCompilationConfigurationFromTemplate(
     val mainAnnotation: KotlinScript = templateClass.kotlinScriptAnnotation
 
     return ScriptCompilationConfiguration(scriptConfigInstance(mainAnnotation.compilationConfiguration)) {
+        hostConfiguration(hostConfiguration)
         propertiesFromTemplate(templateClass, baseClassType, mainAnnotation)
         body()
     }
@@ -62,26 +63,26 @@ fun createEvaluationConfigurationFromTemplate(
 
     val mainAnnotation = templateClass.kotlinScriptAnnotation
 
-    return ScriptEvaluationConfiguration(scriptConfigInstance(mainAnnotation.evaluationConfiguration), body = body)
+    return ScriptEvaluationConfiguration(scriptConfigInstance(mainAnnotation.evaluationConfiguration)) {
+        hostConfiguration(hostConfiguration)
+        body()
+    }
 }
 
 private fun ScriptCompilationConfiguration.Builder.propertiesFromTemplate(
     templateClass: KClass<*>, baseClassType: KotlinType, mainAnnotation: KotlinScript
 ) {
-    if (baseClass() == null) {
-        baseClass(if (templateClass == baseClassType.fromClass) baseClassType else KotlinType(templateClass))
-    }
-    if (fileExtension() == null) {
-        fileExtension(mainAnnotation.fileExtension)
-    }
-    if (displayName() == null) {
-        displayName(mainAnnotation.displayName)
-    }
+    baseClass.replaceOnlyDefault(if (templateClass == baseClassType.fromClass) baseClassType else KotlinType(templateClass))
+    fileExtension.replaceOnlyDefault(mainAnnotation.fileExtension)
+    filePathPattern.replaceOnlyDefault(mainAnnotation.filePathPattern)
+    displayName.replaceOnlyDefault(mainAnnotation.displayName)
 }
 
 private val KClass<*>.kotlinScriptAnnotation: KotlinScript
     get() = findAnnotation()
         ?: when (this@kotlinScriptAnnotation.qualifiedName) {
+            // Any is the default template, so use a default annotation
+            Any::class.qualifiedName,
             // transitions to the new scripting API: substituting annotations for standard templates from script-runtime
             "$SCRIPT_RUNTIME_TEMPLATES_PACKAGE.SimpleScriptTemplate",
             "$SCRIPT_RUNTIME_TEMPLATES_PACKAGE.ScriptTemplateWithArgs",
@@ -117,6 +118,6 @@ private fun <T : Any> KClass<T>.createInstance(): T {
 private fun <T : PropertiesCollection> scriptConfigInstance(kclass: KClass<out T>): T = try {
     kclass.objectInstance ?: kclass.createInstance()
 } catch (e: Throwable) {
-    throw IllegalArgumentException("$ILLEGAL_CONFIG_ANN_ARG: ${e.message}", e)
+    throw IllegalArgumentException("$ILLEGAL_CONFIG_ANN_ARG: ${e.message + if (e.cause != null) " (${e.cause})" else ""}", e)
 }
 

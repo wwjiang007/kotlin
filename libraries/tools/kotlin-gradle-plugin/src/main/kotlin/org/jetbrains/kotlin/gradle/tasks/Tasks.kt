@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.gradle.tasks
 
 import org.gradle.api.Project
+import org.gradle.api.Task
 import org.gradle.api.file.FileCollection
 import org.gradle.api.plugins.BasePluginConvention
 import org.gradle.api.tasks.*
@@ -33,6 +34,7 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinMultiplatformPluginWrapper
 import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformPluginBase
 import org.jetbrains.kotlin.gradle.plugin.PLUGIN_CLASSPATH_CONFIGURATION_NAME
 import org.jetbrains.kotlin.gradle.report.BuildReportMode
+import org.jetbrains.kotlin.gradle.utils.isGradleVersionAtLeast
 import org.jetbrains.kotlin.gradle.utils.isParentOf
 import org.jetbrains.kotlin.gradle.utils.pathsAsStringRelativeTo
 import org.jetbrains.kotlin.gradle.utils.toSortedPathsArray
@@ -218,7 +220,7 @@ abstract class AbstractKotlinCompile<T : CommonCompilerArguments>() : AbstractKo
 
     @get:InputFiles
     @get:PathSensitive(PathSensitivity.RELATIVE)
-    internal var commonSourceSet: Iterable<File> = emptyList()
+    internal var commonSourceSet: FileCollection = project.files()
 
     @get:Input
     internal val moduleName: String
@@ -459,14 +461,27 @@ open class KotlinCompile : AbstractKotlinCompile<K2JVMCompilerArguments>(), Kotl
     private fun disableMultiModuleIC(): Boolean {
         if (!incremental || javaOutputDir == null) return false
 
-        val illegalTask = project.tasks.matching {
-            it is AbstractCompile &&
-                    it !is JavaCompile &&
-                    it !is AbstractKotlinCompile<*> &&
-                    javaOutputDir!!.isParentOf(it.destinationDir)
-        }.firstOrNull() as? AbstractCompile
+        fun forEachTask(fn: (Task) -> Unit) {
+            if (isGradleVersionAtLeast(4, 10)) {
+                project.tasks.configureEach(fn)
+            } else {
+                project.tasks.forEach(fn)
+            }
+        }
 
-        if (illegalTask != null) {
+        var illegalTaskOrNull: AbstractCompile? = null
+
+        forEachTask {
+            if (it is AbstractCompile &&
+                it !is JavaCompile &&
+                it !is AbstractKotlinCompile<*> &&
+                javaOutputDir!!.isParentOf(it.destinationDir)
+            ) {
+                illegalTaskOrNull = illegalTaskOrNull ?: it
+            }
+        }
+
+        illegalTaskOrNull?.let { illegalTask ->
             logger.info(
                 "Kotlin inter-project IC is disabled: " +
                         "unknown task '$illegalTask' destination dir ${illegalTask.destinationDir} " +
@@ -563,8 +578,7 @@ open class Kotlin2JsCompile : AbstractKotlinCompile<K2JSCompilerArguments>(), Ko
 
     private val libraryFilter: (File) -> Boolean
         get() = if ("-Xir" in kotlinOptions.freeCompilerArgs) {
-            // TODO: Detect IR libraries
-            { true }
+            LibraryUtils::isKotlinJavascriptIrLibrary
         } else {
             LibraryUtils::isKotlinJavascriptLibrary
         }
@@ -578,6 +592,7 @@ open class Kotlin2JsCompile : AbstractKotlinCompile<K2JSCompilerArguments>(), Ko
         if ("-Xir" in args.freeArgs) {
             logger.kotlinDebug("Using JS IR backend")
             incremental = false
+            args.freeArgs += "-Xir-legacy-gradle-plugin-compatibility"
         }
 
         val dependencies = compileClasspath

@@ -9,7 +9,7 @@ import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.script.loadScriptingPlugin
-import org.jetbrains.kotlin.scripting.configuration.configureScriptDefinitions
+import org.jetbrains.kotlin.scripting.compiler.plugin.configureScriptDefinitions
 import org.jetbrains.kotlin.test.ConfigurationKind
 import org.jetbrains.kotlin.test.TestJdkKind
 import org.jetbrains.kotlin.utils.PathUtil
@@ -21,6 +21,7 @@ import java.io.File
 import java.lang.reflect.Constructor
 import kotlin.reflect.KClass
 import kotlin.script.experimental.annotations.KotlinScript
+import kotlin.script.experimental.jvm.defaultJvmScriptingHostConfiguration
 import kotlin.script.experimental.jvm.util.scriptCompilationClasspathFromContextOrStdlib
 
 class CustomScriptCodegenTest : CodegenTestCase() {
@@ -65,7 +66,8 @@ class CustomScriptCodegenTest : CodegenTestCase() {
 
         if (scriptDefinitions.isNotEmpty()) {
             configureScriptDefinitions(
-                scriptDefinitions.asList(), configuration, this::class.java.classLoader, MessageCollector.NONE, emptyMap()
+                scriptDefinitions.asList(), configuration, this::class.java.classLoader,
+                MessageCollector.NONE, defaultJvmScriptingHostConfiguration
             )
         }
 

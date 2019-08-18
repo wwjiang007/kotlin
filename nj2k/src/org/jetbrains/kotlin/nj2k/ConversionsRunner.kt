@@ -58,7 +58,7 @@ object ConversionsRunner {
             +PrimaryConstructorDetectConversion(context)
             +InsertDefaultPrimaryConstructorConversion(context)
             +FieldToPropertyConversion()
-            +JavaStandartMethodsConversion(context)
+            +JavaStandardMethodsConversion(context)
             +JavaMethodToKotlinFunctionConversion(context)
             +MainFunctionConversion(context)
             +AssertStatementConversion(context)
@@ -66,7 +66,6 @@ object ConversionsRunner {
             +LiteralConversion()
             +ForConversion(context)
             +LabeledStatementConversion()
-            +TypeParametersNullabilityConversion()
             +ArrayOperationsConversion(context)
             +EqualsOperatorConversion(context)
             +TypeMappingConversion(context)
@@ -78,12 +77,14 @@ object ConversionsRunner {
             +StaticsToCompanionExtractConversion()
             +InterfaceWithFieldConversion()
             +ClassToObjectPromotionConversion(context)
+            +RemoveWrongExtraModifiersForSingleFunctionsConversion()
             +MethodReferenceToLambdaConversion(context)
             +BuiltinMembersConversion(context)
             +ImplicitCastsConversion(context)
+            +LiteralConversion()
 
             +CollectImportsConversion(context)
-            +SortClassMembersConversion()
+            +MoveInitBlocksToTheEndConversion()
             +AddElementsInfoConversion(context)
         }
 

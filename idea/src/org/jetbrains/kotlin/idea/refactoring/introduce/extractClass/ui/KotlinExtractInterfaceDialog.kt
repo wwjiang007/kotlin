@@ -20,7 +20,7 @@ import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
 import com.intellij.refactoring.HelpID
-import com.intellij.refactoring.JavaRefactoringSettings
+import org.jetbrains.kotlin.idea.refactoring.KotlinRefactoringSettings
 import com.intellij.refactoring.RefactoringBundle
 import com.intellij.refactoring.classMembers.MemberInfoModel
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractClass.ExtractSuperInfo
@@ -36,13 +36,20 @@ import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 
 class KotlinExtractInterfaceDialog(
-        originalClass: KtClassOrObject,
-        targetParent: PsiElement,
-        conflictChecker: (KotlinExtractSuperDialogBase) -> Boolean,
-        refactoring: (ExtractSuperInfo) -> Unit
-) : KotlinExtractSuperDialogBase(originalClass, targetParent, conflictChecker, true, KotlinExtractInterfaceHandler.REFACTORING_NAME, refactoring) {
+    originalClass: KtClassOrObject,
+    targetParent: PsiElement,
+    conflictChecker: (KotlinExtractSuperDialogBase) -> Boolean,
+    refactoring: (ExtractSuperInfo) -> Unit
+) : KotlinExtractSuperDialogBase(
+    originalClass,
+    targetParent,
+    conflictChecker,
+    true,
+    KotlinExtractInterfaceHandler.REFACTORING_NAME,
+    refactoring
+) {
     companion object {
-        private val DESTINATION_PACKAGE_RECENT_KEY = "KotlinExtractInterfaceDialog.RECENT_KEYS"
+        private const val DESTINATION_PACKAGE_RECENT_KEY = "KotlinExtractInterfaceDialog.RECENT_KEYS"
     }
 
     init {
@@ -113,10 +120,10 @@ class KotlinExtractInterfaceDialog(
 
     override fun getTopLabelText() = RefactoringBundle.message("extract.interface.from")!!
 
-    override fun getDocCommentPolicySetting() = JavaRefactoringSettings.getInstance().EXTRACT_INTERFACE_JAVADOC
+    override fun getDocCommentPolicySetting() = KotlinRefactoringSettings.instance.EXTRACT_INTERFACE_JAVADOC
 
     override fun setDocCommentPolicySetting(policy: Int) {
-        JavaRefactoringSettings.getInstance().EXTRACT_INTERFACE_JAVADOC = policy
+        KotlinRefactoringSettings.instance.EXTRACT_INTERFACE_JAVADOC = policy
     }
 
     override fun getExtractedSuperNameNotSpecifiedMessage() = RefactoringBundle.message("no.interface.name.specified")!!

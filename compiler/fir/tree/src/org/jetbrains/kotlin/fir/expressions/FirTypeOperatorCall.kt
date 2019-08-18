@@ -5,14 +5,19 @@
 
 package org.jetbrains.kotlin.fir.expressions
 
+import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.fir.expressions.impl.FirOperationBasedCall
 import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.fir.visitors.FirVisitor
 
 // is/!is/as/as?
-interface FirTypeOperatorCall : FirOperatorCall {
+abstract class FirTypeOperatorCall(
+    psi: PsiElement?,
+    operation: FirOperation
+) : FirOperationBasedCall(psi, operation) {
     val argument: FirExpression get() = arguments.first()
 
-    val conversionTypeRef: FirTypeRef
+    abstract val conversionTypeRef: FirTypeRef
 
     override fun <R, D> accept(visitor: FirVisitor<R, D>, data: D): R =
         visitor.visitTypeOperatorCall(this, data)

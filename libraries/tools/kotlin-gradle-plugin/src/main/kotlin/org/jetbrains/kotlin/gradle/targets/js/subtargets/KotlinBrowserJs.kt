@@ -9,15 +9,18 @@ import org.gradle.language.base.plugins.LifecycleBasePlugin
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJsCompilation
 import org.jetbrains.kotlin.gradle.targets.js.KotlinJsTarget
 import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsBrowserDsl
-import org.jetbrains.kotlin.gradle.targets.js.nodejs.nodeJs
+import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin
 import org.jetbrains.kotlin.gradle.targets.js.testing.KotlinJsTest
 import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpack
-import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfigWriter
+import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 import org.jetbrains.kotlin.gradle.tasks.createOrRegisterTask
 
 class KotlinBrowserJs(target: KotlinJsTarget) :
     KotlinJsSubTarget(target, "browser"),
     KotlinJsBrowserDsl {
+
+    override val testTaskDescription: String
+        get() = "Run all ${target.name} tests inside browser using karma and webpack"
 
     private val webpackTaskName = disambiguateCamelCased("webpack")
 
@@ -37,12 +40,17 @@ class KotlinBrowserJs(target: KotlinJsTarget) :
 
     override fun configureRun(compilation: KotlinJsCompilation) {
         val project = compilation.target.project
+        val nodeJs = NodeJsRootPlugin.apply(project.rootProject)
 
         project.createOrRegisterTask<KotlinWebpack>(disambiguateCamelCased("webpack")) {
             val compileKotlinTask = compilation.compileKotlinTask
-            it.dependsOn(target.project.nodeJs.root.npmResolveTask, compileKotlinTask)
+            it.dependsOn(
+                nodeJs.npmInstallTask,
+                compileKotlinTask
+            )
 
             it.compilation = compilation
+            it.description = "build webpack bundle"
 
             project.tasks.getByName(LifecycleBasePlugin.ASSEMBLE_TASK_NAME).dependsOn(it)
         }
@@ -50,15 +58,16 @@ class KotlinBrowserJs(target: KotlinJsTarget) :
         val run = project.createOrRegisterTask<KotlinWebpack>(disambiguateCamelCased("run")) {
             val compileKotlinTask = compilation.compileKotlinTask
             it.dependsOn(
-                target.project.nodeJs.root.npmResolveTask,
+                nodeJs.npmInstallTask,
                 compileKotlinTask,
-                project.getTasksByName(compilation.processResourcesTaskName, false)
+                target.project.tasks.getByName(compilation.processResourcesTaskName)
             )
 
-            it.bin = "webpack-dev-server"
+            it.bin = "webpack-dev-server/bin/webpack-dev-server.js"
             it.compilation = compilation
+            it.description = "start webpack dev server"
 
-            it.devServer = KotlinWebpackConfigWriter.DevServer(
+            it.devServer = KotlinWebpackConfig.DevServer(
                 open = true,
                 contentBase = listOf(compilation.output.resourcesDir.canonicalPath)
             )

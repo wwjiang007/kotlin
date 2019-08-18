@@ -20,6 +20,7 @@ import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.resolve.TemporaryBindingTrace
 import org.jetbrains.kotlin.resolve.calls.ArgumentTypeResolver
+import org.jetbrains.kotlin.resolve.calls.NewCommonSuperTypeCalculator
 import org.jetbrains.kotlin.resolve.calls.checkers.CallCheckerContext
 import org.jetbrains.kotlin.resolve.calls.context.BasicCallResolutionContext
 import org.jetbrains.kotlin.resolve.calls.context.ContextDependency
@@ -34,6 +35,7 @@ import org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.expressions.DoubleColonExpressionResolver
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingServices
+import org.jetbrains.kotlin.types.expressions.typeInfoFactory.createTypeInfo
 import org.jetbrains.kotlin.types.typeUtil.asTypeProjection
 import org.jetbrains.kotlin.types.typeUtil.isUnit
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
@@ -48,7 +50,8 @@ class ResolvedAtomCompleter(
     private val builtIns: KotlinBuiltIns,
     private val deprecationResolver: DeprecationResolver,
     private val moduleDescriptor: ModuleDescriptor,
-    private val dataFlowValueFactory: DataFlowValueFactory
+    private val dataFlowValueFactory: DataFlowValueFactory,
+    private val typeApproximator: TypeApproximator
 ) {
     private val topLevelCallCheckerContext = CallCheckerContext(topLevelCallContext, deprecationResolver, moduleDescriptor)
     private val topLevelTrace = topLevelCallCheckerContext.trace
@@ -128,7 +131,7 @@ class ResolvedAtomCompleter(
             val substitutedTypes = returnTypes.filterNotNull()
             // we have some unsubstituted types
             if (substitutedTypes.isEmpty()) return false
-            val commonReturnType = CommonSupertypes.commonSupertype(returnTypes)
+            val commonReturnType = NewCommonSuperTypeCalculator.commonSuperType(substitutedTypes)
             return commonReturnType.isUnit()
         }
 
@@ -140,7 +143,7 @@ class ResolvedAtomCompleter(
         }
 
         val approximatedReturnType =
-            TypeApproximator(builtIns).approximateDeclarationType(
+            typeApproximator.approximateDeclarationType(
                 returnType,
                 local = true,
                 languageVersionSettings = topLevelCallContext.languageVersionSettings
@@ -288,7 +291,8 @@ class ResolvedAtomCompleter(
         }
 
         // TODO: probably we should also record key 'DATA_FLOW_INFO_BEFORE', see ExpressionTypingVisitorDispatcher.getTypeInfo
-        topLevelTrace.recordType(callableReferenceExpression, resultType)
+        val typeInfo = createTypeInfo(resultType, resolvedAtom.atom.psiCallArgument.dataFlowInfoAfterThisArgument)
+        topLevelTrace.record(BindingContext.EXPRESSION_TYPE_INFO, callableReferenceExpression, typeInfo)
         topLevelTrace.record(BindingContext.PROCESSED, callableReferenceExpression)
 
         doubleColonExpressionResolver.checkReferenceIsToAllowedMember(

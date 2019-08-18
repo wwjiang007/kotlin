@@ -21,9 +21,8 @@ import org.jetbrains.kotlin.resolve.calls.model.*
 import org.jetbrains.kotlin.resolve.calls.tower.ResolutionCandidateApplicability
 import org.jetbrains.kotlin.resolve.calls.tower.ResolutionCandidateApplicability.INAPPLICABLE
 import org.jetbrains.kotlin.resolve.calls.tower.ResolutionCandidateApplicability.INAPPLICABLE_WRONG_RECEIVER
-import org.jetbrains.kotlin.resolve.scopes.receivers.QualifierReceiver
+import org.jetbrains.kotlin.resolve.scopes.receivers.DetailedReceiver
 import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.UnwrappedType
 import org.jetbrains.kotlin.types.model.KotlinTypeMarker
 import org.jetbrains.kotlin.types.model.TypeVariableMarker
 
@@ -38,9 +37,13 @@ class ExpectedTypeConstraintPosition(val topLevelCall: KotlinCall) : ConstraintP
     override fun toString() = "ExpectedType for call $topLevelCall"
 }
 
-class DeclaredUpperBoundConstraintPosition(val typeParameterDescriptor: TypeParameterDescriptor) : ConstraintPosition() {
+sealed class DeclaredUpperBoundConstraintPosition : ConstraintPosition()
+
+class DeclaredUpperBoundConstraintPositionImpl(val typeParameterDescriptor: TypeParameterDescriptor) : DeclaredUpperBoundConstraintPosition() {
     override fun toString() = "DeclaredUpperBound ${typeParameterDescriptor.name} from ${typeParameterDescriptor.containingDeclaration}"
 }
+
+class FirDeclaredUpperBoundConstraintPosition : DeclaredUpperBoundConstraintPosition()
 
 class ArgumentConstraintPosition(val argument: KotlinCallArgument) : ConstraintPosition() {
     override fun toString() = "Argument $argument"
@@ -58,7 +61,7 @@ class KnownTypeParameterConstraintPosition(val typeArgument: KotlinType) : Const
     override fun toString() = "TypeArgument $typeArgument"
 }
 
-class LHSArgumentConstraintPosition(val receiver: QualifierReceiver) : ConstraintPosition() {
+class LHSArgumentConstraintPosition(val receiver: DetailedReceiver) : ConstraintPosition() {
     override fun toString(): String {
         return "LHS receiver $receiver"
     }

@@ -71,7 +71,7 @@ class KotlinLineMarkerProvider : LineMarkerProviderDescriptor() {
     private fun PsiElement?.canHaveSeparator() =
         this is KtFunction || this is KtClassInitializer || (this is KtProperty && !isLocal)
 
-    private fun PsiElement.wantsSeparator() = StringUtil.getLineBreakCount(text) > 0
+    private fun PsiElement.wantsSeparator() = this is KtFunction || StringUtil.getLineBreakCount(text) > 0
 
     private fun createLineSeparatorByElement(element: PsiElement): LineMarkerInfo<PsiElement> {
         val anchor = PsiTreeUtil.getDeepestFirst(element)
@@ -95,6 +95,7 @@ class KotlinLineMarkerProvider : LineMarkerProviderDescriptor() {
 
         for (leaf in elements) {
             ProgressManager.checkCanceled()
+            if (leaf !is PsiIdentifier && leaf.firstChild != null) continue
             val element = leaf.parent as? KtNamedDeclaration ?: continue
             if (!declarations.add(element)) continue
 

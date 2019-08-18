@@ -22,6 +22,7 @@ import org.jetbrains.kotlin.compiler.plugin.AbstractCliOption
 import org.jetbrains.kotlin.compiler.plugin.ComponentRegistrar
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.JVMConfigurationKeys
+import org.jetbrains.kotlin.scripting.compiler.plugin.impl.reporter
 import org.jetbrains.kotlin.scripting.configuration.ScriptingConfigurationKeys
 import org.jetbrains.kotlin.scripting.definitions.SCRIPT_DEFINITION_MARKERS_PATH
 import org.jetbrains.kotlin.scripting.definitions.discoverScriptTemplatesInClasspath
@@ -34,6 +35,7 @@ import org.jetbrains.kotlin.utils.KotlinPaths
 import org.jetbrains.kotlin.utils.PathUtil
 import org.junit.Assert
 import java.io.File
+import kotlin.script.experimental.jvm.defaultJvmScriptingHostConfiguration
 
 class ScriptingCompilerPluginTest : TestCaseWithTmpdir() {
 
@@ -115,7 +117,7 @@ class ScriptingCompilerPluginTest : TestCaseWithTmpdir() {
 
         loadScriptTemplatesFromClasspath(
             listOf("TestScriptWithReceivers", "TestScriptWithSimpleEnvVars"),
-            listOf(defsOut), emptyList(), this::class.java.classLoader, emptyMap(), messageCollector
+            listOf(defsOut), emptyList(), this::class.java.classLoader, defaultJvmScriptingHostConfiguration, messageCollector.reporter
         ).toList()
 
         for (def in defClasses) {
@@ -140,8 +142,8 @@ class ScriptingCompilerPluginTest : TestCaseWithTmpdir() {
             discoverScriptTemplatesInClasspath(
                 listOf(defsOut),
                 this::class.java.classLoader,
-                emptyMap(),
-                messageCollector
+                defaultJvmScriptingHostConfiguration,
+                messageCollector.reporter
             )
 
         assertTrue(messageCollector.messages.isEmpty()) {
@@ -211,8 +213,8 @@ class ScriptingCompilerPluginTest : TestCaseWithTmpdir() {
         discoverScriptTemplatesInClasspath(
             listOf(defsOut),
             this::class.java.classLoader,
-            emptyMap(),
-            messageCollector
+            defaultJvmScriptingHostConfiguration,
+            messageCollector.reporter
         ).toList()
 
         assertTrue(

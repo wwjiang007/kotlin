@@ -1166,6 +1166,34 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 }
             }
 
+            @TestMetadata("compiler/testData/diagnostics/tests/annotations/functionalTypes")
+            @TestDataPath("$PROJECT_ROOT")
+            @RunWith(JUnit3RunnerWithInners.class)
+            public static class FunctionalTypes extends AbstractDiagnosticsTest {
+                private void runTest(String testDataFilePath) throws Exception {
+                    KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+                }
+
+                public void testAllFilesPresentInFunctionalTypes() throws Exception {
+                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/tests/annotations/functionalTypes"), Pattern.compile("^(.*)\\.kts?$"), TargetBackend.ANY, true);
+                }
+
+                @TestMetadata("nonParenthesizedAnnotationsWithError.kt")
+                public void testNonParenthesizedAnnotationsWithError() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/annotations/functionalTypes/nonParenthesizedAnnotationsWithError.kt");
+                }
+
+                @TestMetadata("nonParenthesizedAnnotationsWithoutError.kt")
+                public void testNonParenthesizedAnnotationsWithoutError() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/annotations/functionalTypes/nonParenthesizedAnnotationsWithoutError.kt");
+                }
+
+                @TestMetadata("parenthesizedAnnotations.kt")
+                public void testParenthesizedAnnotations() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/annotations/functionalTypes/parenthesizedAnnotations.kt");
+                }
+            }
+
             @TestMetadata("compiler/testData/diagnostics/tests/annotations/options")
             @TestDataPath("$PROJECT_ROOT")
             @RunWith(JUnit3RunnerWithInners.class)
@@ -1666,6 +1694,16 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 runTest("compiler/testData/diagnostics/tests/callableReference/classVsPackage.kt");
             }
 
+            @TestMetadata("constraintFromLHSWithCorrectDirection.kt")
+            public void testConstraintFromLHSWithCorrectDirection() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/callableReference/constraintFromLHSWithCorrectDirection.kt");
+            }
+
+            @TestMetadata("correctInfoAfterArrayLikeCall.kt")
+            public void testCorrectInfoAfterArrayLikeCall() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/callableReference/correctInfoAfterArrayLikeCall.kt");
+            }
+
             @TestMetadata("ea81649_errorPropertyLHS.kt")
             public void testEa81649_errorPropertyLHS() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/callableReference/ea81649_errorPropertyLHS.kt");
@@ -1681,6 +1719,16 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 runTest("compiler/testData/diagnostics/tests/callableReference/expectedTypeAsSubtypeOfFunctionType.kt");
             }
 
+            @TestMetadata("functionReferenceWithDefaultValueAsOtherFunctionType.kt")
+            public void testFunctionReferenceWithDefaultValueAsOtherFunctionType() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/callableReference/functionReferenceWithDefaultValueAsOtherFunctionType.kt");
+            }
+
+            @TestMetadata("functionReferenceWithDefaultValueAsOtherFunctionType_enabled.kt")
+            public void testFunctionReferenceWithDefaultValueAsOtherFunctionType_enabled() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/callableReference/functionReferenceWithDefaultValueAsOtherFunctionType_enabled.kt");
+            }
+
             @TestMetadata("kt15439_completeCall.kt")
             public void testKt15439_completeCall() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/callableReference/kt15439_completeCall.kt");
@@ -1689,6 +1737,16 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
             @TestMetadata("kt25433.kt")
             public void testKt25433() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/callableReference/kt25433.kt");
+            }
+
+            @TestMetadata("kt31981.kt")
+            public void testKt31981() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/callableReference/kt31981.kt");
+            }
+
+            @TestMetadata("kt32256.kt")
+            public void testKt32256() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/callableReference/kt32256.kt");
             }
 
             @TestMetadata("kt7430_wrongClassOnLHS.kt")
@@ -1701,6 +1759,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 runTest("compiler/testData/diagnostics/tests/callableReference/memberExtensionsImportedFromObjectsUnsupported.kt");
             }
 
+            @TestMetadata("noExceptionOnRedCodeWithArrayLikeCall.kt")
+            public void testNoExceptionOnRedCodeWithArrayLikeCall() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/callableReference/noExceptionOnRedCodeWithArrayLikeCall.kt");
+            }
+
             @TestMetadata("packageInLhs.kt")
             public void testPackageInLhs() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/callableReference/packageInLhs.kt");
@@ -1711,6 +1774,16 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 runTest("compiler/testData/diagnostics/tests/callableReference/parsingPriorityOfGenericArgumentsVsLess.kt");
             }
 
+            @TestMetadata("propertyOfNestedGenericClass.kt")
+            public void testPropertyOfNestedGenericClass() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/callableReference/propertyOfNestedGenericClass.kt");
+            }
+
+            @TestMetadata("rewriteAtSliceOnGetOperator.kt")
+            public void testRewriteAtSliceOnGetOperator() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/callableReference/rewriteAtSliceOnGetOperator.kt");
+            }
+
             @TestMetadata("sam.kt")
             public void testSam() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/callableReference/sam.kt");
@@ -1719,6 +1792,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
             @TestMetadata("subtypeArgumentFromRHSForReference.kt")
             public void testSubtypeArgumentFromRHSForReference() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/callableReference/subtypeArgumentFromRHSForReference.kt");
+            }
+
+            @TestMetadata("suspendCallableReference.kt")
+            public void testSuspendCallableReference() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/callableReference/suspendCallableReference.kt");
             }
 
             @TestMetadata("typealiases.kt")
@@ -7764,6 +7842,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 runTest("compiler/testData/diagnostics/tests/functionLiterals/functionLIteralInBlockInIf.kt");
             }
 
+            @TestMetadata("functionLiteralAsArgumentForFunction.kt")
+            public void testFunctionLiteralAsArgumentForFunction() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/functionLiterals/functionLiteralAsArgumentForFunction.kt");
+            }
+
             @TestMetadata("functionLiteralInIf.kt")
             public void testFunctionLiteralInIf() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/functionLiterals/functionLiteralInIf.kt");
@@ -9274,6 +9357,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 runTest("compiler/testData/diagnostics/tests/incompleteCode/incompleteEquals.kt");
             }
 
+            @TestMetadata("incompleteTryCatchBlock.kt")
+            public void testIncompleteTryCatchBlock() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/incompleteCode/incompleteTryCatchBlock.kt");
+            }
+
             @TestMetadata("kt1955.kt")
             public void testKt1955() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/incompleteCode/kt1955.kt");
@@ -9475,6 +9563,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 runTest("compiler/testData/diagnostics/tests/inference/cannotCompleteResolveWithFunctionLiterals.kt");
             }
 
+            @TestMetadata("capturedInProjectedFlexibleType.kt")
+            public void testCapturedInProjectedFlexibleType() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/inference/capturedInProjectedFlexibleType.kt");
+            }
+
             @TestMetadata("coerceFunctionLiteralToSuspend.kt")
             public void testCoerceFunctionLiteralToSuspend() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/inference/coerceFunctionLiteralToSuspend.kt");
@@ -9645,6 +9738,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 runTest("compiler/testData/diagnostics/tests/inference/kt3184.kt");
             }
 
+            @TestMetadata("kt32434.kt")
+            public void testKt32434() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/inference/kt32434.kt");
+            }
+
             @TestMetadata("kt6175.kt")
             public void testKt6175() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/inference/kt6175.kt");
@@ -9708,6 +9806,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
             @TestMetadata("possibleCycleOnConstraints.kt")
             public void testPossibleCycleOnConstraints() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/inference/possibleCycleOnConstraints.kt");
+            }
+
+            @TestMetadata("recursiveTypes.kt")
+            public void testRecursiveTypes() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/inference/recursiveTypes.kt");
             }
 
             @TestMetadata("reportAboutUnresolvedReferenceAsUnresolved.kt")
@@ -9817,6 +9920,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                     runTest("compiler/testData/diagnostics/tests/inference/capturedTypes/expectedTypeMismatchWithInVariance.kt");
                 }
 
+                @TestMetadata("invokeCallWithCapturedReceiver.kt")
+                public void testInvokeCallWithCapturedReceiver() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/capturedTypes/invokeCallWithCapturedReceiver.kt");
+                }
+
                 @TestMetadata("kt25302.kt")
                 public void testKt25302() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/inference/capturedTypes/kt25302.kt");
@@ -9857,6 +9965,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                     runTest("compiler/testData/diagnostics/tests/inference/capturedTypes/overApproximationForOutCaptured.kt");
                 }
 
+                @TestMetadata("propagateNullailityOnSupertypesWhenCaptureTypes.kt")
+                public void testPropagateNullailityOnSupertypesWhenCaptureTypes() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/capturedTypes/propagateNullailityOnSupertypesWhenCaptureTypes.kt");
+                }
+
                 @TestMetadata("starProjectionRegression.kt")
                 public void testStarProjectionRegression() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/inference/capturedTypes/starProjectionRegression.kt");
@@ -9883,6 +9996,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 @TestMetadata("coercionToUnitForIfAsLastExpressionInLambda.kt")
                 public void testCoercionToUnitForIfAsLastExpressionInLambda() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/inference/coercionToUnit/coercionToUnitForIfAsLastExpressionInLambda.kt");
+                }
+
+                @TestMetadata("coercionToUnitForLastLambdaInLambda.kt")
+                public void testCoercionToUnitForLastLambdaInLambda() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/coercionToUnit/coercionToUnitForLastLambdaInLambda.kt");
                 }
 
                 @TestMetadata("coercionWithExpectedType.kt")
@@ -9973,14 +10091,39 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                     runTest("compiler/testData/diagnostics/tests/inference/commonSystem/kt30300.kt");
                 }
 
+                @TestMetadata("kt31969.kt")
+                public void testKt31969() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/commonSystem/kt31969.kt");
+                }
+
                 @TestMetadata("kt3372toCollection.kt")
                 public void testKt3372toCollection() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/inference/commonSystem/kt3372toCollection.kt");
                 }
 
+                @TestMetadata("lessSpecificTypeForArgumentCallWithExactAnnotation.kt")
+                public void testLessSpecificTypeForArgumentCallWithExactAnnotation() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/commonSystem/lessSpecificTypeForArgumentCallWithExactAnnotation.kt");
+                }
+
+                @TestMetadata("lessSpecificTypeForArgumentCallWithExactAnnotation_ni.kt")
+                public void testLessSpecificTypeForArgumentCallWithExactAnnotation_ni() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/commonSystem/lessSpecificTypeForArgumentCallWithExactAnnotation_ni.kt");
+                }
+
                 @TestMetadata("nestedLambdas.kt")
                 public void testNestedLambdas() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/inference/commonSystem/nestedLambdas.kt");
+                }
+
+                @TestMetadata("postponedCompletionWithExactAnnotation.kt")
+                public void testPostponedCompletionWithExactAnnotation() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/commonSystem/postponedCompletionWithExactAnnotation.kt");
+                }
+
+                @TestMetadata("postponedCompletionWithExactAnnotation_ni.kt")
+                public void testPostponedCompletionWithExactAnnotation_ni() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/commonSystem/postponedCompletionWithExactAnnotation_ni.kt");
                 }
 
                 @TestMetadata("selectFromCovariantAndContravariantTypes.kt")
@@ -10016,9 +10159,19 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                     KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/tests/inference/constraints"), Pattern.compile("^(.*)\\.kts?$"), TargetBackend.ANY, true);
                 }
 
+                @TestMetadata("constraintFromVariantTypeWithNestedProjection.kt")
+                public void testConstraintFromVariantTypeWithNestedProjection() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/constraints/constraintFromVariantTypeWithNestedProjection.kt");
+                }
+
                 @TestMetadata("constraintOnFunctionLiteral.kt")
                 public void testConstraintOnFunctionLiteral() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/inference/constraints/constraintOnFunctionLiteral.kt");
+                }
+
+                @TestMetadata("earlyCompletionForCalls.kt")
+                public void testEarlyCompletionForCalls() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/constraints/earlyCompletionForCalls.kt");
                 }
 
                 @TestMetadata("equalityConstraintOnNullableType.kt")
@@ -10034,6 +10187,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 @TestMetadata("ignoreConstraintFromImplicitInNothing.kt")
                 public void testIgnoreConstraintFromImplicitInNothing() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/inference/constraints/ignoreConstraintFromImplicitInNothing.kt");
+                }
+
+                @TestMetadata("inferTypeFromCapturedStarProjection.kt")
+                public void testInferTypeFromCapturedStarProjection() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/constraints/inferTypeFromCapturedStarProjection.kt");
                 }
 
                 @TestMetadata("kt6320.kt")
@@ -10056,6 +10214,16 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                     runTest("compiler/testData/diagnostics/tests/inference/constraints/kt8879.kt");
                 }
 
+                @TestMetadata("manyConstraintsDueToFlexibleRawTypes.kt")
+                public void testManyConstraintsDueToFlexibleRawTypes() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/constraints/manyConstraintsDueToFlexibleRawTypes.kt");
+                }
+
+                @TestMetadata("manyConstraintsDueToRecursiveFlexibleTypesWithWildcards.kt")
+                public void testManyConstraintsDueToRecursiveFlexibleTypesWithWildcards() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/constraints/manyConstraintsDueToRecursiveFlexibleTypesWithWildcards.kt");
+                }
+
                 @TestMetadata("notNullConstraintOnNullableType.kt")
                 public void testNotNullConstraintOnNullableType() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/inference/constraints/notNullConstraintOnNullableType.kt");
@@ -10064,6 +10232,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 @TestMetadata("operationsOnIntegerValueTypes.kt")
                 public void testOperationsOnIntegerValueTypes() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/inference/constraints/operationsOnIntegerValueTypes.kt");
+                }
+
+                @TestMetadata("recursiveJavaTypeWithStarProjection.kt")
+                public void testRecursiveJavaTypeWithStarProjection() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/constraints/recursiveJavaTypeWithStarProjection.kt");
                 }
 
                 @TestMetadata("returnLambdaFromLambda.kt")
@@ -10187,6 +10360,26 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                     runTest("compiler/testData/diagnostics/tests/inference/nothingType/kt24490.kt");
                 }
 
+                @TestMetadata("kt32051.kt")
+                public void testKt32051() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/nothingType/kt32051.kt");
+                }
+
+                @TestMetadata("kt32081.kt")
+                public void testKt32081() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/nothingType/kt32081.kt");
+                }
+
+                @TestMetadata("kt32207.kt")
+                public void testKt32207() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/nothingType/kt32207.kt");
+                }
+
+                @TestMetadata("kt32388.kt")
+                public void testKt32388() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/nothingType/kt32388.kt");
+                }
+
                 @TestMetadata("lambdaNothingAndExpectedType.kt")
                 public void testLambdaNothingAndExpectedType() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/inference/nothingType/lambdaNothingAndExpectedType.kt");
@@ -10200,6 +10393,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 @TestMetadata("nothingWithCallableReference.kt")
                 public void testNothingWithCallableReference() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/inference/nothingType/nothingWithCallableReference.kt");
+                }
+
+                @TestMetadata("platformNothingAsUsefulConstraint.kt")
+                public void testPlatformNothingAsUsefulConstraint() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/inference/nothingType/platformNothingAsUsefulConstraint.kt");
                 }
             }
 
@@ -12368,6 +12566,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 @TestMetadata("privateCandidatesWithWrongArguments.kt")
                 public void testPrivateCandidatesWithWrongArguments() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/j+k/sam/privateCandidatesWithWrongArguments.kt");
+                }
+
+                @TestMetadata("recursiveSamsAndInvoke.kt")
+                public void testRecursiveSamsAndInvoke() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/j+k/sam/recursiveSamsAndInvoke.kt");
                 }
 
                 @TestMetadata("samOnTypeParameter.kt")
@@ -16919,6 +17122,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 runTest("compiler/testData/diagnostics/tests/regressions/kt328.kt");
             }
 
+            @TestMetadata("kt32836.kt")
+            public void testKt32836() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/regressions/kt32836.kt");
+            }
+
             @TestMetadata("kt334.kt")
             public void testKt334() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/regressions/kt334.kt");
@@ -17187,6 +17395,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
             @TestMetadata("kt860.kt")
             public void testKt860() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/regressions/kt860.kt");
+            }
+
+            @TestMetadata("kt9384.kt")
+            public void testKt9384() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/regressions/kt9384.kt");
             }
 
             @TestMetadata("kt9620.kt")
@@ -17867,6 +18080,26 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                     runTest("compiler/testData/diagnostics/tests/resolve/overloadConflicts/kt10640.kt");
                 }
 
+                @TestMetadata("kt31670.kt")
+                public void testKt31670() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/resolve/overloadConflicts/kt31670.kt");
+                }
+
+                @TestMetadata("kt31670_compat.kt")
+                public void testKt31670_compat() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/resolve/overloadConflicts/kt31670_compat.kt");
+                }
+
+                @TestMetadata("kt31758.kt")
+                public void testKt31758() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/resolve/overloadConflicts/kt31758.kt");
+                }
+
+                @TestMetadata("kt31758_compat.kt")
+                public void testKt31758_compat() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/resolve/overloadConflicts/kt31758_compat.kt");
+                }
+
                 @TestMetadata("numberOfDefaults.kt")
                 public void testNumberOfDefaults() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/resolve/overloadConflicts/numberOfDefaults.kt");
@@ -17875,6 +18108,16 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 @TestMetadata("originalExamples.kt")
                 public void testOriginalExamples() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/resolve/overloadConflicts/originalExamples.kt");
+                }
+
+                @TestMetadata("overloadResolutionOnNullableContravariantParameter.kt")
+                public void testOverloadResolutionOnNullableContravariantParameter() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/resolve/overloadConflicts/overloadResolutionOnNullableContravariantParameter.kt");
+                }
+
+                @TestMetadata("overloadResolutionOnNullableContravariantParameter_compat.kt")
+                public void testOverloadResolutionOnNullableContravariantParameter_compat() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/resolve/overloadConflicts/overloadResolutionOnNullableContravariantParameter_compat.kt");
                 }
 
                 @TestMetadata("varargWithMoreSpecificSignature.kt")
@@ -22305,9 +22548,9 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 runTest("compiler/testData/diagnostics/tests/typeParameters/implicitNothingAsTypeParameter.kt");
             }
 
-            @TestMetadata("implicitNothingAsTypeParameterNI.kt")
-            public void testImplicitNothingAsTypeParameterNI() throws Exception {
-                runTest("compiler/testData/diagnostics/tests/typeParameters/implicitNothingAsTypeParameterNI.kt");
+            @TestMetadata("implicitNothingOnDelegates.kt")
+            public void testImplicitNothingOnDelegates() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/typeParameters/implicitNothingOnDelegates.kt");
             }
 
             @TestMetadata("misplacedConstraints.kt")
@@ -22446,6 +22689,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
             @TestMetadata("importFromTypeAliasObject.kt")
             public void testImportFromTypeAliasObject() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/typealias/importFromTypeAliasObject.kt");
+            }
+
+            @TestMetadata("importMemberFromJavaViaAlias.kt")
+            public void testImportMemberFromJavaViaAlias() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/typealias/importMemberFromJavaViaAlias.kt");
             }
 
             @TestMetadata("inGenerics.kt")
@@ -22618,6 +22866,11 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                 runTest("compiler/testData/diagnostics/tests/typealias/simpleTypeAlias.kt");
             }
 
+            @TestMetadata("starImportOnTypeAlias.kt")
+            public void testStarImportOnTypeAlias() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/typealias/starImportOnTypeAlias.kt");
+            }
+
             @TestMetadata("starProjection.kt")
             public void testStarProjection() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/typealias/starProjection.kt");
@@ -22781,6 +23034,16 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
             @TestMetadata("typeAliasShouldExpandToClass.kt")
             public void testTypeAliasShouldExpandToClass() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/typealias/typeAliasShouldExpandToClass.kt");
+            }
+
+            @TestMetadata("typeAliasesInImportDirectives.kt")
+            public void testTypeAliasesInImportDirectives() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/typealias/typeAliasesInImportDirectives.kt");
+            }
+
+            @TestMetadata("typeAliasesInQualifiers.kt")
+            public void testTypeAliasesInQualifiers() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/typealias/typeAliasesInQualifiers.kt");
             }
 
             @TestMetadata("typealiasRhsAnnotations.kt")
@@ -23681,9 +23944,24 @@ public class DiagnosticsTestGenerated extends AbstractDiagnosticsTest {
                     runTest("compiler/testData/codegen/box/diagnostics/functions/tailRecursion/defaultArgs.kt");
                 }
 
+                @TestMetadata("defaultArgs2.kt")
+                public void testDefaultArgs2() throws Exception {
+                    runTest("compiler/testData/codegen/box/diagnostics/functions/tailRecursion/defaultArgs2.kt");
+                }
+
                 @TestMetadata("defaultArgsOverridden.kt")
                 public void testDefaultArgsOverridden() throws Exception {
                     runTest("compiler/testData/codegen/box/diagnostics/functions/tailRecursion/defaultArgsOverridden.kt");
+                }
+
+                @TestMetadata("defaultArgsWithSideEffects.kt")
+                public void testDefaultArgsWithSideEffects() throws Exception {
+                    runTest("compiler/testData/codegen/box/diagnostics/functions/tailRecursion/defaultArgsWithSideEffects.kt");
+                }
+
+                @TestMetadata("defaultArgsWithSideEffects2.kt")
+                public void testDefaultArgsWithSideEffects2() throws Exception {
+                    runTest("compiler/testData/codegen/box/diagnostics/functions/tailRecursion/defaultArgsWithSideEffects2.kt");
                 }
 
                 @TestMetadata("extensionTailCall.kt")

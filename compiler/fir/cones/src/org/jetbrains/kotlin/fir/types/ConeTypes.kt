@@ -30,12 +30,12 @@ interface ConeTypedProjection {
     val type: ConeKotlinType
 }
 
-class ConeKotlinTypeProjectionIn(override val type: ConeKotlinType) : ConeKotlinTypeProjection(), ConeTypedProjection {
+data class ConeKotlinTypeProjectionIn(override val type: ConeKotlinType) : ConeKotlinTypeProjection(), ConeTypedProjection {
     override val kind: ProjectionKind
         get() = ProjectionKind.IN
 }
 
-class ConeKotlinTypeProjectionOut(override val type: ConeKotlinType) : ConeKotlinTypeProjection(), ConeTypedProjection {
+data class ConeKotlinTypeProjectionOut(override val type: ConeKotlinType) : ConeKotlinTypeProjection(), ConeTypedProjection {
     override val kind: ProjectionKind
         get() = ProjectionKind.OUT
 }
@@ -64,6 +64,10 @@ sealed class ConeKotlinType : ConeKotlinTypeProjection(), ConeTypedProjection, K
         get() = this
 
     abstract val nullability: ConeNullability
+
+    override fun toString(): String {
+        return render()
+    }
 }
 
 val ConeKotlinType.isNullable: Boolean get() = nullability != ConeNullability.NOT_NULL
@@ -105,9 +109,7 @@ abstract class ConeTypeParameterType : ConeLookupTagBasedType() {
     abstract override val lookupTag: ConeTypeParameterLookupTag
 }
 
-
-
-class ConeFlexibleType(val lowerBound: ConeKotlinType, val upperBound: ConeKotlinType) : ConeKotlinType(),
+data class ConeFlexibleType(val lowerBound: ConeKotlinType, val upperBound: ConeKotlinType) : ConeKotlinType(),
     FlexibleTypeMarker {
 
     init {
@@ -126,10 +128,10 @@ class ConeFlexibleType(val lowerBound: ConeKotlinType, val upperBound: ConeKotli
 fun ConeKotlinType.upperBoundIfFlexible() = (this as? ConeFlexibleType)?.upperBound ?: this
 fun ConeKotlinType.lowerBoundIfFlexible() = (this as? ConeFlexibleType)?.lowerBound ?: this
 
-class ConeCapturedTypeConstructor(val projection: ConeKotlinTypeProjection, var supertypes: List<ConeKotlinType>? = null) :
-    TypeConstructorMarker {
-
-}
+class ConeCapturedTypeConstructor(
+    val projection: ConeKotlinTypeProjection,
+    var supertypes: List<ConeKotlinType>? = null
+) : TypeConstructorMarker
 
 class ConeCapturedType(
     val captureStatus: CaptureStatus,

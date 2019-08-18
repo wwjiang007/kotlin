@@ -9,19 +9,23 @@ import com.intellij.psi.*
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.builtins.PrimitiveType
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.util.getJavaClassDescriptor
 import org.jetbrains.kotlin.j2k.ast.Nullability
 import org.jetbrains.kotlin.js.descriptorUtils.getJetTypeFqName
+import org.jetbrains.kotlin.js.resolve.diagnostics.findPsi
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.nj2k.JKSymbolProvider
-import org.jetbrains.kotlin.nj2k.NewJ2kConverterContext
 import org.jetbrains.kotlin.nj2k.kotlinTypeByName
+import org.jetbrains.kotlin.nj2k.symbols.*
 import org.jetbrains.kotlin.nj2k.tree.impl.*
 import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtTypeParameter
 import org.jetbrains.kotlin.psi.KtTypeReference
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.jvm.JvmPrimitiveType
+import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.isNullable
 import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
@@ -40,7 +44,7 @@ fun JKExpression.type(symbolProvider: JKSymbolProvider): JKType? =
         }
         is JKMethodCallExpression -> identifier.returnType
         is JKFieldAccessExpressionImpl -> identifier.fieldType
-        is JKQualifiedExpressionImpl -> this.selector.type(symbolProvider)
+        is JKQualifiedExpressionImpl -> selector.type(symbolProvider)
         is JKKtThrowExpression -> kotlinTypeByName(KotlinBuiltIns.FQ_NAMES.nothing.asString(), symbolProvider)
         is JKClassAccessExpression ->
             JKClassTypeImpl(identifier, emptyList(), Nullability.NotNull)
@@ -57,10 +61,10 @@ fun JKExpression.type(symbolProvider: JKSymbolProvider): JKType? =
         is JKClassLiteralExpression -> {
             val symbol = when (literalType) {
                 JKClassLiteralExpression.LiteralType.KOTLIN_CLASS ->
-                    symbolProvider.provideByFqName<JKClassSymbol>("kotlin.reflect.KClass")
+                    symbolProvider.provideClassSymbol(KotlinBuiltIns.FQ_NAMES.kClass.toSafe())
                 JKClassLiteralExpression.LiteralType.JAVA_CLASS,
                 JKClassLiteralExpression.LiteralType.JAVA_PRIMITIVE_CLASS, JKClassLiteralExpression.LiteralType.JAVA_VOID_TYPE ->
-                    symbolProvider.provideByFqName("java.lang.Class")
+                    symbolProvider.provideClassSymbol("java.lang.Class")
             }
             JKClassTypeImpl(symbol, listOf(classType.type), Nullability.NotNull)
         }
@@ -76,7 +80,7 @@ fun ClassId.toKtClassType(
     symbolProvider: JKSymbolProvider,
     nullability: Nullability = Nullability.Default
 ): JKType =
-    JKClassTypeImpl(symbolProvider.provideByFqName(this), emptyList(), nullability)
+    JKClassTypeImpl(symbolProvider.provideClassSymbol(asSingleFqName()), emptyList(), nullability)
 
 
 fun PsiType.toJK(symbolProvider: JKSymbolProvider, nullability: Nullability = Nullability.Default): JKType {
@@ -88,7 +92,7 @@ fun PsiType.toJK(symbolProvider: JKSymbolProvider, nullability: Nullability = Nu
                 null ->
                     JKClassTypeImpl(JKUnresolvedClassSymbol(rawType().canonicalText), parameters, nullability)
                 is PsiTypeParameter ->
-                    JKTypeParameterTypeImpl(target.name!!)
+                    JKTypeParameterTypeImpl(symbolProvider.provideDirectSymbol(target) as JKTypeParameterSymbol)
                 else -> {
                     JKClassTypeImpl(
                         target.let { symbolProvider.provideDirectSymbol(it) as JKClassSymbol },
@@ -117,6 +121,11 @@ fun PsiType.toJK(symbolProvider: JKSymbolProvider, nullability: Nullability = Nu
                     )
                 else -> JKStarProjectionTypeImpl()
             }
+        is PsiCapturedWildcardType ->
+            JKCapturedType(
+                wildcard.toJK(symbolProvider, nullability) as JKWildCardType,
+                nullability
+            )
         else -> throw Exception("Invalid PSI ${this::class.java}")
     }
 }
@@ -133,17 +142,32 @@ fun JKType.isSubtypeOf(other: JKType, symbolProvider: JKSymbolProvider): Boolean
         ?.let { otherType -> this.toKtType(symbolProvider)?.isSubtypeOf(otherType) } == true
 
 
+fun KotlinType.toJK(symbolProvider: JKSymbolProvider): JKType {
+    return when (val descriptor = constructor.declarationDescriptor) {
+        is TypeParameterDescriptor ->
+            JKTypeParameterTypeImpl(
+                symbolProvider.provideDirectSymbol(descriptor.findPsi() as? KtTypeParameter ?: return JKNoTypeImpl) as JKTypeParameterSymbol
+            )
 
-fun KotlinType.toJK(symbolProvider: JKSymbolProvider): JKClassTypeImpl =
-    JKClassTypeImpl(
-        symbolProvider.provideByFqName(getJetTypeFqName(false)),
-        arguments.map { it.type.toJK(symbolProvider) },
-        if (isNullable()) Nullability.Nullable else Nullability.NotNull
-    )
+        else -> JKClassTypeImpl(
+            symbolProvider.provideClassSymbol(getJetTypeFqName(false)),
+            arguments.map { it.type.toJK(symbolProvider) },
+            if (isNullable()) Nullability.Nullable else Nullability.NotNull
+        )
+    }
+}
+
+val JKType.isKotlinFunctionType: Boolean
+    get() {
+        val fqName = safeAs<JKClassType>()?.fqName ?: return false
+        return functionalTypeRegex.matches(fqName)
+    }
+
+private val functionalTypeRegex = """(kotlin\.jvm\.functions|kotlin)\.Function[\d+]""".toRegex()
 
 
 fun KtTypeReference.toJK(symbolProvider: JKSymbolProvider): JKType? =
-    analyze()
+    analyze(BodyResolveMode.PARTIAL)
         .get(BindingContext.TYPE, this)
         ?.toJK(symbolProvider)
 
@@ -157,14 +181,13 @@ fun JKType.toKtType(symbolProvider: JKSymbolProvider): KotlinType? =
                 symbolProvider
             ).toKtType(symbolProvider)
         else -> null
-//        else -> TODO(this::class.java.toString())
     }
 
 infix fun JKJavaPrimitiveType.isStrongerThan(other: JKJavaPrimitiveType) =
-    jvmPrimitivePrioritypriority.getValue(this.jvmPrimitiveType.primitiveType) >
-            jvmPrimitivePrioritypriority.getValue(other.jvmPrimitiveType.primitiveType)
+    jvmPrimitiveTypesPriority.getValue(this.jvmPrimitiveType.primitiveType) >
+            jvmPrimitiveTypesPriority.getValue(other.jvmPrimitiveType.primitiveType)
 
-private val jvmPrimitivePrioritypriority =
+private val jvmPrimitiveTypesPriority =
     mapOf(
         PrimitiveType.BOOLEAN to -1,
         PrimitiveType.CHAR to 0,
@@ -215,7 +238,7 @@ fun JKType.applyRecursive(transform: (JKType) -> JKType?): JKType =
 inline fun <reified T : JKType> T.updateNullability(newNullability: Nullability): T =
     if (nullability == newNullability) this
     else when (this) {
-        is JKTypeParameterTypeImpl -> JKTypeParameterTypeImpl(name, newNullability)
+        is JKTypeParameterTypeImpl -> JKTypeParameterTypeImpl(identifier, newNullability)
         is JKClassTypeImpl -> JKClassTypeImpl(classReference, parameters, newNullability)
         is JKNoType -> this
         is JKJavaVoidType -> this
@@ -230,7 +253,7 @@ inline fun <reified T : JKType> T.updateNullability(newNullability: Nullability)
 fun <T : JKType> T.updateNullabilityRecursively(newNullability: Nullability): T =
     applyRecursive {
         when (it) {
-            is JKTypeParameterTypeImpl -> JKTypeParameterTypeImpl(it.name, newNullability)
+            is JKTypeParameterTypeImpl -> JKTypeParameterTypeImpl(it.identifier, newNullability)
             is JKClassTypeImpl ->
                 JKClassTypeImpl(
                     it.classReference,
@@ -242,17 +265,12 @@ fun <T : JKType> T.updateNullabilityRecursively(newNullability: Nullability): T 
         }
     } as T
 
-fun JKJavaMethod.returnTypeNullability(context: NewJ2kConverterContext): Nullability =
-    context.typeFlavorCalculator.methodNullability(psi()!!)
-
-fun JKType.isCollectionType(symbolProvider: JKSymbolProvider): Boolean {
-    if (this !is JKClassType) return false
-    val collectionType = JKClassTypeImpl(symbolProvider.provideByFqName("java.util.Collection"), emptyList())
-    return this.isSubtypeOf(collectionType, symbolProvider)
-}
-
 fun JKType.isStringType(): Boolean =
-    (this as? JKClassType)?.classReference?.name == "String"
+    (this as? JKClassType)?.classReference?.isStringType() == true
+
+fun JKClassSymbol.isStringType(): Boolean =
+    fqName == CommonClassNames.JAVA_LANG_STRING
+            || fqName == KotlinBuiltIns.FQ_NAMES.string.asString()
 
 fun JKLiteralExpression.LiteralType.toPrimitiveType(): JKJavaPrimitiveType? =
     when (this) {
@@ -310,14 +328,14 @@ inline fun <reified T : JKType> T.addTypeParametersToRawProjectionType(typeParam
         ) as T
     } else this
 
-fun JKClassSymbol.expectedTypeParametersCount(): Int {
-    val resolvedClass = target
-    return when (resolvedClass) {
+fun JKClassSymbol.expectedTypeParametersCount(): Int =
+    when (val resolvedClass = target) {
         is PsiClass -> resolvedClass.typeParameters.size
         is KtClass -> resolvedClass.typeParameters.size
+        is JKClass -> resolvedClass.typeParameterList.typeParameters.size
         else -> 0
     }
-}
+
 
 val primitiveTypes =
     listOf(
@@ -360,10 +378,6 @@ fun JKType.arrayInnerType(): JKType? =
         else -> null
     }
 
-val namesOfPrimitiveTypes by lazy {
-    KotlinBuiltIns.FQ_NAMES.primitiveTypeShortNames.map { it.identifier.decapitalize() }
-}
-
 fun JKClassSymbol.isInterface(): Boolean {
     val target = target
     return when (target) {
@@ -382,7 +396,7 @@ fun JKType.replaceJavaClassWithKotlinClassType(symbolProvider: JKSymbolProvider)
     applyRecursive { type ->
         if (type is JKClassType && type.classReference.fqName == "java.lang.Class") {
             JKClassTypeImpl(
-                symbolProvider.provideByFqName(KotlinBuiltIns.FQ_NAMES.kClass),
+                symbolProvider.provideClassSymbol(KotlinBuiltIns.FQ_NAMES.kClass.toSafe()),
                 type.parameters.map { it.replaceJavaClassWithKotlinClassType(symbolProvider) },
                 Nullability.NotNull
             )

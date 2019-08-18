@@ -5,11 +5,14 @@
 
 package org.jetbrains.kotlin.fir.expressions
 
+import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.fir.visitors.FirVisitor
 import org.jetbrains.kotlin.name.Name
 
-interface FirNamedArgumentExpression : FirWrappedArgumentExpression {
-    val name: Name
+abstract class FirNamedArgumentExpression(
+    psi: PsiElement?
+) : FirWrappedArgumentExpression(psi) {
+    abstract val name: Name
 
     override fun <R, D> accept(visitor: FirVisitor<R, D>, data: D): R =
         visitor.visitNamedArgumentExpression(this, data)

@@ -8,13 +8,17 @@ package org.jetbrains.kotlin.nj2k.conversions
 import com.intellij.lang.jvm.JvmModifier
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiModifierListOwner
-import com.intellij.psi.util.parentOfType
 import org.jetbrains.kotlin.j2k.getContainingClass
 import org.jetbrains.kotlin.nj2k.NewJ2kConverterContext
 import org.jetbrains.kotlin.nj2k.asQualifierWithThisAsSelector
 import org.jetbrains.kotlin.nj2k.copyTreeAndDetach
+import org.jetbrains.kotlin.nj2k.parentOfType
+import org.jetbrains.kotlin.nj2k.symbols.JKClassSymbol
+import org.jetbrains.kotlin.nj2k.symbols.JKSymbol
 import org.jetbrains.kotlin.nj2k.tree.*
-import org.jetbrains.kotlin.nj2k.tree.impl.*
+import org.jetbrains.kotlin.nj2k.tree.impl.JKClassAccessExpressionImpl
+import org.jetbrains.kotlin.nj2k.tree.impl.JKKtQualifierImpl
+import org.jetbrains.kotlin.nj2k.tree.impl.JKQualifiedExpressionImpl
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
@@ -53,7 +57,7 @@ class StaticMemberAccessConversion(private val context: NewJ2kConverterContext) 
                 ?.safeAs<KtObjectDeclaration>()
                 ?.isCompanion() == true
             is JKTreeElement ->
-                target.safeAs<JKExtraModifiersOwner>()?.hasExtraModifier(ExtraModifier.STATIC) == true
+                target.safeAs<JKOtherModifiersOwner>()?.hasOtherModifier(OtherModifier.STATIC) == true
                         || target.parentOfType<JKClass>()?.classKind == JKClass.ClassKind.OBJECT
             else -> false
         }
@@ -74,7 +78,7 @@ class StaticMemberAccessConversion(private val context: NewJ2kConverterContext) 
 
             is JKTreeElement ->
                 target.parentOfType<JKClass>()?.let { klass ->
-                    if (klass.classKind == JKClass.ClassKind.COMPANION) klass.parentOfType()
+                    if (klass.classKind == JKClass.ClassKind.COMPANION) klass.parentOfType<JKClass>()
                     else klass
                 }?.let { context.symbolProvider.provideUniverseSymbol(it) }
             else -> error("bad isStaticMember")

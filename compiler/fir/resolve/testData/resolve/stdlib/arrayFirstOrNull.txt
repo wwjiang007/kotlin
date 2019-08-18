@@ -9,7 +9,7 @@ FILE: arrayFirstOrNull.kt
     }
     public final fun <T> R|kotlin/Array<out T>|.firstOrNullX(): R|T|? {
         ^firstOrNullX when () {
-            <Unresolved name: isEmpty>#() ->  {
+            R|kotlin/collections/isEmpty|<R|T|>() ->  {
                 Null(null)
             }
             else ->  {

@@ -25,6 +25,12 @@ dependencies {
     testCompileOnly(intellijCoreDep()) { includeJars("intellij-core") }
     testCompile(intellijDep()) { includeJars("idea", "idea_rt", "openapi", "log4j", "jdom", "jps-model") }
     testRuntime(project(":kotlin-reflect"))
+
+    testRuntimeOnly(intellijCoreDep()) { includeJars("intellij-core") }
+
+    Platform[192].orHigher {
+        testRuntimeOnly(intellijDep()) { includeJars("platform-concurrency") }
+    }
 }
 
 sourceSets {
@@ -41,5 +47,3 @@ publish()
 runtimeJar()
 sourcesJar()
 javadocJar()
-
-dist()

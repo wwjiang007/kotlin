@@ -16,6 +16,7 @@ import javax.swing.Icon
 // BUNCH: 182
 // BUNCH: as35
 // BUNCH: as34
+// BUNCH: 191
 internal fun createDslStyleIcon(styleId: Int): Icon {
     val globalScheme = EditorColorsManager.getInstance().globalScheme
     val markersColor = globalScheme.getAttributes(DslHighlighterExtension.styleById(styleId)).foregroundColor

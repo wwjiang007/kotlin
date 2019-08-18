@@ -13,7 +13,7 @@ import org.jetbrains.kotlin.js.backend.ast.*
 class IrDeclarationToJsTransformer : BaseIrElementToJsNodeTransformer<JsStatement, JsGenerationContext> {
 
     override fun visitSimpleFunction(declaration: IrSimpleFunction, context: JsGenerationContext): JsStatement {
-        if (declaration.descriptor.isExpect) return JsEmpty // TODO: fix it in Psi2Ir
+        require(!declaration.descriptor.isExpect)
         return declaration.accept(IrFunctionToJsTransformer(), context).makeStmt()
     }
 
@@ -24,12 +24,7 @@ class IrDeclarationToJsTransformer : BaseIrElementToJsNodeTransformer<JsStatemen
     override fun visitClass(declaration: IrClass, context: JsGenerationContext): JsStatement {
         return JsClassGenerator(
             declaration,
-            context.newDeclaration(
-                JsDeclarationScope(
-                    context.currentScope,
-                    "scope for class ${declaration.name.asString()}"
-                )
-            )
+            context.newDeclaration()
         ).generate()
     }
 

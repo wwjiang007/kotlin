@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.js.translate.utils
 
 import com.intellij.lang.ASTNode
 import com.intellij.psi.PsiElement
+import com.intellij.psi.impl.source.tree.LeafPsiElement
 import com.intellij.util.SmartList
 import org.jetbrains.kotlin.backend.common.COROUTINE_SUSPENDED_NAME
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
@@ -20,6 +21,7 @@ import org.jetbrains.kotlin.js.backend.ast.metadata.*
 import org.jetbrains.kotlin.js.translate.callTranslator.CallTranslator
 import org.jetbrains.kotlin.js.translate.context.Namer
 import org.jetbrains.kotlin.js.translate.context.TranslationContext
+import org.jetbrains.kotlin.js.translate.expression.ExpressionVisitor
 import org.jetbrains.kotlin.js.translate.intrinsic.functions.basic.FunctionIntrinsicWithReceiverComputed
 import org.jetbrains.kotlin.js.translate.reference.ReferenceTranslator
 import org.jetbrains.kotlin.js.translate.utils.TranslationUtils.simpleReturnFunction
@@ -89,7 +91,8 @@ fun generateDelegateCall(
     invocation.source = source
 
     val functionObject = simpleReturnFunction(context.scope(), invocation)
-    functionObject.source = source?.finalElement
+    functionObject.source = source
+    functionObject.body.source = source?.finalElement as? LeafPsiElement
     functionObject.parameters.addAll(parameters)
     if (functionObject.isSuspend) {
         functionObject.fillCoroutineMetadata(context, fromDescriptor, false)
@@ -141,6 +144,8 @@ fun getReferenceToJsClass(classifierDescriptor: ClassifierDescriptor?, context: 
         else -> {
             throw IllegalStateException("Can't get reference for $classifierDescriptor")
         }
+    }.also {
+        it.primitiveKClass = ExpressionVisitor.getPrimitiveClass(context, classifierDescriptor)
     }
 }
 

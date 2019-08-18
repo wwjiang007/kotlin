@@ -828,6 +828,8 @@ public inline fun <K> CharSequence.groupingBy(crossinline keySelector: (Char) ->
 /**
  * Returns a list containing the results of applying the given [transform] function
  * to each character in the original char sequence.
+ * 
+ * @sample samples.text.Strings.map
  */
 public inline fun <R> CharSequence.map(transform: (Char) -> R): List<R> {
     return mapTo(ArrayList<R>(length), transform)
@@ -905,7 +907,8 @@ public inline fun <R, C : MutableCollection<in R>> CharSequence.mapTo(destinatio
 }
 
 /**
- * Returns a lazy [Iterable] of [IndexedValue] for each character of the original char sequence.
+ * Returns a lazy [Iterable] that wraps each character of the original char sequence
+ * into an [IndexedValue] containing the index of that character and the character itself.
  */
 public fun CharSequence.withIndex(): Iterable<IndexedValue<Char>> {
     return IndexingIterable { iterator() }

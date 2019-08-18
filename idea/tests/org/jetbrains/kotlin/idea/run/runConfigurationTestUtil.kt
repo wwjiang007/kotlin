@@ -65,7 +65,7 @@ fun createLibraryWithLongPaths(project: Project): Library {
             for (i in 0..maxCommandlineLengthWindows / maxFilenameLengthWindows) {
                 val tmpFile = VirtualFileManager.constructUrl(
                     LocalFileSystem.getInstance().protocol,
-                    FileUtil.createTempFile("file$i", "a".repeat(maxFilenameLengthWindows)).path
+                    FileUtil.createTempDirectory("file$i", "a".repeat(maxFilenameLengthWindows)).path
                 )
                 addRoot(tmpFile, OrderRootType.CLASSES)
             }
@@ -77,7 +77,7 @@ fun createLibraryWithLongPaths(project: Project): Library {
 
 
 private object MockExecutor : DefaultRunExecutor() {
-    override fun getId() = DefaultRunExecutor.EXECUTOR_ID
+    override fun getId() = EXECUTOR_ID
 }
 
 private object MockProfile : RunProfile {

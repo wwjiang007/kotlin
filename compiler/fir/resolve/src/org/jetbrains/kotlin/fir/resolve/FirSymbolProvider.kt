@@ -6,43 +6,54 @@
 package org.jetbrains.kotlin.fir.resolve
 
 import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.FirSessionComponent
 import org.jetbrains.kotlin.fir.declarations.toFirClassLike
 import org.jetbrains.kotlin.fir.scopes.FirScope
 import org.jetbrains.kotlin.fir.scopes.ProcessorAction
 import org.jetbrains.kotlin.fir.service
 import org.jetbrains.kotlin.fir.symbols.*
+import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirClassLikeSymbol
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 
-interface FirSymbolProvider {
+abstract class FirSymbolProvider : FirSessionComponent {
 
-    fun getClassLikeSymbolByFqName(classId: ClassId): ConeClassLikeSymbol?
+    abstract fun getClassLikeSymbolByFqName(classId: ClassId): FirClassLikeSymbol<*>?
 
     fun getSymbolByLookupTag(lookupTag: ConeClassifierLookupTag): ConeClassifierSymbol? {
         return when (lookupTag) {
-            is ConeClassLikeLookupTag -> getClassLikeSymbolByFqName(lookupTag.classId)
+            is ConeClassLikeLookupTag -> {
+                (lookupTag as? ConeClassLikeLookupTagImpl)
+                    ?.boundSymbol?.takeIf { it.first === this }?.let { return it.second }
+
+                getClassLikeSymbolByFqName(lookupTag.classId).also {
+                    (lookupTag as? ConeClassLikeLookupTagImpl)
+                        ?.boundSymbol = Pair(this, it)
+                }
+            }
             is ConeClassifierLookupTagWithFixedSymbol -> lookupTag.symbol
             else -> error("Unknown lookupTag type: ${lookupTag::class}")
         }
     }
 
-    fun getTopLevelCallableSymbols(packageFqName: FqName, name: Name): List<ConeCallableSymbol>
+    abstract fun getTopLevelCallableSymbols(packageFqName: FqName, name: Name): List<FirCallableSymbol<*>>
 
-    fun getClassDeclaredMemberScope(classId: ClassId): FirScope?
-    fun getClassUseSiteMemberScope(
+    abstract fun getClassDeclaredMemberScope(classId: ClassId): FirScope?
+    abstract fun getClassUseSiteMemberScope(
         classId: ClassId,
         useSiteSession: FirSession,
         scopeSession: ScopeSession
     ): FirScope?
 
-    fun getAllCallableNamesInPackage(fqName: FqName): Set<Name> = emptySet()
-    fun getClassNamesInPackage(fqName: FqName): Set<Name> = emptySet()
+    open fun getAllCallableNamesInPackage(fqName: FqName): Set<Name> = emptySet()
+    open fun getClassNamesInPackage(fqName: FqName): Set<Name> = emptySet()
 
-    fun getAllCallableNamesInClass(classId: ClassId): Set<Name> = emptySet()
-    fun getNestedClassesNamesInClass(classId: ClassId): Set<Name> = emptySet()
+    open fun getAllCallableNamesInClass(classId: ClassId): Set<Name> = emptySet()
+    open fun getNestedClassesNamesInClass(classId: ClassId): Set<Name> = emptySet()
 
-    fun getPackage(fqName: FqName): FqName? // TODO: Replace to symbol sometime
+    abstract fun getPackage(fqName: FqName): FqName? // TODO: Replace to symbol sometime
 
     // TODO: should not retrieve session through the FirElement::session
     fun getSessionForClass(classId: ClassId): FirSession? = getClassLikeSymbolByFqName(classId)?.toFirClassLike()?.session

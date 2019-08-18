@@ -8,14 +8,12 @@ package org.jetbrains.kotlin.gradle.plugin.mpp
 
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Dependency
-import org.jetbrains.kotlin.compilerRunner.KotlinNativeProjectProperty
-import org.jetbrains.kotlin.compilerRunner.hasProperty
 import org.jetbrains.kotlin.compilerRunner.konanHome
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
 import org.jetbrains.kotlin.gradle.plugin.KotlinNativeTargetConfigurator
 import org.jetbrains.kotlin.gradle.plugin.KotlinTargetPreset
+import org.jetbrains.kotlin.gradle.plugin.PropertiesProvider
 import org.jetbrains.kotlin.gradle.utils.NativeCompilerDownloader
-import org.jetbrains.kotlin.konan.target.Distribution
 import org.jetbrains.kotlin.konan.target.HostManager
 import org.jetbrains.kotlin.konan.target.KonanTarget
 
@@ -38,8 +36,11 @@ class KotlinNativeTargetPreset(
             extensions.extraProperties.set(KOTLIN_NATIVE_HOME_PRIVATE_PROPERTY, konanHome)
     }
 
+    private val isKonanHomeOverridden: Boolean
+        get() = PropertiesProvider(project).nativeHome != null
+
     private fun setupNativeCompiler() = with(project) {
-        if (!hasProperty(KotlinNativeProjectProperty.KONAN_HOME_OVERRIDE)) {
+        if (!isKonanHomeOverridden) {
             NativeCompilerDownloader(this).downloadIfNeeded()
             logger.info("Kotlin/Native distribution: $konanHome")
         } else {
@@ -85,17 +86,10 @@ class KotlinNativeTargetPreset(
             }
         }
 
-        if (!result.enabledOnCurrentHost) {
-            with(project.hostManager) {
-                val supportedHosts = this.enabledByHost.filterValues { konanTarget in it }.keys
-                val supportedHostsString =
-                    if (supportedHosts.size == 1)
-                        "a ${supportedHosts.single()} host" else
-                        "one of the host platforms: ${supportedHosts.joinToString(", ")}"
-                project.logger.warn(
-                    "Target '$name' for platform ${konanTarget} is ignored during build on this ${HostManager.host} machine. " +
-                            "You can build it with $supportedHostsString."
-                )
+        if (!konanTarget.enabledOnCurrentHost) {
+            with(HostManager()) {
+                val supportedHosts = enabledByHost.filterValues { konanTarget in it }.keys
+                DisabledNativeTargetsReporter.reportDisabledTarget(project, result, supportedHosts)
             }
         }
 
@@ -107,15 +101,11 @@ class KotlinNativeTargetPreset(
     }
 }
 
-internal val Project.hostManager: HostManager
-    get() = HostManager(Distribution(konanHomeOverride = konanHome))
-
 internal val KonanTarget.isCurrentHost: Boolean
     get() = this == HostManager.host
 
-internal val KotlinNativeTarget.enabledOnCurrentHost
-    get() = project.hostManager.isEnabled(konanTarget)
+internal val KonanTarget.enabledOnCurrentHost
+    get() = HostManager().isEnabled(this)
 
 internal val KotlinNativeCompilation.isMainCompilation: Boolean
     get() = name == KotlinCompilation.MAIN_COMPILATION_NAME
-

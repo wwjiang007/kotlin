@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.j2k.ReferenceSearcher
 import org.jetbrains.kotlin.j2k.hasWriteAccesses
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.nj2k.*
+import org.jetbrains.kotlin.nj2k.symbols.deepestFqName
 import org.jetbrains.kotlin.nj2k.tree.*
 import org.jetbrains.kotlin.nj2k.tree.impl.*
 import kotlin.math.abs
@@ -237,10 +238,7 @@ class ForConversion(private val context: NewJ2kConverterContext) : RecursiveAppl
                 indices,
                 JKKtQualifierImpl.DOT,
                 JKJavaMethodCallExpressionImpl(
-                    context.symbolProvider.provideByFqName(
-                        "kotlin/collections/reversed",
-                        multiResolve = true
-                    ),
+                    context.symbolProvider.provideMethodSymbol("kotlin.collections.reversed"),
                     JKArgumentListImpl()
                 )
             )
@@ -267,10 +265,7 @@ class ForConversion(private val context: NewJ2kConverterContext) : RecursiveAppl
     private fun toIndicesCall(javaSizeCall: JKQualifiedExpression): JKQualifiedExpression? {
         if (javaSizeCall.psi == null) return null
         val selector = JKFieldAccessExpressionImpl(
-            context.symbolProvider.provideByFqName(
-                "kotlin/collections/indices",
-                multiResolve = true
-            )
+            context.symbolProvider.provideFieldSymbol("kotlin.collections.indices")
         )
         return JKQualifiedExpressionImpl(javaSizeCall::receiver.detached(), javaSizeCall.operator, selector)
     }

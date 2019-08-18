@@ -568,6 +568,32 @@ public actual fun String.capitalize(): String {
 }
 
 /**
+ * Returns a copy of this string having its first letter titlecased preferring [Char.toTitleCase] (if different from
+ * [Char.toUpperCase]) or by [String.toUpperCase] using the specified [locale], or the original string,
+ * if it's empty or already starts with an upper case letter.
+ */
+@SinceKotlin("1.3")
+@ExperimentalStdlibApi
+@kotlin.internal.LowPriorityInOverloadResolution
+public fun String.capitalize(locale: Locale): String {
+    if (isNotEmpty()) {
+        val firstChar = this[0]
+        if (firstChar.isLowerCase()) {
+            return buildString {
+                val titleChar = firstChar.toTitleCase()
+                if (titleChar != firstChar.toUpperCase()) {
+                    append(titleChar)
+                } else {
+                    append(this@capitalize.substring(0, 1).toUpperCase(locale))
+                }
+                append(this@capitalize.substring(1))
+            }
+        }
+    }
+    return this
+}
+
+/**
  * Returns a copy of this string having its first letter lowercased, or the original string,
  * if it's empty or already starts with a lower case letter.
  *
@@ -575,6 +601,17 @@ public actual fun String.capitalize(): String {
  */
 public actual fun String.decapitalize(): String {
     return if (isNotEmpty() && this[0].isUpperCase()) substring(0, 1).toLowerCase() + substring(1) else this
+}
+
+/**
+ * Returns a copy of this string having its first letter lowercased using the specified [locale],
+ * or the original string, if it's empty or already starts with a lower case letter.
+ */
+@SinceKotlin("1.3")
+@ExperimentalStdlibApi
+@kotlin.internal.LowPriorityInOverloadResolution
+public fun String.decapitalize(locale: Locale): String {
+    return if (isNotEmpty() && !this[0].isLowerCase()) substring(0, 1).toLowerCase(locale) + substring(1) else this
 }
 
 /**

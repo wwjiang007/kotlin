@@ -7,24 +7,29 @@ package org.jetbrains.kotlin.types.checker
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns.FQ_NAMES
+import org.jetbrains.kotlin.builtins.PrimitiveType
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
+import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.FqNameUnsafe
 import org.jetbrains.kotlin.resolve.calls.inference.CapturedType
+import org.jetbrains.kotlin.resolve.constants.IntegerLiteralTypeConstructor
+import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameUnsafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasExactAnnotation
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasNoInferAnnotation
-import org.jetbrains.kotlin.resolve.constants.IntegerLiteralTypeConstructor
 import org.jetbrains.kotlin.resolve.descriptorUtil.isExactAnnotation
+import org.jetbrains.kotlin.resolve.substitutedUnderlyingType
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.model.*
-import org.jetbrains.kotlin.types.model.CaptureStatus
 import org.jetbrains.kotlin.types.typeUtil.asTypeProjection
 import org.jetbrains.kotlin.types.typeUtil.contains
-import kotlin.math.max
+import org.jetbrains.kotlin.types.typeUtil.representativeUpperBound
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.contract
+import kotlin.math.max
 
-interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
+interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext, TypeSystemCommonBackendContext {
     override fun TypeConstructorMarker.isDenotable(): Boolean {
         require(this is TypeConstructor, this::errorMessage)
         return this.isDenotable
@@ -127,13 +132,13 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
         return this.constructor
     }
 
-    override fun SimpleTypeMarker.argumentsCount(): Int {
-        require(this is SimpleType, this::errorMessage)
+    override fun KotlinTypeMarker.argumentsCount(): Int {
+        require(this is KotlinType, this::errorMessage)
         return this.arguments.size
     }
 
-    override fun SimpleTypeMarker.getArgument(index: Int): TypeArgumentMarker {
-        require(this is SimpleType, this::errorMessage)
+    override fun KotlinTypeMarker.getArgument(index: Int): TypeArgumentMarker {
+        require(this is KotlinType, this::errorMessage)
         return this.arguments[index]
     }
 
@@ -145,15 +150,6 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
     override fun TypeArgumentMarker.getVariance(): TypeVariance {
         require(this is TypeProjection, this::errorMessage)
         return this.projectionKind.convertVariance()
-    }
-
-
-    private fun TypeVariance.convertVariance(): Variance {
-        return when (this) {
-            TypeVariance.INV -> Variance.INVARIANT
-            TypeVariance.IN -> Variance.IN_VARIANCE
-            TypeVariance.OUT -> Variance.OUT_VARIANCE
-        }
     }
 
     override fun TypeArgumentMarker.getType(): KotlinTypeMarker {
@@ -216,6 +212,12 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
                 classDescriptor.kind != ClassKind.ANNOTATION_CLASS
     }
 
+    override fun TypeConstructorMarker.isFinalClassOrEnumEntryOrAnnotationClassConstructor(): Boolean {
+        require(this is TypeConstructor, this::errorMessage)
+        val classDescriptor = declarationDescriptor
+        return classDescriptor is ClassDescriptor && classDescriptor.isFinalClass
+    }
+
     override fun SimpleTypeMarker.asArgumentList(): TypeArgumentListMarker {
         require(this is SimpleType, this::errorMessage)
         return this
@@ -262,11 +264,6 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
                 (constructor.declarationDescriptor != null || this is CapturedType || this is NewCapturedType || this is DefinitelyNotNullType || constructor is IntegerLiteralTypeConstructor)
     }
 
-    override fun KotlinTypeMarker.isNotNullNothing(): Boolean {
-        require(this is KotlinType, this::errorMessage)
-        return typeConstructor().isNothingConstructor() && !TypeUtils.isNullableType(this)
-    }
-
     override fun KotlinTypeMarker.contains(predicate: (KotlinTypeMarker) -> Boolean): Boolean {
         require(this is KotlinType, this::errorMessage)
         return containsInternal(this, predicate)
@@ -274,12 +271,13 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
 
     override fun SimpleTypeMarker.typeDepth(): Int {
         require(this is SimpleType, this::errorMessage)
-        return this.typeDepthInternal()
-    }
+        if (this is TypeUtils.SpecialType) return 0
 
-    override fun KotlinTypeMarker.typeDepth(): Int {
-        require(this is UnwrappedType, this::errorMessage)
-        return this.typeDepthInternal()
+        val maxInArguments = arguments.asSequence().map {
+            if (it.isStarProjection) 1 else it.type.unwrap().typeDepth()
+        }.max() ?: 0
+
+        return maxInArguments + 1
     }
 
     override fun intersectTypes(types: List<KotlinTypeMarker>): KotlinTypeMarker {
@@ -333,6 +331,10 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
         return builtIns.nothingType
     }
 
+    override fun anyType(): SimpleTypeMarker {
+        return builtIns.anyType
+    }
+
     val builtIns: KotlinBuiltIns get() = throw UnsupportedOperationException("Not supported")
 
     override fun KotlinTypeMarker.makeDefinitelyNotNullOrNotNull(): KotlinTypeMarker {
@@ -369,6 +371,10 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
     }
 
     override fun TypeVariableMarker.freshTypeConstructor(): TypeConstructorMarker {
+        errorSupportedOnlyInTypeInference()
+    }
+
+    override fun KotlinTypeMarker.mayBeTypeVariable(): Boolean {
         errorSupportedOnlyInTypeInference()
     }
 
@@ -422,7 +428,7 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
 
     override fun prepareType(type: KotlinTypeMarker): KotlinTypeMarker {
         require(type is UnwrappedType, type::errorMessage)
-        return NewKotlinTypeChecker.transformToNewType(type)
+        return NewKotlinTypeChecker.Default.transformToNewType(type)
     }
 
     override fun DefinitelyNotNullTypeMarker.original(): SimpleTypeMarker {
@@ -486,6 +492,63 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext {
         return this is NewCapturedTypeConstructor
     }
 
+    override fun KotlinTypeMarker.hasAnnotation(fqName: FqName): Boolean {
+        require(this is KotlinType, this::errorMessage)
+        return annotations.hasAnnotation(fqName)
+    }
+
+    override fun KotlinTypeMarker.getAnnotationFirstArgumentValue(fqName: FqName): Any? {
+        require(this is KotlinType, this::errorMessage)
+        return annotations.findAnnotation(fqName)?.allValueArguments?.values?.firstOrNull()?.value
+    }
+
+    override fun TypeConstructorMarker.getTypeParameterClassifier(): TypeParameterMarker? {
+        require(this is TypeConstructor, this::errorMessage)
+        return declarationDescriptor as? TypeParameterDescriptor
+    }
+
+    override fun TypeConstructorMarker.isInlineClass(): Boolean {
+        require(this is TypeConstructor, this::errorMessage)
+        return (declarationDescriptor as? ClassDescriptor)?.isInline == true
+    }
+
+    override fun TypeParameterMarker.getRepresentativeUpperBound(): KotlinTypeMarker {
+        require(this is TypeParameterDescriptor, this::errorMessage)
+        return representativeUpperBound
+    }
+
+    override fun KotlinTypeMarker.getSubstitutedUnderlyingType(): KotlinTypeMarker? {
+        require(this is KotlinType, this::errorMessage)
+        return substitutedUnderlyingType()
+    }
+
+    override fun TypeConstructorMarker.getPrimitiveType(): PrimitiveType? {
+        require(this is TypeConstructor, this::errorMessage)
+        return KotlinBuiltIns.getPrimitiveType(declarationDescriptor as ClassDescriptor)
+    }
+
+    override fun TypeConstructorMarker.getPrimitiveArrayType(): PrimitiveType? {
+        require(this is TypeConstructor, this::errorMessage)
+        return KotlinBuiltIns.getPrimitiveArrayType(declarationDescriptor as ClassDescriptor)
+    }
+
+    override fun TypeConstructorMarker.isUnderKotlinPackage(): Boolean {
+        require(this is TypeConstructor, this::errorMessage)
+        return declarationDescriptor?.let(KotlinBuiltIns::isUnderKotlinPackage) == true
+    }
+
+    override fun TypeConstructorMarker.getClassFqNameUnsafe(): FqNameUnsafe {
+        require(this is TypeConstructor, this::errorMessage)
+        return (declarationDescriptor as ClassDescriptor).fqNameUnsafe
+    }
+}
+
+fun TypeVariance.convertVariance(): Variance {
+    return when (this) {
+        TypeVariance.INV -> Variance.INVARIANT
+        TypeVariance.IN -> Variance.IN_VARIANCE
+        TypeVariance.OUT -> Variance.OUT_VARIANCE
+    }
 }
 
 private fun captureFromExpressionInternal(type: UnwrappedType) = captureFromExpression(type)
@@ -512,23 +575,6 @@ private fun containsInternal(type: KotlinType, predicate: (KotlinTypeMarker) -> 
 
 private fun singleBestRepresentative(collection: Collection<KotlinType>) = collection.singleBestRepresentative()
 
-internal fun UnwrappedType.typeDepthInternal() =
-    when (this) {
-        is SimpleType -> typeDepthInternal()
-        is FlexibleType -> max(lowerBound.typeDepthInternal(), upperBound.typeDepthInternal())
-    }
-
-internal fun SimpleType.typeDepthInternal(): Int {
-    if (this is TypeUtils.SpecialType) return 0
-
-    val maxInArguments = arguments.asSequence().map {
-        if (it.isStarProjection) 1 else it.type.unwrap().typeDepthInternal()
-    }.max() ?: 0
-
-    return maxInArguments + 1
-}
-
-
 @Suppress("NOTHING_TO_INLINE")
 private inline fun Any.errorMessage(): String {
     return "ClassicTypeSystemContext couldn't handle: $this, ${this::class}"
@@ -547,7 +593,6 @@ fun Variance.convertVariance(): TypeVariance {
 }
 
 
-@Suppress("EXPERIMENTAL_IS_NOT_ENABLED")
 @UseExperimental(ExperimentalContracts::class)
 fun requireOrDescribe(condition: Boolean, value: Any?) {
     contract {

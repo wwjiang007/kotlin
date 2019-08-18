@@ -11,10 +11,13 @@ import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.fir.visitors.FirTransformer
 
 class FirExplicitSuperReference(
-    session: FirSession,
     psi: PsiElement?,
     override var superTypeRef: FirTypeRef
-) : FirAbstractElement(session, psi), FirSuperReference {
+) : FirAbstractElement(psi), FirSuperReference {
+    override fun replaceSuperTypeRef(newSuperTypeRef: FirTypeRef) {
+        superTypeRef = newSuperTypeRef
+    }
+
     override fun <D> transformChildren(transformer: FirTransformer<D>, data: D): FirElement {
         superTypeRef = superTypeRef.transformSingle(transformer, data)
         return this

@@ -4,6 +4,9 @@
  */
 package org.jetbrains.kotlin.gradle
 
+import org.jetbrains.kotlin.gradle.internals.DISABLED_NATIVE_TARGETS_REPORTER_DISABLE_WARNING_PROPERTY_NAME
+import org.jetbrains.kotlin.gradle.internals.DISABLED_NATIVE_TARGETS_REPORTER_WARNING_PREFIX
+import org.jetbrains.kotlin.gradle.internals.GRADLE_NO_METADATA_WARNING
 import org.jetbrains.kotlin.gradle.plugin.ProjectLocalConfigurations
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJvmWithJavaTargetPreset
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinMultiplatformPlugin
@@ -295,7 +298,9 @@ class NewMultiplatformIT : BaseGradleIT() {
 
             gradleBuildScript().modify {
                 if (testJavaSupportInJvmTargets) {
-                    it + "\nkotlin.jvm(\"jvm6\").${KotlinJvmTarget::withJava.name}()"
+                    it + "\nkotlin.jvm(\"jvm6\") { " +
+                            "${KotlinJvmTarget::withJava.name.plus("();").repeat(2)} " + // also check that the function is idempotent
+                            "}"
                 } else {
                     it.replace("presets.jvm", "presets.jvmWithJava").replace("jvm(", "targetFromPreset(presets.jvmWithJava, ")
                 }.plus(
@@ -377,7 +382,7 @@ class NewMultiplatformIT : BaseGradleIT() {
 
                 val jvmTestTaskName = if (testJavaSupportInJvmTargets) "jvm6Test" else "test"
                 assertTasksExecuted(":$jvmTestTaskName")
-                assertFileExists("build/reports/tests/$jvmTestTaskName/classes/com.example.lib.JavaTest.html")
+                assertFileExists("build/reports/tests/allTests/classes/com.example.lib.JavaTest.html")
 
                 if (testJavaSupportInJvmTargets) {
                     assertNotContains(KotlinJvmWithJavaTargetPreset.DEPRECATION_WARNING)
@@ -432,8 +437,6 @@ class NewMultiplatformIT : BaseGradleIT() {
             )
 
             val expectedKotlinOutputFiles = listOf(
-                kotlinClassesDir(sourceSet = "js/main") + "new-mpp-lib-with-tests.js",
-                kotlinClassesDir(sourceSet = "js/test") + "new-mpp-lib-with-tests_test.js",
                 *kotlinClassesDir(sourceSet = "jvmWithJava/main").let {
                     arrayOf(
                         it + "com/example/lib/JavaClassUsageKt.class",
@@ -466,6 +469,14 @@ class NewMultiplatformIT : BaseGradleIT() {
             )
 
             expectedKotlinOutputFiles.forEach { assertFileExists(it) }
+
+            assertTestResults(
+                "testProject/new-mpp-lib-with-tests/TEST-all.xml",
+                "jsBrowserTest",
+                "jsNodeTest",
+                "test", // jvmTest
+                "${nativeHostTargetName}Test"
+            )
         }
     }
 
@@ -936,7 +947,6 @@ class NewMultiplatformIT : BaseGradleIT() {
             "fooReleaseExecutable" to "foo",
             "barReleaseExecutable" to "bar",
             "bazReleaseExecutable" to "my-baz",
-            "testDebugExecutable" to "test",
             "test2ReleaseExecutable" to "test2",
             "releaseStatic" to "native_binary",
             "releaseShared" to "native_binary"
@@ -1130,18 +1140,80 @@ class NewMultiplatformIT : BaseGradleIT() {
     fun testNativeTests() = with(Project("new-mpp-native-tests", gradleVersion)) {
         val testTasks = listOf("macos64Test", "linux64Test", "mingw64Test")
         val hostTestTask = "${nativeHostTargetName}Test"
+
+        val suffix = if (isWindows) "exe" else "kexe"
+
+        val defaultOutputFile = "build/bin/$nativeHostTargetName/debugTest/test.$suffix"
+        val anotherOutputFile = "build/bin/$nativeHostTargetName/anotherDebugTest/another.$suffix"
+
         build("tasks") {
             assertSuccessful()
-            println(output)
             testTasks.forEach {
                 // We need to create tasks for all hosts
                 assertTrue(output.contains("$it - "), "There is no test task '$it' in the task list.")
             }
         }
+
+        // Check that tests are not built during the ":assemble" execution
+        build("assemble") {
+            assertSuccessful()
+            assertNoSuchFile(defaultOutputFile)
+            assertNoSuchFile(anotherOutputFile)
+        }
+
         build("check") {
             assertSuccessful()
             assertTasksExecuted(":$hostTestTask")
+            assertFileExists(defaultOutputFile)
             assertTestResults("testProject/new-mpp-native-tests/TEST-TestKt.xml", hostTestTask)
+        }
+
+        build("linkAnotherDebugTest${nativeHostTargetName}") {
+            assertSuccessful()
+            assertFileExists(anotherOutputFile)
+        }
+
+        // Check that test binaries can be accessed in a buildscript.
+        build("checkNewGetters") {
+            assertSuccessful()
+            val suffixes = listOf("exe", "kexe", "wasm")
+            val names = listOf("test", "another")
+            val files = names.flatMap { name ->
+                suffixes.map { suffix ->
+                    "$name.$suffix"
+                }
+            }
+
+            files.forEach {
+                assertContains("Get test: $it")
+                assertContains("Find test: $it")
+            }
+        }
+
+        // Check that accessing a test as an executable fails or returns null and shows the corresponding warning.
+        build("checkOldGet") {
+            assertFailed()
+            assertContains(
+                """
+                    |Probably you are accessing the default test binary using the 'binaries.getExecutable("test", DEBUG)' method.
+                    |Since 1.3.40 tests are represented by a separate binary type. To get the default test binary, use:
+                    |
+                    |    binaries.getTest("DEBUG")
+                """.trimMargin()
+            )
+        }
+
+        build("checkOldFind") {
+            assertSuccessful()
+            assertContains(
+                """
+                    |Probably you are accessing the default test binary using the 'binaries.findExecutable("test", DEBUG)' method.
+                    |Since 1.3.40 tests are represented by a separate binary type. To get the default test binary, use:
+                    |
+                    |    binaries.findTest("DEBUG")
+                """.trimMargin()
+            )
+            assertContains("Find test: null")
         }
     }
 
@@ -1220,7 +1292,7 @@ class NewMultiplatformIT : BaseGradleIT() {
 
     @Test
     fun testNativeCompilerDownloading() {
-        // The plugin shouldn't download the K/N compiler if there is no corresponding targets in the project.
+        // The plugin shouldn't download the K/N compiler if there are no corresponding targets in the project.
         with(Project("sample-old-style-app", gradleVersion, "new-mpp-lib-and-app")) {
             build("tasks") {
                 assertSuccessful()
@@ -1231,6 +1303,62 @@ class NewMultiplatformIT : BaseGradleIT() {
             build("tasks") {
                 assertSuccessful()
                 assertTrue(output.contains("Kotlin/Native distribution: "))
+                // Check for KT-30258.
+                assertFalse(output.contains("Deprecated Gradle features were used in this build, making it incompatible with Gradle 6.0."))
+            }
+
+            build("tasks", "-Pkotlin.native.restrictedDistribution=true") {
+                assertSuccessful()
+                val dists = output.lineSequence().filter {
+                    it.contains("Kotlin/Native distribution: ")
+                }
+
+                // Restricted distribution is available for Mac hosts only.
+                if (HostManager.hostIsMac) {
+                    assertTrue(dists.all { it.contains("-restricted-") })
+                } else {
+                    assertTrue(dists.none { it.contains("-restricted-") })
+                }
+            }
+
+            // This directory actually doesn't contain a K/N distribution
+            // but we still can run a project configuration and check logs.
+            val currentDir = projectDir.absolutePath
+            build("tasks", "-Pkotlin.native.home=$currentDir") {
+                assertSuccessful()
+                assertContains("User-provided Kotlin/Native distribution: $currentDir")
+                assertNotContains("Project property 'org.jetbrains.kotlin.native.home' is deprecated")
+            }
+
+            // Deprecated property.
+            build("tasks", "-Porg.jetbrains.kotlin.native.home=$currentDir") {
+                assertSuccessful()
+                assertContains("User-provided Kotlin/Native distribution: $currentDir")
+                assertContains("Project property 'org.jetbrains.kotlin.native.home' is deprecated")
+            }
+
+            build("tasks", "-Pkotlin.native.version=1.3-eap-10779") {
+                assertSuccessful()
+                assertContainsRegex("Kotlin/Native distribution: .*kotlin-native-(macos|linux|windows)-1\\.3-eap-10779".toRegex())
+                assertNotContains("Project property 'org.jetbrains.kotlin.native.version' is deprecated")
+            }
+
+            // Deprecated property
+            build("tasks", "-Porg.jetbrains.kotlin.native.version=1.3-eap-10779") {
+                assertSuccessful()
+                assertContainsRegex("Kotlin/Native distribution: .*kotlin-native-(macos|linux|windows)-1\\.3-eap-10779".toRegex())
+                assertContains("Project property 'org.jetbrains.kotlin.native.version' is deprecated")
+            }
+        }
+
+        // Gradle 5.0 introduced a new API for Ivy repository layouts.
+        // MPP plugin uses this API to download K/N if Gradle version is >= 5.0.
+        // Check this too (see KT-30258).
+        with(Project("new-mpp-native-libraries", GradleVersionRequired.AtLeast("5.0"))) {
+            build("tasks", "-Pkotlin.native.version=1.3.50-eap-11606") {
+                assertSuccessful()
+                assertTrue(output.contains("Kotlin/Native distribution: "))
+                assertFalse(output.contains("Deprecated Gradle features were used in this build, making it incompatible with Gradle 6.0."))
             }
         }
     }
@@ -1764,5 +1892,33 @@ class NewMultiplatformIT : BaseGradleIT() {
         // Also check that the flag for keeping POMs intact works:
         doTestPomRewriting(mppProjectDependency = false, legacyPublishing = false, keepPomIntact = true)
         doTestPomRewriting(mppProjectDependency = false, legacyPublishing = true, keepPomIntact = true)
+    }
+
+    @Test
+    fun testSuggestionToEnableMetadata() = with(Project("sample-lib", GradleVersionRequired.AtLeast("4.7"), "new-mpp-lib-and-app")) {
+        build {
+            assertNotContains(GRADLE_NO_METADATA_WARNING)
+
+            gradleSettingsScript().modify { it.replace("enableFeaturePreview(", "//") }
+            build {
+                if (testGradleVersionAtLeast("5.3-rc-2")) {
+                    assertContains(GRADLE_NO_METADATA_WARNING)
+                } else {
+                    assertNotContains(GRADLE_NO_METADATA_WARNING)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun testIgnoreDisabledNativeTargets() = with(Project("sample-lib", gradleVersion, "new-mpp-lib-and-app")) {
+        build {
+            assertSuccessful()
+            assertEquals(1, output.lines().count { DISABLED_NATIVE_TARGETS_REPORTER_WARNING_PREFIX in it })
+        }
+        build("-P$DISABLED_NATIVE_TARGETS_REPORTER_DISABLE_WARNING_PROPERTY_NAME=true") {
+            assertSuccessful()
+            assertNotContains(DISABLED_NATIVE_TARGETS_REPORTER_WARNING_PREFIX)
+        }
     }
 }

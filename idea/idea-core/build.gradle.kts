@@ -7,6 +7,7 @@ plugins {
 dependencies {
     compile(kotlinStdlib())
     compileOnly(project(":kotlin-reflect-api"))
+    compile(project(":compiler:psi"))
     compile(project(":core:descriptors"))
     compile(project(":core:descriptors.jvm"))
     compile(project(":compiler:frontend"))
@@ -17,14 +18,19 @@ dependencies {
     compile(project(":idea:idea-jps-common"))
     compile(project(":plugins:android-extensions-compiler"))
     compile(project(":kotlin-scripting-compiler-impl"))
+    compile(project(":compiler:fir:psi2fir"))
+    compile(project(":compiler:fir:fir2ir"))
+    compile(project(":compiler:fir:resolve"))
+    compile(project(":compiler:fir:java"))
     compile(commonDep("org.jetbrains.kotlinx", "kotlinx-coroutines-core")) { isTransitive = false }
     compile(commonDep("org.jetbrains.kotlinx", "kotlinx-coroutines-jdk8")) { isTransitive = false }
-    compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
-    compileOnly(intellijDep()) {
-        Ide.IJ191.orHigher {
-            this@compileOnly.includeJars("platform-api")
-        }
+
+    compileOnly(intellijDep())
+
+    Platform[192].orHigher {
+        compileOnly(intellijPluginDep("java"))
     }
+    
     compileOnly(intellijPluginDep("gradle"))
 }
 

@@ -22,12 +22,15 @@ import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.resolve.calls.model.LambdaKotlinCallArgument
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
+import org.jetbrains.kotlin.resolve.descriptorUtil.hasOnlyInputTypesAnnotation
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.KotlinTypeFactory
 import org.jetbrains.kotlin.types.SimpleType
 import org.jetbrains.kotlin.types.TypeConstructor
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner
 import org.jetbrains.kotlin.types.checker.NewTypeVariableConstructor
 import org.jetbrains.kotlin.types.model.TypeVariableMarker
+import org.jetbrains.kotlin.types.refinement.TypeRefinement
 
 
 class TypeVariableTypeConstructor(private val builtIns: KotlinBuiltIns, val debugName: String) : TypeConstructor,
@@ -39,6 +42,9 @@ class TypeVariableTypeConstructor(private val builtIns: KotlinBuiltIns, val debu
     override fun getDeclarationDescriptor(): ClassifierDescriptor? = null
 
     override fun getBuiltIns() = builtIns
+
+    @TypeRefinement
+    override fun refine(kotlinTypeRefiner: KotlinTypeRefiner): TypeConstructor = this
 
     override fun toString() = "TypeVariable($debugName)"
 }
@@ -53,15 +59,21 @@ sealed class NewTypeVariable(builtIns: KotlinBuiltIns, name: String) : TypeVaria
         nullable = false, memberScope = builtIns.any.unsubstitutedMemberScope
     )
 
+    abstract fun hasOnlyInputTypesAnnotation(): Boolean
+
     override fun toString() = freshTypeConstructor.toString()
 }
 
 class TypeVariableFromCallableDescriptor(
     val originalTypeParameter: TypeParameterDescriptor
-) : NewTypeVariable(originalTypeParameter.builtIns, originalTypeParameter.name.identifier)
+) : NewTypeVariable(originalTypeParameter.builtIns, originalTypeParameter.name.identifier) {
+    override fun hasOnlyInputTypesAnnotation(): Boolean = originalTypeParameter.hasOnlyInputTypesAnnotation()
+}
 
 class TypeVariableForLambdaReturnType(
     val lambdaArgument: LambdaKotlinCallArgument,
     builtIns: KotlinBuiltIns,
     name: String
-) : NewTypeVariable(builtIns, name)
+) : NewTypeVariable(builtIns, name) {
+    override fun hasOnlyInputTypesAnnotation(): Boolean = false
+}

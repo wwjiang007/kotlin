@@ -32,6 +32,10 @@ dependencies {
     testCompileOnly(intellijPluginDep("Groovy"))
     testCompileOnly(intellijDep())
 
+    Platform[192].orHigher {
+        compileOnly(intellijPluginDep("java"))
+    }
+
     testRuntime(project(":kotlin-reflect"))
     testRuntime(project(":idea:idea-jvm"))
     testRuntime(project(":idea:idea-android"))
@@ -44,6 +48,9 @@ dependencies {
     testRuntime(project(":kotlin-scripting-idea"))
     testRuntime(project(":kotlinx-serialization-ide-plugin"))
     // TODO: the order of the plugins matters here, consider avoiding order-dependency
+    Platform[192].orHigher {
+        testRuntime(intellijPluginDep("java"))
+    }
     testRuntime(intellijPluginDep("junit"))
     testRuntime(intellijPluginDep("testng"))
     testRuntime(intellijPluginDep("properties"))

@@ -1,10 +1,10 @@
 // ERROR: Unresolved reference: LinkedList
-import java.util.*
+import java.util.ArrayList
 
 class ForEach {
     fun test() {
-        val xs: ArrayList<Any> = ArrayList()
-        val ys: MutableList<Any> = LinkedList<Any>()
+        val xs = ArrayList<Any>()
+        val ys: MutableList<Any> = LinkedList<Any?>()
         for (x in xs) {
             ys.add(x)
         }

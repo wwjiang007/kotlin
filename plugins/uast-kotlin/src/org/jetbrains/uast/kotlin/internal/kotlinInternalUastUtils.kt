@@ -50,7 +50,10 @@ import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
+import org.jetbrains.kotlin.resolve.calls.inference.model.TypeVariableTypeConstructor
 import org.jetbrains.kotlin.resolve.calls.model.ArgumentMatch
+import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
+import org.jetbrains.kotlin.resolve.calls.tower.NewResolvedCallImpl
 import org.jetbrains.kotlin.resolve.constants.IntegerLiteralTypeConstructor
 import org.jetbrains.kotlin.resolve.constants.IntegerValueTypeConstructor
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
@@ -60,6 +63,7 @@ import org.jetbrains.kotlin.synthetic.SamAdapterExtensionFunctionDescriptor
 import org.jetbrains.kotlin.type.MapPsiToAsmDesc
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.typeUtil.builtIns
+import org.jetbrains.kotlin.types.typeUtil.contains
 import org.jetbrains.kotlin.types.typeUtil.isInterface
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 import org.jetbrains.uast.*
@@ -232,6 +236,10 @@ internal fun KotlinType.toPsiType(lightDeclaration: PsiModifierListOwner?, conte
         return typeAlias.expandedType.toPsiType(lightDeclaration, context, boxed)
     }
 
+    if (contains { type -> type.constructor is TypeVariableTypeConstructor }) {
+        return UastErrorType
+    }
+
     (constructor.declarationDescriptor as? TypeParameterDescriptor)?.let { typeParameter ->
         (typeParameter.containingDeclaration.toSource()?.getMaybeLightElement() as? PsiTypeParameterListOwner)
             ?.typeParameterList?.typeParameters?.getOrNull(typeParameter.index)
@@ -386,18 +394,41 @@ internal fun KotlinULambdaExpression.getFunctionalInterfaceType(): PsiType? {
     if (parent is KtValueArgument) run {
         val callExpression = parent.parents.take(2).firstIsInstanceOrNull<KtCallExpression>() ?: return@run
         val resolvedCall = callExpression.getResolvedCall(callExpression.analyze()) ?: return@run
+
+        // NewResolvedCallImpl can be used as a marker meaning that this code is working under *new* inference
+        if (resolvedCall is NewResolvedCallImpl) {
+            val samConvertedArgument = resolvedCall.getExpectedTypeForSamConvertedArgument(parent)
+
+            // Same as if in old inference we would get SamDescriptor
+            if (samConvertedArgument != null) {
+                val type = getTypeByArgument(resolvedCall, resolvedCall.candidateDescriptor, parent) ?: return@run
+                return type.getFunctionalInterfaceType(this, sourcePsi)
+            }
+        }
+
         val candidateDescriptor = resolvedCall.candidateDescriptor as? SyntheticMemberDescriptor<*> ?: return@run
         when (candidateDescriptor) {
             is SamConstructorDescriptor -> return candidateDescriptor.returnType?.getFunctionalInterfaceType(this, sourcePsi)
             is SamAdapterDescriptor<*>, is SamAdapterExtensionFunctionDescriptor -> {
-                val index = (resolvedCall.getArgumentMapping(parent) as? ArgumentMatch)?.valueParameter?.index ?: return@run
                 val functionDescriptor = candidateDescriptor.baseDescriptorForSynthetic as? FunctionDescriptor ?: return@run
-                val parameterDescriptor = functionDescriptor.valueParameters.getOrNull(index) ?: return@run
-                return parameterDescriptor.type.getFunctionalInterfaceType(this, sourcePsi)
+
+                val type = getTypeByArgument(resolvedCall, functionDescriptor, parent) ?: return@run
+                return type.getFunctionalInterfaceType(this, sourcePsi)
             }
         }
     }
     return sourcePsi.getExpectedType()?.getFunctionalInterfaceType(this, sourcePsi)
+}
+
+private fun getTypeByArgument(
+    resolvedCall: ResolvedCall<*>,
+    descriptor: CallableDescriptor,
+    argument: ValueArgument
+): KotlinType? {
+    val index = (resolvedCall.getArgumentMapping(argument) as? ArgumentMatch)?.valueParameter?.index ?: return null
+    val parameterDescriptor = descriptor.valueParameters.getOrNull(index) ?: return null
+
+    return parameterDescriptor.type
 }
 
 internal fun unwrapFakeFileForLightClass(file: PsiFile): PsiFile = (file as? FakeFileForLightClass)?.ktFile ?: file

@@ -27,6 +27,12 @@ dependencies {
 
     testRuntime(project(":kotlinx-metadata-jvm", configuration = "runtime"))
 
+    testRuntimeOnly(intellijCoreDep()) { includeJars("intellij-core") }
+
+    Platform[192].orHigher {
+        testRuntimeOnly(intellijDep()) { includeJars("platform-concurrency", "platform-objectSerializer") }
+    }
+
     shadows(project(":kotlinx-metadata-jvm", configuration = "runtime"))
     shadows("org.jetbrains.intellij.deps:asm-all:$kotlinpAsmVersion")
 }
@@ -58,8 +64,7 @@ tasks {
     }
     "test" {
         // These dependencies are needed because ForTestCompileRuntime loads jars from dist
-        dependsOn(":kotlin-reflect:dist")
-        dependsOn(":kotlin-script-runtime:dist")
+        dependsOn(":dist")
     }
 }
 

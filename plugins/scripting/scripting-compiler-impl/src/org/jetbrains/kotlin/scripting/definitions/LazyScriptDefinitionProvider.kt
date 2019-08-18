@@ -7,18 +7,26 @@ package org.jetbrains.kotlin.scripting.definitions
 
 import com.intellij.ide.highlighter.JavaFileType
 import org.jetbrains.kotlin.idea.KotlinFileType
+import java.io.File
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
+import kotlin.script.experimental.host.ScriptingHostConfiguration
+import kotlin.script.experimental.jvm.defaultJvmScriptingHostConfiguration
 
 abstract class LazyScriptDefinitionProvider : ScriptDefinitionProvider {
 
     protected val lock = ReentrantReadWriteLock()
 
-    protected abstract val currentDefinitions: Sequence<KotlinScriptDefinition>
+    protected abstract val currentDefinitions: Sequence<ScriptDefinition>
 
-    private var _cachedDefinitions: Sequence<KotlinScriptDefinition>? = null
-    private val cachedDefinitions: Sequence<KotlinScriptDefinition>
+    protected open fun getScriptingHostConfiguration(): ScriptingHostConfiguration = defaultJvmScriptingHostConfiguration
+
+    override fun getDefaultDefinition(): ScriptDefinition =
+        ScriptDefinition.getDefault(getScriptingHostConfiguration())
+
+    private var _cachedDefinitions: Sequence<ScriptDefinition>? = null
+    private val cachedDefinitions: Sequence<ScriptDefinition>
         get() {
             assert(lock.readLockCount > 0) { "cachedDefinitions should only be used under the read lock" }
             if (_cachedDefinitions == null) lock.write {
@@ -37,17 +45,25 @@ abstract class LazyScriptDefinitionProvider : ScriptDefinitionProvider {
         fileName.endsWith(it, ignoreCase = true)
     }
 
+    override fun findDefinition(file: File): ScriptDefinition? =
+        if (nonScriptFileName(file.name)) null
+        else lock.read {
+            cachedDefinitions.firstOrNull { it.isScript(file) }
+        }
+
     override fun findScriptDefinition(fileName: String): KotlinScriptDefinition? =
         if (nonScriptFileName(fileName)) null
         else lock.read {
-            cachedDefinitions.firstOrNull { it.isScript(fileName) }
+            cachedDefinitions.map { it.legacyDefinition }.firstOrNull { it.isScript(fileName) }
         }
 
-    override fun isScript(fileName: String) = findScriptDefinition(fileName) != null
+    override fun isScript(file: File) = findDefinition(file) != null
 
     override fun getKnownFilenameExtensions(): Sequence<String> = lock.read {
         cachedDefinitions.map { it.fileExtension }
     }
+
+    override fun getDefaultScriptDefinition(): KotlinScriptDefinition = getDefaultDefinition().legacyDefinition
 
     companion object {
         // TODO: find a common place for storing kotlin-related extensions and reuse values from it everywhere

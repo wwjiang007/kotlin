@@ -1,18 +1,15 @@
 package org.jetbrains.kotlin.gradle.internal.testing
 
-import jetbrains.buildServer.messages.serviceMessages.ServiceMessage
 import org.gradle.api.internal.tasks.testing.TestExecuter
 import org.gradle.api.internal.tasks.testing.TestExecutionSpec
 import org.gradle.api.internal.tasks.testing.TestResultProcessor
 import org.gradle.internal.operations.BuildOperationExecutor
+import org.gradle.process.ExecResult
 import org.gradle.process.ProcessForkOptions
 import org.gradle.process.internal.ExecHandle
 import org.gradle.process.internal.ExecHandleFactory
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import java.io.PipedInputStream
-import java.io.PipedOutputStream
-import kotlin.concurrent.thread
 
 open class TCServiceMessagesTestExecutionSpec(
     val forkOptions: ProcessForkOptions,
@@ -31,7 +28,9 @@ private val log = LoggerFactory.getLogger("org.jetbrains.kotlin.gradle.tasks.tes
 
 class TCServiceMessagesTestExecutor(
     val execHandleFactory: ExecHandleFactory,
-    val buildOperationExecutor: BuildOperationExecutor
+    val buildOperationExecutor: BuildOperationExecutor,
+    val runListeners: MutableList<KotlinTestRunnerListener>,
+    val ignoreRunFailures: Boolean
 ) : TestExecuter<TCServiceMessagesTestExecutionSpec> {
     var execHandle: ExecHandle? = null
     var outputReaderThread: Thread? = null
@@ -39,54 +38,40 @@ class TCServiceMessagesTestExecutor(
 
     override fun execute(spec: TCServiceMessagesTestExecutionSpec, testResultProcessor: TestResultProcessor) {
         spec.wrapExecute {
-            val stdInPipe = PipedInputStream()
-
             val rootOperation = buildOperationExecutor.currentOperation.parentId
 
-            outputReaderThread = thread(name = "${spec.forkOptions} output reader") {
-                try {
-                    val client = spec.createClient(testResultProcessor, log)
+            val client = spec.createClient(testResultProcessor, log)
 
-                    client.root(rootOperation) {
-                        stdInPipe.reader().useLines { lines ->
-                            lines.forEach {
-                                if (shouldStop) {
-                                    client.closeAll()
-                                    return@thread
-                                }
+            try {
+                val exec = execHandleFactory.newExec()
+                spec.forkOptions.copyTo(exec)
+                exec.args = spec.args
+                exec.standardOutput = TCServiceMessageOutputStreamHandler(client, { spec.showSuppressedOutput() }, log)
+                execHandle = exec.build()
 
-                                try {
-                                    ServiceMessage.parse(it, client)
-                                } catch (e: Exception) {
-                                    spec.showSuppressedOutput()
-                                    log.error(
-                                        "Error while processing test process output message \"$it\"",
-                                        e
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } catch (t: Throwable) {
-                    spec.showSuppressedOutput()
-                    log.error("Error creating TCServiceMessagesClient", t)
+                lateinit var result: ExecResult
+                client.root(rootOperation) {
+                    execHandle!!.start()
+                    result = execHandle!!.waitForFinish()
                 }
-            }
 
-            val exec = execHandleFactory.newExec()
-            spec.forkOptions.copyTo(exec)
-            exec.args = spec.args
-            exec.standardOutput = PipedOutputStream(stdInPipe)
-
-            execHandle = exec.build()
-
-            execHandle!!.start()
-            val result = execHandle!!.waitForFinish()
-            outputReaderThread!!.join()
-
-            if (spec.checkExitCode && result.exitValue != 0) {
+                if (spec.checkExitCode && result.exitValue != 0) {
+                    error("$execHandle exited with errors (exit code: ${result.exitValue})")
+                }
+            } catch (e: Throwable) {
                 spec.showSuppressedOutput()
-                error("$execHandle exited with errors (exit code: ${result.exitValue})")
+
+                val wrappedError = client.ensureNodesClosed(null, e, false) ?: if (e is Error) e else Error(e)
+
+                runListeners.forEach {
+                    it.runningFailure(wrappedError)
+                }
+
+                if (ignoreRunFailures) {
+                    log.error(wrappedError.message)
+                } else {
+                    throw e
+                }
             }
         }
     }

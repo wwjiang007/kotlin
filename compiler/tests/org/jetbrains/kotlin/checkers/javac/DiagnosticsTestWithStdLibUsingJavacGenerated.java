@@ -1553,6 +1553,11 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
             runTestWithPackageReplacement("compiler/testData/diagnostics/testsWithStdLib/coroutines/kt18292.kt", "kotlin.coroutines");
         }
 
+        @TestMetadata("kt18292_ni.kt")
+        public void testKt18292_ni() throws Exception {
+            runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/kt18292_ni.kt");
+        }
+
         @TestMetadata("kt28658.kt")
         public void testKt28658() throws Exception {
             runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/kt28658.kt");
@@ -1779,6 +1784,11 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
                 runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/callableReference/bigArity.kt");
             }
 
+            @TestMetadata("callableReferenceOnUnresolvedLHS.kt")
+            public void testCallableReferenceOnUnresolvedLHS() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/callableReference/callableReferenceOnUnresolvedLHS.kt");
+            }
+
             @TestMetadata("property.kt")
             public void testProperty_1_2() throws Exception {
                 runTestWithPackageReplacement("compiler/testData/diagnostics/testsWithStdLib/coroutines/callableReference/property.kt", "kotlin.coroutines.experimental");
@@ -1867,9 +1877,19 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
                 runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/inferCoroutineTypeInOldVersion.kt");
             }
 
+            @TestMetadata("inferenceFromMethodInsideLocalVariable.kt")
+            public void testInferenceFromMethodInsideLocalVariable() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/inferenceFromMethodInsideLocalVariable.kt");
+            }
+
             @TestMetadata("kt15516.kt")
             public void testKt15516() throws Exception {
                 runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/kt15516.kt");
+            }
+
+            @TestMetadata("kt32271.kt")
+            public void testKt32271() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/kt32271.kt");
             }
 
             @TestMetadata("nestedLambdaInferenceWithListMap.kt")
@@ -1907,6 +1927,11 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
                 runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/returnTypeInference2.kt");
             }
 
+            @TestMetadata("severalCandidatesWithDifferentVisibility.kt")
+            public void testSeveralCandidatesWithDifferentVisibility() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/severalCandidatesWithDifferentVisibility.kt");
+            }
+
             @TestMetadata("simpleGenerator.kt")
             public void testSimpleGenerator() throws Exception {
                 runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/simpleGenerator.kt");
@@ -1920,6 +1945,11 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
             @TestMetadata("suspendCallsWrongUpperBound.kt")
             public void testSuspendCallsWrongUpperBound() throws Exception {
                 runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/suspendCallsWrongUpperBound.kt");
+            }
+
+            @TestMetadata("twoReceiversInScope.kt")
+            public void testTwoReceiversInScope() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/coroutines/inference/twoReceiversInScope.kt");
             }
 
             @TestMetadata("typeFromReceiver.kt")
@@ -2728,9 +2758,24 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
                 runTest("compiler/testData/diagnostics/testsWithStdLib/inference/annotationsForResolve/exactAnnotation.kt");
             }
 
+            @TestMetadata("explicitTypeArgumentAsValidInputType.kt")
+            public void testExplicitTypeArgumentAsValidInputType() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/inference/annotationsForResolve/explicitTypeArgumentAsValidInputType.kt");
+            }
+
             @TestMetadata("internalAnnotationsOnTypes.kt")
             public void testInternalAnnotationsOnTypes() throws Exception {
                 runTest("compiler/testData/diagnostics/testsWithStdLib/inference/annotationsForResolve/internalAnnotationsOnTypes.kt");
+            }
+
+            @TestMetadata("kt26698.kt")
+            public void testKt26698() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/inference/annotationsForResolve/kt26698.kt");
+            }
+
+            @TestMetadata("kt29307.kt")
+            public void testKt29307() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/inference/annotationsForResolve/kt29307.kt");
             }
 
             @TestMetadata("noInferAndLowPriority.kt")
@@ -2743,14 +2788,39 @@ public class DiagnosticsTestWithStdLibUsingJavacGenerated extends AbstractDiagno
                 runTest("compiler/testData/diagnostics/testsWithStdLib/inference/annotationsForResolve/noInferAnnotation.kt");
             }
 
+            @TestMetadata("notNullAnnotation.kt")
+            public void testNotNullAnnotation() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/inference/annotationsForResolve/notNullAnnotation.kt");
+            }
+
+            @TestMetadata("onlyInputTypes.kt")
+            public void testOnlyInputTypes() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/inference/annotationsForResolve/onlyInputTypes.kt");
+            }
+
             @TestMetadata("onlyInputTypesAndLowPriority.kt")
             public void testOnlyInputTypesAndLowPriority() throws Exception {
                 runTest("compiler/testData/diagnostics/testsWithStdLib/inference/annotationsForResolve/onlyInputTypesAndLowPriority.kt");
             }
 
+            @TestMetadata("onlyInputTypesAndTopLevelCapturedTypes.kt")
+            public void testOnlyInputTypesAndTopLevelCapturedTypes() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/inference/annotationsForResolve/onlyInputTypesAndTopLevelCapturedTypes.kt");
+            }
+
             @TestMetadata("onlyInputTypesAnnotationWithPlatformTypes.kt")
             public void testOnlyInputTypesAnnotationWithPlatformTypes() throws Exception {
                 runTest("compiler/testData/diagnostics/testsWithStdLib/inference/annotationsForResolve/onlyInputTypesAnnotationWithPlatformTypes.kt");
+            }
+
+            @TestMetadata("onlyInputTypesCaptured.kt")
+            public void testOnlyInputTypesCaptured() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/inference/annotationsForResolve/onlyInputTypesCaptured.kt");
+            }
+
+            @TestMetadata("onlyInputTypesWithVarargs.kt")
+            public void testOnlyInputTypesWithVarargs() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/inference/annotationsForResolve/onlyInputTypesWithVarargs.kt");
             }
 
             @TestMetadata("propagationOfNoInferAnnotation.kt")

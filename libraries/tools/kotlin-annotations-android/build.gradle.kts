@@ -29,7 +29,7 @@ sourceSets {
 }
 
 dependencies {
-    compile(kotlinBuiltins())
+    compileOnly(kotlinBuiltins())
 }
 
 publish()
@@ -37,5 +37,3 @@ publish()
 sourcesJar()
 javadocJar()
 runtimeJar()
-dist()
-

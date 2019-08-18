@@ -256,9 +256,24 @@ public class CliTestGenerated extends AbstractCliTest {
             runTest("compiler/testData/cli/jvm/fileClassClashMultipleFiles.args");
         }
 
+        @TestMetadata("firHello.args")
+        public void testFirHello() throws Exception {
+            runTest("compiler/testData/cli/jvm/firHello.args");
+        }
+
         @TestMetadata("flagAllowingResultAsReturnType.args")
         public void testFlagAllowingResultAsReturnType() throws Exception {
             runTest("compiler/testData/cli/jvm/flagAllowingResultAsReturnType.args");
+        }
+
+        @TestMetadata("functionReferenceWithDefaultValuesFeatureIsEnabledWithNewInference.args")
+        public void testFunctionReferenceWithDefaultValuesFeatureIsEnabledWithNewInference() throws Exception {
+            runTest("compiler/testData/cli/jvm/functionReferenceWithDefaultValuesFeatureIsEnabledWithNewInference.args");
+        }
+
+        @TestMetadata("functionReferenceWithDefaultValuesFeatureIsEnabledWithXXNewInference.args")
+        public void testFunctionReferenceWithDefaultValuesFeatureIsEnabledWithXXNewInference() throws Exception {
+            runTest("compiler/testData/cli/jvm/functionReferenceWithDefaultValuesFeatureIsEnabledWithXXNewInference.args");
         }
 
         @TestMetadata("help.args")
@@ -569,6 +584,26 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("singleJavaFileRoots.args")
         public void testSingleJavaFileRoots() throws Exception {
             runTest("compiler/testData/cli/jvm/singleJavaFileRoots.args");
+        }
+
+        @TestMetadata("standaloneSamConversionsAreDisabledExplicitlyWithNewInference.args")
+        public void testStandaloneSamConversionsAreDisabledExplicitlyWithNewInference() throws Exception {
+            runTest("compiler/testData/cli/jvm/standaloneSamConversionsAreDisabledExplicitlyWithNewInference.args");
+        }
+
+        @TestMetadata("standaloneSamConversionsAreEnabledWithNewInference.args")
+        public void testStandaloneSamConversionsAreEnabledWithNewInference() throws Exception {
+            runTest("compiler/testData/cli/jvm/standaloneSamConversionsAreEnabledWithNewInference.args");
+        }
+
+        @TestMetadata("standaloneSamConversionsAreEnabledWithNewInferenceInternalFlag.args")
+        public void testStandaloneSamConversionsAreEnabledWithNewInferenceInternalFlag() throws Exception {
+            runTest("compiler/testData/cli/jvm/standaloneSamConversionsAreEnabledWithNewInferenceInternalFlag.args");
+        }
+
+        @TestMetadata("standaloneSamConversionsBaseline_1_3.args")
+        public void testStandaloneSamConversionsBaseline_1_3() throws Exception {
+            runTest("compiler/testData/cli/jvm/standaloneSamConversionsBaseline_1_3.args");
         }
 
         @TestMetadata("suppressAllWarningsJvm.args")

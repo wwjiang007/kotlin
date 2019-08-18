@@ -22,10 +22,8 @@ import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintStorage
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.checker.ClassicTypeSystemContext
-import org.jetbrains.kotlin.types.model.StubTypeMarker
-import org.jetbrains.kotlin.types.model.TypeConstructorMarker
-import org.jetbrains.kotlin.types.model.TypeSubstitutorMarker
-import org.jetbrains.kotlin.types.model.TypeSystemInferenceExtensionContext
+import org.jetbrains.kotlin.types.model.*
+import java.util.*
 
 fun ConstraintStorage.buildCurrentSubstitutor(
     context: TypeSystemInferenceExtensionContext,
@@ -70,13 +68,16 @@ fun CallableDescriptor.substitute(substitutor: NewTypeSubstitutor): CallableDesc
     return substitute(TypeSubstitutor.create(wrappedSubstitution))
 }
 
-fun CallableDescriptor.substituteAndApproximateCapturedTypes(substitutor: NewTypeSubstitutor): CallableDescriptor {
+fun CallableDescriptor.substituteAndApproximateCapturedTypes(
+    substitutor: NewTypeSubstitutor,
+    typeApproximator: TypeApproximator
+): CallableDescriptor {
     val wrappedSubstitution = object : TypeSubstitution() {
         override fun get(key: KotlinType): TypeProjection? = null
 
         override fun prepareTopLevelType(topLevelType: KotlinType, position: Variance) =
             substitutor.safeSubstitute(topLevelType.unwrap()).let { substitutedType ->
-                TypeApproximator(builtIns).approximateToSuperType(substitutedType, TypeApproximatorConfiguration.CapturedAndIntegerLiteralsTypesApproximation)
+                typeApproximator.approximateToSuperType(substitutedType, TypeApproximatorConfiguration.CapturedAndIntegerLiteralsTypesApproximation)
                     ?: substitutedType
             }
     }

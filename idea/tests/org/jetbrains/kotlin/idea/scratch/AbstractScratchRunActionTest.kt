@@ -9,13 +9,12 @@ import com.intellij.ide.scratch.ScratchFileService
 import com.intellij.ide.scratch.ScratchRootType
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.module.Module
 import com.intellij.openapi.roots.CompilerModuleExtension
 import com.intellij.openapi.roots.ModuleRootModificationUtil
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.newvfs.impl.VfsRootAccess
-import com.intellij.psi.PsiDocumentManager
-import com.intellij.psi.PsiManager
 import com.intellij.testFramework.FileEditorManagerTestCase
 import com.intellij.testFramework.MapDataContext
 import com.intellij.testFramework.PsiTestUtil
@@ -23,15 +22,20 @@ import com.intellij.testFramework.TestActionEvent
 import com.intellij.util.ui.UIUtil
 import org.jetbrains.kotlin.codegen.forTestCompile.ForTestCompileRuntime
 import org.jetbrains.kotlin.idea.KotlinLanguage
+import org.jetbrains.kotlin.idea.actions.KOTLIN_WORKSHEET_EXTENSION
 import org.jetbrains.kotlin.idea.core.script.ScriptDependenciesManager
 import org.jetbrains.kotlin.idea.highlighter.KotlinHighlightingUtil
+import org.jetbrains.kotlin.idea.scratch.actions.ClearScratchAction
 import org.jetbrains.kotlin.idea.scratch.actions.RunScratchAction
 import org.jetbrains.kotlin.idea.scratch.actions.ScratchCompilationSupport
 import org.jetbrains.kotlin.idea.scratch.output.InlayScratchFileRenderer
+import org.jetbrains.kotlin.idea.scratch.output.getInlays
+import org.jetbrains.kotlin.idea.scratch.ui.ScratchTopPanel
 import org.jetbrains.kotlin.idea.test.KotlinLightProjectDescriptor
 import org.jetbrains.kotlin.idea.test.KotlinWithJdkAndRuntimeLightProjectDescriptor
 import org.jetbrains.kotlin.idea.test.PluginTestCaseBase
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
+import org.jetbrains.kotlin.parsing.KotlinParserDefinition.Companion.STD_SCRIPT_SUFFIX
 import org.jetbrains.kotlin.test.InTextDirectivesUtils
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.MockLibraryUtil
@@ -41,15 +45,33 @@ import java.io.File
 
 abstract class AbstractScratchRunActionTest : FileEditorManagerTestCase() {
 
-    fun doReplTest(fileName: String) {
-        doTest(fileName, true)
+    fun doWorksheetReplTest(fileName: String) {
+        doTest(fileName = fileName, isRepl = true, isWorksheet = true)
     }
 
-    fun doCompilingTest(fileName: String) {
-        doTest(fileName, false)
+    fun doScratchReplTest(fileName: String) {
+        doTest(fileName = fileName, isRepl = true, isWorksheet = false)
     }
 
-    fun doMultiFileTest(dirName: String) {
+    fun doWorksheetCompilingTest(fileName: String) {
+        doTest(fileName = fileName, isRepl = false, isWorksheet = true)
+    }
+
+    fun doScratchCompilingTest(fileName: String) {
+        doTest(fileName = fileName, isRepl = false, isWorksheet = false)
+    }
+
+    fun doWorksheetMultiFileTest(dirName: String) {
+        doMultiFileTest(dirName, isWorksheet = true)
+    }
+
+    fun doScratchMultiFileTest(dirName: String) {
+        doMultiFileTest(dirName, isWorksheet = false)
+    }
+
+    private fun doMultiFileTest(dirName: String, isWorksheet: Boolean) {
+        val mainFileExtension = if (isWorksheet) KOTLIN_WORKSHEET_EXTENSION else STD_SCRIPT_SUFFIX
+
         val javaFiles = arrayListOf<File>()
         val kotlinFiles = arrayListOf<File>()
         val baseDir = File(testDataPath, dirName)
@@ -72,57 +94,36 @@ abstract class AbstractScratchRunActionTest : FileEditorManagerTestCase() {
 
         MockLibraryUtil.compileKotlin(baseDir.path, outputDir)
 
-        PsiTestUtil.setCompilerOutputPath(myModule, outputDir.path, false)
+        PsiTestUtil.setCompilerOutputPath(myFixture.module, outputDir.path, false)
 
-        val mainFileName = "$dirName/${getTestName(true)}.kts"
-        doCompilingTest(mainFileName)
-        doReplTest(mainFileName)
+        val mainFileName = "$dirName/${getTestName(true)}.$mainFileExtension"
+        doTest(mainFileName, isRepl = false, isWorksheet = isWorksheet)
 
-        ModuleRootModificationUtil.updateModel(myModule) { model ->
+        launchAction(ClearScratchAction())
+
+        doTest(mainFileName, isRepl = true, isWorksheet = isWorksheet)
+
+        ModuleRootModificationUtil.updateModel(myFixture.module) { model ->
             model.getModuleExtension(CompilerModuleExtension::class.java).inheritCompilerOutputPath(true)
         }
     }
 
-    fun doTest(fileName: String, isRepl: Boolean) {
+    fun doTest(fileName: String, isRepl: Boolean, isWorksheet: Boolean) {
         val sourceFile = File(testDataPath, fileName)
-        val fileText = sourceFile.readText()
+        val fileText = sourceFile.readText().inlinePropertiesValues(isRepl)
 
-        val scratchFile = createScratchFile(sourceFile.name, fileText)
-
-        ScriptDependenciesManager.updateScriptDependenciesSynchronously(scratchFile, project)
-
-        val psiFile = PsiManager.getInstance(project).findFile(scratchFile) ?: error("Couldn't find psi file ${sourceFile.path}")
-
-        if (!KotlinHighlightingUtil.shouldHighlight(psiFile)) error("Highlighting for scratch file is switched off")
-
-        val (editor, scratchPanel) = getEditorWithScratchPanel(myManager, scratchFile) ?: error("Couldn't find scratch panel")
-        scratchPanel.scratchFile.saveOptions {
-            copy(isRepl = isRepl, isInteractiveMode = false)
+        if (isWorksheet) {
+            configureWorksheetByText(sourceFile.name, fileText)
+        } else {
+            configureScratchByText(sourceFile.name, fileText)
         }
 
-        if (!InTextDirectivesUtils.isDirectiveDefined(fileText, "// NO_MODULE")) {
-            scratchPanel.setModule(myFixture.module)
-        }
+        if (!KotlinHighlightingUtil.shouldHighlight(myFixture.file)) error("Highlighting for scratch file is switched off")
 
-        launchScratch(scratchFile)
+        launchScratch()
+        waitUntilScratchFinishes()
 
-        val doc = PsiDocumentManager.getInstance(project).getDocument(psiFile) ?: error("Document for ${psiFile.name} is null")
-
-        val actualOutput = StringBuilder(psiFile.text)
-        for (line in doc.lineCount - 1 downTo 0) {
-            editor.editor.inlayModel.getInlineElementsInRange(
-                doc.getLineStartOffset(line),
-                doc.getLineEndOffset(line)
-            ).map { it.renderer }
-                .filterIsInstance<InlayScratchFileRenderer>()
-                .forEach {
-                    val str = it.toString()
-                    val offset = doc.getLineEndOffset(line); actualOutput.insert(
-                    offset,
-                    "${str.takeWhile { it.isWhitespace() }}// ${str.trim()}"
-                )
-                }
-        }
+        val actualOutput = getFileTextWithInlays()
 
         val expectedFileName = if (isRepl) {
             fileName.replace(".kts", ".repl.after")
@@ -130,10 +131,39 @@ abstract class AbstractScratchRunActionTest : FileEditorManagerTestCase() {
             fileName.replace(".kts", ".comp.after")
         }
         val expectedFile = File(testDataPath, expectedFileName)
-        KotlinTestUtils.assertEqualsToFile(expectedFile, actualOutput.toString())
+        KotlinTestUtils.assertEqualsToFile(expectedFile, actualOutput)
     }
 
-    protected fun createScratchFile(name: String, text: String): VirtualFile {
+    protected fun String.inlinePropertiesValues(
+        isRepl: Boolean = false,
+        isInteractiveMode: Boolean = false
+    ): String {
+        return replace("~REPL_MODE~", isRepl.toString()).replace("~INTERACTIVE_MODE~", isInteractiveMode.toString())
+    }
+
+    protected fun getFileTextWithInlays(): String {
+        val doc = myFixture.getDocument(myFixture.file) ?: error("Document for ${myFixture.file.name} is null")
+        val actualOutput = StringBuilder(myFixture.file.text)
+        for (line in doc.lineCount - 1 downTo 0) {
+            getInlays(doc.getLineStartOffset(line), doc.getLineEndOffset(line))
+                .forEach { inlay ->
+                    val str = inlay.toString()
+                    val offset = doc.getLineEndOffset(line)
+                    actualOutput.insert(
+                        offset,
+                        "${str.takeWhile { it.isWhitespace() }}// ${str.trim()}"
+                    )
+                }
+        }
+        return actualOutput.toString().trim()
+    }
+
+    protected fun getInlays(start: Int = 0, end: Int = myFixture.file.textLength): List<InlayScratchFileRenderer> {
+        val inlineElementsInRange = myFixture.editor.inlayModel.getInlays(start, end)
+        return inlineElementsInRange.map { it.renderer as InlayScratchFileRenderer }
+    }
+
+    protected fun configureScratchByText(name: String, text: String): ScratchTopPanel {
         val scratchFile = ScratchRootType.getInstance().createScratchFile(
             project,
             name,
@@ -143,23 +173,64 @@ abstract class AbstractScratchRunActionTest : FileEditorManagerTestCase() {
         ) ?: error("Couldn't create scratch file")
 
         myFixture.openFileInEditor(scratchFile)
-        return scratchFile
+
+        ScriptDependenciesManager.updateScriptDependenciesSynchronously(scratchFile, project)
+
+        val (_, scratchPanel) = getEditorWithScratchPanel(myManager, myFixture.file.virtualFile)
+            ?: error("Couldn't find scratch panel")
+
+        configureOptions(scratchPanel, text, myFixture.module)
+
+        return scratchPanel
     }
 
-    protected fun launchScratch(scratchFile: VirtualFile) {
-        val action = RunScratchAction()
-        val e = getActionEvent(scratchFile, action)
+    protected fun configureWorksheetByText(name: String, text: String): ScratchTopPanel {
+        val worksheetFile = myFixture.configureByText(name, text).virtualFile
 
+        ScriptDependenciesManager.updateScriptDependenciesSynchronously(worksheetFile, project)
+
+        val (_, scratchPanel) = getEditorWithScratchPanel(myManager, myFixture.file.virtualFile)
+            ?: error("Couldn't find scratch panel")
+
+        // We want to check that correct module is selected automatically,
+        // that's why we set `module` to null so it wouldn't be changed
+        configureOptions(scratchPanel, text, null)
+
+        return scratchPanel
+    }
+
+
+    protected fun launchScratch() {
+        val action = RunScratchAction()
+        launchAction(action)
+    }
+
+    protected fun launchAction(action: AnAction) {
+        val e = getActionEvent(myFixture.file.virtualFile, action)
         action.beforeActionPerformedUpdate(e)
         Assert.assertTrue(e.presentation.isEnabled && e.presentation.isVisible)
         action.actionPerformed(e)
+    }
 
+    protected fun waitUntilScratchFinishes(shouldStopRepl: Boolean = true) {
         UIUtil.dispatchAllInvocationEvents()
 
         val start = System.currentTimeMillis()
         // wait until output is displayed in editor or for 1 minute
         while (ScratchCompilationSupport.isAnyInProgress() && (System.currentTimeMillis() - start) < 60000) {
             Thread.sleep(100)
+        }
+
+        if (shouldStopRepl) stopReplProcess()
+
+        UIUtil.dispatchAllInvocationEvents()
+    }
+
+    protected fun stopReplProcess() {
+        if (myFixture.file != null) {
+            val (_, scratchPanel) = getEditorWithScratchPanel(myManager, myFixture.file.virtualFile)
+                ?: error("Couldn't find scratch panel")
+            scratchPanel.scratchFile.replScratchExecutor?.stopAndWait()
         }
 
         UIUtil.dispatchAllInvocationEvents()
@@ -173,6 +244,10 @@ abstract class AbstractScratchRunActionTest : FileEditorManagerTestCase() {
         return TestActionEvent(context, action)
     }
 
+    protected fun testScratchText(): String {
+        return File(testDataPath, "idea/testData/scratch/custom/test_scratch.kts").readText()
+    }
+
     override fun getTestDataPath() = KotlinTestUtils.getHomeDirectory()
 
 
@@ -182,6 +257,7 @@ abstract class AbstractScratchRunActionTest : FileEditorManagerTestCase() {
         return when {
             testName.endsWith("WithKotlinTest") -> INSTANCE_WITH_KOTLIN_TEST
             testName.endsWith("NoRuntime") -> INSTANCE_WITHOUT_RUNTIME
+            testName.endsWith("ScriptRuntime") -> INSTANCE_WITH_SCRIPT_RUNTIME
             else -> KotlinWithJdkAndRuntimeLightProjectDescriptor.INSTANCE_FULL_JDK
         }
     }
@@ -217,5 +293,33 @@ abstract class AbstractScratchRunActionTest : FileEditorManagerTestCase() {
         private val INSTANCE_WITHOUT_RUNTIME = object : KotlinLightProjectDescriptor() {
             override fun getSdk() = PluginTestCaseBase.fullJdk()
         }
+
+        private val INSTANCE_WITH_SCRIPT_RUNTIME = object : KotlinWithJdkAndRuntimeLightProjectDescriptor(
+            arrayListOf(
+                ForTestCompileRuntime.runtimeJarForTests(),
+                ForTestCompileRuntime.scriptRuntimeJarForTests()
+            )
+        ) {
+            override fun getSdk() = PluginTestCaseBase.fullJdk()
+        }
+
+        fun configureOptions(
+            scratchPanel: ScratchTopPanel,
+            fileText: String,
+            module: Module?
+        ) {
+            if (InTextDirectivesUtils.getPrefixedBoolean(fileText, "// INTERACTIVE_MODE: ") != true) {
+                scratchPanel.setInteractiveMode(false)
+            }
+
+            if (InTextDirectivesUtils.getPrefixedBoolean(fileText, "// REPL_MODE: ") == true) {
+                scratchPanel.setReplMode(true)
+            }
+
+            if (module != null && !InTextDirectivesUtils.isDirectiveDefined(fileText, "// NO_MODULE")) {
+                scratchPanel.setModule(module)
+            }
+        }
+
     }
 }

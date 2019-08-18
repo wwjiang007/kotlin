@@ -24,7 +24,6 @@ import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.roots.ProjectRootModificationTracker
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.io.FileUtil
-import com.intellij.openapi.util.registry.Registry
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.CachedValue
 import com.intellij.psi.util.CachedValueProvider
@@ -41,15 +40,12 @@ import org.jetbrains.kotlin.idea.compiler.configuration.KotlinCommonCompilerArgu
 import org.jetbrains.kotlin.idea.compiler.configuration.KotlinCompilerSettings
 import org.jetbrains.kotlin.idea.facet.getLibraryLanguageLevel
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.platform.DefaultIdeTargetPlatformKindProvider
-import org.jetbrains.kotlin.platform.IdePlatform
-import org.jetbrains.kotlin.platform.IdePlatformKind
-import org.jetbrains.kotlin.platform.impl.JvmIdePlatformKind
+import org.jetbrains.kotlin.platform.*
 import org.jetbrains.kotlin.platform.impl.isCommon
+import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.UserDataProperty
-import org.jetbrains.kotlin.resolve.TargetPlatform
 import org.jetbrains.kotlin.utils.Jsr305State
 import java.io.File
 
@@ -63,7 +59,7 @@ var KtFile.forcedTargetPlatform: TargetPlatform? by UserDataProperty(Key.create(
 
 fun Module.getAndCacheLanguageLevelByDependencies(): LanguageVersion {
     val facetSettings = KotlinFacetSettingsProvider.getInstance(project).getInitializedSettings(this)
-    val languageLevel = getLibraryLanguageLevel(this, null, facetSettings.platform?.kind)
+    val languageLevel = getLibraryLanguageLevel(this, null, facetSettings.targetPlatform?.idePlatformKind)
 
     // Preserve inferred version in facet/project settings
     if (facetSettings.useProjectSettings) {
@@ -150,6 +146,7 @@ fun Project.getLanguageVersionSettings(
 
     val extraAnalysisFlags = additionalArguments.configureAnalysisFlags(MessageCollector.NONE).apply {
         if (jsr305State != null) put(JvmAnalysisFlags.jsr305, jsr305State)
+        initIDESpecificAnalysisSettings(this@getLanguageVersionSettings)
     }
 
     return LanguageVersionSettingsImpl(
@@ -195,11 +192,15 @@ private fun Module.computeLanguageVersionSettings(): LanguageVersionSettings {
 
     val languageFeatures = facetSettings.mergedCompilerArguments?.configureLanguageFeatures(MessageCollector.NONE)?.apply {
         configureCoroutinesSupport(facetSettings.coroutineSupport, languageVersion)
-        configureMultiplatformSupport(facetSettings.platform?.kind, this@computeLanguageVersionSettings)
+        configureMultiplatformSupport(facetSettings.targetPlatform?.idePlatformKind, this@computeLanguageVersionSettings)
         configureNewInferenceSupportInIDE(project)
     }.orEmpty()
 
-    val analysisFlags = facetSettings.mergedCompilerArguments?.configureAnalysisFlags(MessageCollector.NONE).orEmpty()
+    val analysisFlags = facetSettings
+        .mergedCompilerArguments
+        ?.configureAnalysisFlags(MessageCollector.NONE)
+        ?.apply { initIDESpecificAnalysisSettings(project) }
+        .orEmpty()
 
     return LanguageVersionSettingsImpl(
         languageVersion,
@@ -209,25 +210,35 @@ private fun Module.computeLanguageVersionSettings(): LanguageVersionSettings {
     )
 }
 
-val Module.platform: IdePlatform<*, *>?
-    get() = KotlinFacetSettingsProvider.getInstance(project).getInitializedSettings(this).platform ?: project.platform
+private fun MutableMap<AnalysisFlag<*>, Any>.initIDESpecificAnalysisSettings(project: Project) {
+    if (KotlinMultiplatformAnalysisModeComponent.getMode(project) == KotlinMultiplatformAnalysisModeComponent.Mode.COMPOSITE) {
+        put(AnalysisFlags.useTypeRefinement, true)
+    }
+}
 
-val Project.platform: IdePlatform<*, *>?
+val Module.platform: TargetPlatform?
+    get() = KotlinFacetSettingsProvider.getInstance(project).getInitializedSettings(this).targetPlatform ?: project.platform
+
+val Module.isHMPPEnabled: Boolean
+    get() = KotlinFacetSettingsProvider.getInstance(project).getInitializedSettings(this).isHmppEnabled
+
+// FIXME(dsavvinov): this logic is clearly wrong in MPP environment; review and fix
+val Project.platform: TargetPlatform?
     get() {
         val jvmTarget = Kotlin2JvmCompilerArgumentsHolder.getInstance(this).settings.jvmTarget ?: return null
         val version = JvmTarget.fromString(jvmTarget) ?: return null
-        return JvmIdePlatformKind.Platform(version)
+        return JvmPlatforms.jvmPlatformByTargetVersion(version)
     }
 
 private val Module.implementsCommonModule: Boolean
-    get() = !platform.isCommon
-            && ModuleRootManager.getInstance(this).dependencies.any { it.platform.isCommon }
+    get() = !platform.isCommon() // FIXME(dsavvinov): this doesn't seems right, in multilevel-MPP 'common' modules can implement other commons
+            && ModuleRootManager.getInstance(this).dependencies.any { it.platform.isCommon() }
 
 private fun parseArguments(
-    platformKind: IdePlatform<*, *>,
+    platformKind: TargetPlatform,
     additionalArguments: List<String>
 ): CommonCompilerArguments {
-    return platformKind.createArguments().also { parseCommandLineArguments(additionalArguments, it) }
+    return platformKind.createArguments { parseCommandLineArguments(additionalArguments, this) }
 }
 
 fun MutableMap<LanguageFeature, LanguageFeature.State>.configureCoroutinesSupport(
@@ -265,12 +276,4 @@ val PsiElement.languageVersionSettings: LanguageVersionSettings
             return LanguageVersionSettingsImpl.DEFAULT
         }
         return IDELanguageSettingsProvider.getLanguageVersionSettings(this.getModuleInfo(), project)
-    }
-
-val KtElement.jvmTarget: JvmTarget
-    get() {
-        if (ServiceManager.getService(project, ProjectFileIndex::class.java) == null) {
-            return JvmTarget.DEFAULT
-        }
-        return IDELanguageSettingsProvider.getTargetPlatform(this.getModuleInfo(), project) as? JvmTarget ?: JvmTarget.DEFAULT
     }

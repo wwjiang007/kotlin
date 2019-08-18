@@ -9,7 +9,18 @@ plugins {
 }
 
 dependencies {
-    testCompileOnly(intellijDep()) { includeJars("openapi", "idea", "idea_rt", "util", "asm-all", rootProject = rootProject) }
+    testCompileOnly(intellijDep()) {
+        includeJars("openapi", "extensions", "idea", "idea_rt", "util", "asm-all", rootProject = rootProject)
+    }
+
+    Platform[191].orLower {
+        testCompileOnly(intellijDep()) { includeJars("java-api") }
+    }
+
+    Platform[192].orHigher {
+        testCompileOnly(intellijPluginDep("java")) { includeJars("java-api") }
+    }
+
     testRuntime(intellijDep())
 
     testCompile(commonDep("junit:junit"))

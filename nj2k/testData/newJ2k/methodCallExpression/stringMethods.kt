@@ -1,7 +1,8 @@
 // ERROR: Type mismatch: inferred type is String but Charset was expected
 // ERROR: Type mismatch: inferred type is String but Charset was expected
 import java.nio.charset.Charset
-import java.util.*
+import java.util.Comparator
+import java.util.Locale
 
 internal class A {
     @Throws(Exception::class)
@@ -13,7 +14,7 @@ internal class A {
         String(intArrayOf(32, 65, 127), 0, 3)
 
         val bytes = byteArrayOf(32, 65, 100, 81)
-        val charset = Charset.forName("utf-8")
+        val charset: Charset = Charset.forName("utf-8")
         String(bytes)
         String(bytes, charset)
         String(bytes, 0, 2)
@@ -59,7 +60,6 @@ internal class A {
         s.toLowerCase(Locale.FRENCH)
         s.toUpperCase()
         s.toUpperCase(Locale.FRENCH)
-
         s
         s.toCharArray()
     }
@@ -69,25 +69,27 @@ internal class A {
         val s = "test string"
         s == "test"
         s.equals(
-                "tesT", ignoreCase = true
-        )
+                "tesT"
+                , ignoreCase = true)
         s.compareTo("Test", ignoreCase = true)
         s.regionMatches(
                 0,
                 "TE",
                 0,
-                2, ignoreCase = true
-        )
+                2
+                , ignoreCase = true)
         s.regionMatches(0, "st", 1, 2)
-        s.matches("\\w+".toRegex())
         s.replace("\\w+".toRegex(), "---")
                 .replaceFirst("([s-t])".toRegex(), "A$1")
-        useSplit(s.split("\\s+".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray())
-        useSplit(s.split("\\s+".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray())
-        useSplit(s.split("\\s+".toRegex()).toTypedArray())
-        useSplit(s.split("\\s+".toRegex(), 2).toTypedArray())
-        val limit = 5
-        useSplit(s.split("\\s+".toRegex(), limit.coerceAtLeast(0)).toTypedArray())
+        /* TODO
+        s.matches("\\w+");
+        useSplit(s.split("\\s+"));
+        useSplit(s.split("\\s+", 0));
+        useSplit(s.split("\\s+", -1));
+        useSplit(s.split("\\s+", 2));
+        int limit = 5;
+        useSplit(s.split("\\s+", limit));
+        */
         s.trim { it <= ' ' }
         "$s another"
 
@@ -120,8 +122,7 @@ internal class A {
         String(chars, 1, 2)
         String(chars)
         String(chars, 1, 2)
-
-        val order = String.CASE_INSENSITIVE_ORDER
+        val order: Comparator<String?>? = java.lang.String.CASE_INSENSITIVE_ORDER
     }
 
     fun unsupportedMethods() {
@@ -134,5 +135,5 @@ internal class A {
         */
     }
 
-    fun useSplit(result: Array<String>) {}
+    fun useSplit(result: Array<String?>?) {}
 }

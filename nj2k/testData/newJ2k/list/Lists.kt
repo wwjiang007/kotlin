@@ -1,11 +1,11 @@
 // ERROR: Unresolved reference: LinkedList
-import java.util.*
+import java.util.ArrayList
 
 class Lists {
     fun test() {
         val xs: MutableList<Any?> = ArrayList()
-        val ys: MutableList<Any?> = LinkedList<Any>()
-        val zs: ArrayList<Any?> = ArrayList()
+        val ys: MutableList<Any?> = LinkedList<Any?>()
+        val zs = ArrayList<Any?>()
         xs.add(null)
         ys.add(null)
         xs.clear()

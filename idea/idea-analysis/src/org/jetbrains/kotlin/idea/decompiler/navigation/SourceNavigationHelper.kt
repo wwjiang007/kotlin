@@ -18,7 +18,6 @@ import com.intellij.psi.stubs.StringStubIndexExtension
 import com.intellij.util.containers.ContainerUtil
 import gnu.trove.THashSet
 import org.jetbrains.annotations.TestOnly
-import org.jetbrains.kotlin.analyzer.common.CommonPlatform
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.idea.caches.project.BinaryModuleInfo
 import org.jetbrains.kotlin.idea.caches.project.getBinaryLibrariesModuleInfos
@@ -35,6 +34,7 @@ import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.debugText.getDebugText
+import org.jetbrains.kotlin.platform.isCommon
 import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 
 object SourceNavigationHelper {
@@ -75,10 +75,10 @@ object SourceNavigationHelper {
 
     private fun BinaryModuleInfo.associatedCommonLibraries(): List<BinaryModuleInfo> {
         val platform = platform
-        if (platform == null || platform is CommonPlatform) return emptyList()
+        if (platform == null || platform.isCommon()) return emptyList()
 
         return dependencies().filterIsInstance<BinaryModuleInfo>().filter {
-            it.platform is CommonPlatform
+            it.platform.isCommon()
         }
     }
 
@@ -269,8 +269,8 @@ object SourceNavigationHelper {
         if (DumbService.isDumb(from.project)) return from
 
         when (navigationKind) {
-            SourceNavigationHelper.NavigationKind.CLASS_FILES_TO_SOURCES -> if (!from.containingKtFile.isCompiled) return from
-            SourceNavigationHelper.NavigationKind.SOURCES_TO_CLASS_FILES -> {
+            NavigationKind.CLASS_FILES_TO_SOURCES -> if (!from.containingKtFile.isCompiled) return from
+            NavigationKind.SOURCES_TO_CLASS_FILES -> {
                 val file = from.containingFile
                 if (file is KtFile && file.isCompiled) return from
                 if (!ProjectRootsUtil.isInContent(

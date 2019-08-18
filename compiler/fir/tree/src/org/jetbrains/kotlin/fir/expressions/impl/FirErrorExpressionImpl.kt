@@ -10,7 +10,6 @@ import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.expressions.FirErrorExpression
 
 class FirErrorExpressionImpl(
-    session: FirSession,
     psi: PsiElement?,
     override val reason: String
-) : FirAbstractExpression(session, psi), FirErrorExpression
+) : FirErrorExpression(psi)

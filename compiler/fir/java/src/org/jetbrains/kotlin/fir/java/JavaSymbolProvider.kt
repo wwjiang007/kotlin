@@ -6,7 +6,10 @@
 package org.jetbrains.kotlin.fir.java
 
 import com.intellij.openapi.project.Project
+import com.intellij.psi.PsiElement
 import com.intellij.psi.search.GlobalSearchScope
+import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.FirRegularClass
 import org.jetbrains.kotlin.fir.declarations.FirTypeParameter
@@ -18,17 +21,11 @@ import org.jetbrains.kotlin.fir.java.declarations.FirJavaMethod
 import org.jetbrains.kotlin.fir.java.scopes.JavaClassEnhancementScope
 import org.jetbrains.kotlin.fir.java.scopes.JavaClassUseSiteScope
 import org.jetbrains.kotlin.fir.resolve.*
-import org.jetbrains.kotlin.fir.resolve.transformers.firUnsafe
 import org.jetbrains.kotlin.fir.scopes.FirScope
-import org.jetbrains.kotlin.fir.scopes.impl.FirClassDeclaredMemberScope
 import org.jetbrains.kotlin.fir.scopes.impl.FirSuperTypeScope
+import org.jetbrains.kotlin.fir.scopes.impl.declaredMemberScope
 import org.jetbrains.kotlin.fir.symbols.CallableId
-import org.jetbrains.kotlin.fir.symbols.ConeCallableSymbol
-import org.jetbrains.kotlin.fir.symbols.ConeClassLikeSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirClassSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirFieldSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirFunctionSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.FirTypeParameterSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.*
 import org.jetbrains.kotlin.fir.types.ConeClassErrorType
 import org.jetbrains.kotlin.fir.types.impl.ConeTypeParameterTypeImpl
 import org.jetbrains.kotlin.fir.types.impl.FirResolvedTypeRefImpl
@@ -36,6 +33,8 @@ import org.jetbrains.kotlin.load.java.JavaClassFinder
 import org.jetbrains.kotlin.load.java.JvmAnnotationNames
 import org.jetbrains.kotlin.load.java.structure.JavaClass
 import org.jetbrains.kotlin.load.java.structure.JavaTypeParameter
+import org.jetbrains.kotlin.load.java.structure.impl.JavaElementImpl
+import org.jetbrains.kotlin.load.kotlin.KotlinClassFinder
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
@@ -50,14 +49,17 @@ class JavaSymbolProvider(
 
     private val facade: KotlinJavaPsiFacade get() = KotlinJavaPsiFacade.getInstance(project)
 
-    private fun findClass(classId: ClassId): JavaClass? = facade.findClass(JavaClassFinder.Request(classId), searchScope)
+    private fun findClass(
+        classId: ClassId,
+        content: KotlinClassFinder.Result.ClassFileContent?
+    ): JavaClass? = facade.findClass(JavaClassFinder.Request(classId, previouslyFoundClassFileContent = content?.content), searchScope)
 
-    override fun getTopLevelCallableSymbols(packageFqName: FqName, name: Name): List<ConeCallableSymbol> =
+    override fun getTopLevelCallableSymbols(packageFqName: FqName, name: Name): List<FirCallableSymbol<*>> =
         emptyList()
 
     override fun getClassDeclaredMemberScope(classId: ClassId): FirScope? {
         val classSymbol = getClassLikeSymbolByFqName(classId) as? FirClassSymbol ?: return null
-        return FirClassDeclaredMemberScope(classSymbol.fir)
+        return declaredMemberScope(classSymbol.fir)
     }
 
     override fun getClassUseSiteMemberScope(
@@ -65,9 +67,8 @@ class JavaSymbolProvider(
         useSiteSession: FirSession,
         scopeSession: ScopeSession
     ): FirScope? {
-        val symbol = this.getClassLikeSymbolByFqName(classId) ?: return null
-        val javaClass = symbol.firUnsafe<FirJavaClass>()
-        return buildJavaEnhancementScope(useSiteSession, javaClass.symbol, scopeSession)
+        val symbol = this.getClassLikeSymbolByFqName(classId) as? FirClassSymbol ?: return null
+        return buildJavaEnhancementScope(useSiteSession, symbol, scopeSession)
     }
 
     private fun buildJavaEnhancementScope(
@@ -86,7 +87,7 @@ class JavaSymbolProvider(
         scopeSession: ScopeSession
     ): JavaClassUseSiteScope {
         return scopeSession.getOrBuild(regularClass.symbol, JAVA_USE_SITE) {
-            val declaredScope = scopeSession.getOrBuild(regularClass.symbol, DECLARED) { FirClassDeclaredMemberScope(regularClass) }
+            val declaredScope = scopeSession.getOrBuild(regularClass.symbol, DECLARED) { declaredMemberScope(regularClass) }
             val superTypeEnhancementScopes =
                 lookupSuperTypes(regularClass, lookupInterfaces = true, deep = false, useSiteSession = useSiteSession)
                     .mapNotNull { useSiteSuperType ->
@@ -133,10 +134,12 @@ class JavaSymbolProvider(
             }
     }
 
-    override fun getClassLikeSymbolByFqName(classId: ClassId): ConeClassLikeSymbol? {
+    override fun getClassLikeSymbolByFqName(classId: ClassId): FirClassLikeSymbol<*>? = getFirJavaClass(classId)
+
+    fun getFirJavaClass(classId: ClassId, content: KotlinClassFinder.Result.ClassFileContent? = null): FirClassLikeSymbol<*>? {
         if (!hasTopLevelClassOf(classId)) return null
         return classCache.lookupCacheOrCalculateWithPostCompute(classId, {
-            val foundClass = findClass(classId)
+            val foundClass = findClass(classId, content)
             if (foundClass == null || foundClass.annotations.any { it.classId?.asSingleFqName() == JvmAnnotationNames.METADATA_FQ_NAME }) {
                 null to null
             } else {
@@ -156,7 +159,8 @@ class JavaSymbolProvider(
                     }
                 }
                 FirJavaClass(
-                    session, firSymbol as FirClassSymbol, javaClass.name,
+                    session, (javaClass as? JavaElementImpl<*>)?.psi,
+                    firSymbol as FirClassSymbol, javaClass.name,
                     javaClass.visibility, javaClass.modality,
                     javaClass.classKind, isTopLevel = isTopLevel,
                     isStatic = javaClass.isStatic,
@@ -175,7 +179,8 @@ class JavaSymbolProvider(
                         val fieldSymbol = FirFieldSymbol(fieldId)
                         val returnType = javaField.type
                         val firJavaField = FirJavaField(
-                            this@JavaSymbolProvider.session, fieldSymbol, fieldName,
+                            this@JavaSymbolProvider.session, (javaField as? JavaElementImpl<*>)?.psi,
+                            fieldSymbol, fieldName,
                             javaField.visibility, javaField.modality,
                             returnTypeRef = returnType.toFirJavaTypeRef(this@JavaSymbolProvider.session, javaTypeParameterStack),
                             isVar = !javaField.isFinal,
@@ -188,10 +193,11 @@ class JavaSymbolProvider(
                     for (javaMethod in javaClass.methods) {
                         val methodName = javaMethod.name
                         val methodId = CallableId(classId.packageFqName, classId.relativeClassName, methodName)
-                        val methodSymbol = FirFunctionSymbol(methodId)
+                        val methodSymbol = FirNamedFunctionSymbol(methodId)
                         val returnType = javaMethod.returnType
                         val firJavaMethod = FirJavaMethod(
-                            this@JavaSymbolProvider.session, methodSymbol, methodName,
+                            this@JavaSymbolProvider.session, (javaMethod as? JavaElementImpl<*>)?.psi,
+                            methodSymbol, methodName,
                             javaMethod.visibility, javaMethod.modality,
                             returnTypeRef = returnType.toFirJavaTypeRef(this@JavaSymbolProvider.session, javaTypeParameterStack),
                             isStatic = javaMethod.isStatic
@@ -206,22 +212,41 @@ class JavaSymbolProvider(
                         }
                         declarations += firJavaMethod
                     }
-                    for (javaConstructor in javaClass.constructors) {
-                        val constructorId = CallableId(classId.packageFqName, classId.relativeClassName, classId.shortClassName)
-                        val constructorSymbol = FirFunctionSymbol(constructorId)
+                    val javaClassDeclaredConstructors = javaClass.constructors
+                    val constructorId = CallableId(classId.packageFqName, classId.relativeClassName, classId.shortClassName)
+
+                    fun addJavaConstructor(
+                        visibility: Visibility = this.visibility,
+                        psi: PsiElement? = null,
+                        isPrimary: Boolean = false
+                    ): FirJavaConstructor {
+                        val constructorSymbol = FirConstructorSymbol(constructorId)
                         val classTypeParameters = javaClass.typeParameters.convertTypeParameters(javaTypeParameterStack)
-                        val constructorTypeParameters = javaConstructor.typeParameters.convertTypeParameters(javaTypeParameterStack)
-                        val typeParameters = classTypeParameters + constructorTypeParameters
                         val firJavaConstructor = FirJavaConstructor(
-                            this@JavaSymbolProvider.session, constructorSymbol, javaConstructor.visibility,
+                            this@JavaSymbolProvider.session, psi,
+                            constructorSymbol, visibility, isPrimary,
                             FirResolvedTypeRefImpl(
-                                this@JavaSymbolProvider.session, null,
+                                null,
                                 firSymbol.constructType(
-                                    classTypeParameters.map { ConeTypeParameterTypeImpl(it.symbol, false) }.toTypedArray(), false
+                                    classTypeParameters.map { ConeTypeParameterTypeImpl(it.symbol.toLookupTag(), false) }.toTypedArray(),
+                                    false
                                 )
                             )
                         ).apply {
-                            this.typeParameters += typeParameters
+                            this.typeParameters += classTypeParameters
+                        }
+                        declarations += firJavaConstructor
+                        return firJavaConstructor
+                    }
+
+                    if (javaClassDeclaredConstructors.isEmpty() && javaClass.classKind == ClassKind.CLASS) {
+                        addJavaConstructor(isPrimary = true)
+                    }
+                    for (javaConstructor in javaClassDeclaredConstructors) {
+                        addJavaConstructor(
+                            visibility = javaConstructor.visibility, psi = (javaConstructor as? JavaElementImpl<*>)?.psi
+                        ).apply {
+                            this.typeParameters += javaConstructor.typeParameters.convertTypeParameters(javaTypeParameterStack)
                             addAnnotationsFrom(this@JavaSymbolProvider.session, javaConstructor, javaTypeParameterStack)
                             for (valueParameter in javaConstructor.valueParameters) {
                                 valueParameters += valueParameter.toFirValueParameters(
@@ -229,7 +254,6 @@ class JavaSymbolProvider(
                                 )
                             }
                         }
-                        declarations += firJavaConstructor
                     }
                 }
             }

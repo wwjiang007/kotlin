@@ -5,7 +5,6 @@
 
 package org.jetbrains.kotlin.asJava.classes
 
-import com.google.common.collect.Lists
 import com.intellij.openapi.components.ServiceManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
@@ -25,11 +24,10 @@ import com.intellij.psi.stubs.StubElement
 import com.intellij.psi.util.CachedValue
 import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
-import com.intellij.psi.util.PsiModificationTracker.OUT_OF_CODE_BLOCK_MODIFICATION_COUNT
 import com.intellij.psi.util.PsiUtilCore
 import com.intellij.util.IncorrectOperationException
-import com.intellij.util.containers.ContainerUtil
 import org.jetbrains.annotations.NonNls
+import org.jetbrains.kotlin.analyzer.KotlinModificationTrackerService
 import org.jetbrains.kotlin.asJava.ImpreciseResolveResult
 import org.jetbrains.kotlin.asJava.ImpreciseResolveResult.UNSURE
 import org.jetbrains.kotlin.asJava.LightClassGenerationSupport
@@ -38,14 +36,15 @@ import org.jetbrains.kotlin.asJava.builder.InvalidLightClassDataHolder
 import org.jetbrains.kotlin.asJava.builder.LightClassData
 import org.jetbrains.kotlin.asJava.builder.LightClassDataHolder
 import org.jetbrains.kotlin.asJava.builder.LightClassDataProviderForClassOrObject
-import org.jetbrains.kotlin.asJava.elements.*
+import org.jetbrains.kotlin.asJava.elements.FakeFileForLightClass
+import org.jetbrains.kotlin.asJava.elements.KtLightIdentifier
+import org.jetbrains.kotlin.asJava.elements.KtLightModifierList
+import org.jetbrains.kotlin.asJava.elements.KtLightPsiReferenceList
 import org.jetbrains.kotlin.asJava.hasInterfaceDefaultImpls
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMap
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.lexer.KtTokens.*
 import org.jetbrains.kotlin.load.java.structure.LightClassOriginKind
-import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.FqNameUnsafe
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.debugText.getDebugText
@@ -56,6 +55,16 @@ import org.jetbrains.kotlin.psi.stubs.KotlinClassOrObjectStub
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import java.util.*
 import javax.swing.Icon
+
+private class KtLightClassModifierList(containingClass: KtLightClassForSourceDeclaration, computeModifiers: () -> Set<String>) :
+    KtLightModifierList<KtLightClassForSourceDeclaration>(containingClass) {
+
+    private val modifiers by lazyPub { computeModifiers() }
+
+    override fun hasModifierProperty(name: String): Boolean =
+        if (name != PsiModifier.FINAL) name in modifiers else owner.isFinal(PsiModifier.FINAL in modifiers)
+
+}
 
 abstract class KtLightClassForSourceDeclaration(
     protected val classOrObject: KtClassOrObject,
@@ -76,6 +85,7 @@ abstract class KtLightClassForSourceDeclaration(
 
     private val _extendsList by lazyPub { createExtendsList() }
     private val _implementsList by lazyPub { createImplementsList() }
+    private val _deprecated by lazyPub { classOrObject.isDeprecated() }
 
     protected open fun createExtendsList(): PsiReferenceList? = super.getExtendsList()?.let { KtLightPsiReferenceList(it, this) }
     protected open fun createImplementsList(): PsiReferenceList? = super.getImplementsList()?.let { KtLightPsiReferenceList(it, this) }
@@ -174,7 +184,7 @@ abstract class KtLightClassForSourceDeclaration(
 
     private val _typeParameterList: PsiTypeParameterList by lazyPub { buildTypeParameterList() }
 
-    open protected fun buildTypeParameterList() = LightClassUtil.buildLightTypeParameterList(this, classOrObject)
+    protected open fun buildTypeParameterList() = LightClassUtil.buildLightTypeParameterList(this, classOrObject)
 
     override fun getTypeParameterList(): PsiTypeParameterList? = _typeParameterList
 
@@ -182,7 +192,7 @@ abstract class KtLightClassForSourceDeclaration(
 
     override fun getName(): String? = classOrObject.nameAsName?.asString()
 
-    private val _modifierList: PsiModifierList by lazyPub { KtLightClassModifierList(this) }
+    private val _modifierList: PsiModifierList by lazyPub { KtLightClassModifierList(this) { computeModifiers() } }
 
     override fun getModifierList(): PsiModifierList? = _modifierList
 
@@ -227,39 +237,7 @@ abstract class KtLightClassForSourceDeclaration(
 
     override fun hasModifierProperty(@NonNls name: String): Boolean = modifierList?.hasModifierProperty(name) ?: false
 
-    override fun isDeprecated(): Boolean {
-        val jetModifierList = classOrObject.modifierList ?: return false
-
-        val deprecatedFqName = KotlinBuiltIns.FQ_NAMES.deprecated
-        val deprecatedName = deprecatedFqName.shortName().asString()
-
-        for (annotationEntry in jetModifierList.annotationEntries) {
-            val typeReference = annotationEntry.typeReference ?: continue
-
-            val typeElement = typeReference.typeElement
-            if (typeElement !is KtUserType) continue // If it's not a user type, it's definitely not a ref to deprecated
-
-            val fqName = toQualifiedName(typeElement) ?: continue
-
-            if (deprecatedFqName == fqName) return true
-            if (deprecatedName == fqName.asString()) return true
-        }
-        return false
-    }
-
-    private fun toQualifiedName(userType: KtUserType): FqName? {
-        val reversedNames = Lists.newArrayList<String>()
-
-        var current: KtUserType? = userType
-        while (current != null) {
-            val name = current.referencedName ?: return null
-
-            reversedNames.add(name)
-            current = current.qualifier
-        }
-
-        return FqName.fromSegments(ContainerUtil.reverse(reversedNames))
-    }
+    override fun isDeprecated(): Boolean = _deprecated
 
     override fun isInterface(): Boolean {
         if (classOrObject !is KtClass) return false
@@ -339,7 +317,10 @@ abstract class KtLightClassForSourceDeclaration(
         fun create(classOrObject: KtClassOrObject): KtLightClassForSourceDeclaration? =
             CachedValuesManager.getCachedValue(classOrObject) {
                 CachedValueProvider.Result
-                    .create(createNoCache(classOrObject, KtUltraLightClass.forceUsingOldLightClasses), OUT_OF_CODE_BLOCK_MODIFICATION_COUNT)
+                    .create(
+                        createNoCache(classOrObject, KtUltraLightSupport.forceUsingOldLightClasses),
+                        KotlinModificationTrackerService.getInstance(classOrObject.project).outOfBlockModificationTracker
+                    )
             }
 
         fun createNoCache(classOrObject: KtClassOrObject, forceUsingOldLightClasses: Boolean): KtLightClassForSourceDeclaration? {
@@ -466,16 +447,6 @@ abstract class KtLightClassForSourceDeclaration(
     override val originKind: LightClassOriginKind
         get() = LightClassOriginKind.SOURCE
 
-    private class KtLightClassModifierList(containingClass: KtLightClassForSourceDeclaration) :
-        KtLightModifierList<KtLightClassForSourceDeclaration>(containingClass) {
-
-        private val modifiers by lazyPub { containingClass.computeModifiers() }
-
-        override fun hasModifierProperty(name: String): Boolean =
-            if (name != PsiModifier.FINAL) name in modifiers else owner.isFinal(PsiModifier.FINAL in modifiers)
-
-    }
-
     open fun isFinal(isFinalByPsi: Boolean): Boolean {
         // annotations can make class open via 'allopen' plugin
         if (!isPossiblyAffectedByAllOpen() || !isFinalByPsi) return isFinalByPsi
@@ -488,10 +459,8 @@ fun KtLightClassForSourceDeclaration.isPossiblyAffectedByAllOpen() =
     !isAnnotationType && !isInterface && kotlinOrigin.annotationEntries.isNotEmpty()
 
 fun getOutermostClassOrObject(classOrObject: KtClassOrObject): KtClassOrObject {
-    val outermostClass = KtPsiUtil.getOutermostClassOrObject(classOrObject)
+    return KtPsiUtil.getOutermostClassOrObject(classOrObject)
         ?: throw IllegalStateException("Attempt to build a light class for a local class: " + classOrObject.text)
-
-    return outermostClass
 }
 
 interface LightClassInheritanceHelper {

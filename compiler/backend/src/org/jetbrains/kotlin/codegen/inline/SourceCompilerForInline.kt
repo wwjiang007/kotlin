@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -48,11 +48,7 @@ interface SourceCompilerForInline {
 
     val lazySourceMapper: DefaultSourceMapper
 
-    fun generateLambdaBody(
-        adapter: MethodVisitor,
-        jvmMethodSignature: JvmMethodSignature,
-        lambdaInfo: ExpressionLambda
-    ): SMAP
+    fun generateLambdaBody(lambdaInfo: ExpressionLambda): SMAPAndMethodNode
 
     fun doCreateMethodNodeFromSource(
         callableDescriptor: FunctionDescriptor,
@@ -122,20 +118,27 @@ class PsiSourceCompilerForInline(private val codegen: ExpressionCodegen, overrid
 
             val signature = codegen.state.typeMapper.mapSignatureSkipGeneric(context.functionDescriptor, context.contextKind)
             return InlineCallSiteInfo(
-                parentCodegen.className, signature.asmMethod.name, signature.asmMethod.descriptor, compilationContextFunctionDescriptor.isInlineOrInsideInline()
+                parentCodegen.className,
+                signature.asmMethod.name,
+                signature.asmMethod.descriptor,
+                compilationContextFunctionDescriptor.isInlineOrInsideInline(),
+                compilationContextFunctionDescriptor.isSuspend
             )
         }
 
     override val lazySourceMapper
         get() = codegen.parentCodegen.orCreateSourceMapper
 
-    override fun generateLambdaBody(
-        adapter: MethodVisitor,
-        jvmMethodSignature: JvmMethodSignature,
-        lambdaInfo: ExpressionLambda
-    ): SMAP {
+    override fun generateLambdaBody(lambdaInfo: ExpressionLambda): SMAPAndMethodNode {
         lambdaInfo as? PsiExpressionLambda ?: error("TODO")
         val invokeMethodDescriptor = lambdaInfo.invokeMethodDescriptor
+        val jvmMethodSignature = state.typeMapper.mapSignatureSkipGeneric(invokeMethodDescriptor)
+        val asmMethod = jvmMethodSignature.asmMethod
+        val methodNode = MethodNode(
+            Opcodes.API_VERSION, AsmUtil.getMethodAsmFlags(invokeMethodDescriptor, OwnerKind.IMPLEMENTATION, state),
+            asmMethod.name, asmMethod.descriptor, null, null
+        )
+        val adapter = wrapWithMaxLocalCalc(methodNode)
         val closureContext = when {
             lambdaInfo.isPropertyReference ->
                 codegen.getContext().intoAnonymousClass(lambdaInfo.classDescriptor, codegen, OwnerKind.IMPLEMENTATION)
@@ -146,12 +149,13 @@ class PsiSourceCompilerForInline(private val codegen: ExpressionCodegen, overrid
             else -> codegen.getContext().intoClosure(invokeMethodDescriptor, codegen, state.typeMapper)
         }
         val context = closureContext.intoInlinedLambda(invokeMethodDescriptor, lambdaInfo.isCrossInline, lambdaInfo.isPropertyReference)
-
-        return generateMethodBody(
+        val smap = generateMethodBody(
             adapter, invokeMethodDescriptor, context,
             lambdaInfo.functionWithBodyOrCallableReference,
             jvmMethodSignature, lambdaInfo
         )
+        adapter.visitMaxs(-1, -1)
+        return SMAPAndMethodNode(methodNode, smap)
     }
 
     private fun generateMethodBody(
@@ -171,7 +175,7 @@ class PsiSourceCompilerForInline(private val codegen: ExpressionCodegen, overrid
                 codegen.parentCodegen.className
             else
                 state.typeMapper.mapImplementationOwner(descriptor).internalName,
-            if (isLambda) emptyList() else additionalInnerClasses,
+            if (isLambda) emptyList<ClassDescriptor>() else additionalInnerClasses,
             isLambda
         )
 
@@ -387,7 +391,7 @@ class PsiSourceCompilerForInline(private val codegen: ExpressionCodegen, overrid
 
             return when (descriptor) {
                 is ScriptDescriptor -> {
-                    val earlierScripts = state.replSpecific.earlierScriptsForReplInterpreter
+                    val earlierScripts = state.scriptSpecific.earlierScriptsForReplInterpreter
                     containerContext.intoScript(
                         descriptor,
                         earlierScripts ?: emptyList(),

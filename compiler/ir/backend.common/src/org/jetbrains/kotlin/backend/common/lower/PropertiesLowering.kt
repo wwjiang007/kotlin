@@ -30,7 +30,8 @@ class PropertiesLowering(
     private val context: BackendContext,
     private val originOfSyntheticMethodForAnnotations: IrDeclarationOrigin? = null,
     private val skipExternalProperties: Boolean = false,
-    private val computeSyntheticMethodName: ((Name) -> String)? = null
+    private val generateAnnotationFields: Boolean = false,
+    private val computeSyntheticMethodName: ((IrProperty) -> String)? = null
 ) : IrElementTransformerVoid(), FileLoweringPass {
     override fun lower(irFile: IrFile) {
         irFile.accept(this, null)
@@ -53,7 +54,7 @@ class PropertiesLowering(
             if (skipExternalProperties && declaration.isEffectivelyExternal()) listOf(declaration) else {
                 ArrayList<IrDeclaration>(4).apply {
                     // JvmFields in a companion object refer to companion's owners and should not be generated within companion.
-                    if (kind != ClassKind.ANNOTATION_CLASS && declaration.backingField?.parent == declaration.parent) {
+                    if (generateAnnotationFields || (kind != ClassKind.ANNOTATION_CLASS && declaration.backingField?.parent == declaration.parent)) {
                         addIfNotNull(declaration.backingField)
                     }
                     addIfNotNull(declaration.getter)
@@ -62,7 +63,7 @@ class PropertiesLowering(
                     if (declaration.annotations.isNotEmpty() && originOfSyntheticMethodForAnnotations != null
                         && computeSyntheticMethodName != null
                     ) {
-                        val methodName = computeSyntheticMethodName.invoke(declaration.name) // Workaround KT-4113
+                        val methodName = computeSyntheticMethodName.invoke(declaration) // Workaround KT-4113
                         add(createSyntheticMethodForAnnotations(declaration, originOfSyntheticMethodForAnnotations, methodName))
                     }
                 }

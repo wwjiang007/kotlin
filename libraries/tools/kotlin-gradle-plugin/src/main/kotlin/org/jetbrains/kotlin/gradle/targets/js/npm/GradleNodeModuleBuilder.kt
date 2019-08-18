@@ -18,7 +18,7 @@ import java.io.File
 internal class GradleNodeModuleBuilder(
     val project: Project,
     val dependency: ResolvedDependency,
-    val artifacts: Set<ResolvedArtifact>,
+    val artifacts: Collection<ResolvedArtifact>,
     val cache: GradleNodeModulesCache
 ) {
     var srcPackageJsonFile: File? = null
@@ -39,7 +39,7 @@ internal class GradleNodeModuleBuilder(
         }
     }
 
-    fun rebuild(): PackageJson? {
+    fun rebuild(): File? {
         if (files.isEmpty()) return null
 
         val packageJson = srcPackageJsonFile?.reader()?.use {
@@ -75,33 +75,12 @@ private fun isKotlinJsRuntimeFile(file: File): Boolean {
             || name.endsWith(".js.map")
 }
 
-internal fun fixSemver(version: String): String {
-    val c = version.split("-", limit = 2)
-    val main = c[0]
-    val preRelease = if (c.size > 1) c[1] else null
-    val numbers = main.split(".")
-    val major = numbers[0]
-    val minor = if (numbers.size > 1) numbers[1] else null
-    val patch = if (numbers.size > 2) numbers[2] else null
-    return buildString {
-        append(major.filter { it.isDigit() })
-        append(".")
-        append(minor?.filter { it.isDigit() } ?: "0")
-        append(".")
-        append(patch?.filter { it.isDigit() } ?: "0")
-        if (preRelease != null) {
-            append("-")
-            append(preRelease)
-        }
-    }
-}
-
 fun makeNodeModule(
     container: File,
     packageJson: PackageJson,
     files: (File) -> Unit
-): PackageJson {
-    val dir = container.resolve(packageJson.name)
+): File {
+    val dir = importedPackageDir(container, packageJson.name, packageJson.version)
 
     if (dir.exists()) dir.deleteRecursively()
 
@@ -119,5 +98,10 @@ fun makeNodeModule(
         gson.toJson(packageJson, it)
     }
 
-    return packageJson
+    return dir
 }
+
+fun importedPackageDir(container: File, name: String, version: String): File =
+    container.resolve(name).resolve(version)
+
+fun GradleNodeModule(dir: File) = GradleNodeModule(dir.parentFile.name, dir.name, dir)

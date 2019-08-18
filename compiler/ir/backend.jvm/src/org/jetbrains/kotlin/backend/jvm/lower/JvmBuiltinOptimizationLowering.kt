@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.backend.jvm.lower
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
 import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
+import org.jetbrains.kotlin.backend.jvm.lower.inlineclasses.unboxInlineClass
 import org.jetbrains.kotlin.codegen.intrinsics.Not
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
@@ -49,8 +50,8 @@ class JvmBuiltinOptimizationLowering(val context: JvmBackendContext) : FileLower
             // When used for null checks, it is safe to eliminate constants and local variable loads.
             // Even if a local variable of simple type is updated via the debugger it still cannot
             // be null.
-            return (right.isNullConst() && left.type.isPrimitiveType())
-                    || (left.isNullConst() && right.type.isPrimitiveType())
+            return (right.isNullConst() && left.type.unboxInlineClass().isPrimitiveType())
+                    || (left.isNullConst() && right.type.unboxInlineClass().isPrimitiveType())
         }
         return false
     }
@@ -114,10 +115,30 @@ class JvmBuiltinOptimizationLowering(val context: JvmBackendContext) : FileLower
                         expression.startOffset,
                         expression.endOffset,
                         context.irBuiltIns.booleanType,
-                        context.irIntrinsics.andandSymbol
+                        context.irBuiltIns.andandSymbol
                     ).apply {
-                        dispatchReceiver = expression.branches[0].condition
-                        putValueArgument(0, expression.branches[0].result)
+                        putValueArgument(0, expression.branches[0].condition)
+                        putValueArgument(1, expression.branches[0].result)
+                    }
+                }
+                if (expression.origin == IrStatementOrigin.OROR) {
+                    assert(
+                        expression.type.isBoolean()
+                                && expression.branches.size == 2
+                                && expression.branches[0].result.isTrueConst()
+                                && expression.branches[1].condition.isTrueConst()) {
+                        "OROR condition should have an 'if a then true' body on its first branch, " +
+                                "and an 'if true then b' body on its second branch. " +
+                                "Failing expression: ${expression.dump()}"
+                    }
+                    return IrCallImpl(
+                        expression.startOffset,
+                        expression.endOffset,
+                        context.irBuiltIns.booleanType,
+                        context.irBuiltIns.ororSymbol
+                    ).apply {
+                        putValueArgument(0, expression.branches[0].condition)
+                        putValueArgument(1, expression.branches[1].result)
                     }
                 }
                 // If the only condition that is left has a constant true condition remove the

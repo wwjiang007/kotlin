@@ -17,7 +17,7 @@ import org.jetbrains.kotlin.idea.completion.test.testCompletion
 import org.jetbrains.kotlin.idea.test.KotlinWithJdkAndRuntimeLightProjectDescriptor
 import org.jetbrains.kotlin.idea.test.PluginTestCaseBase
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
-import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatform
+import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import java.io.File
 
@@ -26,7 +26,7 @@ abstract class AbstractIdeReplCompletionTest : KotlinFixtureCompletionBaseTestCa
 
     override fun setUp() {
         super.setUp()
-        consoleRunner = KotlinConsoleKeeper.getInstance(project).run(myModule)!!
+        consoleRunner = KotlinConsoleKeeper.getInstance(project).run(module)!!
         VfsRootAccess.allowRootAccess(KotlinTestUtils.getHomeDirectory())
     }
 
@@ -37,7 +37,7 @@ abstract class AbstractIdeReplCompletionTest : KotlinFixtureCompletionBaseTestCa
         super.tearDown()
     }
 
-    override fun getPlatform() = JvmPlatform
+    override fun getPlatform() = JvmPlatforms.unspecifiedJvmPlatform
     override fun defaultCompletionType() = CompletionType.BASIC
 
     override fun doTest(testPath: String) {

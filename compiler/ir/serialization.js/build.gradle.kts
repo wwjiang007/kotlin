@@ -10,9 +10,12 @@ dependencies {
 
     compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
 
+    testCompile(intellijCoreDep()) { includeJars("intellij-core") }
     testCompile(project(":compiler:frontend"))
     testCompile(project(":compiler:cli"))
     testCompile(project(":compiler:util"))
+
+    testRuntime(intellijDep()) { includeJars("picocontainer", "trove4j", "guava", "jdom", rootProject = rootProject) }
 }
 
 sourceSets {
@@ -111,6 +114,7 @@ val reducedRuntimeSources by task<Sync> {
                 "libraries/stdlib/js/src/kotlin/char.kt",
                 "libraries/stdlib/js/src/kotlin/collections.kt",
                 "libraries/stdlib/js/src/kotlin/collections/**",
+                "libraries/stdlib/js/src/kotlin/time/**",
                 "libraries/stdlib/js/src/kotlin/console.kt",
                 "libraries/stdlib/js/src/kotlin/coreDeprecated.kt",
                 "libraries/stdlib/js/src/kotlin/date.kt",
@@ -126,6 +130,7 @@ val reducedRuntimeSources by task<Sync> {
                 "libraries/stdlib/src/kotlin/properties/Delegates.kt",
                 "libraries/stdlib/src/kotlin/random/URandom.kt",
                 "libraries/stdlib/src/kotlin/text/**",
+                "libraries/stdlib/src/kotlin/time/**",
                 "libraries/stdlib/src/kotlin/util/KotlinVersion.kt",
                 "libraries/stdlib/src/kotlin/util/Tuples.kt",
                 "libraries/stdlib/js/src/kotlin/dom/**",
@@ -154,22 +159,32 @@ fun JavaExec.buildKLib(sources: List<String>, dependencies: List<String>, outPat
     passClasspathInJar()
 }
 
+val fullRuntimeDir = buildDir.resolve("fullRuntime/klib")
+
 val generateFullRuntimeKLib by task<NoDebugJavaExec> {
     dependsOn(fullRuntimeSources)
 
     buildKLib(sources = listOf(fullRuntimeSources.outputs.files.singleFile.path),
               dependencies = emptyList(),
-              outPath = "$buildDir/fullRuntime/klib/JS_IR_RUNTIME.klm",
+              outPath = fullRuntimeDir.absolutePath,
               commonSources = listOf("common", "src", "unsigned").map { "$buildDir/fullRuntime/src/libraries/stdlib/$it" }
     )
+}
+
+val packFullRuntimeKLib by tasks.registering(Jar::class) {
+    dependsOn(generateFullRuntimeKLib)
+    from(fullRuntimeDir)
+    destinationDirectory.set(rootProject.buildDir.resolve("js-ir-runtime"))
+    archiveFileName.set("full-runtime.klib")
 }
 
 val generateReducedRuntimeKLib by task<NoDebugJavaExec> {
     dependsOn(reducedRuntimeSources)
 
+    val outPath = buildDir.resolve("reducedRuntime/klib").absolutePath
     buildKLib(sources = listOf(reducedRuntimeSources.outputs.files.singleFile.path),
               dependencies = emptyList(),
-              outPath = "$buildDir/reducedRuntime/klib/JS_IR_RUNTIME.klm",
+              outPath = outPath,
               commonSources = listOf("common", "src", "unsigned").map { "$buildDir/reducedRuntime/src/libraries/stdlib/$it" }
     )
 }
@@ -183,8 +198,8 @@ val generateKotlinTestKLib by task<NoDebugJavaExec> {
 
     buildKLib(
         sources = listOf("$rootDir/libraries/kotlin.test/js/src/main") + kotlinTestCommonSources,
-        dependencies = listOf("${generateFullRuntimeKLib.outputs.files.singleFile.path}/JS_IR_RUNTIME.klm"),
-        outPath = "$buildDir/kotlin.test/klib/kotlin.test.klm",
+        dependencies = listOf("${generateFullRuntimeKLib.outputs.files.singleFile.path}/klib"),
+        outPath = "$buildDir/kotlin.test/klib",
         commonSources = kotlinTestCommonSources
     )
 }

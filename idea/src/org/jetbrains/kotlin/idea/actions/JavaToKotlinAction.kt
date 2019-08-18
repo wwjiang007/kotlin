@@ -24,9 +24,11 @@ import com.intellij.ide.scratch.ScratchRootType
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.actionSystem.LangDataKeys
 import com.intellij.openapi.command.CommandProcessor
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.module.Module
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.MessageType
@@ -34,6 +36,7 @@ import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.ui.ex.MessagesEx
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.util.Key
+import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileVisitor
@@ -44,19 +47,19 @@ import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.idea.KotlinFileType
+import org.jetbrains.kotlin.idea.core.util.toPsiFile
 import org.jetbrains.kotlin.idea.j2k.IdeaJavaToKotlinServices
-import org.jetbrains.kotlin.idea.j2k.JavaToKotlinConverterFactory
-import org.jetbrains.kotlin.idea.refactoring.toPsiFile
+import org.jetbrains.kotlin.idea.j2k.J2kPostProcessor
 import org.jetbrains.kotlin.idea.util.application.executeWriteCommand
 import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.idea.util.isRunningInCidrIde
-import org.jetbrains.kotlin.j2k.ConverterSettings
-import org.jetbrains.kotlin.j2k.FilesResult
+import org.jetbrains.kotlin.j2k.*
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.UserDataProperty
 import java.io.File
 import java.io.IOException
 import java.util.*
+import kotlin.system.measureTimeMillis
 
 var VirtualFile.pathBeforeJ2K: String? by UserDataProperty(Key.create<String>("PATH_BEFORE_J2K_CONVERSION"))
 
@@ -80,25 +83,29 @@ class JavaToKotlinAction : AnAction() {
             for ((psiFile, text) in javaFiles.zip(convertedTexts)) {
                 try {
                     val document = PsiDocumentManager.getInstance(psiFile.project).getDocument(psiFile)
-                    if (document == null) {
-                        MessagesEx.error(psiFile.project, "Failed to save conversion result: couldn't find document for " + psiFile.name).showLater()
+                    val errorMessage = when {
+                        document == null -> "couldn't find document for ${psiFile.name}"
+                        !document.isWritable -> "file `${psiFile.name}` is read-only"
+                        else -> null
+                    }
+                    if (errorMessage != null) {
+                        MessagesEx.error(psiFile.project, "Failed to save conversion result: $errorMessage")
+                            .showLater()
                         continue
                     }
-                    document.replaceString(0, document.textLength, text)
+                    document!!.replaceString(0, document.textLength, text)
                     FileDocumentManager.getInstance().saveDocument(document)
 
                     val virtualFile = psiFile.virtualFile
                     if (ScratchRootType.getInstance().containsFile(virtualFile)) {
                         val mapping = ScratchFileService.getInstance().scratchesMapping
                         mapping.setMapping(virtualFile, KotlinFileType.INSTANCE.language)
-                    }
-                    else {
+                    } else {
                         val fileName = uniqueKotlinFileName(virtualFile)
                         virtualFile.pathBeforeJ2K = virtualFile.path
                         virtualFile.rename(this, fileName)
                     }
-                }
-                catch (e: IOException) {
+                } catch (e: IOException) {
                     MessagesEx.error(psiFile.project, e.message ?: "").showLater()
                 }
             }
@@ -106,49 +113,82 @@ class JavaToKotlinAction : AnAction() {
         }
 
         fun convertFiles(
-            javaFiles: List<PsiJavaFile>, project: Project,
+            javaFiles: List<PsiJavaFile>,
+            project: Project,
+            module: Module,
             enableExternalCodeProcessing: Boolean = true,
-            askExternalCodeProcessing: Boolean = true
+            askExternalCodeProcessing: Boolean = true,
+            forceUsingOldJ2k: Boolean = false
         ): List<KtFile> {
             var converterResult: FilesResult? = null
             fun convert() {
                 val converter =
-                    JavaToKotlinConverterFactory.createJavaToKotlinConverter(
+                    if (forceUsingOldJ2k) OldJavaToKotlinConverter(
                         project,
+                        ConverterSettings.defaultSettings,
+                        IdeaJavaToKotlinServices
+                    ) else J2kConverterExtension.extension().createJavaToKotlinConverter(
+                        project,
+                        module,
                         ConverterSettings.defaultSettings,
                         IdeaJavaToKotlinServices
                     )
                 converterResult = converter.filesToKotlin(
                     javaFiles,
-                    JavaToKotlinConverterFactory.createPostProcessor(formatCode = true),
+                    if (forceUsingOldJ2k) J2kPostProcessor(formatCode = true)
+                    else J2kConverterExtension.extension().createPostProcessor(formatCode = true),
                     progress = ProgressManager.getInstance().progressIndicator!!
+                )
+            }
+
+            fun convertWithStatistics() {
+                val conversionTime = measureTimeMillis {
+                    convert()
+                }
+                val linesCount = javaFiles.sumBy { StringUtil.getLineBreakCount(it.text) }
+                logJ2kConversionStatistics(
+                    ConversionType.FILES,
+                    J2kConverterExtension.isNewJ2k,
+                    conversionTime,
+                    linesCount,
+                    javaFiles.size
                 )
             }
 
 
             if (!ProgressManager.getInstance().runProcessWithProgressSynchronously(
-                    ::convert,
+                    ::convertWithStatistics,
                     title,
                     true,
-                    project)) return emptyList()
+                    project
+                )
+            ) return emptyList()
 
 
             var externalCodeUpdate: (() -> Unit)? = null
 
             if (enableExternalCodeProcessing && converterResult!!.externalCodeProcessing != null) {
-                val question = "Some code in the rest of your project may require corrections after performing this conversion. Do you want to find such code and correct it too?"
-                if (!askExternalCodeProcessing || (Messages.showYesNoDialog(project, question, title, Messages.getQuestionIcon()) == Messages.YES)) {
+                val question =
+                    "Some code in the rest of your project may require corrections after performing this conversion. Do you want to find such code and correct it too?"
+                if (!askExternalCodeProcessing || (Messages.showYesNoDialog(
+                        project,
+                        question,
+                        title,
+                        Messages.getQuestionIcon()
+                    ) == Messages.YES)
+                ) {
                     ProgressManager.getInstance().runProcessWithProgressSynchronously(
-                            {
-                                runReadAction {
-                                    externalCodeUpdate = converterResult!!.externalCodeProcessing!!.prepareWriteOperation(
-                                        ProgressManager.getInstance().progressIndicator!!
-                                    )
-                                }
-                            },
-                            title,
-                            true,
-                            project)
+                        {
+                            runReadAction {
+                                externalCodeUpdate = converterResult!!.externalCodeProcessing!!.prepareWriteOperation(
+                                    ProgressManager.getInstance().progressIndicator!!
+                                )
+                            }
+                        },
+                        title,
+                        true,
+                        project
+                    )
                 }
             }
 
@@ -182,13 +222,17 @@ class JavaToKotlinAction : AnAction() {
                 .showInCenterOf(statusBar.component)
         }
 
+
+        val module = e.getData(LangDataKeys.MODULE)!!
+        if (!J2kConverterExtension.extension().doCheckBeforeConversion(project, module)) return
+
         val firstSyntaxError = javaFiles.asSequence().map { PsiTreeUtil.findChildOfType(it, PsiErrorElement::class.java) }.firstOrNull()
 
         if (firstSyntaxError != null) {
             val count = javaFiles.filter { PsiTreeUtil.hasErrorElements(it) }.count()
             val question = firstSyntaxError.containingFile.name +
-                           (if (count > 1) " and ${count - 1} more Java files" else " file") +
-                           " contain syntax errors, the conversion result may be incorrect"
+                    (if (count > 1) " and ${count - 1} more Java files" else " file") +
+                    " contain syntax errors, the conversion result may be incorrect"
 
             val okText = "Investigate Errors"
             val cancelText = "Proceed with Conversion"
@@ -199,13 +243,14 @@ class JavaToKotlinAction : AnAction() {
                     okText,
                     cancelText,
                     Messages.getWarningIcon()
-            ) == Messages.OK) {
+                ) == Messages.OK
+            ) {
                 NavigationUtil.activateFileWithPsiElement(firstSyntaxError.navigationElement)
                 return
             }
         }
 
-        convertFiles(javaFiles, project)
+        convertFiles(javaFiles, project, module)
     }
 
     override fun update(e: AnActionEvent) {
@@ -237,8 +282,8 @@ class JavaToKotlinAction : AnAction() {
     private fun allJavaFiles(filesOrDirs: Array<VirtualFile>, project: Project): Sequence<PsiJavaFile> {
         val manager = PsiManager.getInstance(project)
         return allFiles(filesOrDirs)
-                .asSequence()
-                .mapNotNull { manager.findFile(it) as? PsiJavaFile }
+            .asSequence()
+            .mapNotNull { manager.findFile(it) as? PsiJavaFile }
     }
 
     private fun allFiles(filesOrDirs: Array<VirtualFile>): Collection<VirtualFile> {

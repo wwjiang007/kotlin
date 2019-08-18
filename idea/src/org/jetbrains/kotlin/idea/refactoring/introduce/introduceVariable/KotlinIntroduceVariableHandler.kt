@@ -42,7 +42,7 @@ import org.jetbrains.kotlin.descriptors.ValueParameterDescriptor
 import org.jetbrains.kotlin.idea.analysis.analyzeInContext
 import org.jetbrains.kotlin.idea.analysis.computeTypeInfoInContext
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
-import org.jetbrains.kotlin.idea.codeInsight.CodeInsightUtils
+import org.jetbrains.kotlin.idea.core.util.CodeInsightUtils
 import org.jetbrains.kotlin.idea.core.*
 import org.jetbrains.kotlin.idea.intentions.ConvertToBlockBodyIntention
 import org.jetbrains.kotlin.idea.refactoring.*
@@ -93,7 +93,7 @@ object KotlinIntroduceVariableHandler : RefactoringActionHandler {
         }
 
         override fun equalTypes(a: KotlinType, b: KotlinType): Boolean {
-            return with(NewKotlinTypeChecker) {
+            return with(NewKotlinTypeChecker.Default) {
                 ContextImpl().equalTypes(a.unwrap(), b.unwrap())
             }
         }
@@ -644,7 +644,9 @@ object KotlinIntroduceVariableHandler : RefactoringActionHandler {
                     return occurrence.extractableSubstringInfo?.contentRange ?: occurrence.textRange
                 }
             }
-            chooser.showChooser(expression, allOccurrences, callback)
+            ApplicationManager.getApplication().invokeLater {
+                chooser.showChooser(expression, allOccurrences, callback)
+            }
         }
         else {
             callback.pass(OccurrencesChooser.ReplaceChoice.ALL)

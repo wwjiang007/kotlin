@@ -24,8 +24,10 @@ import org.jetbrains.kotlin.resolve.calls.inference.model.NewConstraintSystemImp
 import org.jetbrains.kotlin.resolve.calls.inference.model.NewTypeVariable
 import org.jetbrains.kotlin.resolve.calls.model.*
 import org.jetbrains.kotlin.resolve.calls.tower.*
+import org.jetbrains.kotlin.resolve.calls.util.FakeCallableDescriptorForObject
 import org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver
 import org.jetbrains.kotlin.types.StubType
+import org.jetbrains.kotlin.types.TypeApproximator
 import org.jetbrains.kotlin.types.TypeConstructor
 import org.jetbrains.kotlin.types.UnwrappedType
 import org.jetbrains.kotlin.types.expressions.DoubleColonExpressionResolver
@@ -46,7 +48,8 @@ class CoroutineInferenceSession(
     private val argumentTypeResolver: ArgumentTypeResolver,
     private val doubleColonExpressionResolver: DoubleColonExpressionResolver,
     private val deprecationResolver: DeprecationResolver,
-    private val moduleDescriptor: ModuleDescriptor
+    private val moduleDescriptor: ModuleDescriptor,
+    private val typeApproximator: TypeApproximator
 ) : ManyCandidatesResolver<CallableDescriptor>(
     psiCallResolver, postponedArgumentsAnalyzer, kotlinConstraintSystemCompleter, callComponents, builtIns
 ) {
@@ -57,6 +60,8 @@ class CoroutineInferenceSession(
 
     override fun addCompletedCallInfo(callInfo: CompletedCallInfo) {
         require(callInfo is PSICompletedCallInfo) { "Wrong instance of callInfo: $callInfo" }
+
+        if (skipCall(callInfo.callResolutionResult)) return
 
         commonCalls.add(callInfo)
 
@@ -71,8 +76,15 @@ class CoroutineInferenceSession(
         }
     }
 
-    override fun writeOnlyStubs(): Boolean {
-        return true
+    override fun writeOnlyStubs(callInfo: SingleCallResolutionResult): Boolean {
+        return !skipCall(callInfo)
+    }
+
+    private fun skipCall(callInfo: SingleCallResolutionResult): Boolean {
+        // FakeCallableDescriptorForObject can't introduce new information for inference, so it's safe to complete it fully
+        if (callInfo.resultCallAtom.candidateDescriptor is FakeCallableDescriptorForObject) return true
+
+        return false
     }
 
     override fun currentConstraintSystem(): ConstraintStorage {
@@ -210,13 +222,15 @@ class CoroutineInferenceSession(
         return ResolvedAtomCompleter(
             resultSubstitutor, context, kotlinToResolvedCallTransformer,
             expressionTypingServices, argumentTypeResolver, doubleColonExpressionResolver, builtIns,
-            deprecationResolver, moduleDescriptor, context.dataFlowValueFactory
+            deprecationResolver, moduleDescriptor, context.dataFlowValueFactory, typeApproximator
         )
     }
 }
 
 class ComposedSubstitutor(val left: NewTypeSubstitutor, val right: NewTypeSubstitutor) : NewTypeSubstitutor {
     override fun substituteNotNullTypeWithConstructor(constructor: TypeConstructor): UnwrappedType? {
-        return left.safeSubstitute(right.substituteNotNullTypeWithConstructor(constructor) ?: return null)
+        return left.substituteNotNullTypeWithConstructor(
+            right.substituteNotNullTypeWithConstructor(constructor)?.constructor ?: constructor
+        )
     }
 }

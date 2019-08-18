@@ -1,5 +1,7 @@
 package test
 
+import java.util.ArrayList
+
 class Test {
     private var myProp: String? = null
     private var myIntProp: Int? = null
@@ -35,8 +37,8 @@ class Test {
     }
 
     fun test7() {
-        val list: MutableList<Int> = ArrayList()
-        list.remove(myIntProp!!)
+        val list: MutableList<Int?> = ArrayList()
+        list.remove(myIntProp)
     }
 
     fun foo1(s: String) {}

@@ -5,10 +5,12 @@
 
 package org.jetbrains.kotlin.fir.expressions
 
+import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.fir.expressions.impl.FirCallWithArgumentList
 import org.jetbrains.kotlin.fir.visitors.FirVisitor
 
-interface FirOperatorCall : FirCall {
-    val operation: FirOperation
+abstract class FirOperatorCall(psi: PsiElement?) : FirCallWithArgumentList(psi) {
+    abstract val operation: FirOperation
 
     override fun <R, D> accept(visitor: FirVisitor<R, D>, data: D): R =
         visitor.visitOperatorCall(this, data)

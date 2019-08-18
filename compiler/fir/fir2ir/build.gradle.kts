@@ -19,7 +19,7 @@ dependencies {
 
     compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
 
-    testCompileOnly(intellijDep()) { includeJars("openapi", "idea", "idea_rt", "util", "asm-all", rootProject = rootProject) }
+    testCompileOnly(intellijDep())
 
     testRuntime(intellijDep())
 
@@ -32,6 +32,10 @@ dependencies {
     testCompileOnly(project(":kotlin-reflect-api"))
     testRuntime(project(":kotlin-reflect"))
 
+    Platform[192].orHigher {
+        testCompileOnly(intellijCoreDep()) { includeJars("intellij-core") }
+        testRuntimeOnly(intellijCoreDep()) { includeJars("intellij-core") }
+    }
 }
 
 sourceSets {

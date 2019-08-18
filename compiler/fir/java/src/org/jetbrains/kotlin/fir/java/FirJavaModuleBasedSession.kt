@@ -15,6 +15,9 @@ import org.jetbrains.kotlin.fir.resolve.FirSymbolProvider
 import org.jetbrains.kotlin.fir.resolve.impl.FirCompositeSymbolProvider
 import org.jetbrains.kotlin.fir.resolve.impl.FirDependenciesSymbolProviderImpl
 import org.jetbrains.kotlin.fir.resolve.impl.FirLibrarySymbolProviderImpl
+import org.jetbrains.kotlin.fir.resolve.impl.FirProviderImpl
+import org.jetbrains.kotlin.fir.scopes.impl.FirClassDeclaredMemberScopeProvider
+import org.jetbrains.kotlin.fir.types.FirCorrespondingSupertypesCache
 import org.jetbrains.kotlin.load.java.JavaClassFinder
 import org.jetbrains.kotlin.load.java.JavaClassFinderImpl
 import org.jetbrains.kotlin.load.kotlin.KotlinClassFinder
@@ -23,12 +26,17 @@ import org.jetbrains.kotlin.load.kotlin.VirtualFileFinderFactory
 
 class FirJavaModuleBasedSession(
     moduleInfo: ModuleInfo,
-    override val sessionProvider: FirProjectSessionProvider,
+    sessionProvider: FirProjectSessionProvider,
     scope: GlobalSearchScope,
     dependenciesProvider: FirSymbolProvider? = null
-) : FirModuleBasedSession(moduleInfo) {
+) : FirModuleBasedSession(moduleInfo, sessionProvider) {
+
+
     init {
         sessionProvider.sessionCache[moduleInfo] = this
+        val firProvider = FirProviderImpl(this)
+        registerComponent(FirProvider::class, firProvider)
+
         registerComponent(
             FirSymbolProvider::class,
             FirCompositeSymbolProvider(
@@ -37,35 +45,52 @@ class FirJavaModuleBasedSession(
                     JavaSymbolProvider(this, sessionProvider.project, scope),
                     dependenciesProvider ?: FirDependenciesSymbolProviderImpl(this)
                 )
-            )
+            ) as FirSymbolProvider
+        )
+
+        registerComponent(
+            FirCorrespondingSupertypesCache::class,
+            FirCorrespondingSupertypesCache(this)
         )
     }
 }
 
 class FirLibrarySession private constructor(
     moduleInfo: ModuleInfo,
-    override val sessionProvider: FirProjectSessionProvider,
+    sessionProvider: FirProjectSessionProvider,
     scope: GlobalSearchScope,
     packagePartProvider: PackagePartProvider,
     kotlinClassFinder: KotlinClassFinder,
     javaClassFinder: JavaClassFinder
-) : FirSessionBase() {
+) : FirSessionBase(sessionProvider) {
+
+
     init {
         sessionProvider.sessionCache[moduleInfo] = this
+        val javaSymbolProvider = JavaSymbolProvider(this, sessionProvider.project, scope)
+
         registerComponent(
             FirSymbolProvider::class,
             FirCompositeSymbolProvider(
                 listOf(
+                    FirLibrarySymbolProviderImpl(this),
                     KotlinDeserializedJvmSymbolsProvider(
                         this, sessionProvider.project,
-                        packagePartProvider, kotlinClassFinder,
+                        packagePartProvider,
+                        javaSymbolProvider,
+                        kotlinClassFinder,
                         javaClassFinder
                     ),
-                    FirLibrarySymbolProviderImpl(this),
-                    JavaSymbolProvider(this, sessionProvider.project, scope),
+                    javaSymbolProvider,
                     FirDependenciesSymbolProviderImpl(this)
                 )
-            )
+            ) as FirSymbolProvider
+        )
+        registerComponent(FirClassDeclaredMemberScopeProvider::class, FirClassDeclaredMemberScopeProvider())
+
+        registerComponent(
+            FirCorrespondingSupertypesCache::class,
+            FirCorrespondingSupertypesCache(this)
         )
     }
 

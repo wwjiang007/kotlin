@@ -1,5 +1,6 @@
 import javaApi.JavaClass
 import kotlinApi.KotlinClass
+import java.util.HashMap
 
 internal class X {
     operator fun get(index: Int): Int {
@@ -8,7 +9,7 @@ internal class X {
 }
 
 internal class C {
-    fun foo(map: HashMap<String, String?>): String? {
+    fun foo(map: HashMap<String, String>): String? {
         return map["a"]
     }
 

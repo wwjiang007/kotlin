@@ -25,6 +25,9 @@ FILE: destructuring.kt
             ^component3 R|/Some.third|
         }
 
+        public final fun copy(first: Int = R|/Some.first|, second: Double = R|/Some.second|, third: String = R|/Some.third|): R|Some| {
+        }
+
     }
     public? final? fun foo(some: Some): kotlin/Unit {
         lval <destruct>: <implicit> = some#

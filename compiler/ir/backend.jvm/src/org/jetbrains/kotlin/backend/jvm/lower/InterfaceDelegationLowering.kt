@@ -15,6 +15,7 @@ import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
 import org.jetbrains.kotlin.backend.jvm.codegen.isJvmInterface
+import org.jetbrains.kotlin.backend.jvm.ir.hasJvmDefault
 import org.jetbrains.kotlin.codegen.OwnerKind
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.descriptors.Modality
@@ -22,14 +23,19 @@ import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.descriptors.deserialization.PLATFORM_DEPENDENT_ANNOTATION_FQ_NAME
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
-import org.jetbrains.kotlin.ir.builders.*
-import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.builders.irBlockBody
+import org.jetbrains.kotlin.ir.builders.irCall
+import org.jetbrains.kotlin.ir.builders.irGet
+import org.jetbrains.kotlin.ir.builders.irReturn
+import org.jetbrains.kotlin.ir.declarations.IrClass
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
+import org.jetbrains.kotlin.ir.declarations.IrFile
+import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.impl.IrSimpleFunctionSymbolImpl
-import org.jetbrains.kotlin.ir.types.defaultType
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.*
 import org.jetbrains.kotlin.name.Name
@@ -80,7 +86,7 @@ private class InterfaceDelegationLowering(val context: JvmBackendContext) : IrEl
             // (Otherwise, delegation will be present in the parent class)
             if (!isDefaultImplsGeneration &&
                 function.overriddenSymbols.any {
-                    !it.owner.parentAsClass.isInterface &&
+                    (!it.owner.parentAsClass.isInterface || it.owner.hasJvmDefault()) &&
                             it.owner.modality != Modality.ABSTRACT
                 }
             ) {
@@ -199,7 +205,35 @@ private class InterfaceSuperCallsLowering(val context: JvmBackendContext) : IrEl
         if (superCallee.isDefinitelyNotDefaultImplsMethod()) return super.visitCall(expression)
 
         val redirectTarget = context.declarationFactory.getDefaultImplsFunction(superCallee)
-        val newCall = irCall(expression, redirectTarget, dispatchReceiverAsFirstArgument = true)
+        val newCall = irCall(expression, redirectTarget, receiversAsArguments = true)
+
+        return super.visitCall(newCall)
+    }
+}
+
+internal val interfaceDefaultCallsPhase = makeIrFilePhase(
+    lowering = ::InterfaceDefaultCallsLowering,
+    name = "InterfaceDefaultCalls",
+    description = "Redirect interface calls with default arguments to DefaultImpls"
+)
+
+private class InterfaceDefaultCallsLowering(val context: JvmBackendContext) : IrElementTransformerVoid(), FileLoweringPass {
+
+    override fun lower(irFile: IrFile) {
+        irFile.transformChildrenVoid(this)
+    }
+
+    override fun visitCall(expression: IrCall): IrExpression {
+        val callee = expression.symbol.owner
+
+        if (callee.parent.safeAs<IrClass>()?.isInterface != true ||
+            callee.origin != IrDeclarationOrigin.FUNCTION_FOR_DEFAULT_PARAMETER
+        ) {
+            return super.visitCall(expression)
+        }
+
+        val redirectTarget = context.declarationFactory.getDefaultImplsFunction(callee as IrSimpleFunction)
+        val newCall = irCall(expression, redirectTarget, receiversAsArguments = true)
 
         return super.visitCall(newCall)
     }

@@ -78,12 +78,11 @@ private fun isFunctionalTypeWithReceiver(typeRef: FirTypeRef) =
         coneTypeSafe.lookupTag.classId.asString() == "kotlin/ExtensionFunctionType"
     }
 
-private val ConeKotlinType.returnType: ConeKotlinType
+private val ConeKotlinType.returnType: ConeKotlinType?
     get() {
         require(this is ConeClassType)
         val projection = typeArguments.last()
-        require(projection is ConeTypedProjection)
-        return projection.type
+        return (projection as? ConeTypedProjection)?.type
     }
 
 private val ConeKotlinType.valueParameterTypes: List<ConeKotlinType?>
@@ -130,7 +129,7 @@ private fun extraLambdaInfo(
     return ResolvedLambdaAtom(argument, isSuspend, receiverType, parameters, returnType, typeVariable.takeIf { newTypeVariableUsed })
 }
 
-private fun extractLambdaInfoFromFunctionalType(
+internal fun extractLambdaInfoFromFunctionalType(
     expectedType: ConeKotlinType?,
     expectedTypeRef: FirTypeRef,
     argument: FirAnonymousFunction
@@ -139,8 +138,8 @@ private fun extractLambdaInfoFromFunctionalType(
     val parameters = extractLambdaParameters(expectedType, argument)
 
     val argumentAsFunctionExpression = argument//.safeAs<FunctionExpression>()
-    val receiverType = argumentAsFunctionExpression?.receiverType ?: expectedType.receiverType(expectedTypeRef)
-    val returnType = argumentAsFunctionExpression?.returnType ?: expectedType.returnType
+    val receiverType = argumentAsFunctionExpression.receiverType ?: expectedType.receiverType(expectedTypeRef)
+    val returnType = argumentAsFunctionExpression.returnType ?: expectedType.returnType ?: return null
 
     return ResolvedLambdaAtom(
         argument,

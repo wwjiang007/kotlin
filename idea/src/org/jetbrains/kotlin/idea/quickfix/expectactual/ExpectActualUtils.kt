@@ -13,7 +13,7 @@ import org.jetbrains.kotlin.idea.caches.project.implementedDescriptors
 import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithContent
 import org.jetbrains.kotlin.idea.core.KotlinNameSuggester
 import org.jetbrains.kotlin.idea.core.findOrCreateDirectoryForPackage
-import org.jetbrains.kotlin.idea.core.getPackage
+import org.jetbrains.kotlin.idea.core.getFqNameWithImplicitPrefix
 import org.jetbrains.kotlin.idea.core.overrideImplement.MemberGenerateMode
 import org.jetbrains.kotlin.idea.core.overrideImplement.OverrideMemberChooserObject.BodyType.EMPTY_OR_TEMPLATE
 import org.jetbrains.kotlin.idea.core.overrideImplement.OverrideMemberChooserObject.BodyType.NO_BODY
@@ -25,22 +25,21 @@ import org.jetbrains.kotlin.idea.project.platform
 import org.jetbrains.kotlin.idea.refactoring.createKotlinFile
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.idea.util.hasDeclarationOf
+import org.jetbrains.kotlin.idea.util.hasInlineModifier
 import org.jetbrains.kotlin.idea.util.isEffectivelyActual
 import org.jetbrains.kotlin.idea.util.module
 import org.jetbrains.kotlin.js.descriptorUtils.getJetTypeFqName
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.platform.impl.isCommon
+import org.jetbrains.kotlin.platform.isCommon
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.hasActualModifier
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
-import org.jetbrains.kotlin.resolve.MultiTargetPlatform
 import org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker
 import org.jetbrains.kotlin.resolve.checkers.ExperimentalUsageChecker
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
-import org.jetbrains.kotlin.resolve.getMultiTargetPlatform
 import org.jetbrains.kotlin.types.AbbreviatedType
 import org.jetbrains.kotlin.types.KotlinType
 
@@ -57,7 +56,7 @@ fun createFileForDeclaration(module: Module, declaration: KtNamedDeclaration): K
         val fileNameWithExtension = "$fileName.kt"
         val existingFile = directory.findFile(fileNameWithExtension)
         val packageName =
-            if (packageDirective?.packageNameExpression == null) directory.getPackage()?.qualifiedName
+            if (packageDirective?.packageNameExpression == null) directory.getFqNameWithImplicitPrefix()?.asString()
             else packageDirective.fqName.asString()
         if (existingFile is KtFile) {
             val existingPackageDirective = existingFile.packageDirective
@@ -172,7 +171,7 @@ internal fun KtPsiFactory.generateClassOrObject(
     }
     declLoop@ for (originalDeclaration in originalClass.declarations.filter { !it.exists() }) {
         val descriptor = originalDeclaration.toDescriptor() ?: continue
-        if (generateExpectClass && !originalDeclaration.isEffectivelyActual()) continue
+        if (generateExpectClass && !originalDeclaration.isEffectivelyActual(false)) continue
         val generatedDeclaration: KtDeclaration = when (originalDeclaration) {
             is KtClassOrObject -> {
                 generateClassOrObject(project, generateExpectClass, originalDeclaration, outerClasses + generatedClass)
@@ -192,7 +191,7 @@ internal fun KtPsiFactory.generateClassOrObject(
         }
         generatedClass.addDeclaration(generatedDeclaration)
     }
-    if (!originalClass.isAnnotation()) {
+    if (!originalClass.isAnnotation() && !originalClass.hasInlineModifier()) {
         for (originalProperty in originalClass.primaryConstructorParameters) {
             if (!originalProperty.hasValOrVar() || !originalProperty.hasActualModifier()) continue
             val descriptor = originalProperty.toDescriptor() as? PropertyDescriptor ?: continue
@@ -203,7 +202,12 @@ internal fun KtPsiFactory.generateClassOrObject(
         }
     }
     val originalPrimaryConstructor = originalClass.primaryConstructor
-    if (generatedClass is KtClass && originalPrimaryConstructor != null && !originalPrimaryConstructor.exists()) {
+    if (
+        generatedClass is KtClass
+        && originalPrimaryConstructor != null
+        && (!generateExpectClass || originalPrimaryConstructor.hasActualModifier())
+        && !originalPrimaryConstructor.exists()
+    ) {
         val descriptor = originalPrimaryConstructor.toDescriptor()
         if (descriptor is FunctionDescriptor) {
             val expectedPrimaryConstructor = generateFunction(
@@ -290,12 +294,12 @@ private fun KotlinType.checkAccessibility(accessibleClasses: List<KtClassOrObjec
     }
     val classifierDescriptor = constructor.declarationDescriptor as? ClassifierDescriptorWithTypeParameters ?: return
     val moduleDescriptor = classifierDescriptor.module
-    if (moduleDescriptor.getMultiTargetPlatform() == MultiTargetPlatform.Common) {
+    if (moduleDescriptor.platform.isCommon()) {
         // Common classes are Ok; unfortunately this check does not work correctly for simple (non-expect) classes from common module
         return
     }
     val declaration = DescriptorToSourceUtils.descriptorToDeclaration(classifierDescriptor)
-    if (declaration?.module?.platform?.kind?.isCommon == true) {
+    if (declaration?.module?.platform?.isCommon() == true) {
         // Common classes are Ok again
         return
     }

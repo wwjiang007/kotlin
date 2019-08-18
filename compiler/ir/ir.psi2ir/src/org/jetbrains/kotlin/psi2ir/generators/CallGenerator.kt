@@ -67,15 +67,18 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
         endOffset: Int,
         call: CallBuilder
     ): IrExpression {
-        val targetType = descriptor.returnType!!.toIrType()
+        val targetKotlinType = descriptor.returnType!!
+        val targetType = targetKotlinType.toIrType()
 
         return IrTypeOperatorCallImpl(
             startOffset, endOffset,
             targetType,
             IrTypeOperator.SAM_CONVERSION,
             targetType,
-            targetType.classifierOrFail,
-            call.irValueArgumentsByIndex[0]!!
+            statementGenerator.castArgumentToFunctionalInterfaceForSamType(
+                call.irValueArgumentsByIndex[0]!!,
+                targetKotlinType
+            )
         )
     }
 
@@ -158,9 +161,8 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
             if (dispatchReceiver != null) throw AssertionError("Dispatch receiver should be null: $dispatchReceiver")
             if (extensionReceiver != null) throw AssertionError("Extension receiver should be null: $extensionReceiver")
             val constructorSymbol = context.symbolTable.referenceConstructor(constructorDescriptor.original)
-            val irResultType = constructorDescriptor.returnType.toIrType()
-            val irCall = IrEnumConstructorCallImpl(startOffset, endOffset, irResultType, constructorSymbol)
-            addParametersToCall(startOffset, endOffset, call, irCall, irResultType)
+            val irCall = IrEnumConstructorCallImpl(startOffset, endOffset, context.irBuiltIns.unitType, constructorSymbol)
+            addParametersToCall(startOffset, endOffset, call, irCall, context.irBuiltIns.unitType)
         }
     }
 
@@ -199,18 +201,19 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
                     )
                 } else {
                     val getterSymbol = context.symbolTable.referenceFunction(getMethodDescriptor.original)
-                    IrGetterCallImpl(
+                    IrCallImpl(
                         startOffset, endOffset,
                         irType,
                         getterSymbol,
                         getMethodDescriptor,
                         descriptor.typeParametersCount,
-                        dispatchReceiverValue?.load(),
-                        extensionReceiverValue?.load(),
+                        0,
                         IrStatementOrigin.GET_PROPERTY,
                         superQualifierSymbol
                     ).apply {
                         putTypeArguments(call.typeArguments) { it.toIrType() }
+                        dispatchReceiver = dispatchReceiverValue?.load()
+                        extensionReceiver = extensionReceiverValue?.load()
                     }
                 }
             }
