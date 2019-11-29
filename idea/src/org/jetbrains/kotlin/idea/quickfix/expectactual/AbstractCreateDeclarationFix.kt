@@ -5,23 +5,27 @@
 
 package org.jetbrains.kotlin.idea.quickfix.expectactual
 
+import com.intellij.codeInsight.actions.ReformatCodeAction
 import com.intellij.ide.util.EditorHelper
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.psi.codeStyle.CodeStyleManager
+import com.intellij.psi.formatter.FormatterUtil
 import org.jetbrains.kotlin.idea.core.ShortenReferences
 import org.jetbrains.kotlin.idea.quickfix.KotlinQuickFixAction
+import org.jetbrains.kotlin.idea.quickfix.TypeAccessibilityChecker
 import org.jetbrains.kotlin.idea.refactoring.introduce.showErrorHint
 import org.jetbrains.kotlin.idea.util.application.executeWriteCommand
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
+import java.util.*
 
 abstract class AbstractCreateDeclarationFix<D : KtNamedDeclaration>(
     declaration: D,
     protected val module: Module,
-    protected val generateIt: KtPsiFactory.(Project, D) -> D?
+    protected val generateIt: KtPsiFactory.(Project, TypeAccessibilityChecker, D) -> D?
 ) : KotlinQuickFixAction<D>(declaration) {
 
     override fun getFamilyName(): String = "Create expect / actual declaration"
@@ -53,10 +57,10 @@ abstract class AbstractCreateDeclarationFix<D : KtNamedDeclaration>(
         val factory = KtPsiFactory(project)
         DumbService.getInstance(project).runWhenSmart {
             val generated = try {
-                factory.generateIt(project, element) ?: return@runWhenSmart
+                factory.generateIt(project, TypeAccessibilityChecker.create(project, module), element) ?: return@runWhenSmart
             } catch (e: KotlinTypeInaccessibleException) {
                 if (editor != null) {
-                    showErrorHint(project, editor, "Cannot generate expected $elementType: " + e.message, e.message)
+                    showErrorHint(project, editor, escapeXml("Cannot generate $elementType: " + e.message), "Inaccessible type")
                 }
                 return@runWhenSmart
             }
@@ -70,6 +74,7 @@ abstract class AbstractCreateDeclarationFix<D : KtNamedDeclaration>(
                         val oldPackageDirective = targetFile.packageDirective
                         val newPackageDirective = packageDirective.copy() as KtPackageDirective
                         if (oldPackageDirective != null) {
+                            if (oldPackageDirective.text.isEmpty()) targetFile.addAfter(factory.createNewLine(2), oldPackageDirective)
                             oldPackageDirective.replace(newPackageDirective)
                         } else {
                             targetFile.add(newPackageDirective)
@@ -88,7 +93,8 @@ abstract class AbstractCreateDeclarationFix<D : KtNamedDeclaration>(
                 val reformatted = CodeStyleManager.getInstance(project).reformat(generatedDeclaration)
                 val shortened = ShortenReferences.DEFAULT.process(reformatted as KtElement)
                 EditorHelper.openInEditor(shortened)?.caretModel?.moveToOffset(
-                    (shortened as? KtNamedDeclaration)?.nameIdentifier?.startOffset ?: shortened.startOffset
+                    (shortened as? KtNamedDeclaration)?.nameIdentifier?.startOffset ?: shortened.startOffset,
+                    true
                 )
             }
         }

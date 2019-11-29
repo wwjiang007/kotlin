@@ -58,6 +58,7 @@ public class DefaultErrorMessagesJvm implements DefaultErrorMessages.Extension {
         MAP.put(VOLATILE_ON_DELEGATE, "'@Volatile' annotation cannot be used on delegated properties");
         MAP.put(SYNCHRONIZED_ON_ABSTRACT, "'@Synchronized' annotation cannot be used on abstract functions");
         MAP.put(SYNCHRONIZED_ON_INLINE, "'@Synchronized' annotation has no effect on inline functions");
+        MAP.put(SYNCHRONIZED_IN_INTERFACE, "'@Synchronized' annotation cannot be used on interface members");
         MAP.put(EXTERNAL_DECLARATION_CANNOT_BE_ABSTRACT, "External declaration can not be abstract");
         MAP.put(EXTERNAL_DECLARATION_CANNOT_HAVE_BODY, "External declaration can not have a body");
         MAP.put(EXTERNAL_DECLARATION_IN_INTERFACE, "Members of interfaces can not be external");
@@ -150,6 +151,7 @@ public class DefaultErrorMessagesJvm implements DefaultErrorMessages.Extension {
                 "See https://youtrack.jetbrains.com/issue/KT-18053 for more details";
         MAP.put(CONCURRENT_HASH_MAP_CONTAINS_OPERATOR, MESSAGE_FOR_CONCURRENT_HASH_MAP_CONTAINS);
         MAP.put(CONCURRENT_HASH_MAP_CONTAINS_OPERATOR_ERROR, MESSAGE_FOR_CONCURRENT_HASH_MAP_CONTAINS);
+        MAP.put(TAILREC_WITH_DEFAULTS, "Computation order of non-constant default arguments in tail-recursive functions will change in 1.4. See KT-31540 for more details");
     }
 
     @NotNull

@@ -6,27 +6,39 @@
 package org.jetbrains.kotlin.fir.scopes.impl
 
 import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.scopes.FirOverrideChecker
 import org.jetbrains.kotlin.fir.scopes.FirScope
 import org.jetbrains.kotlin.fir.scopes.ProcessorAction
-import org.jetbrains.kotlin.fir.symbols.ConeFunctionSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirClassifierSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirFunctionSymbol
 import org.jetbrains.kotlin.name.Name
 
-class FirSuperTypeScope(
+open class FirSuperTypeScope(
     session: FirSession,
+    overrideChecker: FirOverrideChecker,
     val scopes: List<FirScope>
-) : AbstractFirOverrideScope(session) {
+) : AbstractFirOverrideScope(session, overrideChecker) {
+
+    private val absentFunctions = mutableSetOf<Name>()
+
+    private val absentProperties = mutableSetOf<Name>()
+
+    private val absentClassifiers = mutableSetOf<Name>()
 
     override fun processFunctionsByName(name: Name, processor: (FirFunctionSymbol<*>) -> ProcessorAction): ProcessorAction {
-        val accepted = HashSet<ConeFunctionSymbol>()
-        val pending = mutableListOf<ConeFunctionSymbol>()
+        if (name in absentFunctions) {
+            return ProcessorAction.NEXT
+        }
+        val accepted = HashSet<FirFunctionSymbol<*>>()
+        val pending = mutableListOf<FirFunctionSymbol<*>>()
+        var empty = true
         for (scope in scopes) {
-            if (scope.processFunctionsByName(name) {
-
-                    if (it !in accepted && it.isOverridden(accepted) == null) {
-                        pending += it
-                        processor(it)
+            if (scope.processFunctionsByName(name) { functionSymbol ->
+                    empty = false
+                    if (functionSymbol !in accepted && functionSymbol.getOverridden(accepted) == null) {
+                        pending += functionSymbol
+                        processor(functionSymbol)
                     } else {
                         ProcessorAction.NEXT
                     }
@@ -36,16 +48,24 @@ class FirSuperTypeScope(
             }
             accepted += pending
             pending.clear()
+        }
+        if (empty) {
+            absentFunctions += name
         }
         return super.processFunctionsByName(name, processor)
     }
 
     override fun processPropertiesByName(name: Name, processor: (FirCallableSymbol<*>) -> ProcessorAction): ProcessorAction {
+        if (name in absentProperties) {
+            return ProcessorAction.NEXT
+        }
         val accepted = HashSet<FirCallableSymbol<*>>()
         val pending = mutableListOf<FirCallableSymbol<*>>()
+        var empty = true
         for (scope in scopes) {
             if (scope.processPropertiesByName(name) {
-                    if (it !in accepted && it.isOverridden(accepted) == null) {
+                    empty = false
+                    if (it !in accepted && it.getOverridden(accepted) == null) {
                         pending += it
                         processor(it)
                     } else {
@@ -58,6 +78,38 @@ class FirSuperTypeScope(
             accepted += pending
             pending.clear()
         }
+        if (empty) {
+            absentProperties += name
+        }
         return super.processPropertiesByName(name, processor)
+    }
+
+    override fun processClassifiersByName(name: Name, processor: (FirClassifierSymbol<*>) -> ProcessorAction): ProcessorAction {
+        if (name in absentClassifiers) {
+            return ProcessorAction.NEXT
+        }
+        val accepted = HashSet<FirClassifierSymbol<*>>()
+        val pending = mutableListOf<FirClassifierSymbol<*>>()
+        var empty = true
+        for (scope in scopes) {
+            if (scope.processClassifiersByName(name) {
+                    empty = false
+                    if (it !in accepted) {
+                        pending += it
+                        processor(it)
+                    } else {
+                        ProcessorAction.NEXT
+                    }
+                }.stop()
+            ) {
+                return ProcessorAction.STOP
+            }
+            accepted += pending
+            pending.clear()
+        }
+        if (empty) {
+            absentClassifiers += name
+        }
+        return super.processClassifiersByName(name, processor)
     }
 }

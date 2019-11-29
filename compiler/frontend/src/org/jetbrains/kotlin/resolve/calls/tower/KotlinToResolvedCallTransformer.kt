@@ -26,9 +26,10 @@ import org.jetbrains.kotlin.resolve.calls.context.CallPosition
 import org.jetbrains.kotlin.resolve.calls.inference.buildResultingSubstitutor
 import org.jetbrains.kotlin.resolve.calls.inference.components.FreshVariableNewTypeSubstitutor
 import org.jetbrains.kotlin.resolve.calls.inference.components.NewTypeSubstitutor
+import org.jetbrains.kotlin.resolve.calls.inference.components.composeWith
 import org.jetbrains.kotlin.resolve.calls.inference.model.*
 import org.jetbrains.kotlin.resolve.calls.inference.substitute
-import org.jetbrains.kotlin.resolve.calls.inference.substituteAndApproximateCapturedTypes
+import org.jetbrains.kotlin.resolve.calls.inference.substituteAndApproximateTypes
 import org.jetbrains.kotlin.resolve.calls.model.*
 import org.jetbrains.kotlin.resolve.calls.resolvedCallUtil.makeNullableTypeIfSafeReceiver
 import org.jetbrains.kotlin.resolve.calls.results.ResolutionStatus
@@ -71,11 +72,20 @@ class KotlinToResolvedCallTransformer(
     private val builtIns: KotlinBuiltIns,
     private val typeSystemContext: TypeSystemInferenceExtensionContextDelegate,
     private val smartCastManager: SmartCastManager,
-    private val typeApproximator: TypeApproximator
+    private val typeApproximator: TypeApproximator,
+    private val missingSupertypesResolver: MissingSupertypesResolver
 ) {
     companion object {
         private val REPORT_MISSING_NEW_INFERENCE_DIAGNOSTIC
             get() = false
+
+        fun keyForPartiallyResolvedCall(resolvedCallAtom: ResolvedCallAtom): Call {
+            val psiKotlinCall = resolvedCallAtom.atom.psiKotlinCall
+            return if (psiKotlinCall is PSIKotlinCallForInvoke)
+                psiKotlinCall.baseCall.psiCall
+            else
+                psiKotlinCall.psiCall
+        }
     }
 
     fun <D : CallableDescriptor> onlyTransform(
@@ -92,13 +102,9 @@ class KotlinToResolvedCallTransformer(
             is PartialCallResolutionResult -> {
                 val candidate = baseResolvedCall.resultCallAtom
 
-                val psiKotlinCall = candidate.atom.psiKotlinCall
-                val psiCall = if (psiKotlinCall is PSIKotlinCallForInvoke)
-                    psiKotlinCall.baseCall.psiCall
-                else
-                    psiKotlinCall.psiCall
+                val psiCall = keyForPartiallyResolvedCall(candidate)
 
-                context.trace.record(BindingContext.ONLY_RESOLVED_CALL, psiCall, baseResolvedCall)
+                context.trace.record(BindingContext.ONLY_RESOLVED_CALL, psiCall, PartialCallContainer(baseResolvedCall))
                 context.trace.record(BindingContext.PARTIAL_CALL_RESOLUTION_CONTEXT, psiCall, context)
 
                 context.inferenceSession.addPartialCallInfo(
@@ -129,11 +135,11 @@ class KotlinToResolvedCallTransformer(
                 val ktPrimitiveCompleter = ResolvedAtomCompleter(
                     resultSubstitutor, context, this, expressionTypingServices, argumentTypeResolver,
                     doubleColonExpressionResolver, builtIns, deprecationResolver, moduleDescriptor, dataFlowValueFactory,
-                    typeApproximator
+                    typeApproximator, missingSupertypesResolver
                 )
 
                 if (!ErrorUtils.isError(candidate.candidateDescriptor)) {
-                    for (subKtPrimitive in candidate.subResolvedAtoms) {
+                    candidate.subResolvedAtoms?.forEach { subKtPrimitive ->
                         ktPrimitiveCompleter.completeAll(subKtPrimitive)
                     }
                 }
@@ -693,25 +699,9 @@ class NewResolvedCallImpl<D : CallableDescriptor>(
         }
 
         @Suppress("UNCHECKED_CAST")
-        resultingDescriptor = run {
-            val candidateDescriptor = resolvedCallAtom.candidateDescriptor
-            val containsCapturedTypes = resolvedCallAtom.candidateDescriptor.returnType?.contains { it is NewCapturedType } ?: false
-            val containsIntegerLiteralTypes = resolvedCallAtom.candidateDescriptor.returnType?.contains { it.constructor is IntegerLiteralTypeConstructor } ?: false
+        resultingDescriptor = substitutedResultingDescriptor(substitutor) as D
 
-            when {
-                candidateDescriptor is FunctionDescriptor ||
-                        (candidateDescriptor is PropertyDescriptor && (candidateDescriptor.typeParameters.isNotEmpty() || containsCapturedTypes || containsIntegerLiteralTypes)) ->
-                    // this code is very suspicious. Now it is very useful for BE, because they cannot do nothing with captured types,
-                    // but it seems like temporary solution.
-                    candidateDescriptor.substitute(resolvedCallAtom.substitutor).substituteAndApproximateCapturedTypes(
-                        substitutor ?: FreshVariableNewTypeSubstitutor.Empty, typeApproximator
-                    )
-                else ->
-                    candidateDescriptor
-            }
-        } as D
-
-        typeArguments = resolvedCallAtom.substitutor.freshVariables.map {
+        typeArguments = resolvedCallAtom.freshVariablesSubstitutor.freshVariables.map {
             val substituted = (substitutor ?: FreshVariableNewTypeSubstitutor.Empty).safeSubstitute(it.defaultType)
             typeApproximator
                 .approximateToSuperType(substituted, TypeApproximatorConfiguration.IntegerLiteralsTypesApproximation)
@@ -719,6 +709,32 @@ class NewResolvedCallImpl<D : CallableDescriptor>(
         }
 
         calculateExpectedTypeForSamConvertedArgumentMap(substitutor)
+    }
+
+    private fun substitutedResultingDescriptor(substitutor: NewTypeSubstitutor?) =
+        when (val candidateDescriptor = resolvedCallAtom.candidateDescriptor) {
+            is FunctionDescriptor -> candidateDescriptor.substituteInferredVariablesAndApproximate(substitutor)
+            is PropertyDescriptor -> {
+                val shouldRunApproximation = candidateDescriptor.returnType?.let { type ->
+                    type.contains { it is NewCapturedType } ||
+                            type.contains { it.constructor is IntegerLiteralTypeConstructor } ||
+                            type.contains { it is DefinitelyNotNullType }
+                } ?: false
+
+                if (candidateDescriptor.typeParameters.isNotEmpty() || shouldRunApproximation)
+                    candidateDescriptor.substituteInferredVariablesAndApproximate(substitutor)
+                else
+                    candidateDescriptor
+            }
+            else -> candidateDescriptor
+        }
+
+    private fun CallableDescriptor.substituteInferredVariablesAndApproximate(substitutor: NewTypeSubstitutor?): CallableDescriptor {
+        val inferredTypeVariablesSubstitutor = substitutor ?: FreshVariableNewTypeSubstitutor.Empty
+        val compositeSubstitutor = inferredTypeVariablesSubstitutor.composeWith(resolvedCallAtom.knownParametersSubstitutor)
+
+        return substitute(resolvedCallAtom.freshVariablesSubstitutor)
+            .substituteAndApproximateTypes(compositeSubstitutor, typeApproximator)
     }
 
     fun getExpectedTypeForSamConvertedArgument(valueArgument: ValueArgument): UnwrappedType? =
@@ -729,7 +745,8 @@ class NewResolvedCallImpl<D : CallableDescriptor>(
 
         expedtedTypeForSamConvertedArgumentMap = hashMapOf()
         for ((argument, description) in resolvedCallAtom.argumentsWithConversion) {
-            val typeWithFreshVariables = resolvedCallAtom.substitutor.safeSubstitute(description.convertedTypeByCandidateParameter)
+            val typeWithFreshVariables =
+                resolvedCallAtom.freshVariablesSubstitutor.safeSubstitute(description.convertedTypeByCandidateParameter)
             val expectedType = substitutor?.safeSubstitute(typeWithFreshVariables) ?: typeWithFreshVariables
             expedtedTypeForSamConvertedArgumentMap!![argument.psiCallArgument.valueArgument] = expectedType
         }

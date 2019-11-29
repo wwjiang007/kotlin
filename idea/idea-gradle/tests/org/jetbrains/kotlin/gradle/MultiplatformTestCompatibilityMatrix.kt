@@ -5,13 +5,4 @@
 
 package org.jetbrains.kotlin.gradle
 
-//BUNCH 181
-fun MultiplatformProjectImportingTest.shouldRunTest(kotlinPluginVersion: String, gradleVersion: String): Boolean {
-    return true
-}
-
-fun NewMultiplatformProjectImportingTest.shouldRunTest(kotlinPluginVersion: String, gradleVersion: String): Boolean {
-    return !gradleVersion.startsWith("3.")
-}
-
 fun KaptImportingTest.isAndroidStudio() = false

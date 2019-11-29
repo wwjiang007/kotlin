@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.types.checker
 
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.TypeAliasDescriptor
 import org.jetbrains.kotlin.resolve.OverridingUtil
@@ -30,6 +31,8 @@ import org.jetbrains.kotlin.types.model.CaptureStatus
 import org.jetbrains.kotlin.types.typeUtil.makeNullable
 
 object SimpleClassicTypeSystemContext : ClassicTypeSystemContext
+
+class ClassicTypeSystemContextImpl(override val builtIns: KotlinBuiltIns) : ClassicTypeSystemContext
 
 object StrictEqualityTypeChecker {
 
@@ -145,7 +148,7 @@ object NullabilityChecker {
 
     fun isSubtypeOfAny(type: UnwrappedType): Boolean =
         SimpleClassicTypeSystemContext
-            .newBaseTypeCheckerContext(false)
+            .newBaseTypeCheckerContext(errorTypesEqualToAnything = false, stubTypesEqualToAnything = true)
             .hasNotNullSupertype(type.lowerIfFlexible(), SupertypesPolicy.LowerIfFlexible)
 }
 

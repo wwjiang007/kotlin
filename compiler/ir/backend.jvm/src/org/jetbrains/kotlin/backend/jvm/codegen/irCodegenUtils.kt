@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.backend.common.ir.ir2string
 import org.jetbrains.kotlin.backend.common.lower.allOverridden
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns.FQ_NAMES
 import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMap
 import org.jetbrains.kotlin.codegen.*
 import org.jetbrains.kotlin.codegen.AsmUtil.LABELED_THIS_PARAMETER
@@ -19,31 +20,35 @@ import org.jetbrains.kotlin.codegen.signature.BothSignatureWriter
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
-import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.ClassKind
+import org.jetbrains.kotlin.descriptors.DeclarationDescriptorWithSource
+import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.expressions.IrGetEnumValue
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.load.java.JavaVisibilities
-import org.jetbrains.kotlin.load.kotlin.TypeMappingMode
+import org.jetbrains.kotlin.load.java.JvmAbi
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker
 import org.jetbrains.kotlin.resolve.inline.INLINE_ONLY_ANNOTATION_FQ_NAME
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmClassSignature
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodParameterKind
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature
 import org.jetbrains.kotlin.resolve.source.PsiSourceElement
+import org.jetbrains.kotlin.utils.addIfNotNull
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.jetbrains.org.objectweb.asm.MethodVisitor
 import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
 
 class IrFrameMap : FrameMapBase<IrSymbol>() {
-    private val typeMap = mutableMapOf<IrSymbol,Type>()
+    private val typeMap = mutableMapOf<IrSymbol, Type>()
 
     override fun enter(descriptor: IrSymbol, type: Type): Int {
         typeMap[descriptor] = type
@@ -94,7 +99,7 @@ fun JvmBackendContext.getSourceMapper(declaration: IrClass): DefaultSourceMapper
     return DefaultSourceMapper(
         SourceInfo.createInfoForIr(
             endLineNumber + 1,
-            this.state.typeMapper.mapType(declaration.descriptor).internalName,
+            typeMapper.mapClass(declaration).internalName,
             declaration.fileParent.name
         )
     )
@@ -104,17 +109,15 @@ val IrType.isExtensionFunctionType: Boolean
     get() = isFunctionTypeOrSubtype() && hasAnnotation(KotlinBuiltIns.FQ_NAMES.extensionFunctionType)
 
 
-/* Borrowed from MemberCodegen.java */
+/* Borrowed with modifications from MemberCodegen.java */
 
 fun writeInnerClass(innerClass: IrClass, typeMapper: IrTypeMapper, context: JvmBackendContext, v: ClassBuilder) {
-    val outerClassInternalName = innerClass.parent.safeAs<IrClass>()?.let { typeMapper.classInternalName(it) }
-    /* TODO: So long as the type mapper works by descriptors, the internal name should be consistent with it. */
-    val outerClassInternalNameByDescriptor = innerClass.descriptor.containingDeclaration.safeAs<ClassDescriptor>()?.let {
-        typeMapper.kotlinTypeMapper.classInternalName(it)
-    }
+    val outerClassInternalName =
+        if (context.customEnclosingFunction[innerClass.attributeOwnerId] != null) null
+        else innerClass.parent.safeAs<IrClass>()?.let(typeMapper::classInternalName)
     val innerName = innerClass.name.takeUnless { it.isSpecial }?.asString()
     val innerClassInternalName = typeMapper.classInternalName(innerClass)
-    v.visitInnerClass(innerClassInternalName, outerClassInternalNameByDescriptor, innerName, innerClass.calculateInnerClassAccessFlags(context))
+    v.visitInnerClass(innerClassInternalName, outerClassInternalName, innerName, innerClass.calculateInnerClassAccessFlags(context))
 }
 
 /* Borrowed with modifications from AsmUtil.java */
@@ -165,7 +168,7 @@ private fun IrClass.innerAccessFlagsForModalityAndKind(): Int {
     return 0
 }
 
-private fun IrDeclarationWithVisibility.getVisibilityAccessFlag(kind: OwnerKind? = null): Int =
+fun IrDeclarationWithVisibility.getVisibilityAccessFlag(kind: OwnerKind? = null): Int =
     specialCaseVisibility(kind)
         ?: visibilityToAccessFlag[visibility]
         ?: throw IllegalStateException("$visibility is not a valid visibility in backend for ${ir2string(this)}")
@@ -176,24 +179,13 @@ private fun IrDeclarationWithVisibility.specialCaseVisibility(kind: OwnerKind?):
 //        return ACC_PUBLIC
 //    }
     if (this is IrClass && Visibilities.isPrivate(visibility) &&
-            parent.safeAs<IrClass>()?.isInterface ?: false) { // TODO: non-intrinsic
+        parent.safeAs<IrClass>()?.isInterface ?: false
+    ) { // TODO: non-intrinsic
         return Opcodes.ACC_PUBLIC
     }
 
 //    if (memberDescriptor is FunctionDescriptor && isInlineClassWrapperConstructor(memberDescriptor, kind))
     if (this is IrConstructor && parentAsClass.isInline && kind === OwnerKind.IMPLEMENTATION) {
-        return Opcodes.ACC_PRIVATE
-    }
-
-//    if (kind !== OwnerKind.ERASED_INLINE_CLASS &&
-//        memberDescriptor is ConstructorDescriptor &&
-//        memberDescriptor !is AccessorForConstructorDescriptor &&
-//        shouldHideConstructorDueToInlineClassTypeValueParameters(memberDescriptor)
-//    ) {
-    if (kind !== OwnerKind.ERASED_INLINE_CLASS &&
-        this is IrConstructor &&
-        shouldHideDueToInlineClassTypeValueParameters()
-    ) {
         return Opcodes.ACC_PRIVATE
     }
 
@@ -220,9 +212,9 @@ private fun IrDeclarationWithVisibility.specialCaseVisibility(kind: OwnerKind?):
 //    if (memberDescriptor is ConstructorDescriptor && isAnonymousObject(memberDescriptor.containingDeclaration)) {
 //        return getVisibilityAccessFlagForAnonymous(memberDescriptor.containingDeclaration as ClassDescriptor)
 //    }
-    if (this is IrConstructor && parentAsClass.isAnonymousObject) {
-        return parentAsClass.getVisibilityAccessFlagForAnonymous()
-    }
+//    if (this is IrConstructor && parentAsClass.isAnonymousObject) {
+//        return parentAsClass.getVisibilityAccessFlagForAnonymous()
+//    }
 
 //    TODO: when is this applicable?
 //    if (memberDescriptor is SyntheticJavaPropertyDescriptor) {
@@ -282,30 +274,6 @@ private fun IrDeclarationWithVisibility.specialCaseVisibility(kind: OwnerKind?):
 
     return null
 }
-
-/* From inlineClassManglingRules.kt */
-fun IrConstructor.shouldHideDueToInlineClassTypeValueParameters() =
-    !Visibilities.isPrivate(visibility) &&
-            !parentAsClass.isInline &&
-            parentAsClass.modality !== Modality.SEALED &&
-            valueParameters.any { it.type.requiresFunctionNameMangling() }
-
-fun IrType.requiresFunctionNameMangling(): Boolean =
-    isInlineClassThatRequiresMangling() || isTypeParameterWithUpperBoundThatRequiresMangling()
-
-fun IrType.isInlineClassThatRequiresMangling() =
-    safeAs<IrSimpleType>()?.classifier?.owner?.safeAs<IrClass>()?.let {
-        it.isInline && !it.isDontMangleClass()
-    } ?: false
-
-fun IrClass.isDontMangleClass() =
-    fqNameWhenAvailable != DescriptorUtils.RESULT_FQ_NAME
-
-fun IrType.isTypeParameterWithUpperBoundThatRequiresMangling() =
-    safeAs<IrSimpleType>()?.classifier?.owner.safeAs<IrTypeParameter>()?.let { param ->
-        param.superTypes.any { it.requiresFunctionNameMangling() }
-    } ?: false
-
 
 /* Borrowed from InlineUtil. */
 private tailrec fun isInlineOrContainedInInline(declaration: IrDeclaration?): Boolean = when {
@@ -379,22 +347,9 @@ internal fun getSignature(
             sw.writeInterface()
             val jvmInterfaceType = typeMapper.mapSupertype(superType, sw)
             sw.writeInterfaceEnd()
-            val jvmInterfaceInternalName = jvmInterfaceType.internalName
 
-            superInterfaces.add(jvmInterfaceInternalName)
-
-            val kotlinMarkerInterfaceInternalName = KOTLIN_MARKER_INTERFACES.get(kotlinInterfaceName)
-            if (kotlinMarkerInterfaceInternalName != null) {
-                if (typeMapper.classBuilderMode === ClassBuilderMode.LIGHT_CLASSES) {
-                    sw.writeInterface()
-                    val kotlinCollectionType =
-                        typeMapper.mapType(superClass.defaultType, TypeMappingMode.SUPER_TYPE_KOTLIN_COLLECTIONS_AS_IS, sw)
-                    sw.writeInterfaceEnd()
-                    superInterfaces.add(kotlinCollectionType.internalName)
-                }
-
-                kotlinMarkerInterfaces.add(kotlinMarkerInterfaceInternalName)
-            }
+            superInterfaces.add(jvmInterfaceType.internalName)
+            kotlinMarkerInterfaces.addIfNotNull(KOTLIN_MARKER_INTERFACES[kotlinInterfaceName])
         }
     }
 
@@ -462,13 +417,8 @@ fun generateParameterNames(
     irFunction: IrFunction,
     mv: MethodVisitor,
     jvmSignature: JvmMethodSignature,
-    state: GenerationState,
-    isSynthetic: Boolean
+    state: GenerationState
 ) {
-    if (!state.generateParametersMetadata || isSynthetic) {
-        return
-    }
-
     val iterator = irFunction.valueParameters.iterator()
     val kotlinParameterTypes = jvmSignature.valueParameters
     var isEnumName = true
@@ -559,3 +509,24 @@ fun getLabeledThisName(callableName: String, prefix: String, defaultName: String
         defaultName
     } else prefix + mangleNameIfNeeded(callableName)
 }
+
+val IrAnnotationContainer.deprecationFlags: Int
+    get() {
+        val annotation = annotations.findAnnotation(FQ_NAMES.deprecated) ?: return 0
+        val isHidden = (annotation.getValueArgument(2) as? IrGetEnumValue)?.symbol?.owner
+            ?.name?.asString() == DeprecationLevel.HIDDEN.name
+        return Opcodes.ACC_DEPRECATED or if (isHidden) Opcodes.ACC_SYNTHETIC else 0
+    }
+
+// We can't check for JvmLoweredDeclarationOrigin.SYNTHETIC_METHOD_FOR_PROPERTY_ANNOTATIONS because for interface methods
+// moved to DefaultImpls, origin is changed to DEFAULT_IMPLS
+// TODO: Fix origin somehow
+val IrFunction.isSyntheticMethodForProperty: Boolean
+    get() = name.asString().endsWith(JvmAbi.ANNOTATED_PROPERTY_METHOD_NAME_SUFFIX)
+
+val IrFunction.deprecationFlags: Int
+    get() {
+        val originFlags = if (isSyntheticMethodForProperty) Opcodes.ACC_DEPRECATED else 0
+        val propertyFlags = (this as? IrSimpleFunction)?.correspondingPropertySymbol?.owner?.deprecationFlags ?: 0
+        return originFlags or propertyFlags or (this as IrAnnotationContainer).deprecationFlags
+    }

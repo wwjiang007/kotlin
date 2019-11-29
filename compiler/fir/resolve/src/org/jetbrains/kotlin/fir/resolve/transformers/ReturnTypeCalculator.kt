@@ -10,11 +10,14 @@ import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.FirCallableMemberDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirTypedDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirValueParameter
+import org.jetbrains.kotlin.fir.diagnostics.DiagnosticKind
+import org.jetbrains.kotlin.fir.diagnostics.FirSimpleDiagnostic
 import org.jetbrains.kotlin.fir.render
-import org.jetbrains.kotlin.fir.resolve.FirProvider
+import org.jetbrains.kotlin.fir.resolve.ResolutionMode
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
-import org.jetbrains.kotlin.fir.service
-import org.jetbrains.kotlin.fir.symbols.ConeCallableSymbol
+import org.jetbrains.kotlin.fir.resolve.firProvider
+import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.FirDesignatedBodyResolveTransformer
+import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
 import org.jetbrains.kotlin.fir.types.FirImplicitTypeRef
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.impl.FirComputingImplicitTypeRef
@@ -31,7 +34,7 @@ class ReturnTypeCalculatorWithJump(val session: FirSession, val scopeSession: Sc
         if (declaration.returnTypeRef is FirComputingImplicitTypeRef) {
             declaration.transformReturnTypeRef(
                 TransformImplicitType,
-                FirErrorTypeRefImpl(null, "cycle")
+                FirErrorTypeRefImpl(null, FirSimpleDiagnostic("cycle", DiagnosticKind.RecursionInImplicitTypes))
             )
             return declaration.returnTypeRef as FirResolvedTypeRef
         }
@@ -46,7 +49,7 @@ class ReturnTypeCalculatorWithJump(val session: FirSession, val scopeSession: Sc
                 TransformImplicitType,
                 FirErrorTypeRefImpl(
                     null,
-                    "Unsupported: implicit VP type"
+                    FirSimpleDiagnostic("Unsupported: implicit VP type")
                 )
             )
         }
@@ -56,10 +59,10 @@ class ReturnTypeCalculatorWithJump(val session: FirSession, val scopeSession: Sc
         require(declaration is FirCallableMemberDeclaration<*>) { "${declaration::class}: ${declaration.render()}" }
 
 
-        val symbol = declaration.symbol as ConeCallableSymbol
+        val symbol = declaration.symbol as FirCallableSymbol<*>
         val id = symbol.callableId
 
-        val provider = session.service<FirProvider>()
+        val provider = session.firProvider
 
         val file = provider.getFirCallableContainerFile(symbol)
 
@@ -67,10 +70,9 @@ class ReturnTypeCalculatorWithJump(val session: FirSession, val scopeSession: Sc
             classId.outerClassId
         }.mapTo(mutableListOf()) { provider.getFirClassifierByFqName(it) }
 
-        if (file == null || outerClasses.any { it == null }) return FirErrorTypeRefImpl(
-            null,
-            "I don't know what todo"
-        )
+        if (file == null || outerClasses.any { it == null }) {
+            return FirErrorTypeRefImpl(null, FirSimpleDiagnostic("Cannot calculate return type (local class/object?)", DiagnosticKind.InferenceError))
+        }
 
         declaration.transformReturnTypeRef(
             TransformImplicitType,
@@ -79,11 +81,11 @@ class ReturnTypeCalculatorWithJump(val session: FirSession, val scopeSession: Sc
 
         val transformer = FirDesignatedBodyResolveTransformer(
             (listOf(file) + outerClasses.filterNotNull().asReversed() + listOf(declaration)).iterator(),
-            file.fileSession,
+            file.session,
             scopeSession
         )
 
-        file.transform<FirElement, Any?>(transformer, null)
+        file.transform<FirElement, ResolutionMode>(transformer, ResolutionMode.ContextDependent)
 
 
         val newReturnTypeRef = declaration.returnTypeRef

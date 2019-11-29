@@ -17,7 +17,7 @@ import kotlin.test.fail
 class CocoaPodsIT : BaseGradleIT() {
 
     // We use Kotlin DSL. Earlier Gradle versions fail at accessors codegen.
-    val gradleVersion = GradleVersionRequired.AtLeast("4.9")
+    val gradleVersion = GradleVersionRequired.None
 
     val PODFILE_IMPORT_DIRECTIVE_PLACEHOLDER = "<import_mode_directive>"
 
@@ -62,6 +62,10 @@ class CocoaPodsIT : BaseGradleIT() {
                     spec.pod_target_xcconfig = {
                         'KOTLIN_TARGET[sdk=iphonesimulator*]' => 'ios_x64',
                         'KOTLIN_TARGET[sdk=iphoneos*]' => 'ios_arm',
+                        'KOTLIN_TARGET[sdk=watchsimulator*]' => 'watchos_x86',
+                        'KOTLIN_TARGET[sdk=watchos*]' => 'watchos_arm',
+                        'KOTLIN_TARGET[sdk=appletvsimulator*]' => 'tvos_x64',
+                        'KOTLIN_TARGET[sdk=appletvos*]' => 'tvos_arm64',
                         'KOTLIN_TARGET[sdk=macosx*]' => 'macos_x64'
                     }
 

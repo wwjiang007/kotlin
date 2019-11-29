@@ -46,13 +46,14 @@ class TypeRemapper private constructor(
     }
 
     fun registerTypeParameter(name: String) {
-        assert(typeParametersMapping[name] == null) {
-            "Type parameter already registered $name"
-        }
+        //TODO: enable after KT-34656 proper fix
+//        assert(typeParametersMapping[name] == null) {
+//            "Type parameter already registered $name"
+//        }
         typeParametersMapping[name] = TypeParameter(name, name, false, null)
     }
 
-    fun registerTypeParameter(mapping: TypeParameterMapping) {
+    fun registerTypeParameter(mapping: TypeParameterMapping<*>) {
         typeParametersMapping[mapping.name] = TypeParameter(
             mapping.name, mapping.reificationArgument?.parameterName, mapping.isReified, mapping.signature
         )
@@ -64,8 +65,8 @@ class TypeRemapper private constructor(
 
     companion object {
         @JvmStatic
-        fun createRoot(formalTypeParameters: TypeParameterMappings?): TypeRemapper {
-            return TypeRemapper(HashMap<String, String?>()).apply {
+        fun createRoot(formalTypeParameters: TypeParameterMappings<*>?): TypeRemapper {
+            return TypeRemapper(HashMap()).apply {
                 formalTypeParameters?.forEach {
                     registerTypeParameter(it)
                 }

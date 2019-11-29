@@ -237,6 +237,8 @@ class BasicCompletionSession(
                 ).completeDslFunctions()
             }
 
+            KEYWORDS_ONLY.doComplete()
+
             val contextVariableTypesForSmartCompletion = withCollectRequiredContextVariableTypes(::completeWithSmartCompletion)
 
             val contextVariableTypesForReferenceVariants = withCollectRequiredContextVariableTypes { lookupElementFactory ->
@@ -249,20 +251,16 @@ class BasicCompletionSession(
 
                     prefix[0].isLowerCase() -> {
                         addReferenceVariantElements(lookupElementFactory, USUALLY_START_LOWER_CASE.intersect(descriptorKindFilter))
-                        flushToResultSet()
                         addReferenceVariantElements(lookupElementFactory, USUALLY_START_UPPER_CASE.intersect(descriptorKindFilter))
                     }
 
                     else -> {
                         addReferenceVariantElements(lookupElementFactory, USUALLY_START_UPPER_CASE.intersect(descriptorKindFilter))
-                        flushToResultSet()
                         addReferenceVariantElements(lookupElementFactory, USUALLY_START_LOWER_CASE.intersect(descriptorKindFilter))
                     }
                 }
                 referenceVariantsCollector!!.collectingFinished()
             }
-
-            KEYWORDS_ONLY.doComplete()
 
             // getting root packages from scope is very slow so we do this in alternative way
             if (callTypeAndReceiver.receiver == null && callTypeAndReceiver.callType.descriptorKindFilter.kindMask.and(DescriptorKindFilter.PACKAGES_MASK) != 0) {
@@ -339,8 +337,19 @@ class BasicCompletionSession(
                     }
                 }
 
-                if (configuration.staticMembers && callTypeAndReceiver is CallTypeAndReceiver.DEFAULT && prefix.isNotEmpty()) {
-                    staticMembersCompletion.completeFromIndices(indicesHelper(false), collector)
+                if (configuration.staticMembers && prefix.isNotEmpty()) {
+                    if (!receiverTypes.isNullOrEmpty()) {
+                        staticMembersCompletion.completeObjectMemberExtensionsFromIndices(
+                            indicesHelper(false),
+                            receiverTypes.map { it.type },
+                            callTypeAndReceiver.callType,
+                            collector
+                        )
+                    }
+
+                    if (callTypeAndReceiver is CallTypeAndReceiver.DEFAULT) {
+                        staticMembersCompletion.completeFromIndices(indicesHelper(false), collector)
+                    }
                 }
             }
         }

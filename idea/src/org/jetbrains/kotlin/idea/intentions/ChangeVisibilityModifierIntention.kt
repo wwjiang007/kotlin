@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptorWithVisibility
 import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.idea.core.*
+import org.jetbrains.kotlin.idea.util.runCommandOnAllExpectAndActualDeclaration
 import org.jetbrains.kotlin.lexer.KtModifierKeywordToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
@@ -34,6 +35,7 @@ import org.jetbrains.kotlin.psi.psiUtil.visibilityModifierType
 open class ChangeVisibilityModifierIntention protected constructor(
     val modifier: KtModifierKeywordToken
 ) : SelfTargetingRangeIntention<KtDeclaration>(KtDeclaration::class.java, "Make ${modifier.value}") {
+    override fun startInWriteAction(): Boolean = false
 
     override fun applicabilityRange(element: KtDeclaration): TextRange? {
         val modifierList = element.modifierList
@@ -46,11 +48,12 @@ open class ChangeVisibilityModifierIntention protected constructor(
         if (descriptor.visibility == targetVisibility) return null
 
         if (modifierList?.hasModifier(KtTokens.OVERRIDE_KEYWORD) == true) {
-            val callableDescriptor = descriptor  as? CallableDescriptor ?: return null
+            val callableDescriptor = descriptor as? CallableDescriptor ?: return null
             // cannot make visibility less than (or non-comparable with) any of the supers
             if (callableDescriptor.overriddenDescriptors
                     .map { Visibilities.compare(it.visibility, targetVisibility) }
-                    .any { it == null || it > 0 }) return null
+                    .any { it == null || it > 0 }
+            ) return null
         }
 
         text = defaultText
@@ -80,8 +83,13 @@ open class ChangeVisibilityModifierIntention protected constructor(
     }
 
     override fun applyTo(element: KtDeclaration, editor: Editor?) {
-        element.setVisibility(modifier)
-        if (element is KtPropertyAccessor) element.modifierList?.nextSibling?.replace(KtPsiFactory(element).createWhiteSpace())
+        val factory = KtPsiFactory(element)
+        element.runCommandOnAllExpectAndActualDeclaration("Change visibility modifier", writeAction = true) {
+            it.setVisibility(modifier)
+            if (it is KtPropertyAccessor) {
+                it.modifierList?.nextSibling?.replace(factory.createWhiteSpace())
+            }
+        }
     }
 
     private fun noModifierYetApplicabilityRange(declaration: KtDeclaration): TextRange? {

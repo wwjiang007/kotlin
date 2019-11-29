@@ -10,13 +10,10 @@ abstract class AbstractIncrementalJsKlibCompilerRunnerTest : AbstractIncremental
             libraries = "build/js-ir-runtime/full-runtime.klib"
             outputFile = File(destinationDir, "${testDir.name}.klib").path
             sourceMap = true
-            irBackend = true
-            irProduceOnly = "klib"
+            // Don't zip klib content since date on files affect the md5 checksum we compute to check whether output files identical
+            irProduceKlibDir = true
+            irOnly = true
         }
-
-    override fun rebuildAndCompareOutput(sourceRoots: List<File>, testDir: File, buildLogSteps: List<BuildStep>, outDir: File) {
-        // todo fix
-    }
 
     override val buildLogFinder: BuildLogFinder
         get() = super.buildLogFinder.copy(isJsIrEnabled = true)

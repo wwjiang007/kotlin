@@ -29,7 +29,9 @@ abstract class YarnBasics : NpmApi {
 
         project.execWithProgress(description) { exec ->
             exec.executable = nodeJsEnv.nodeExecutable
-            exec.args = listOf(yarnEnv.home.resolve("bin/yarn.js").absolutePath) + args
+            exec.args = listOf(yarnEnv.home.resolve("bin/yarn.js").absolutePath) +
+                    args +
+                    if (project.logger.isDebugEnabled) "--verbose" else ""
             exec.workingDir = dir
         }
     }
@@ -55,6 +57,11 @@ abstract class YarnBasics : NpmApi {
 
                 val key = YarnLock.key(src.key, src.version)
                 val deps = byKey[key]
+                    ?: if (src.version == "*") byKey.entries
+                        .firstOrNull { it.key.startsWith(YarnLock.key(src.key, "")) }
+                        ?.value
+                    else null
+
                 if (deps != null) {
                     src.resolvedVersion = deps.version
                     src.integrity = deps.integrity
@@ -62,8 +69,7 @@ abstract class YarnBasics : NpmApi {
                         val scopedName = dep.scopedName
                         val child = NpmDependency(
                             src.project,
-                            scopedName.scope,
-                            scopedName.name,
+                            scopedName.toString(),
                             dep.version ?: "*"
                         )
                         child.parent = src

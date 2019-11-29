@@ -8,11 +8,12 @@ package org.jetbrains.kotlin.idea.perf
 import com.intellij.ide.highlighter.JavaFileType
 import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.openapi.application.runWriteAction
-import com.intellij.openapi.util.registry.Registry
 import com.intellij.psi.PsiDocumentManager
 import org.jetbrains.kotlin.idea.KotlinFileType
 import org.jetbrains.kotlin.idea.conversion.copy.AbstractJavaToKotlinCopyPasteConversionTest
 import org.jetbrains.kotlin.idea.conversion.copy.ConvertJavaCopyPasteProcessor
+import org.jetbrains.kotlin.idea.perf.Stats.Companion.WARM_UP
+import org.jetbrains.kotlin.idea.testFramework.commitAllDocuments
 import org.jetbrains.kotlin.j2k.J2kConverterExtension
 import org.jetbrains.kotlin.test.InTextDirectivesUtils
 import org.jetbrains.kotlin.test.KotlinTestUtils
@@ -47,7 +48,7 @@ abstract class AbstractPerformanceJavaToKotlinCopyPasteConversionTest(private va
 
     private fun doWarmUpPerfTest() {
         stats().perfTest<Unit, Unit>(
-            testName = "warm-up",
+            testName = WARM_UP,
             setUp = {
                 with(myFixture) {
                     configureByText(JavaFileType.INSTANCE, "<selection>public class Foo {\nprivate String value;\n}</selection>")
@@ -105,6 +106,7 @@ abstract class AbstractPerformanceJavaToKotlinCopyPasteConversionTest(private va
                 commitAllDocuments()
                 validate(path, noConversionExpected)
 
+                // to avoid VFS refresh
                 myFixture.performEditorAction(IdeActions.ACTION_UNDO)
             }
         )

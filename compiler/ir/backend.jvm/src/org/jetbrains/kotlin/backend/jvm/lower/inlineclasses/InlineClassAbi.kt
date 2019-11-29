@@ -11,7 +11,6 @@ import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.load.java.JvmAbi
-import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 
@@ -29,6 +28,7 @@ object InlineClassAbi {
         val klass = type.classOrNull?.owner ?: return null
         if (!klass.isInline) return null
 
+        // TODO: Apply type substitutions
         val underlyingType = getUnderlyingType(klass).unboxInlineClass()
         if (!type.isNullable())
             return underlyingType
@@ -91,14 +91,19 @@ object InlineClassAbi {
     }
 }
 
-internal val IrType.requiresMangling: Boolean
+private val IrType.requiresMangling: Boolean
     get() {
         val irClass = erasedUpperBound
         return irClass.isInline && irClass.fqNameWhenAvailable != DescriptorUtils.RESULT_FQ_NAME
     }
 
-internal val IrFunction.fullValueParameterList: List<IrValueParameter>
+private val IrFunction.fullValueParameterList: List<IrValueParameter>
     get() = listOfNotNull(extensionReceiverParameter) + valueParameters
+
+internal val IrFunction.hasMangledParameters: Boolean
+    get() = dispatchReceiverParameter?.type?.getClass()?.isInline == true ||
+            fullValueParameterList.any { it.type.requiresMangling } ||
+            (this is IrConstructor && constructedClass.isInline)
 
 internal val IrClass.inlineClassFieldName: Name
     get() = primaryConstructor!!.valueParameters.single().name

@@ -5,7 +5,10 @@
 
 package org.jetbrains.kotlin.mainKts
 
-import org.jetbrains.kotlin.mainKts.impl.FilesAndIvyResolver
+import kotlinx.coroutines.runBlocking
+import org.jetbrains.kotlin.mainKts.impl.IvyResolver
+import org.jetbrains.kotlin.mainKts.impl.resolveFromAnnotations
+import org.jetbrains.kotlin.script.util.CompilerOptions
 import org.jetbrains.kotlin.script.util.DependsOn
 import org.jetbrains.kotlin.script.util.Import
 import org.jetbrains.kotlin.script.util.Repository
@@ -14,6 +17,8 @@ import kotlin.script.dependencies.ScriptContents
 import kotlin.script.dependencies.ScriptDependenciesResolver
 import kotlin.script.experimental.annotations.KotlinScript
 import kotlin.script.experimental.api.*
+import kotlin.script.experimental.dependencies.CompoundDependenciesResolver
+import kotlin.script.experimental.dependencies.FileSystemDependenciesResolver
 import kotlin.script.experimental.host.FileBasedScriptSource
 import kotlin.script.experimental.host.FileScriptSource
 import kotlin.script.experimental.jvm.compat.mapLegacyDiagnosticSeverity
@@ -35,12 +40,13 @@ abstract class MainKtsScript(val args: Array<String>)
 
 object MainKtsScriptDefinition : ScriptCompilationConfiguration(
     {
-        defaultImports(DependsOn::class, Repository::class, Import::class)
+        defaultImports(DependsOn::class, Repository::class, Import::class, CompilerOptions::class)
         jvm {
             dependenciesFromClassContext(MainKtsScriptDefinition::class, "kotlin-main-kts", "kotlin-stdlib", "kotlin-reflect")
         }
         refineConfiguration {
-            onAnnotations(DependsOn::class, Repository::class, Import::class, handler = MainKtsConfigurator())
+            onAnnotations(DependsOn::class, Repository::class, Import::class, CompilerOptions::class, handler = MainKtsConfigurator())
+            beforeCompiling(::configureProvidedPropertiesFromJsr223Context)
         }
         ide {
             acceptedLocations(ScriptAcceptedLocation.Everywhere)
@@ -58,14 +64,10 @@ object MainKtsEvaluationConfiguration : ScriptEvaluationConfiguration(
 )
 
 class MainKtsConfigurator : RefineScriptCompilationConfigurationHandler {
-    private val resolver = FilesAndIvyResolver()
+    private val resolver = CompoundDependenciesResolver(FileSystemDependenciesResolver(), IvyResolver())
 
     override operator fun invoke(context: ScriptConfigurationRefinementContext): ResultWithDiagnostics<ScriptCompilationConfiguration> =
-        processAnnotations(context).onSuccess { updatedConfiguration ->
-            configureProvidedPropertiesFromJsr223Context(
-                ScriptConfigurationRefinementContext(context.script, updatedConfiguration, context.collectedData)
-            )
-        }
+        processAnnotations(context)
 
     fun processAnnotations(context: ScriptConfigurationRefinementContext): ResultWithDiagnostics<ScriptCompilationConfiguration> {
         val diagnostics = arrayListOf<ScriptDiagnostic>()
@@ -90,23 +92,25 @@ class MainKtsConfigurator : RefineScriptCompilationConfigurationHandler {
                 FileScriptSource(scriptBaseDir?.resolve(sourceName) ?: File(sourceName))
             } ?: emptyList()
         }
-
-        val resolvedClassPath = try {
-            val scriptContents = object : ScriptContents {
-                override val annotations: Iterable<Annotation> = annotations.filter { it is DependsOn || it is Repository }
-                override val file: File? = null
-                override val text: CharSequence? = null
-            }
-            resolver.resolve(scriptContents, emptyMap(), ::report, null).get()?.classpath?.toList()
-            // TODO: add diagnostics
-        } catch (e: Throwable) {
-            return ResultWithDiagnostics.Failure(*diagnostics.toTypedArray(), e.asDiagnostics(path = context.script.locationId))
+        val compileOptions = annotations.flatMap {
+            (it as? CompilerOptions)?.options?.toList() ?: emptyList()
         }
 
-        return ScriptCompilationConfiguration(context.compilationConfiguration) {
-            if (resolvedClassPath != null) updateClasspath(resolvedClassPath)
-            if (importedSources.isNotEmpty()) importScripts.append(importedSources)
-        }.asSuccess(diagnostics)
+        val resolveResult = try {
+            runBlocking {
+                resolveFromAnnotations(resolver, annotations.filter { it is DependsOn || it is Repository })
+            }
+        } catch (e: Throwable) {
+            ResultWithDiagnostics.Failure(*diagnostics.toTypedArray(), e.asDiagnostics(path = context.script.locationId))
+        }
+
+        return resolveResult.onSuccess { resolvedClassPath ->
+            ScriptCompilationConfiguration(context.compilationConfiguration) {
+                if (resolvedClassPath != null) updateClasspath(resolvedClassPath)
+                if (importedSources.isNotEmpty()) importScripts.append(importedSources)
+                if (compileOptions.isNotEmpty()) compilerOptions.append(compileOptions)
+            }.asSuccess()
+        }
     }
 }
 

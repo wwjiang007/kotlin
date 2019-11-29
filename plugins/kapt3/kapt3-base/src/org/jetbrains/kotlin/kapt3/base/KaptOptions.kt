@@ -9,6 +9,8 @@ import org.jetbrains.kotlin.kapt3.base.incremental.SourcesToReprocess
 import java.io.File
 import java.nio.file.Files
 
+private const val KAPT_KOTLIN_GENERATED_OPTION_NAME = "kapt.kotlin.generated"
+
 class KaptOptions(
     val projectBaseDir: File?,
     val compileClasspath: List<File>,
@@ -80,6 +82,11 @@ class KaptOptions(
             )
         }
     }
+
+    fun getKotlinGeneratedSourcesDirectory(): File? {
+        val value = processingOptions[KAPT_KOTLIN_GENERATED_OPTION_NAME] ?: return null
+        return File(value).takeIf { it.exists() }
+    }
 }
 
 interface KaptFlags {
@@ -141,7 +148,21 @@ fun KaptOptions.collectJavaSourceFiles(sourcesToReprocess: SourcesToReprocess = 
 
     return when (sourcesToReprocess) {
         is SourcesToReprocess.FullRebuild -> allSources()
-        is SourcesToReprocess.Incremental -> sourcesToReprocess.toReprocess.filter { it.exists() }
+        is SourcesToReprocess.Incremental -> {
+            val toReprocess = sourcesToReprocess.toReprocess.filter { it.exists() }
+            if (toReprocess.isNotEmpty()) {
+                // Make sure to add error/NonExistentClass.java when there are sources to re-process, as
+                // this class is never reported as changed. See https://youtrack.jetbrains.com/issue/KT-34194 for details.
+                val nonExistentClass = stubsOutputDir.resolve("error/NonExistentClass.java")
+                if (nonExistentClass.exists()) {
+                    toReprocess + nonExistentClass
+                } else {
+                    toReprocess
+                }
+            } else {
+                emptyList()
+            }
+        }
     }
 }
 

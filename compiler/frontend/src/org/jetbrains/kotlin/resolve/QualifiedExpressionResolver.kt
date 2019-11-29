@@ -18,6 +18,8 @@ package org.jetbrains.kotlin.resolve
 
 import com.intellij.psi.impl.source.DummyHolder
 import com.intellij.util.SmartList
+import org.jetbrains.kotlin.config.AnalysisFlags
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.diagnostics.Errors
 import org.jetbrains.kotlin.incremental.KotlinLookupLocation
@@ -25,6 +27,7 @@ import org.jetbrains.kotlin.incremental.components.LookupLocation
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.progress.ProgressIndicatorAndCompilationCanceledStatus
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.codeFragmentUtil.suppressDiagnosticsInDebugMode
 import org.jetbrains.kotlin.psi.psiUtil.getTopmostParentQualifiedExpressionForSelector
@@ -43,7 +46,7 @@ import org.jetbrains.kotlin.resolve.source.KotlinSourceElement
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingContext
 import org.jetbrains.kotlin.types.expressions.isWithoutValueArguments
 
-class QualifiedExpressionResolver {
+class QualifiedExpressionResolver(val languageVersionSettings: LanguageVersionSettings) {
     fun resolvePackageHeader(
         packageDirective: KtPackageDirective,
         module: ModuleDescriptor,
@@ -218,6 +221,8 @@ class QualifiedExpressionResolver {
         excludedImportNames: Collection<FqName>,
         packageFragmentForVisibilityCheck: PackageFragmentDescriptor?
     ): ImportingScope? { // null if some error happened
+        ProgressIndicatorAndCompilationCanceledStatus.checkCanceled()
+
         val importedReference = importDirective.importContent ?: return null
         val path = importedReference.asQualifierPartList()
         val lastPart = path.lastOrNull() ?: return null
@@ -431,7 +436,7 @@ class QualifiedExpressionResolver {
         position: QualifierPosition
     ): DeclarationDescriptor? {
         val (packageOrClassDescriptor, endIndex) =
-                resolveToPackageOrClassPrefix(path, moduleDescriptor, trace, shouldBeVisibleFrom, scopeForFirstPart, position)
+            resolveToPackageOrClassPrefix(path, moduleDescriptor, trace, shouldBeVisibleFrom, scopeForFirstPart, position)
 
         if (endIndex != path.size) {
             return null
@@ -439,6 +444,9 @@ class QualifiedExpressionResolver {
 
         return packageOrClassDescriptor
     }
+
+    private fun resolveInIDEMode(path: List<QualifierPart>): Boolean =
+        languageVersionSettings.getFlag(AnalysisFlags.ideMode) && path.size > 1 && path.first().name.asString() == ROOT_PREFIX_FOR_IDE_RESOLUTION_MODE
 
     private fun resolveToPackageOrClassPrefix(
         path: List<QualifierPart>,
@@ -449,6 +457,18 @@ class QualifiedExpressionResolver {
         position: QualifierPosition,
         isValue: ((KtSimpleNameExpression) -> Boolean)? = null
     ): Pair<DeclarationDescriptor?, Int> {
+        if (resolveInIDEMode(path)) {
+            return resolveToPackageOrClassPrefix(
+                path.subList(1, path.size),
+                moduleDescriptor,
+                trace,
+                shouldBeVisibleFrom,
+                scopeForFirstPart = null,
+                position = position,
+                isValue = null
+            ).let { it.first to it.second + 1 }
+        }
+
         if (path.isEmpty()) {
             return Pair(moduleDescriptor.getPackage(FqName.ROOT), 0)
         }
@@ -471,13 +491,13 @@ class QualifiedExpressionResolver {
         }
 
         val (prefixDescriptor, nextIndexAfterPrefix) =
-                if (classifierDescriptor != null)
-                    Pair(classifierDescriptor, 1)
-                else
-                    moduleDescriptor.quickResolveToPackage(path, trace, position)
+            if (classifierDescriptor != null)
+                Pair(classifierDescriptor, 1)
+            else
+                moduleDescriptor.quickResolveToPackage(path, trace, position)
 
         var currentDescriptor: DeclarationDescriptor? = prefixDescriptor
-        for (qualifierPartIndex in nextIndexAfterPrefix..path.size - 1) {
+        for (qualifierPartIndex in nextIndexAfterPrefix until path.size) {
             val qualifierPart = path[qualifierPartIndex]
 
             val nextPackageOrClassDescriptor =
@@ -758,6 +778,26 @@ class QualifiedExpressionResolver {
         trace.record(BindingContext.QUALIFIER, qualifier.expression, qualifier)
 
         return qualifier
+    }
+
+    companion object {
+        /**
+         *  Shouldn't be visible to users.
+         *  Used as prefix for [FqName] from non-root to avoid conflicts when resolving in IDE.
+         *  E.g.:
+         *  ---------
+         *  package a
+         *
+         *  class A
+         *
+         *  fun test(a: Any) {
+         *      a.A() // invalid code -> incorrect import/completion/etc.
+         *      _root_ide_package_.a.A() // OK
+         *  }
+         *  ---------
+         */
+        const val ROOT_PREFIX_FOR_IDE_RESOLUTION_MODE = "_root_ide_package_"
+        const val ROOT_PREFIX_FOR_IDE_RESOLUTION_MODE_WITH_DOT = "$ROOT_PREFIX_FOR_IDE_RESOLUTION_MODE."
     }
 }
 

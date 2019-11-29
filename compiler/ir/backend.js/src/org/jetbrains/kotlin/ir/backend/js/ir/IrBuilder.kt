@@ -5,7 +5,6 @@
 
 package org.jetbrains.kotlin.ir.backend.js.ir
 
-import org.jetbrains.kotlin.backend.common.descriptors.*
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.descriptors.Visibility
@@ -13,6 +12,7 @@ import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.*
+import org.jetbrains.kotlin.ir.descriptors.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.*
@@ -32,7 +32,6 @@ object JsIrBuilder {
             UNDEFINED_OFFSET,
             type ?: target.owner.returnType,
             target,
-            target.descriptor,
             target.descriptor.typeParametersCount,
             SYNTHESIZED_STATEMENT
         ).apply {
@@ -93,6 +92,7 @@ object JsIrBuilder {
         isExternal: Boolean = false,
         isTailrec: Boolean = false,
         isSuspend: Boolean = false,
+        isExpect: Boolean = false,
         origin: IrDeclarationOrigin = SYNTHESIZED_DECLARATION
     ) = buildFunction(
         Name.identifier(name),
@@ -100,11 +100,12 @@ object JsIrBuilder {
         parent,
         visibility,
         modality,
-        isInline,
-        isExternal,
-        isTailrec,
-        isSuspend,
-        origin
+        isInline = isInline,
+        isExternal = isExternal,
+        isTailrec = isTailrec,
+        isSuspend = isSuspend,
+        isExpect = isExpect,
+        origin = origin
     )
 
     fun buildFunction(
@@ -117,6 +118,8 @@ object JsIrBuilder {
         isExternal: Boolean = false,
         isTailrec: Boolean = false,
         isSuspend: Boolean = false,
+        isExpect: Boolean = false,
+        isOperator: Boolean = false,
         origin: IrDeclarationOrigin = SYNTHESIZED_DECLARATION
     ): IrSimpleFunction {
         val descriptor = WrappedSimpleFunctionDescriptor()
@@ -129,10 +132,13 @@ object JsIrBuilder {
             visibility,
             modality,
             returnType,
-            isInline,
-            isExternal,
-            isTailrec,
-            isSuspend
+            isInline = isInline,
+            isExternal = isExternal,
+            isTailrec = isTailrec,
+            isSuspend = isSuspend,
+            isExpect = isExpect,
+            isFakeOverride = origin == IrDeclarationOrigin.FAKE_OVERRIDE,
+            isOperator = isOperator
         ).also {
             descriptor.bind(it)
             it.parent = parent
@@ -140,7 +146,9 @@ object JsIrBuilder {
     }
 
     fun buildAnonymousInitializer() =
-        IrAnonymousInitializerImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, SYNTHESIZED_DECLARATION, IrAnonymousInitializerSymbolImpl(WrappedClassDescriptor()))
+        IrAnonymousInitializerImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, SYNTHESIZED_DECLARATION, IrAnonymousInitializerSymbolImpl(
+            WrappedClassDescriptor()
+        ))
 
     fun buildGetObjectValue(type: IrType, classSymbol: IrClassSymbol) =
         IrGetObjectValueImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, classSymbol)
@@ -181,7 +189,7 @@ object JsIrBuilder {
         IrCompositeImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, SYNTHESIZED_STATEMENT, statements)
 
     fun buildFunctionReference(type: IrType, symbol: IrFunctionSymbol) =
-        IrFunctionReferenceImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, symbol, symbol.descriptor, 0, null)
+        IrFunctionReferenceImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, symbol, 0, null)
 
     fun buildVar(
         type: IrType,
@@ -245,6 +253,8 @@ object JsIrBuilder {
     fun buildImplicitCast(value: IrExpression, toType: IrType) =
         buildTypeOperator(toType, IrTypeOperator.IMPLICIT_CAST, value, toType)
 
+    fun buildReinterpretCast(value: IrExpression, toType: IrType) =
+        buildTypeOperator(toType, IrTypeOperator.REINTERPRET_CAST, value, toType)
 
     fun buildNull(type: IrType) = IrConstImpl.constNull(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type)
     fun buildBoolean(type: IrType, v: Boolean) = IrConstImpl.boolean(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, v)

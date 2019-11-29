@@ -5,6 +5,9 @@
 
 package org.jetbrains.kotlin.backend.common.lower.loops
 
+import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
+import org.jetbrains.kotlin.ir.builders.createTmpVariable
+import org.jetbrains.kotlin.ir.builders.irGet
 import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.expressions.IrConstKind
 import org.jetbrains.kotlin.ir.expressions.IrExpression
@@ -13,29 +16,36 @@ import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstImpl
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.getClass
+import org.jetbrains.kotlin.ir.types.isNothing
 import org.jetbrains.kotlin.ir.util.functions
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.util.OperatorNameConventions
 
 internal fun IrExpression.castIfNecessary(targetType: IrType, numberCastFunctionName: Name): IrExpression {
-    return if (type == targetType) {
+    // This expression's type could be Nothing from an exception throw.
+    return if (type == targetType || type.isNothing()) {
         this
     } else {
-        val function = type.getClass()!!.functions.first { it.name == numberCastFunctionName }
-        IrCallImpl(startOffset, endOffset, function.returnType, function.symbol)
+        val castFun = type.getClass()!!.functions.single { it.name == numberCastFunctionName && it.valueParameters.isEmpty() }
+        IrCallImpl(startOffset, endOffset, castFun.returnType, castFun.symbol)
             .apply { dispatchReceiver = this@castIfNecessary }
     }
 }
 
 /** Return the negated value if the expression is const, otherwise call unaryMinus(). */
 internal fun IrExpression.negate(): IrExpression {
-    val value = (this as? IrConst<*>)?.value as? Number
-    return when (value) {
+    return when (val value = (this as? IrConst<*>)?.value as? Number) {
         is Int -> IrConstImpl(startOffset, endOffset, type, IrConstKind.Int, -value)
         is Long -> IrConstImpl(startOffset, endOffset, type, IrConstKind.Long, -value)
         else -> {
-            val unaryMinusFun = type.getClass()!!.functions.first { it.name == OperatorNameConventions.UNARY_MINUS }
-            IrCallImpl(startOffset, endOffset, type, unaryMinusFun.symbol, unaryMinusFun.descriptor).apply {
+            // This expression's type could be Nothing from an exception throw, in which case the unary minus function will not exist.
+            if (type.isNothing()) return this
+
+            val unaryMinusFun = type.getClass()!!.functions.single {
+                it.name == OperatorNameConventions.UNARY_MINUS &&
+                        it.valueParameters.isEmpty()
+            }
+            IrCallImpl(startOffset, endOffset, type, unaryMinusFun.symbol).apply {
                 dispatchReceiver = this@negate
             }
         }
@@ -44,14 +54,16 @@ internal fun IrExpression.negate(): IrExpression {
 
 /** Return `this - 1` if the expression is const, otherwise call dec(). */
 internal fun IrExpression.decrement(): IrExpression {
-    val thisValue = (this as? IrConst<*>)?.value
-    return when (thisValue) {
+    return when (val thisValue = (this as? IrConst<*>)?.value) {
         is Int -> IrConstImpl(startOffset, endOffset, type, IrConstKind.Int, thisValue - 1)
         is Long -> IrConstImpl(startOffset, endOffset, type, IrConstKind.Long, thisValue - 1)
         is Char -> IrConstImpl(startOffset, endOffset, type, IrConstKind.Char, thisValue - 1)
         else -> {
-            val decFun = type.getClass()!!.functions.first { it.name == OperatorNameConventions.DEC }
-            IrCallImpl(startOffset, endOffset, type, decFun.symbol, decFun.descriptor).apply {
+            val decFun = type.getClass()!!.functions.single {
+                it.name == OperatorNameConventions.DEC &&
+                        it.valueParameters.isEmpty()
+            }
+            IrCallImpl(startOffset, endOffset, type, decFun.symbol).apply {
                 dispatchReceiver = this@decrement
             }
         }
@@ -63,10 +75,22 @@ internal val IrExpression.canHaveSideEffects: Boolean
 
 internal val IrExpression.constLongValue: Long?
     get() = if (this is IrConst<*>) {
-        val value = this.value
-        when (value) {
+        when (val value = this.value) {
             is Number -> value.toLong()
             is Char -> value.toLong()
             else -> null
         }
     } else null
+
+/**
+ * If [expression] can have side effects ([IrExpression.canHaveSideEffects]), this function creates a temporary local variable for that
+ * expression and returns that variable and an [IrGetValue] for it. Otherwise, it returns no variable and [expression].
+ *
+ * This helps reduce local variable usage.
+ */
+internal fun DeclarationIrBuilder.createTemporaryVariableIfNecessary(expression: IrExpression, nameHint: String? = null) =
+    if (expression.canHaveSideEffects) {
+        scope.createTmpVariable(expression, nameHint = nameHint).let { Pair(it, irGet(it)) }
+    } else {
+        Pair(null, expression)
+    }

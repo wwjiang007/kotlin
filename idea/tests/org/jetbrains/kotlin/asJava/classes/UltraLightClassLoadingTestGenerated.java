@@ -8,7 +8,6 @@ package org.jetbrains.kotlin.asJava.classes;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
-import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -22,11 +21,11 @@ import java.util.regex.Pattern;
 @RunWith(JUnit3RunnerWithInners.class)
 public class UltraLightClassLoadingTestGenerated extends AbstractUltraLightClassLoadingTest {
     private void runTest(String testDataFilePath) throws Exception {
-        KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
     }
 
     public void testAllFilesPresentInUltraLightClasses() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/asJava/ultraLightClasses"), Pattern.compile("^(.+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/asJava/ultraLightClasses"), Pattern.compile("^(.+)\\.(kt|kts)$"), true);
     }
 
     @TestMetadata("annotations.kt")
@@ -62,6 +61,11 @@ public class UltraLightClassLoadingTestGenerated extends AbstractUltraLightClass
     @TestMetadata("delegatingToInterfaces.kt")
     public void testDelegatingToInterfaces() throws Exception {
         runTest("compiler/testData/asJava/ultraLightClasses/delegatingToInterfaces.kt");
+    }
+
+    @TestMetadata("dollarsInNameLocal.kt")
+    public void testDollarsInNameLocal() throws Exception {
+        runTest("compiler/testData/asJava/ultraLightClasses/dollarsInNameLocal.kt");
     }
 
     @TestMetadata("enums.kt")
@@ -137,6 +141,11 @@ public class UltraLightClassLoadingTestGenerated extends AbstractUltraLightClass
     @TestMetadata("lateinitProperty.kt")
     public void testLateinitProperty() throws Exception {
         runTest("compiler/testData/asJava/ultraLightClasses/lateinitProperty.kt");
+    }
+
+    @TestMetadata("localClassDerived.kt")
+    public void testLocalClassDerived() throws Exception {
+        runTest("compiler/testData/asJava/ultraLightClasses/localClassDerived.kt");
     }
 
     @TestMetadata("objects.kt")

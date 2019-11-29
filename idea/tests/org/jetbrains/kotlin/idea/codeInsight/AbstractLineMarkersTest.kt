@@ -23,7 +23,6 @@ import org.jetbrains.kotlin.idea.navigation.NavigationTestUtils
 import org.jetbrains.kotlin.idea.test.ConfigLibraryUtil
 import org.jetbrains.kotlin.idea.test.KotlinLightCodeInsightFixtureTestCase
 import org.jetbrains.kotlin.idea.test.KotlinWithJdkAndRuntimeLightProjectDescriptor
-import org.jetbrains.kotlin.idea.test.PluginTestCaseBase
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.test.InTextDirectivesUtils
 import org.jetbrains.kotlin.test.KotlinTestUtils
@@ -34,10 +33,6 @@ import java.io.File
 
 abstract class AbstractLineMarkersTest : KotlinLightCodeInsightFixtureTestCase() {
 
-    override fun getBasePath(): String {
-        return PluginTestCaseBase.TEST_DATA_PROJECT_RELATIVE + "/codeInsight/lineMarker"
-    }
-
     override fun getProjectDescriptor(): LightProjectDescriptor {
         return KotlinWithJdkAndRuntimeLightProjectDescriptor.INSTANCE
     }
@@ -45,45 +40,25 @@ abstract class AbstractLineMarkersTest : KotlinLightCodeInsightFixtureTestCase()
     fun doTest(path: String) = doTest(path) {}
 
     protected fun doAndCheckHighlighting(
-        documentToAnalyze: Document, expectedHighlighting: ExpectedHighlightingData, expectedFile: File
+        project: Project,
+        documentToAnalyze: Document,
+        expectedHighlighting: ExpectedHighlightingData,
+        expectedFile: File
     ): List<LineMarkerInfo<*>> {
         myFixture.doHighlighting()
 
-        val markers = DaemonCodeAnalyzerImpl.getLineMarkers(documentToAnalyze, myFixture.project)
-
-        try {
-            expectedHighlighting.checkLineMarkers(markers, documentToAnalyze.text)
-
-            // This is a workaround for sad bug in ExpectedHighlightingData:
-            // the latter doesn't throw assertion error when some line markers are expected, but none are present.
-            if (FileUtil.loadFile(expectedFile).contains("<lineMarker") && markers.isEmpty()) {
-                throw AssertionError("Some line markers are expected, but nothing is present at all")
-            }
-        } catch (error: AssertionError) {
-            try {
-                val actualTextWithTestData = TagsTestDataUtil.insertInfoTags(markers, true, myFixture.file.text)
-                KotlinTestUtils.assertEqualsToFile(expectedFile, actualTextWithTestData)
-            } catch (failure: FileComparisonFailure) {
-                throw FileComparisonFailure(
-                    error.message + "\n" + failure.message,
-                    failure.expected,
-                    failure.actual,
-                    failure.filePath
-                )
-            }
-        }
-        return markers
+        return checkHighlighting(project, documentToAnalyze, expectedHighlighting, expectedFile)
     }
 
     fun doTest(path: String, additionalCheck: () -> Unit) {
-        val fileText = FileUtil.loadFile(File(path))
+        val fileText = FileUtil.loadFile(testDataFile())
         try {
             ConfigLibraryUtil.configureLibrariesByDirective(myFixture.module, PlatformTestUtil.getCommunityPath(), fileText)
             if (InTextDirectivesUtils.findStringWithPrefixes(fileText, "METHOD_SEPARATORS") != null) {
                 DaemonCodeAnalyzerSettings.getInstance().SHOW_METHOD_SEPARATORS = true
             }
 
-            myFixture.configureByFile(path)
+            myFixture.configureByFile(fileName())
             val project = myFixture.project
             val document = myFixture.editor.document
 
@@ -92,7 +67,7 @@ abstract class AbstractLineMarkersTest : KotlinLightCodeInsightFixtureTestCase()
 
             PsiDocumentManager.getInstance(project).commitAllDocuments()
 
-            val markers = doAndCheckHighlighting(document, data, File(path))
+            val markers = doAndCheckHighlighting(myFixture.project, document, data, testDataFile())
 
             assertNavigationElements(myFixture.project, myFixture.file as KtFile, markers)
             additionalCheck()
@@ -172,6 +147,38 @@ abstract class AbstractLineMarkersTest : KotlinLightCodeInsightFixtureTestCase()
             expectedNavigationText = expectedNavigationText.substring(expectedNavigationText.indexOf("\n") + 1)
 
             return expectedNavigationText
+        }
+
+        fun checkHighlighting(
+            project: Project,
+            documentToAnalyze: Document,
+            expectedHighlighting: ExpectedHighlightingData,
+            expectedFile: File
+        ): MutableList<LineMarkerInfo<*>> {
+            val markers = DaemonCodeAnalyzerImpl.getLineMarkers(documentToAnalyze, project)
+
+            try {
+                expectedHighlighting.checkLineMarkers(markers, documentToAnalyze.text)
+
+                // This is a workaround for sad bug in ExpectedHighlightingData:
+                // the latter doesn't throw assertion error when some line markers are expected, but none are present.
+                if (FileUtil.loadFile(expectedFile).contains("<lineMarker") && markers.isEmpty()) {
+                    throw AssertionError("Some line markers are expected, but nothing is present at all")
+                }
+            } catch (error: AssertionError) {
+                try {
+                    val actualTextWithTestData = TagsTestDataUtil.insertInfoTags(markers, true, documentToAnalyze.text)
+                    KotlinTestUtils.assertEqualsToFile(expectedFile, actualTextWithTestData)
+                } catch (failure: FileComparisonFailure) {
+                    throw FileComparisonFailure(
+                        error.message + "\n" + failure.message,
+                        failure.expected,
+                        failure.actual,
+                        failure.filePath
+                    )
+                }
+            }
+            return markers
         }
     }
 }

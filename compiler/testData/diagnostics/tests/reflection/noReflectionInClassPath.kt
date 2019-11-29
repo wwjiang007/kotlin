@@ -17,12 +17,12 @@ fun n11() = (Foo::func)(Foo(""))
 
 fun y01() = Foo::prop.<!NO_REFLECTION_IN_CLASS_PATH!>getter<!>
 fun y02() = Foo::class.<!NO_REFLECTION_IN_CLASS_PATH!>members<!>
-fun y03() = Foo::class.<!NO_REFLECTION_IN_CLASS_PATH!>simpleName<!>
+fun y03() = Foo::class.simpleName
 fun y04() = Foo::class.<!UNRESOLVED_REFERENCE!>properties<!>
 
 fun <T : Any> kclass(k: KClass<*>, kt: KClass<T>) {
-    k.<!NO_REFLECTION_IN_CLASS_PATH!>simpleName<!>
-    k.<!NO_REFLECTION_IN_CLASS_PATH!>qualifiedName<!>
+    k.simpleName
+    k.qualifiedName
     k.<!NO_REFLECTION_IN_CLASS_PATH!>members<!>
     k.<!NO_REFLECTION_IN_CLASS_PATH!>constructors<!>
     k.<!NO_REFLECTION_IN_CLASS_PATH!>nestedClasses<!>
@@ -39,8 +39,24 @@ fun <T : Any> kclass(k: KClass<*>, kt: KClass<T>) {
     k.<!NO_REFLECTION_IN_CLASS_PATH!>isCompanion<!>
 
     k.<!NO_REFLECTION_IN_CLASS_PATH!>annotations<!>
+    k.isInstance(42)
 
     k == kt
     k.hashCode()
     k.toString()
+}
+
+fun ktype(t: KType, t2: KType) {
+    t.classifier
+    t.arguments
+    t.isMarkedNullable
+    t.annotations
+
+    t == t2
+    t.hashCode()
+    t.toString()
+
+    KTypeProjection.Companion.covariant(t)
+    KTypeProjection.STAR
+    KTypeProjection(KVariance.IN, t)
 }

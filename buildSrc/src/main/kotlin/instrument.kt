@@ -44,10 +44,29 @@ fun Project.configureFormInstrumentation() {
         // classes from the "friendly directory" to the compile classpath.
         val testCompile = tasks.findByName("compileTestKotlin") as AbstractCompile?
         testCompile?.doFirst {
+            val originalClassesDirs = files((mainSourceSet as ExtensionAware).extra.get("classesDirsCopy"))
+
             testCompile.classpath = (testCompile.classpath
                     - mainSourceSet.output.classesDirs
-                    + files((mainSourceSet as ExtensionAware).extra.get("classesDirsCopy")))
+                    + originalClassesDirs)
+
+            // Since Kotlin 1.3.60, the friend paths available to the test compile task are calculated as the main source set's
+            // output.classesDirs. Since the classesDirs are excluded from the classpath (replaced by the originalClassesDirs),
+            // in order to be able to access the internals of 'main', tests need to receive the original classes dirs as a
+            // -Xfriend-paths compiler argument as well.
+            fun addFreeCompilerArgs(kotlinCompileTask: AbstractCompile, vararg args: String) {
+                val getKotlinOptions = kotlinCompileTask::class.java.getMethod("getKotlinOptions")
+                val kotlinOptions = getKotlinOptions(kotlinCompileTask)
+
+                val getFreeCompilerArgs = kotlinOptions::class.java.getMethod("getFreeCompilerArgs")
+                val freeCompilerArgs = getFreeCompilerArgs(kotlinOptions) as List<*>
+
+                val setFreeCompilerArgs = kotlinOptions::class.java.getMethod("setFreeCompilerArgs", List::class.java)
+                setFreeCompilerArgs(kotlinOptions, freeCompilerArgs + args)
+            }
+            addFreeCompilerArgs(testCompile, "-Xfriend-paths=" + originalClassesDirs.joinToString(",")  { it.absolutePath })
         }
+
     }
 
     val instrumentationClasspathCfg = configurations.create("instrumentationClasspath")
@@ -68,16 +87,15 @@ fun Project.configureFormInstrumentation() {
             val instrumentedClassesDir = File(project.buildDir, "classes/${sourceSetParam.name}-instrumented")
             (sourceSetParam.output.classesDirs as ConfigurableFileCollection).setFrom(instrumentedClassesDir)
             val instrumentTask =
-                project.tasks.create(sourceSetParam.getTaskName("instrument", "classes"), IntelliJInstrumentCodeTask::class.java)
-            instrumentTask.apply {
-                dependsOn(sourceSetParam.classesTaskName).onlyIf { !classesDirsCopy.isEmpty }
-                sourceSet = sourceSetParam
-                instrumentationClasspath = instrumentationClasspathCfg
-                originalClassesDirs = classesDirsCopy
-                output = instrumentedClassesDir
-            }
+                project.tasks.register(sourceSetParam.getTaskName("instrument", "classes"), IntelliJInstrumentCodeTask::class.java) {
+                    dependsOn(sourceSetParam.classesTaskName).onlyIf { !classesDirsCopy.isEmpty }
+                    sourceSet = sourceSetParam
+                    instrumentationClasspath = instrumentationClasspathCfg
+                    originalClassesDirs = classesDirsCopy
+                    output = instrumentedClassesDir
+                    outputs.dir(instrumentedClassesDir)
+                }
 
-            instrumentTask.outputs.dir(instrumentedClassesDir)
             // Ensure that our task is invoked when the source set is built
             sourceSetParam.compiledBy(instrumentTask)
             @Suppress("UNUSED_EXPRESSION")
@@ -93,17 +111,21 @@ open class IntelliJInstrumentCodeTask : ConventionTask() {
         private const val LOADER_REF = "java2.loader"
     }
 
-    var sourceSet: SourceSet? = null
-
+    @Classpath
     var instrumentationClasspath: Configuration? = null
 
-    @Input
+    @InputFiles
+    @PathSensitive(PathSensitivity.RELATIVE)
     var originalClassesDirs: FileCollection? = null
 
     @get:Input
     var instrumentNotNull: Boolean = false
 
+    @Internal
+    var sourceSet: SourceSet? = null
+
     @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
     val sourceDirs: FileCollection
         get() = project.files(sourceSet!!.allSource.srcDirs.filter { !sourceSet!!.resources.contains(it) && it.exists() })
 

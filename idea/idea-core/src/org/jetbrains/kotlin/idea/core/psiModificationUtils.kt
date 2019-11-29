@@ -288,9 +288,8 @@ fun KtDeclaration.toDescriptor(): DeclarationDescriptor? {
     return descriptor
 }
 
-//TODO: code style option whether to insert redundant 'public' keyword or not
-fun KtModifierListOwner.setVisibility(visibilityModifier: KtModifierKeywordToken) {
-    if (this is KtDeclaration) {
+fun KtModifierListOwner.setVisibility(visibilityModifier: KtModifierKeywordToken, addImplicitVisibilityModifier: Boolean = false) {
+    if (this is KtDeclaration && !addImplicitVisibilityModifier) {
         val defaultVisibilityKeyword = implicitVisibility()
 
         if (visibilityModifier == defaultVisibilityKeyword) {
@@ -415,7 +414,6 @@ fun KtDeclaration.implicitModality(): KtModifierKeywordToken {
             descriptor as? ClassDescriptor,
             containingDescriptor,
             mapModalityToken(predictedModality),
-            bindingContext,
             isImplicitModality = true
         )
 
@@ -489,9 +487,10 @@ fun KtTypeParameterListOwner.addTypeParameter(typeParameter: KtTypeParameter): K
     val list = KtPsiFactory(this).createTypeParameterList("<X>")
     list.parameters[0].replace(typeParameter)
     val leftAnchor = when (this) {
-        is KtClass -> nameIdentifier ?: getClassOrInterfaceKeyword()
+        is KtClass -> nameIdentifier
         is KtNamedFunction -> funKeyword
         is KtProperty -> valOrVarKeyword
+        is KtTypeAlias -> nameIdentifier
         else -> null
     } ?: return null
     return (addAfter(list, leftAnchor) as KtTypeParameterList).parameters.first()
@@ -557,10 +556,14 @@ fun KtModifierList.normalize(): KtModifierList {
 }
 
 fun KtBlockStringTemplateEntry.canDropBraces() =
-    expression is KtNameReferenceExpression && canPlaceAfterSimpleNameEntry(nextSibling)
+    (expression is KtNameReferenceExpression || expression is KtThisExpression) && canPlaceAfterSimpleNameEntry(nextSibling)
 
 fun KtBlockStringTemplateEntry.dropBraces(): KtSimpleNameStringTemplateEntry {
-    val name = (expression as KtNameReferenceExpression).getReferencedNameElement().text
+    val name = if (expression is KtThisExpression) {
+        KtTokens.THIS_KEYWORD.value
+    } else {
+        (expression as KtNameReferenceExpression).getReferencedNameElement().text
+    }
     val newEntry = KtPsiFactory(this).createSimpleNameStringTemplateEntry(name)
     return replaced(newEntry)
 }

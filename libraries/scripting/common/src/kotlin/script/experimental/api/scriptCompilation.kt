@@ -58,6 +58,11 @@ fun ScriptCompilationConfiguration?.with(body: ScriptCompilationConfiguration.Bu
 val ScriptCompilationConfigurationKeys.displayName by PropertiesCollection.key<String>()
 
 /**
+ * The default script class name
+ */
+val ScriptCompilationConfigurationKeys.defaultIdentifier by PropertiesCollection.key<String>("Script")
+
+/**
  * The script filename extension
  * Used for the primary script definition selection as well as to assign a kotlin-specific file type to the files with the extension in Intellij IDEA
  * For Intellij IDEA support, it is important to have this extension set to a non-ambiguous name.
@@ -269,13 +274,15 @@ fun ScriptCompilationConfiguration.refineOnAnnotations(
     val foundAnnotationNames = collectedData[ScriptCollectedData.foundAnnotations]?.mapTo(HashSet()) { it.annotationClass.java.name }
     if (foundAnnotationNames.isNullOrEmpty()) return this.asSuccess()
 
-    val refinedConfig = this[ScriptCompilationConfiguration.refineConfigurationOnAnnotations]
-        ?.fold(this) { config, (annotations, handler) ->
-            // checking that the collected data contains expected annotations
-            if (annotations.none { foundAnnotationNames.contains(it.typeName) }) config
-            else handler.invoke(ScriptConfigurationRefinementContext(script, config, collectedData)).valueOr { return it }
-        }
-    return (refinedConfig ?: this).asSuccess()
+    val thisResult: ResultWithDiagnostics<ScriptCompilationConfiguration> = this.asSuccess()
+    return this[ScriptCompilationConfiguration.refineConfigurationOnAnnotations]
+        ?.fold(thisResult) { config, (annotations, handler) ->
+            config.onSuccess {
+                // checking that the collected data contains expected annotations
+                if (annotations.none { foundAnnotationNames.contains(it.typeName) }) it.asSuccess()
+                else handler.invoke(ScriptConfigurationRefinementContext(script, it, collectedData))
+            }
+        } ?: thisResult
 }
 
 fun ScriptCompilationConfiguration.refineBeforeCompiling(

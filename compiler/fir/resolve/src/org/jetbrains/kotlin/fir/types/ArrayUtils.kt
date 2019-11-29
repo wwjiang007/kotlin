@@ -8,15 +8,16 @@ package org.jetbrains.kotlin.fir.types
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.resolve.FirSymbolProvider
 import org.jetbrains.kotlin.fir.resolve.constructType
-import org.jetbrains.kotlin.fir.service
+import org.jetbrains.kotlin.fir.resolve.firSymbolProvider
 import org.jetbrains.kotlin.fir.symbols.StandardClassIds
 import org.jetbrains.kotlin.fir.symbols.invoke
 
 
 fun ConeKotlinType.createArrayOf(session: FirSession, nullable: Boolean = false): ConeKotlinType {
-    val symbolProvider: FirSymbolProvider = session.service()
-    if (this is ConeClassType) {
-        val primitiveArrayId = StandardClassIds.primitiveArrayTypeByElementType[lookupTag.classId]
+    val symbolProvider: FirSymbolProvider = session.firSymbolProvider
+    val type = lowerBoundIfFlexible()
+    if (type is ConeClassLikeType) {
+        val primitiveArrayId = StandardClassIds.primitiveArrayTypeByElementType[type.lookupTag.classId]
         if (primitiveArrayId != null) {
             return primitiveArrayId.invoke(symbolProvider).constructType(emptyArray(), nullable)
         }
@@ -27,13 +28,14 @@ fun ConeKotlinType.createArrayOf(session: FirSession, nullable: Boolean = false)
 
 
 fun ConeKotlinType.arrayElementType(session: FirSession): ConeKotlinType? {
-    if (this !is ConeClassType) return null
-    val classId = this.lookupTag.classId
+    val type = this.lowerBoundIfFlexible()
+    if (type !is ConeClassLikeType) return null
+    val classId = type.lookupTag.classId
     if (classId == StandardClassIds.Array)
-        return (typeArguments.first() as ConeTypedProjection).type
+        return (type.typeArguments.first() as ConeTypedProjection).type
     val elementType = StandardClassIds.elementTypeByPrimitiveArrayType[classId]
     if (elementType != null) {
-        return elementType.invoke(session.service()).constructType(emptyArray(), isNullable = false)
+        return elementType.invoke(session.firSymbolProvider).constructType(emptyArray(), isNullable = false)
     }
 
     return null

@@ -8,23 +8,22 @@ plugins {
 
 dependencies {
     compile(project(":kotlin-sam-with-receiver-compiler-plugin"))
-    compile(project(":plugins:annotation-based-compiler-plugins-ide-support"))
-    compile(project(":compiler:util"))
-    compile(project(":compiler:frontend"))
-    compile(project(":compiler:frontend.java"))
-    compile(project(":idea:idea-core"))
 
-    Ide.AS33.orHigher.not {
-        compile(project(":idea:idea-android"))
+    compileOnly(project(":plugins:annotation-based-compiler-plugins-ide-support"))
+    compileOnly(project(":compiler:util"))
+    compileOnly(project(":compiler:frontend"))
+    compileOnly(project(":compiler:frontend.java"))
+    compileOnly(project(":idea:idea-core"))
+
+    Ide.IJ183 {
+        compileOnly(project(":idea:idea-android"))
     }
 
-    compile(project(":idea"))
-    compile(project(":idea:idea-jvm"))
+    compileOnly(project(":idea"))
+    compileOnly(project(":idea:idea-jvm"))
 
-    compileOnly(intellijDep()) { includeJars("openapi", "extensions", "util") }
-    Platform[181].orHigher {
-        compileOnly(intellijDep()) { includeJars("platform-api") }
-    }
+    compileOnly(intellijDep()) { includeJars("platform-api", "openapi", "extensions", "util") }
+    compileOnly(intellijDep("gradle"))
 }
 
 sourceSets {
@@ -33,3 +32,9 @@ sourceSets {
 }
 
 runtimeJar()
+
+sourcesJar()
+
+javadocJar()
+
+apply(from = "$rootDir/gradle/kotlinPluginPublication.gradle.kts")

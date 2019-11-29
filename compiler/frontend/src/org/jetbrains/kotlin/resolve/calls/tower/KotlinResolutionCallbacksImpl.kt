@@ -38,8 +38,6 @@ import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluat
 import org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope
-import org.jetbrains.kotlin.resolve.scopes.receivers.ExpressionReceiver
-import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValueWithSmartCastInfo
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.expressions.DoubleColonExpressionResolver
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingServices
@@ -75,7 +73,8 @@ class KotlinResolutionCallbacksImpl(
     val doubleColonExpressionResolver: DoubleColonExpressionResolver,
     val deprecationResolver: DeprecationResolver,
     val moduleDescriptor: ModuleDescriptor,
-    val topLevelCallContext: BasicCallResolutionContext?
+    val topLevelCallContext: BasicCallResolutionContext?,
+    val missingSupertypesResolver: MissingSupertypesResolver
 ) : KotlinResolutionCallbacks {
     class LambdaInfo(val expectedType: UnwrappedType, val contextDependency: ContextDependency) {
         val returnStatements = ArrayList<Pair<KtReturnExpression, LambdaContextInfo?>>()
@@ -161,7 +160,8 @@ class KotlinResolutionCallbacksImpl(
                     psiCallResolver, postponedArgumentsAnalyzer, kotlinConstraintSystemCompleter,
                     callComponents, builtIns, topLevelCallContext, stubsForPostponedVariables, trace,
                     kotlinToResolvedCallTransformer, expressionTypingServices, argumentTypeResolver,
-                    doubleColonExpressionResolver, deprecationResolver, moduleDescriptor, typeApproximator
+                    doubleColonExpressionResolver, deprecationResolver, moduleDescriptor, typeApproximator,
+                    missingSupertypesResolver
                 )
             } else {
                 null
@@ -223,21 +223,6 @@ class KotlinResolutionCallbacksImpl(
     override fun bindStubResolvedCallForCandidate(candidate: ResolvedCallAtom) {
         kotlinToResolvedCallTransformer.createStubResolvedCallAndWriteItToTrace<CallableDescriptor>(
             candidate, trace, emptyList(), substitutor = null
-        )
-    }
-
-    override fun createReceiverWithSmartCastInfo(resolvedAtom: ResolvedCallAtom): ReceiverValueWithSmartCastInfo? {
-        val returnType = resolvedAtom.candidateDescriptor.returnType ?: return null
-        val psiKotlinCall = resolvedAtom.atom.psiKotlinCall
-        val callElement = psiKotlinCall.psiCall.callElement.safeAs<KtExpression>() ?: return null
-        val expression = findCommonParent(callElement, resolvedAtom.atom.psiKotlinCall.explicitReceiver)
-
-        return transformToReceiverWithSmartCastInfo(
-            resolvedAtom.candidateDescriptor,
-            trace.bindingContext,
-            psiKotlinCall.resultDataFlowInfo,
-            ExpressionReceiver.create(expression, returnType, trace.bindingContext),
-            languageVersionSettings, dataFlowValueFactory
         )
     }
 

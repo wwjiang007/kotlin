@@ -29,13 +29,11 @@ import org.jetbrains.kotlin.ir.backend.js.utils.OperatorNames
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrFileImpl
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
-import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
-import org.jetbrains.kotlin.ir.symbols.IrClassifierSymbol
-import org.jetbrains.kotlin.ir.symbols.IrEnumEntrySymbol
-import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
+import org.jetbrains.kotlin.ir.symbols.*
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.types.impl.IrDynamicTypeImpl
 import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.js.config.JSConfigurationKeys
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
@@ -47,14 +45,21 @@ class JsIrBackendContext(
     val symbolTable: SymbolTable,
     irModuleFragment: IrModuleFragment,
     val additionalExportedDeclarations: Set<FqName>,
-    override val configuration: CompilerConfiguration
+    override val configuration: CompilerConfiguration, // TODO: remove configuration from backend context
+    override val scriptMode: Boolean = false
 ) : CommonBackendContext {
+    override val transformedFunction = mutableMapOf<IrFunctionSymbol, IrSimpleFunctionSymbol>()
+    override val lateinitNullableFields = mutableMapOf<IrField, IrField>()
+
+    val memberMap = mutableMapOf<IrSimpleFunctionSymbol, IrSimpleFunction>()
 
     override val builtIns = module.builtIns
 
     override var inVerbosePhase: Boolean = false
 
-    var externalPackageFragment = mutableMapOf<FqName, IrPackageFragment>()
+    val devMode = configuration[JSConfigurationKeys.DEVELOPER_MODE] ?: false
+
+    var externalPackageFragment = mutableMapOf<IrFileSymbol, IrFile>()
     lateinit var bodilessBuiltInsPackageFragment: IrPackageFragment
 
     val externalNestedClasses = mutableListOf<IrClass>()
@@ -252,7 +257,8 @@ class JsIrBackendContext(
     val newThrowableSymbol = symbolTable.referenceSimpleFunction(getJsInternalFunction("newThrowable"))
     val extendThrowableSymbol = symbolTable.referenceSimpleFunction(getJsInternalFunction("extendThrowable"))
 
-    val throwISEymbol = symbolTable.referenceSimpleFunction(getFunctions(kotlinPackageFqn.child(Name.identifier("THROW_ISE"))).single())
+    val throwISEsymbol = symbolTable.referenceSimpleFunction(getFunctions(kotlinPackageFqn.child(Name.identifier("THROW_ISE"))).single())
+    val throwIAEsymbol = symbolTable.referenceSimpleFunction(getFunctions(kotlinPackageFqn.child(Name.identifier("THROW_IAE"))).single())
 
     val suiteFun = getFunctions(FqName("kotlin.test.suite")).singleOrNull()?.let { symbolTable.referenceSimpleFunction(it) }
     val testFun = getFunctions(FqName("kotlin.test.test")).singleOrNull()?.let { symbolTable.referenceSimpleFunction(it) }

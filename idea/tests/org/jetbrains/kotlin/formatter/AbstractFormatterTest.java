@@ -17,11 +17,11 @@ import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.codeStyle.CodeStyleManager;
 import com.intellij.psi.codeStyle.CodeStyleSettings;
-import com.intellij.testFramework.LightIdeaTestCase;
 import com.intellij.util.IncorrectOperationException;
 import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.idea.KotlinLanguage;
+import org.jetbrains.kotlin.idea.test.KotlinLightIdeaTestCase;
 import org.jetbrains.kotlin.idea.test.PluginTestCaseBase;
 import org.jetbrains.kotlin.test.InTextDirectivesUtils;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
@@ -33,7 +33,7 @@ import java.util.Map;
 
 // Based on from com.intellij.psi.formatter.java.AbstractJavaFormatterTest
 @SuppressWarnings("UnusedDeclaration")
-public abstract class AbstractFormatterTest extends LightIdeaTestCase {
+public abstract class AbstractFormatterTest extends KotlinLightIdeaTestCase {
 
     protected enum Action {REFORMAT, INDENT}
 
@@ -131,7 +131,7 @@ public abstract class AbstractFormatterTest extends LightIdeaTestCase {
         String testFileExtension = expectedFileNameWithExtension.substring(expectedFileNameWithExtension.lastIndexOf("."));
         String originalFileText = FileUtil.loadFile(new File(testFileName + testFileExtension), true);
 
-        CodeStyleSettings codeStyleSettings = FormatSettingsUtil.getSettings();
+        CodeStyleSettings codeStyleSettings = FormatSettingsUtil.getSettings(getProject());
         try {
             Integer rightMargin = InTextDirectivesUtils.getPrefixedInt(originalFileText, "// RIGHT_MARGIN: ");
             if (rightMargin != null) {

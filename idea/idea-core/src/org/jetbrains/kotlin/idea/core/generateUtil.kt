@@ -19,10 +19,7 @@ package org.jetbrains.kotlin.idea.core
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.util.text.StringUtil
-import com.intellij.psi.PsiDocumentManager
-import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiWhiteSpace
-import com.intellij.psi.SmartPointerManager
+import com.intellij.psi.*
 import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.SmartList
@@ -45,7 +42,7 @@ fun moveCaretIntoGeneratedElement(editor: Editor, element: PsiElement) {
     pointer.element?.let { moveCaretIntoGeneratedElementDocumentUnblocked(editor, it) }
 }
 
-class RestoreCaret<T: PsiElement>(beforeElement: T, val editor: Editor?) {
+class RestoreCaret<T : PsiElement>(beforeElement: T, val editor: Editor?) {
     private val relativeOffset: Int
     private val beforeElementTextLength: Int = beforeElement.textLength
 
@@ -214,16 +211,19 @@ private fun removeAfterOffset(offset: Int, whiteSpace: PsiWhiteSpace): PsiElemen
     return whiteSpace
 }
 
+@JvmOverloads
 fun <T : KtDeclaration> insertMembersAfter(
-        editor: Editor?,
-        classOrObject: KtClassOrObject,
-        members: Collection<T>,
-        anchor: PsiElement? = null
+    editor: Editor?,
+    classOrObject: KtClassOrObject,
+    members: Collection<T>,
+    anchor: PsiElement? = null,
+    getAnchor: (KtDeclaration) -> PsiElement? = { null }
 ): List<T> {
     members.ifEmpty { return emptyList() }
-
+    val project = classOrObject.project
     return runWriteAction {
-        val insertedMembers = SmartList<T>()
+        val insertedMembers = SmartList<SmartPsiElementPointer<T>>()
+        fun insertedMembersElements() = insertedMembers.mapNotNull { it.element }
 
         val (parameters, otherMembers) = members.partition { it is KtParameter }
 
@@ -231,7 +231,7 @@ fun <T : KtDeclaration> insertMembersAfter(
             if (classOrObject !is KtClass) return@mapNotNullTo null
 
             @Suppress("UNCHECKED_CAST")
-            (classOrObject.createPrimaryConstructorParameterListIfAbsent().addParameter(it as KtParameter) as T)
+            SmartPointerManager.createPointer(classOrObject.createPrimaryConstructorParameterListIfAbsent().addParameter(it as KtParameter) as T)
         }
 
         if (otherMembers.isNotEmpty()) {
@@ -239,37 +239,40 @@ fun <T : KtDeclaration> insertMembersAfter(
 
             var afterAnchor = anchor ?: findInsertAfterAnchor(editor, body) ?: return@runWriteAction emptyList<T>()
             otherMembers.mapTo(insertedMembers) {
+                afterAnchor = getAnchor(it) ?: afterAnchor
+
                 if (classOrObject is KtClass && classOrObject.isEnum()) {
                     val enumEntries = classOrObject.declarations.filterIsInstance<KtEnumEntry>()
-                    val bound = (enumEntries.lastOrNull() ?: classOrObject.allChildren.firstOrNull { it.node.elementType == KtTokens.SEMICOLON })
+                    val bound = (enumEntries.lastOrNull() ?: classOrObject.allChildren.firstOrNull { element ->
+                        element.node.elementType == KtTokens.SEMICOLON
+                    })
                     if (it !is KtEnumEntry) {
                         if (bound != null && afterAnchor.startOffset <= bound.startOffset) {
                             afterAnchor = bound
                         }
-                    }
-                    else if (bound == null && body.declarations.isNotEmpty()) {
+                    } else if (bound == null && body.declarations.isNotEmpty()) {
                         afterAnchor = body.lBrace!!
-                    }
-                    else if (bound != null && afterAnchor.startOffset > bound.startOffset) {
+                    } else if (bound != null && afterAnchor.startOffset > bound.startOffset) {
                         afterAnchor = bound.prevSibling!!
                     }
                 }
 
                 @Suppress("UNCHECKED_CAST")
-                (body.addAfter(it, afterAnchor) as T).apply { afterAnchor = this }
+                SmartPointerManager.createPointer((body.addAfter(it, afterAnchor) as T).apply { afterAnchor = this })
             }
         }
 
-        ShortenReferences.DEFAULT.process(insertedMembers)
+        ShortenReferences.DEFAULT.process(insertedMembersElements())
 
+        val firstElement = insertedMembersElements().firstOrNull() ?: return@runWriteAction emptyList()
         if (editor != null) {
-            moveCaretIntoGeneratedElement(editor, insertedMembers.first())
+            moveCaretIntoGeneratedElement(editor, firstElement)
         }
 
-        val codeStyleManager = CodeStyleManager.getInstance(classOrObject.project)
-        insertedMembers.forEach { codeStyleManager.reformat(it) }
+        val codeStyleManager = CodeStyleManager.getInstance(project)
+        insertedMembersElements().forEach { codeStyleManager.reformat(it) }
 
-        insertedMembers
+        insertedMembersElements().toList()
     }
 }
 

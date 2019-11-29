@@ -11,7 +11,8 @@ import org.jetbrains.kotlin.utils.Printer
 class RunTestMethodModel(
     private val targetBackend: TargetBackend,
     private val testMethodName: String,
-    private val testRunnerMethodName: String
+    private val testRunnerMethodName: String,
+    private val additionalRunnerArguments: List<String> = emptyList()
 ) : MethodModel {
     override val name = METHOD_NAME
     override val dataString: String? = null
@@ -21,8 +22,23 @@ class RunTestMethodModel(
     }
 
     override fun generateBody(p: Printer) {
-        val className = TargetBackend::class.java.simpleName
-        p.println("KotlinTestUtils.$testRunnerMethodName(this::$testMethodName, $className.$targetBackend, testDataFilePath);")
+        if (!isWithTargetBackend()) {
+            p.println("KotlinTestUtils.$testRunnerMethodName(this::$testMethodName, this, testDataFilePath);")
+        } else {
+            val className = TargetBackend::class.java.simpleName
+            val additionalArguments = if (additionalRunnerArguments.isNotEmpty())
+                additionalRunnerArguments.joinToString(separator = ", ", prefix = ", ")
+            else ""
+            p.println("KotlinTestUtils.$testRunnerMethodName(this::$testMethodName, $className.$targetBackend, testDataFilePath$additionalArguments);")
+        }
+    }
+
+    override fun imports(): Collection<Class<*>> {
+        return super.imports() + if (isWithTargetBackend()) setOf(TargetBackend::class.java) else emptySet()
+    }
+
+    private fun isWithTargetBackend(): Boolean {
+        return !(targetBackend == TargetBackend.ANY && additionalRunnerArguments.isEmpty() && testRunnerMethodName == METHOD_NAME)
     }
 
     companion object {

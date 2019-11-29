@@ -8,7 +8,6 @@ package org.jetbrains.kotlin.idea;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
-import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -22,11 +21,36 @@ import java.util.regex.Pattern;
 @RunWith(JUnit3RunnerWithInners.class)
 public class SmartSelectionTestGenerated extends AbstractSmartSelectionTest {
     private void runTest(String testDataFilePath) throws Exception {
-        KotlinTestUtils.runTest(this::doTestSmartSelection, TargetBackend.ANY, testDataFilePath);
+        KotlinTestUtils.runTest(this::doTestSmartSelection, this, testDataFilePath);
     }
 
     public void testAllFilesPresentInSmartSelection() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/smartSelection"), Pattern.compile("^([^.]+)\\.kt$"), TargetBackend.ANY, true);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/smartSelection"), Pattern.compile("^([^.]+)\\.kt$"), true);
+    }
+
+    @TestMetadata("beforeComment.kt")
+    public void testBeforeComment() throws Exception {
+        runTest("idea/testData/smartSelection/beforeComment.kt");
+    }
+
+    @TestMetadata("beforeKDocComment.kt")
+    public void testBeforeKDocComment() throws Exception {
+        runTest("idea/testData/smartSelection/beforeKDocComment.kt");
+    }
+
+    @TestMetadata("beforeRightParenthesis.kt")
+    public void testBeforeRightParenthesis() throws Exception {
+        runTest("idea/testData/smartSelection/beforeRightParenthesis.kt");
+    }
+
+    @TestMetadata("beforeRightParenthesis2.kt")
+    public void testBeforeRightParenthesis2() throws Exception {
+        runTest("idea/testData/smartSelection/beforeRightParenthesis2.kt");
+    }
+
+    @TestMetadata("beforeRightParenthesis3.kt")
+    public void testBeforeRightParenthesis3() throws Exception {
+        runTest("idea/testData/smartSelection/beforeRightParenthesis3.kt");
     }
 
     @TestMetadata("commentsAndExtraSpaces.kt")

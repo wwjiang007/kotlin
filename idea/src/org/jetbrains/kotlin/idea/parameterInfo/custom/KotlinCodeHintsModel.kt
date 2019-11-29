@@ -11,16 +11,17 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.RangeMarker
 import com.intellij.openapi.editor.event.EditorFactoryEvent
+import com.intellij.openapi.editor.event.EditorFactoryListener
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.util.containers.ContainerUtil
+import org.jetbrains.kotlin.idea.core.util.end
 import org.jetbrains.kotlin.idea.core.util.range
 import org.jetbrains.kotlin.idea.util.application.runReadAction
-import org.jetbrains.kotlin.idea.util.compat.EditorFactoryListenerWrapper
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import java.util.concurrent.ConcurrentHashMap
 
-class KotlinCodeHintsModel(val project: Project) : EditorFactoryListenerWrapper {
+class KotlinCodeHintsModel(val project: Project) : EditorFactoryListener {
     companion object {
         fun getInstance(project: Project): KotlinCodeHintsModel =
             project.getComponent(KotlinCodeHintsModel::class.java) ?: error("Component `KotlinCodeHintsModel` is expected to be registered")
@@ -45,6 +46,9 @@ class KotlinCodeHintsModel(val project: Project) : EditorFactoryListenerWrapper 
                     .firstOrNull { (marker, _) ->
                         val textRange = marker.range
                         if (textRange == null || !(textRange.startOffset <= offset && offset <= textRange.endOffset)) {
+                            return@firstOrNull false
+                        }
+                        if (textRange.end > document.textLength) {
                             return@firstOrNull false
                         }
 

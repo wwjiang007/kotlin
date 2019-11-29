@@ -8,7 +8,6 @@ package org.jetbrains.kotlin.idea.conversion.copy;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
-import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -22,16 +21,21 @@ import java.util.regex.Pattern;
 @RunWith(JUnit3RunnerWithInners.class)
 public class LiteralTextToKotlinCopyPasteTestGenerated extends AbstractLiteralTextToKotlinCopyPasteTest {
     private void runTest(String testDataFilePath) throws Exception {
-        KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
     }
 
     public void testAllFilesPresentInPlainTextLiteral() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/copyPaste/plainTextLiteral"), Pattern.compile("^([^\\.]+)\\.txt$"), TargetBackend.ANY, true);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/copyPaste/plainTextLiteral"), Pattern.compile("^([^\\.]+)\\.txt$"), true);
     }
 
     @TestMetadata("BrokenEntries.txt")
     public void testBrokenEntries() throws Exception {
         runTest("idea/testData/copyPaste/plainTextLiteral/BrokenEntries.txt");
+    }
+
+    @TestMetadata("CustomTrimIndent.txt")
+    public void testCustomTrimIndent() throws Exception {
+        runTest("idea/testData/copyPaste/plainTextLiteral/CustomTrimIndent.txt");
     }
 
     @TestMetadata("MultiLine.txt")
@@ -57,6 +61,21 @@ public class LiteralTextToKotlinCopyPasteTestGenerated extends AbstractLiteralTe
     @TestMetadata("TrailingLines.txt")
     public void testTrailingLines() throws Exception {
         runTest("idea/testData/copyPaste/plainTextLiteral/TrailingLines.txt");
+    }
+
+    @TestMetadata("TrimIndent.txt")
+    public void testTrimIndent() throws Exception {
+        runTest("idea/testData/copyPaste/plainTextLiteral/TrimIndent.txt");
+    }
+
+    @TestMetadata("TrimIndent2.txt")
+    public void testTrimIndent2() throws Exception {
+        runTest("idea/testData/copyPaste/plainTextLiteral/TrimIndent2.txt");
+    }
+
+    @TestMetadata("TrimIndent3.txt")
+    public void testTrimIndent3() throws Exception {
+        runTest("idea/testData/copyPaste/plainTextLiteral/TrimIndent3.txt");
     }
 
     @TestMetadata("WithBackslashes.txt")

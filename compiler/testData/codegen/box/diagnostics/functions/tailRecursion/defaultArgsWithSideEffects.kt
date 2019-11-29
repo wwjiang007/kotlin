@@ -1,5 +1,6 @@
+// !LANGUAGE: +ProperComputationOrderOfTailrecDefaultParameters
+// IGNORE_BACKEND_FIR: JVM_IR
 // DONT_RUN_GENERATED_CODE: JS
-// IGNORE_BACKEND: JVM
 
 var counter = 0
 fun inc() = counter++

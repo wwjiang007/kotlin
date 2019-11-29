@@ -11,22 +11,21 @@ import com.intellij.execution.actions.ConfigurationContext
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.projectRoots.Sdk
 import com.intellij.openapi.roots.ModuleRootModificationUtil
-import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiComment
-import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiManager
 import com.intellij.refactoring.RefactoringFactory
 import com.intellij.testFramework.MapDataContext
 import com.intellij.testFramework.PsiTestUtil
+import org.jetbrains.kotlin.checkers.languageVersionSettingsFromText
 import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
 import org.jetbrains.kotlin.idea.MainFunctionDetector
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
+import org.jetbrains.kotlin.idea.project.setLanguageVersionSettings
 import org.jetbrains.kotlin.idea.search.allScope
 import org.jetbrains.kotlin.idea.stubindex.KotlinFullClassNameIndex
 import org.jetbrains.kotlin.idea.stubindex.KotlinTopLevelFunctionFqnNameIndex
 import org.jetbrains.kotlin.idea.test.ConfigLibraryUtil
-import org.jetbrains.kotlin.idea.test.KotlinCodeInsightTestCase
 import org.jetbrains.kotlin.idea.test.PluginTestCaseBase.*
 import org.jetbrains.kotlin.idea.test.configureLanguageAndApiVersion
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
@@ -34,18 +33,14 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.allChildren
 import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 import org.jetbrains.kotlin.test.JUnit3WithIdeaConfigurationRunner
-import org.junit.Assert
 import org.junit.runner.RunWith
 import java.io.File
 import java.util.*
 
-private val RUN_PREFIX = "// RUN:"
+private const val RUN_PREFIX = "// RUN:"
 
 @RunWith(JUnit3WithIdeaConfigurationRunner::class)
-class RunConfigurationTest: KotlinCodeInsightTestCase() {
-    fun getTestProject() = myProject!!
-    override fun getModule() = myModule!!
-
+class RunConfigurationTest : AbstractRunConfigurationTest() {
     fun testMainInTest() {
         val createResult = configureModule(moduleDirPath("module"), getTestProject().baseDir!!)
         configureLanguageAndApiVersion(
@@ -56,44 +51,49 @@ class RunConfigurationTest: KotlinCodeInsightTestCase() {
         val runConfiguration = createConfigurationFromMain("some.main")
         val javaParameters = getJavaRunParameters(runConfiguration)
 
-        Assert.assertTrue(javaParameters.classPath.rootDirs.contains(createResult.srcOutputDir))
-        Assert.assertTrue(javaParameters.classPath.rootDirs.contains(createResult.testOutputDir))
+        assertTrue(javaParameters.classPath.rootDirs.contains(createResult.srcOutputDir))
+        assertTrue(javaParameters.classPath.rootDirs.contains(createResult.testOutputDir))
 
         fun functionVisitor(function: KtNamedFunction) {
+            val file = function.containingKtFile
             val options = function.bodyExpression?.allChildren?.filterIsInstance<PsiComment>()?.map { it.text.trim().replace("//", "").trim() }?.filter { it.isNotBlank() }?.toList() ?: emptyList()
             if (options.isNotEmpty()) {
                 val assertIsMain = "yes" in options
                 val assertIsNotMain = "no" in options
 
+                val languageVersionSettings = languageVersionSettingsFromText(listOf(file.text))
+                createResult.module.setLanguageVersionSettings(languageVersionSettings)
                 val isMainFunction =
-                    MainFunctionDetector(LanguageVersionSettingsImpl.DEFAULT) { it.resolveToDescriptorIfAny() }.isMain(function)
+                    MainFunctionDetector(languageVersionSettings) { it.resolveToDescriptorIfAny() }.isMain(function)
 
                 if (assertIsMain) {
-                    Assert.assertTrue("The function ${function.fqName?.asString()} should be main", isMainFunction)
+                    assertTrue("$file: The function ${function.fqName?.asString()} should be main", isMainFunction)
                 }
                 if (assertIsNotMain) {
-                    Assert.assertFalse("The function ${function.fqName?.asString()} should NOT be main", isMainFunction)
+                    assertFalse("$file: The function ${function.fqName?.asString()} should NOT be main", isMainFunction)
                 }
 
                 if (isMainFunction) {
                     createConfigurationFromMain(function.fqName?.asString()!!).checkConfiguration()
 
-                    Assert.assertNotNull("Kotlin configuration producer should produce configuration for ${function.fqName?.asString()}",
-                                      KotlinRunConfigurationProducer.getEntryPointContainer(function))
+                    assertNotNull(
+                        "$file: Kotlin configuration producer should produce configuration for ${function.fqName?.asString()}",
+                        KotlinRunConfigurationProducer.getEntryPointContainer(function)
+                    )
                 } else {
                     try {
                         createConfigurationFromMain(function.fqName?.asString()!!).checkConfiguration()
-                        Assert.fail("configuration for function ${function.fqName?.asString()} at least shouldn't pass checkConfiguration()")
+                        fail("$file: configuration for function ${function.fqName?.asString()} at least shouldn't pass checkConfiguration()")
                     } catch (expected: Throwable) {
                     }
 
                     if (function.containingFile.text.startsWith("// entryPointExists")) {
-                        Assert.assertNotNull(
-                            "Kotlin configuration producer should produce configuration for ${function.fqName?.asString()}",
+                        assertNotNull(
+                            "$file: Kotlin configuration producer should produce configuration for ${function.fqName?.asString()}",
                             KotlinRunConfigurationProducer.getEntryPointContainer(function)
                         )
                     } else {
-                        Assert.assertNull(
+                        assertNull(
                             "Kotlin configuration producer shouldn't produce configuration for ${function.fqName?.asString()}",
                             KotlinRunConfigurationProducer.getEntryPointContainer(function)
                         )
@@ -102,7 +102,7 @@ class RunConfigurationTest: KotlinCodeInsightTestCase() {
             }
         }
 
-        createResult.srcDir.children.filter { it.extension == "kt" }.forEach {
+        createResult.srcDir?.children?.filter { it.extension == "kt" }?.forEach {
             val psiFile = PsiManager.getInstance(createResult.module.project).findFile(it)
             if (psiFile is KtFile) {
                 psiFile.acceptChildren(object : KtVisitorVoid() {
@@ -132,8 +132,8 @@ class RunConfigurationTest: KotlinCodeInsightTestCase() {
 
         val javaParameters = getJavaRunParameters(kotlinRunConfiguration)
 
-        Assert.assertTrue(javaParameters.classPath.rootDirs.contains(dependencyModuleSrcDir))
-        Assert.assertTrue(javaParameters.classPath.rootDirs.contains(moduleWithDependencySrcDir))
+        assertTrue(javaParameters.classPath.rootDirs.contains(dependencyModuleSrcDir))
+        assertTrue(javaParameters.classPath.rootDirs.contains(moduleWithDependencySrcDir))
     }
 
     fun testLongCommandLine() {
@@ -170,7 +170,7 @@ class RunConfigurationTest: KotlinCodeInsightTestCase() {
         val rename = RefactoringFactory.getInstance(getTestProject()).createRename(obj, "Bar")
         rename.run()
 
-        Assert.assertEquals("renameTest.Bar", runConfiguration.MAIN_CLASS_NAME)
+        assertEquals("renameTest.Bar", runConfiguration.MAIN_CLASS_NAME)
     }
 
     fun testUpdateOnPackageRename() {
@@ -183,7 +183,7 @@ class RunConfigurationTest: KotlinCodeInsightTestCase() {
         val rename = RefactoringFactory.getInstance(getTestProject()).createRename(pkg, "afterRenameTest")
         rename.run()
 
-        Assert.assertEquals("afterRenameTest.Foo", runConfiguration.MAIN_CLASS_NAME)
+        assertEquals("afterRenameTest.Foo", runConfiguration.MAIN_CLASS_NAME)
     }
 
     fun testWithModuleForJdk6() {
@@ -204,13 +204,13 @@ class RunConfigurationTest: KotlinCodeInsightTestCase() {
 
         val javaParameters = getJavaRunParameters(createConfigurationFromMain("some.main"))
 
-        Assert.assertEquals(moduleName, javaParameters.moduleName)
+        assertEquals(moduleName, javaParameters.moduleName)
     }
 
     private fun doTest(configureRuntime: (Module, Sdk) -> Unit) {
         val baseDir = getTestProject().baseDir!!
         val createModuleResult = configureModule(moduleDirPath("module"), baseDir)
-        val srcDir = createModuleResult.srcDir
+        val srcDir = createModuleResult.srcDir!!
 
         configureRuntime(createModuleResult.module, addJdk(testRootDisposable, ::mockJdk))
 
@@ -239,7 +239,7 @@ class RunConfigurationTest: KotlinCodeInsightTestCase() {
                         }
                     }
             )
-            Assert.assertEquals(expectedClasses, actualClasses)
+            assertEquals(expectedClasses, actualClasses)
         }
         finally {
             ConfigLibraryUtil.unConfigureKotlinRuntimeAndSdk(createModuleResult.module, mockJdk())
@@ -258,41 +258,5 @@ class RunConfigurationTest: KotlinCodeInsightTestCase() {
         return createConfigurationFromElement(mainFunction, save) as KotlinRunConfiguration
     }
 
-    private fun configureModule(moduleDir: String, outputParentDir: VirtualFile, configModule: Module = module): CreateModuleResult {
-        val srcPath = moduleDir + "/src"
-        val srcDir = PsiTestUtil.createTestProjectStructure(project, configModule, srcPath, myFilesToDelete, true)
-
-        val testPath = moduleDir + "/test"
-        if (File(testPath).exists()) {
-            val testDir = PsiTestUtil.createTestProjectStructure(project, configModule, testPath, myFilesToDelete, false)
-            PsiTestUtil.addSourceRoot(module, testDir, true)
-        }
-
-        val (srcOutDir, testOutDir) = runWriteAction {
-            val outDir = outputParentDir.createChildDirectory(this, "out")
-            val srcOutDir = outDir.createChildDirectory(this, "production")
-            val testOutDir = outDir.createChildDirectory(this, "test")
-
-            PsiTestUtil.setCompilerOutputPath(configModule, srcOutDir.url, false)
-            PsiTestUtil.setCompilerOutputPath(configModule, testOutDir.url, true)
-
-            Pair(srcOutDir, testOutDir)
-        }
-
-        PsiDocumentManager.getInstance(getTestProject()).commitAllDocuments()
-
-        return CreateModuleResult(configModule, srcDir, srcOutDir, testOutDir)
-    }
-
-    private fun moduleDirPath(moduleName: String) = "${testDataPath}${getTestName(false)}/$moduleName"
-
     override fun getTestDataPath() = getTestDataPathBase() + "/run/"
-    override fun getTestProjectJdk() = mockJdk()
-
-    private class CreateModuleResult(
-            val module: Module,
-            val srcDir: VirtualFile,
-            val srcOutputDir: VirtualFile,
-            val testOutputDir: VirtualFile
-    )
 }

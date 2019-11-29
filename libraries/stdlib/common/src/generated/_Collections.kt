@@ -18,7 +18,9 @@ import kotlin.ranges.contains
 import kotlin.ranges.reversed
 
 /**
- * Returns 1st *element* from the collection.
+ * Returns 1st *element* from the list.
+ * 
+ * Throws an [IndexOutOfBoundsException] if the size of this list is less than 1.
  */
 @kotlin.internal.InlineOnly
 public inline operator fun <T> List<T>.component1(): T {
@@ -26,7 +28,9 @@ public inline operator fun <T> List<T>.component1(): T {
 }
 
 /**
- * Returns 2nd *element* from the collection.
+ * Returns 2nd *element* from the list.
+ * 
+ * Throws an [IndexOutOfBoundsException] if the size of this list is less than 2.
  */
 @kotlin.internal.InlineOnly
 public inline operator fun <T> List<T>.component2(): T {
@@ -34,7 +38,9 @@ public inline operator fun <T> List<T>.component2(): T {
 }
 
 /**
- * Returns 3rd *element* from the collection.
+ * Returns 3rd *element* from the list.
+ * 
+ * Throws an [IndexOutOfBoundsException] if the size of this list is less than 3.
  */
 @kotlin.internal.InlineOnly
 public inline operator fun <T> List<T>.component3(): T {
@@ -42,7 +48,9 @@ public inline operator fun <T> List<T>.component3(): T {
 }
 
 /**
- * Returns 4th *element* from the collection.
+ * Returns 4th *element* from the list.
+ * 
+ * Throws an [IndexOutOfBoundsException] if the size of this list is less than 4.
  */
 @kotlin.internal.InlineOnly
 public inline operator fun <T> List<T>.component4(): T {
@@ -50,7 +58,9 @@ public inline operator fun <T> List<T>.component4(): T {
 }
 
 /**
- * Returns 5th *element* from the collection.
+ * Returns 5th *element* from the list.
+ * 
+ * Throws an [IndexOutOfBoundsException] if the size of this list is less than 5.
  */
 @kotlin.internal.InlineOnly
 public inline operator fun <T> List<T>.component5(): T {
@@ -1046,6 +1056,8 @@ public fun Collection<Short>.toShortArray(): ShortArray {
  * If any of two pairs would have the same key the last one gets added to the map.
  * 
  * The returned map preserves the entry iteration order of the original collection.
+ * 
+ * @sample samples.collections.Collections.Transformations.associate
  */
 public inline fun <T, K, V> Iterable<T>.associate(transform: (T) -> Pair<K, V>): Map<K, V> {
     val capacity = mapCapacity(collectionSizeOrDefault(10)).coerceAtLeast(16)
@@ -1059,6 +1071,8 @@ public inline fun <T, K, V> Iterable<T>.associate(transform: (T) -> Pair<K, V>):
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  * 
  * The returned map preserves the entry iteration order of the original collection.
+ * 
+ * @sample samples.collections.Collections.Transformations.associateBy
  */
 public inline fun <T, K> Iterable<T>.associateBy(keySelector: (T) -> K): Map<K, T> {
     val capacity = mapCapacity(collectionSizeOrDefault(10)).coerceAtLeast(16)
@@ -1071,6 +1085,8 @@ public inline fun <T, K> Iterable<T>.associateBy(keySelector: (T) -> K): Map<K, 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
  * 
  * The returned map preserves the entry iteration order of the original collection.
+ * 
+ * @sample samples.collections.Collections.Transformations.associateByWithValueTransform
  */
 public inline fun <T, K, V> Iterable<T>.associateBy(keySelector: (T) -> K, valueTransform: (T) -> V): Map<K, V> {
     val capacity = mapCapacity(collectionSizeOrDefault(10)).coerceAtLeast(16)
@@ -1083,6 +1099,8 @@ public inline fun <T, K, V> Iterable<T>.associateBy(keySelector: (T) -> K, value
  * and value is the element itself.
  * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
+ * @sample samples.collections.Collections.Transformations.associateByTo
  */
 public inline fun <T, K, M : MutableMap<in K, in T>> Iterable<T>.associateByTo(destination: M, keySelector: (T) -> K): M {
     for (element in this) {
@@ -1097,6 +1115,8 @@ public inline fun <T, K, M : MutableMap<in K, in T>> Iterable<T>.associateByTo(d
  * and value is provided by the [valueTransform] function applied to elements of the given collection.
  * 
  * If any two elements would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
+ * @sample samples.collections.Collections.Transformations.associateByToWithValueTransform
  */
 public inline fun <T, K, V, M : MutableMap<in K, in V>> Iterable<T>.associateByTo(destination: M, keySelector: (T) -> K, valueTransform: (T) -> V): M {
     for (element in this) {
@@ -1110,6 +1130,8 @@ public inline fun <T, K, V, M : MutableMap<in K, in V>> Iterable<T>.associateByT
  * provided by [transform] function applied to each element of the given collection.
  * 
  * If any of two pairs would have the same key the last one gets added to the map.
+ * 
+ * @sample samples.collections.Collections.Transformations.associateTo
  */
 public inline fun <T, K, V, M : MutableMap<in K, in V>> Iterable<T>.associateTo(destination: M, transform: (T) -> Pair<K, V>): M {
     for (element in this) {
@@ -1139,6 +1161,8 @@ public inline fun <K, V> Iterable<K>.associateWith(valueSelector: (K) -> V): Map
  * where key is the element itself and value is provided by the [valueSelector] function applied to that key.
  * 
  * If any two elements are equal, the last one overwrites the former value in the map.
+ * 
+ * @sample samples.collections.Collections.Transformations.associateWithTo
  */
 @SinceKotlin("1.3")
 public inline fun <K, V, M : MutableMap<in K, in V>> Iterable<K>.associateWithTo(destination: M, valueSelector: (K) -> V): M {
@@ -1213,6 +1237,8 @@ public fun <T> Iterable<T>.toSet(): Set<T> {
 
 /**
  * Returns a single list of all elements yielded from results of [transform] function being invoked on each element of original collection.
+ * 
+ * @sample samples.collections.Collections.Transformations.flatMap
  */
 public inline fun <T, R> Iterable<T>.flatMap(transform: (T) -> Iterable<R>): List<R> {
     return flatMapTo(ArrayList<R>(), transform)
@@ -2147,9 +2173,10 @@ public fun <T> Iterable<T>.windowed(size: Int, step: Int = 1, partialWindows: Bo
     checkWindowSizeStep(size, step)
     if (this is RandomAccess && this is List) {
         val thisSize = this.size
-        val result = ArrayList<List<T>>((thisSize + step - 1) / step)
+        val resultCapacity = thisSize / step + if (thisSize % step == 0) 0 else 1
+        val result = ArrayList<List<T>>(resultCapacity)
         var index = 0
-        while (index < thisSize) {
+        while (index in 0 until thisSize) {
             val windowSize = size.coerceAtMost(thisSize - index)
             if (windowSize < size && !partialWindows) break
             result.add(List(windowSize) { this[it + index] })
@@ -2186,12 +2213,14 @@ public fun <T, R> Iterable<T>.windowed(size: Int, step: Int = 1, partialWindows:
     checkWindowSizeStep(size, step)
     if (this is RandomAccess && this is List) {
         val thisSize = this.size
-        val result = ArrayList<R>((thisSize + step - 1) / step)
+        val resultCapacity = thisSize / step + if (thisSize % step == 0) 0 else 1
+        val result = ArrayList<R>(resultCapacity)
         val window = MovingSubList(this)
         var index = 0
-        while (index < thisSize) {
-            window.move(index, (index + size).coerceAtMost(thisSize))
-            if (!partialWindows && window.size < size) break
+        while (index in 0 until thisSize) {
+            val windowSize = size.coerceAtMost(thisSize - index)
+            if (!partialWindows && windowSize < size) break
+            window.move(index, index + windowSize)
             result.add(transform(window))
             index += step
         }

@@ -1,4 +1,4 @@
-// IGNORE_BACKEND: JVM_IR
+// IGNORE_BACKEND_FIR: JVM_IR
 // WITH_RUNTIME
 // WITH_COROUTINES
 // COMMON_COROUTINES_TEST
@@ -20,8 +20,8 @@ fun box(): String {
     var result = ""
 
     builder {
-        result = try { suspendInlineThrow("OK") } catch (e: RuntimeException) { e.message!! }
-//        result = suspendInline("OK")
+        result = try { suspendInlineThrow("O") } catch (e: RuntimeException) { e.message!! }
+        result += suspendInline("K")
     }
 
     return result

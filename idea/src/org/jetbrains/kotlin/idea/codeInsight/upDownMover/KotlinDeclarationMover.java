@@ -140,7 +140,17 @@ public class KotlinDeclarationMover extends AbstractKotlinUpDownMover {
     private static KtDeclaration getMovableDeclaration(@Nullable PsiElement element) {
         if (element == null) return null;
 
-        KtDeclaration declaration = PsiTreeUtil.getParentOfType(element, KtDeclaration.class, false);
+        KtDeclaration declaration = null;
+        if (element.getNode().getElementType() == KtTokens.LBRACE) {
+            KtLambdaExpression lambda = PsiTreeUtil.getParentOfType(element, KtLambdaExpression.class, true);
+            KtFunction function = PsiTreeUtil.getParentOfType(lambda, KtFunction.class, true);
+            if (function != null && function.getBodyExpression() == lambda) {
+                declaration = function;
+            }
+        }
+        if (declaration == null) {
+            declaration = PsiTreeUtil.getParentOfType(element, KtDeclaration.class, false);
+        }        
         if (declaration instanceof KtParameter) return null;
         if (declaration instanceof KtTypeParameter) {
             return getMovableDeclaration(declaration.getParent());
@@ -186,6 +196,11 @@ public class KotlinDeclarationMover extends AbstractKotlinUpDownMover {
             || startLine == oldRange.startLine || startLine == oldRange.endLine
             || endLine == oldRange.startLine || endLine == oldRange.endLine) {
             return new LineRange(startLine, endLine);
+        }
+
+        int lineCount = doc.getLineCount();
+        if (oldRange.startLine >= lineCount || oldRange.endLine >= lineCount) {
+            return null;
         }
 
         TextRange lineTextRange = new TextRange(doc.getLineStartOffset(oldRange.startLine),
@@ -287,8 +302,7 @@ public class KotlinDeclarationMover extends AbstractKotlinUpDownMover {
 
         PsiElement sibling = getLastNonWhiteSiblingInLine(firstNonWhiteSibling(sourceRange, down), editor, down);
 
-        // Either reached last sibling, or jumped over multi-line whitespace
-        if (sibling == null)  {
+        if (sibling == null || sibling instanceof KtPackageDirective || sibling instanceof KtImportList)  {
             info.toMove2 = null;
             return true;
         }

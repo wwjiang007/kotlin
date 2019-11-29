@@ -5,22 +5,30 @@
 
 package org.jetbrains.kotlin.fir.java.declarations
 
-import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
 import org.jetbrains.kotlin.fir.declarations.impl.FirValueParameterImpl
-import org.jetbrains.kotlin.fir.java.types.FirJavaTypeRef
+import org.jetbrains.kotlin.fir.types.jvm.FirJavaTypeRef
+import org.jetbrains.kotlin.fir.symbols.impl.FirVariableSymbol
 import org.jetbrains.kotlin.name.Name
 
 class FirJavaValueParameter(
     session: FirSession,
-    psi: PsiElement?,
+    source: FirSourceElement?,
     name: Name,
     returnTypeRef: FirJavaTypeRef,
     isVararg: Boolean
 ) : FirValueParameterImpl(
-    session, psi, name, returnTypeRef,
-    defaultValue = null, isCrossinline = false, isNoinline = false, isVararg = isVararg
+    source,
+    session,
+    returnTypeRef,
+    name,
+    FirVariableSymbol(name),
+    defaultValue = null,
+    isCrossinline = false,
+    isNoinline = false,
+    isVararg = isVararg
 ) {
     init {
         resolvePhase = FirResolvePhase.DECLARATIONS

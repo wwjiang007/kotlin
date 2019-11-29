@@ -2,6 +2,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     kotlin("jvm")
+    id("jps-compatible")
 }
 
 dependencies {
@@ -39,3 +40,5 @@ val generateTests by generator("org.jetbrains.kotlin.generators.tests.GenerateRu
 projectTest(parallel = true) {
     workingDir = rootDir
 }
+
+testsJar()

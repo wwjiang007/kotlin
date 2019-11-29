@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.codegen.coroutines.isResumeImplMethodName
 import org.jetbrains.kotlin.codegen.inline.coroutines.CoroutineTransformer
 import org.jetbrains.kotlin.codegen.inline.coroutines.FOR_INLINE_SUFFIX
 import org.jetbrains.kotlin.codegen.serialization.JvmCodegenStringTable
+import org.jetbrains.kotlin.codegen.state.KotlinTypeMapperBase
 import org.jetbrains.kotlin.load.java.JvmAnnotationNames
 import org.jetbrains.kotlin.load.kotlin.FileBasedKotlinClass
 import org.jetbrains.kotlin.load.kotlin.header.KotlinClassHeader
@@ -46,6 +47,9 @@ class AnonymousObjectTransformer(
     private lateinit var sourceMapper: SourceMapper
     private val languageVersionSettings = inliningContext.state.languageVersionSettings
 
+    // TODO: use IrTypeMapper in the IR backend
+    private val typeMapper: KotlinTypeMapperBase = state.typeMapper
+
     override fun doTransform(parentRemapper: FieldRemapper): InlineResult {
         val innerClassNodes = ArrayList<InnerClassNode>()
         val classBuilder = createRemappingClassBuilderViaFactory(inliningContext)
@@ -55,7 +59,7 @@ class AnonymousObjectTransformer(
 
         createClassReader().accept(object : ClassVisitor(Opcodes.API_VERSION, classBuilder.visitor) {
             override fun visit(version: Int, access: Int, name: String, signature: String?, superName: String, interfaces: Array<String>) {
-                classBuilder.defineClass(null, version, access, name, signature, superName, interfaces)
+                classBuilder.defineClass(null, maxOf(version, state.classFileVersion), access, name, signature, superName, interfaces)
                 if (languageVersionSettings.isCoroutineSuperClass(superName)) {
                     inliningContext.isContinuation = true
                 }
@@ -226,7 +230,7 @@ class AnonymousObjectTransformer(
         when (header.kind) {
             KotlinClassHeader.Kind.CLASS -> {
                 val (nameResolver, classProto) = JvmProtoBufUtil.readClassDataFrom(data, strings)
-                val newStringTable = JvmCodegenStringTable(state.typeMapper, nameResolver)
+                val newStringTable = JvmCodegenStringTable(typeMapper, nameResolver)
                 val newProto = classProto.toBuilder().apply {
                     setExtension(JvmProtoBuf.anonymousObjectOriginName, newStringTable.getStringIndex(oldObjectType.internalName))
                 }.build()
@@ -234,7 +238,7 @@ class AnonymousObjectTransformer(
             }
             KotlinClassHeader.Kind.SYNTHETIC_CLASS -> {
                 val (nameResolver, functionProto) = JvmProtoBufUtil.readFunctionDataFrom(data, strings)
-                val newStringTable = JvmCodegenStringTable(state.typeMapper, nameResolver)
+                val newStringTable = JvmCodegenStringTable(typeMapper, nameResolver)
                 val newProto = functionProto.toBuilder().apply {
                     setExtension(JvmProtoBuf.lambdaClassOriginName, newStringTable.getStringIndex(oldObjectType.internalName))
                 }.build()
@@ -490,13 +494,27 @@ class AnonymousObjectTransformer(
 
         //For all inlined lambdas add their captured parameters
         //TODO: some of such parameters could be skipped - we should perform additional analysis
-        val capturedLambdasToInline = HashMap<String, LambdaInfo>() //captured var of inlined parameter
         val allRecapturedParameters = ArrayList<CapturedParamDesc>()
-        val addCapturedNotAddOuter =
-            parentFieldRemapper.isRoot || parentFieldRemapper is InlinedLambdaRemapper && parentFieldRemapper.parent!!.isRoot
-        val alreadyAdded = HashMap<String, CapturedParamInfo>()
-        for (info in capturedLambdas) {
-            if (addCapturedNotAddOuter) {
+        if (parentFieldRemapper !is InlinedLambdaRemapper || parentFieldRemapper.parent!!.isRoot) {
+            // Possible cases:
+            //
+            //   1. Top-level object in an inline lambda that is *not* being inlined into another object. In this case, we
+            //      have no choice but to add a separate field for each captured variable. `capturedLambdas` is either empty
+            //      (already have the fields) or contains the parent lambda object (captures used to be read from it, but
+            //      the object will be removed and its contents inlined).
+            //
+            //   2. Top-level object in a named inline function. Again, there's no option but to add separate fields.
+            //      `capturedLambdas` contains all lambdas used by this object and nested objects.
+            //
+            //   3. Nested object, either in an inline lambda or an inline function. This case has two subcases:
+            //      * The object's captures are passed as separate arguments (e.g. KT-28064 style object that used to be in a lambda);
+            //        we could group them into `this$0` now, but choose not to. Lambdas are replaced by their captures.
+            //      * The object's captures are already grouped into `this$0`; this includes captured lambda parameters (for objects in
+            //        inline functions) and a reference to the outer object or lambda (for objects in lambdas), so `capturedLambdas` is
+            //        empty and the choice doesn't matter.
+            //
+            val alreadyAdded = HashMap<String, CapturedParamInfo>()
+            for (info in capturedLambdas) {
                 for (desc in info.capturedVars) {
                     val key = desc.fieldName + "$$$" + desc.type.className
                     val alreadyAddedParam = alreadyAdded[key]
@@ -528,11 +546,10 @@ class AnonymousObjectTransformer(
                     }
                 }
             }
-            capturedLambdasToInline.put(info.lambdaClassType.internalName, info)
-        }
-
-        if (parentFieldRemapper is InlinedLambdaRemapper && !capturedLambdas.isEmpty() && !addCapturedNotAddOuter) {
-            //lambda with non InlinedLambdaRemapper already have outer
+        } else if (capturedLambdas.isNotEmpty()) {
+            // Top-level object in a lambda inlined into another object. As already said above, either `capturedLambdas` is empty
+            // (no captures or captures were generated as loose fields) or it contains a single entry for the parent lambda itself.
+            // Simply replace one `this$0` (of lambda type) with another (of destination object type).
             val parent = parentFieldRemapper.parent as? RegeneratedLambdaFieldRemapper
                 ?: throw AssertionError("Expecting RegeneratedLambdaFieldRemapper, but ${parentFieldRemapper.parent}")
             val ownerType = Type.getObjectType(parent.originalLambdaInternalName)
@@ -546,7 +563,7 @@ class AnonymousObjectTransformer(
         }
 
         transformationInfo.allRecapturedParameters = allRecapturedParameters
-        transformationInfo.capturedLambdasToInline = capturedLambdasToInline
+        transformationInfo.capturedLambdasToInline = capturedLambdas.associateBy { it.lambdaClassType.internalName }
 
         return constructorAdditionalFakeParams
     }

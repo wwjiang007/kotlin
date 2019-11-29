@@ -21,13 +21,12 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.checkReservedPrefixWord
 import org.jetbrains.kotlin.psi.psiUtil.checkReservedYieldBeforeLambda
 import org.jetbrains.kotlin.psi.psiUtil.getAnnotationEntries
-import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.BindingContext.EXPECTED_RETURN_TYPE
-import org.jetbrains.kotlin.resolve.BindingContextUtils
-import org.jetbrains.kotlin.resolve.BindingTrace
-import org.jetbrains.kotlin.resolve.FunctionDescriptorUtil
 import org.jetbrains.kotlin.resolve.calls.context.ContextDependency
 import org.jetbrains.kotlin.resolve.calls.inference.model.TypeVariableTypeConstructor
+import org.jetbrains.kotlin.resolve.checkers.TrailingCommaChecker
+import org.jetbrains.kotlin.resolve.checkers.TrailingCommaDeclarationChecker
 import org.jetbrains.kotlin.resolve.checkers.UnderscoreChecker
 import org.jetbrains.kotlin.resolve.lazy.ForceResolveUtil
 import org.jetbrains.kotlin.resolve.scopes.LexicalWritableScope
@@ -144,10 +143,25 @@ internal class FunctionsTypingVisitor(facade: ExpressionTypingInternals) : Expre
             components.identifierChecker.checkDeclaration(it, context.trace)
             UnderscoreChecker.checkNamed(it, context.trace, components.languageVersionSettings, allowSingleUnderscore = true)
         }
+
+        val valueParameterList = expression.functionLiteral.valueParameterList
+        if (valueParameterList?.stub == null) {
+            TrailingCommaChecker.check(
+                valueParameterList?.trailingComma,
+                context.trace,
+                context.languageVersionSettings
+            )
+        }
+
         val safeReturnType = computeReturnType(expression, context, functionDescriptor, functionTypeExpected)
         functionDescriptor.setReturnType(safeReturnType)
 
-        val resultType = functionDescriptor.createFunctionType(components.builtIns, suspendFunctionTypeExpected)!!
+        val resultType = components.typeResolutionInterceptor.interceptType(
+            expression,
+            context,
+            functionDescriptor.createFunctionType(components.builtIns, suspendFunctionTypeExpected)!!
+        )
+
         if (functionTypeExpected) {
             // all checks were done before
             return createTypeInfo(resultType, context)
@@ -175,7 +189,9 @@ internal class FunctionsTypingVisitor(facade: ExpressionTypingInternals) : Expre
             components.annotationResolver.resolveAnnotationsWithArguments(context.scope, expression.getAnnotationEntries(), context.trace),
             CallableMemberDescriptor.Kind.DECLARATION, functionLiteral.toSourceElement(),
             context.expectedType.isSuspendFunctionType()
-        )
+        ).let {
+            facade.components.typeResolutionInterceptor.interceptFunctionLiteralDescriptor(expression, context, it)
+        }
         components.functionDescriptorResolver.initializeFunctionDescriptorAndExplicitReturnType(
             context.scope.ownerDescriptor, context.scope, functionLiteral,
             functionDescriptor, context.trace, context.expectedType, context.dataFlowInfo

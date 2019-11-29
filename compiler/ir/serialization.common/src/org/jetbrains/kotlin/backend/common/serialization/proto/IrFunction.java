@@ -37,7 +37,7 @@ public final class IrFunction extends
         org.jetbrains.kotlin.protobuf.ByteString.newOutput();
     org.jetbrains.kotlin.protobuf.CodedOutputStream unknownFieldsCodedOutput =
         org.jetbrains.kotlin.protobuf.CodedOutputStream.newInstance(
-            unknownFieldsOutput);
+            unknownFieldsOutput, 1);
     try {
       boolean done = false;
       while (!done) {
@@ -88,12 +88,35 @@ public final class IrFunction extends
             isSuspend_ = input.readBool();
             break;
           }
-          case 42: {
+          case 40: {
             if (!((mutable_bitField0_ & 0x00000010) == 0x00000010)) {
-              overridden_ = new java.util.ArrayList<org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol>();
+              overridden_ = new java.util.ArrayList<java.lang.Integer>();
               mutable_bitField0_ |= 0x00000010;
             }
-            overridden_.add(input.readMessage(org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol.PARSER, extensionRegistry));
+            overridden_.add(input.readInt32());
+            break;
+          }
+          case 42: {
+            int length = input.readRawVarint32();
+            int limit = input.pushLimit(length);
+            if (!((mutable_bitField0_ & 0x00000010) == 0x00000010) && input.getBytesUntilLimit() > 0) {
+              overridden_ = new java.util.ArrayList<java.lang.Integer>();
+              mutable_bitField0_ |= 0x00000010;
+            }
+            while (input.getBytesUntilLimit() > 0) {
+              overridden_.add(input.readInt32());
+            }
+            input.popLimit(limit);
+            break;
+          }
+          case 64: {
+            bitField0_ |= 0x00000010;
+            isFakeOverride_ = input.readBool();
+            break;
+          }
+          case 72: {
+            bitField0_ |= 0x00000020;
+            isOperator_ = input.readBool();
             break;
           }
         }
@@ -194,58 +217,63 @@ public final class IrFunction extends
   }
 
   public static final int OVERRIDDEN_FIELD_NUMBER = 5;
-  private java.util.List<org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol> overridden_;
+  private java.util.List<java.lang.Integer> overridden_;
   /**
-   * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-   *
-   * <pre>
-   *optional UniqId corresponding_property = 7;
-   * </pre>
+   * <code>repeated int32 overridden = 5;</code>
    */
-  public java.util.List<org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol> getOverriddenList() {
+  public java.util.List<java.lang.Integer>
+      getOverriddenList() {
     return overridden_;
   }
   /**
-   * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-   *
-   * <pre>
-   *optional UniqId corresponding_property = 7;
-   * </pre>
-   */
-  public java.util.List<? extends org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbolOrBuilder> 
-      getOverriddenOrBuilderList() {
-    return overridden_;
-  }
-  /**
-   * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-   *
-   * <pre>
-   *optional UniqId corresponding_property = 7;
-   * </pre>
+   * <code>repeated int32 overridden = 5;</code>
    */
   public int getOverriddenCount() {
     return overridden_.size();
   }
   /**
-   * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-   *
-   * <pre>
-   *optional UniqId corresponding_property = 7;
-   * </pre>
+   * <code>repeated int32 overridden = 5;</code>
    */
-  public org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol getOverridden(int index) {
+  public int getOverridden(int index) {
     return overridden_.get(index);
   }
+
+  public static final int IS_FAKE_OVERRIDE_FIELD_NUMBER = 8;
+  private boolean isFakeOverride_;
   /**
-   * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
+   * <code>required bool is_fake_override = 8;</code>
    *
    * <pre>
    *optional UniqId corresponding_property = 7;
    * </pre>
    */
-  public org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbolOrBuilder getOverriddenOrBuilder(
-      int index) {
-    return overridden_.get(index);
+  public boolean hasIsFakeOverride() {
+    return ((bitField0_ & 0x00000010) == 0x00000010);
+  }
+  /**
+   * <code>required bool is_fake_override = 8;</code>
+   *
+   * <pre>
+   *optional UniqId corresponding_property = 7;
+   * </pre>
+   */
+  public boolean getIsFakeOverride() {
+    return isFakeOverride_;
+  }
+
+  public static final int IS_OPERATOR_FIELD_NUMBER = 9;
+  private boolean isOperator_;
+  /**
+   * <code>required bool is_operator = 9;</code>
+   */
+  public boolean hasIsOperator() {
+    return ((bitField0_ & 0x00000020) == 0x00000020);
+  }
+  /**
+   * <code>required bool is_operator = 9;</code>
+   */
+  public boolean getIsOperator() {
+    return isOperator_;
   }
 
   private void initFields() {
@@ -254,6 +282,8 @@ public final class IrFunction extends
     isTailrec_ = false;
     isSuspend_ = false;
     overridden_ = java.util.Collections.emptyList();
+    isFakeOverride_ = false;
+    isOperator_ = false;
   }
   private byte memoizedIsInitialized = -1;
   public final boolean isInitialized() {
@@ -277,15 +307,17 @@ public final class IrFunction extends
       memoizedIsInitialized = 0;
       return false;
     }
-    if (!getBase().isInitialized()) {
+    if (!hasIsFakeOverride()) {
       memoizedIsInitialized = 0;
       return false;
     }
-    for (int i = 0; i < getOverriddenCount(); i++) {
-      if (!getOverridden(i).isInitialized()) {
-        memoizedIsInitialized = 0;
-        return false;
-      }
+    if (!hasIsOperator()) {
+      memoizedIsInitialized = 0;
+      return false;
+    }
+    if (!getBase().isInitialized()) {
+      memoizedIsInitialized = 0;
+      return false;
     }
     memoizedIsInitialized = 1;
     return true;
@@ -307,7 +339,13 @@ public final class IrFunction extends
       output.writeBool(4, isSuspend_);
     }
     for (int i = 0; i < overridden_.size(); i++) {
-      output.writeMessage(5, overridden_.get(i));
+      output.writeInt32(5, overridden_.get(i));
+    }
+    if (((bitField0_ & 0x00000010) == 0x00000010)) {
+      output.writeBool(8, isFakeOverride_);
+    }
+    if (((bitField0_ & 0x00000020) == 0x00000020)) {
+      output.writeBool(9, isOperator_);
     }
     output.writeRawBytes(unknownFields);
   }
@@ -334,9 +372,22 @@ public final class IrFunction extends
       size += org.jetbrains.kotlin.protobuf.CodedOutputStream
         .computeBoolSize(4, isSuspend_);
     }
-    for (int i = 0; i < overridden_.size(); i++) {
+    {
+      int dataSize = 0;
+      for (int i = 0; i < overridden_.size(); i++) {
+        dataSize += org.jetbrains.kotlin.protobuf.CodedOutputStream
+          .computeInt32SizeNoTag(overridden_.get(i));
+      }
+      size += dataSize;
+      size += 1 * getOverriddenList().size();
+    }
+    if (((bitField0_ & 0x00000010) == 0x00000010)) {
       size += org.jetbrains.kotlin.protobuf.CodedOutputStream
-        .computeMessageSize(5, overridden_.get(i));
+        .computeBoolSize(8, isFakeOverride_);
+    }
+    if (((bitField0_ & 0x00000020) == 0x00000020)) {
+      size += org.jetbrains.kotlin.protobuf.CodedOutputStream
+        .computeBoolSize(9, isOperator_);
     }
     size += unknownFields.size();
     memoizedSerializedSize = size;
@@ -442,6 +493,10 @@ public final class IrFunction extends
       bitField0_ = (bitField0_ & ~0x00000008);
       overridden_ = java.util.Collections.emptyList();
       bitField0_ = (bitField0_ & ~0x00000010);
+      isFakeOverride_ = false;
+      bitField0_ = (bitField0_ & ~0x00000020);
+      isOperator_ = false;
+      bitField0_ = (bitField0_ & ~0x00000040);
       return this;
     }
 
@@ -486,6 +541,14 @@ public final class IrFunction extends
         bitField0_ = (bitField0_ & ~0x00000010);
       }
       result.overridden_ = overridden_;
+      if (((from_bitField0_ & 0x00000020) == 0x00000020)) {
+        to_bitField0_ |= 0x00000010;
+      }
+      result.isFakeOverride_ = isFakeOverride_;
+      if (((from_bitField0_ & 0x00000040) == 0x00000040)) {
+        to_bitField0_ |= 0x00000020;
+      }
+      result.isOperator_ = isOperator_;
       result.bitField0_ = to_bitField0_;
       return result;
     }
@@ -514,6 +577,12 @@ public final class IrFunction extends
         }
         
       }
+      if (other.hasIsFakeOverride()) {
+        setIsFakeOverride(other.getIsFakeOverride());
+      }
+      if (other.hasIsOperator()) {
+        setIsOperator(other.getIsOperator());
+      }
       setUnknownFields(
           getUnknownFields().concat(other.unknownFields));
       return this;
@@ -536,15 +605,17 @@ public final class IrFunction extends
         
         return false;
       }
-      if (!getBase().isInitialized()) {
+      if (!hasIsFakeOverride()) {
         
         return false;
       }
-      for (int i = 0; i < getOverriddenCount(); i++) {
-        if (!getOverridden(i).isInitialized()) {
-          
-          return false;
-        }
+      if (!hasIsOperator()) {
+        
+        return false;
+      }
+      if (!getBase().isInitialized()) {
+        
+        return false;
       }
       return true;
     }
@@ -727,176 +798,149 @@ public final class IrFunction extends
       return this;
     }
 
-    private java.util.List<org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol> overridden_ =
-      java.util.Collections.emptyList();
+    private java.util.List<java.lang.Integer> overridden_ = java.util.Collections.emptyList();
     private void ensureOverriddenIsMutable() {
       if (!((bitField0_ & 0x00000010) == 0x00000010)) {
-        overridden_ = new java.util.ArrayList<org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol>(overridden_);
+        overridden_ = new java.util.ArrayList<java.lang.Integer>(overridden_);
         bitField0_ |= 0x00000010;
        }
     }
-
     /**
-     * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-     *
-     * <pre>
-     *optional UniqId corresponding_property = 7;
-     * </pre>
+     * <code>repeated int32 overridden = 5;</code>
      */
-    public java.util.List<org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol> getOverriddenList() {
+    public java.util.List<java.lang.Integer>
+        getOverriddenList() {
       return java.util.Collections.unmodifiableList(overridden_);
     }
     /**
-     * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-     *
-     * <pre>
-     *optional UniqId corresponding_property = 7;
-     * </pre>
+     * <code>repeated int32 overridden = 5;</code>
      */
     public int getOverriddenCount() {
       return overridden_.size();
     }
     /**
-     * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-     *
-     * <pre>
-     *optional UniqId corresponding_property = 7;
-     * </pre>
+     * <code>repeated int32 overridden = 5;</code>
      */
-    public org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol getOverridden(int index) {
+    public int getOverridden(int index) {
       return overridden_.get(index);
     }
     /**
-     * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-     *
-     * <pre>
-     *optional UniqId corresponding_property = 7;
-     * </pre>
+     * <code>repeated int32 overridden = 5;</code>
      */
     public Builder setOverridden(
-        int index, org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol value) {
-      if (value == null) {
-        throw new NullPointerException();
-      }
+        int index, int value) {
       ensureOverriddenIsMutable();
       overridden_.set(index, value);
-
+      
       return this;
     }
     /**
-     * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-     *
-     * <pre>
-     *optional UniqId corresponding_property = 7;
-     * </pre>
+     * <code>repeated int32 overridden = 5;</code>
      */
-    public Builder setOverridden(
-        int index, org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol.Builder builderForValue) {
-      ensureOverriddenIsMutable();
-      overridden_.set(index, builderForValue.build());
-
-      return this;
-    }
-    /**
-     * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-     *
-     * <pre>
-     *optional UniqId corresponding_property = 7;
-     * </pre>
-     */
-    public Builder addOverridden(org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol value) {
-      if (value == null) {
-        throw new NullPointerException();
-      }
+    public Builder addOverridden(int value) {
       ensureOverriddenIsMutable();
       overridden_.add(value);
-
+      
       return this;
     }
     /**
-     * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-     *
-     * <pre>
-     *optional UniqId corresponding_property = 7;
-     * </pre>
-     */
-    public Builder addOverridden(
-        int index, org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol value) {
-      if (value == null) {
-        throw new NullPointerException();
-      }
-      ensureOverriddenIsMutable();
-      overridden_.add(index, value);
-
-      return this;
-    }
-    /**
-     * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-     *
-     * <pre>
-     *optional UniqId corresponding_property = 7;
-     * </pre>
-     */
-    public Builder addOverridden(
-        org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol.Builder builderForValue) {
-      ensureOverriddenIsMutable();
-      overridden_.add(builderForValue.build());
-
-      return this;
-    }
-    /**
-     * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-     *
-     * <pre>
-     *optional UniqId corresponding_property = 7;
-     * </pre>
-     */
-    public Builder addOverridden(
-        int index, org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol.Builder builderForValue) {
-      ensureOverriddenIsMutable();
-      overridden_.add(index, builderForValue.build());
-
-      return this;
-    }
-    /**
-     * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-     *
-     * <pre>
-     *optional UniqId corresponding_property = 7;
-     * </pre>
+     * <code>repeated int32 overridden = 5;</code>
      */
     public Builder addAllOverridden(
-        java.lang.Iterable<? extends org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol> values) {
+        java.lang.Iterable<? extends java.lang.Integer> values) {
       ensureOverriddenIsMutable();
       org.jetbrains.kotlin.protobuf.AbstractMessageLite.Builder.addAll(
           values, overridden_);
-
+      
       return this;
     }
     /**
-     * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
-     *
-     * <pre>
-     *optional UniqId corresponding_property = 7;
-     * </pre>
+     * <code>repeated int32 overridden = 5;</code>
      */
     public Builder clearOverridden() {
       overridden_ = java.util.Collections.emptyList();
       bitField0_ = (bitField0_ & ~0x00000010);
-
+      
       return this;
     }
+
+    private boolean isFakeOverride_ ;
     /**
-     * <code>repeated .org.jetbrains.kotlin.backend.common.serialization.proto.IrSymbol overridden = 5;</code>
+     * <code>required bool is_fake_override = 8;</code>
      *
      * <pre>
      *optional UniqId corresponding_property = 7;
      * </pre>
      */
-    public Builder removeOverridden(int index) {
-      ensureOverriddenIsMutable();
-      overridden_.remove(index);
+    public boolean hasIsFakeOverride() {
+      return ((bitField0_ & 0x00000020) == 0x00000020);
+    }
+    /**
+     * <code>required bool is_fake_override = 8;</code>
+     *
+     * <pre>
+     *optional UniqId corresponding_property = 7;
+     * </pre>
+     */
+    public boolean getIsFakeOverride() {
+      return isFakeOverride_;
+    }
+    /**
+     * <code>required bool is_fake_override = 8;</code>
+     *
+     * <pre>
+     *optional UniqId corresponding_property = 7;
+     * </pre>
+     */
+    public Builder setIsFakeOverride(boolean value) {
+      bitField0_ |= 0x00000020;
+      isFakeOverride_ = value;
+      
+      return this;
+    }
+    /**
+     * <code>required bool is_fake_override = 8;</code>
+     *
+     * <pre>
+     *optional UniqId corresponding_property = 7;
+     * </pre>
+     */
+    public Builder clearIsFakeOverride() {
+      bitField0_ = (bitField0_ & ~0x00000020);
+      isFakeOverride_ = false;
+      
+      return this;
+    }
 
+    private boolean isOperator_ ;
+    /**
+     * <code>required bool is_operator = 9;</code>
+     */
+    public boolean hasIsOperator() {
+      return ((bitField0_ & 0x00000040) == 0x00000040);
+    }
+    /**
+     * <code>required bool is_operator = 9;</code>
+     */
+    public boolean getIsOperator() {
+      return isOperator_;
+    }
+    /**
+     * <code>required bool is_operator = 9;</code>
+     */
+    public Builder setIsOperator(boolean value) {
+      bitField0_ |= 0x00000040;
+      isOperator_ = value;
+      
+      return this;
+    }
+    /**
+     * <code>required bool is_operator = 9;</code>
+     */
+    public Builder clearIsOperator() {
+      bitField0_ = (bitField0_ & ~0x00000040);
+      isOperator_ = false;
+      
       return this;
     }
 

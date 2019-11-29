@@ -19,7 +19,7 @@ package org.jetbrains.kotlin.idea.completion
 import com.intellij.codeInsight.completion.InsertHandler
 import com.intellij.codeInsight.lookup.LookupElement
 import org.jetbrains.kotlin.builtins.getReturnTypeFromFunctionType
-import org.jetbrains.kotlin.builtins.isFunctionType
+import org.jetbrains.kotlin.builtins.isBuiltinFunctionalType
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.idea.completion.handlers.*
 import org.jetbrains.kotlin.idea.core.ExpectedInfo
@@ -51,7 +51,7 @@ class InsertHandlerProvider(
                                 if (callType != CallType.SUPER_MEMBERS) { // for super call we don't suggest to generate "super.foo { ... }" (seems to be non-typical use)
                                     val parameter = parameters.single()
                                     val parameterType = parameter.type
-                                    if (parameterType.isFunctionType) {
+                                    if (parameterType.isBuiltinFunctionalType) {
                                         if (getValueParametersCountFromFunctionType(parameterType) <= 1 && !parameter.hasDefaultValue()) {
                                             // otherwise additional item with lambda template is to be added
                                             return KotlinFunctionInsertHandler.Normal(
@@ -101,7 +101,7 @@ class InsertHandlerProvider(
                 descriptor.upperBounds.filter { it.arguments.isNotEmpty() }.forEach(::addPotentiallyInferred)
             }
 
-            if (type.isFunctionType && getValueParametersCountFromFunctionType(type) <= 1) {
+            if (type.isBuiltinFunctionalType && getValueParametersCountFromFunctionType(type) <= 1) {
                 // do not rely on inference from input of function type with one or no arguments - use only return type of functional type
                 addPotentiallyInferred(type.getReturnTypeFromFunctionType())
                 return

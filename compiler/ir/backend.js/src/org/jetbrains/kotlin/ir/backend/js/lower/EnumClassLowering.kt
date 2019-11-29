@@ -5,10 +5,9 @@
 
 package org.jetbrains.kotlin.ir.backend.js.lower
 
+import org.jetbrains.kotlin.backend.common.CommonBackendContext
 import org.jetbrains.kotlin.backend.common.DeclarationContainerLoweringPass
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
-import org.jetbrains.kotlin.backend.common.descriptors.WrappedClassConstructorDescriptor
-import org.jetbrains.kotlin.backend.common.descriptors.WrappedFieldDescriptor
 import org.jetbrains.kotlin.backend.common.ir.copyParameterDeclarationsFrom
 import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
 import org.jetbrains.kotlin.backend.common.lower.irBlockBody
@@ -23,6 +22,8 @@ import org.jetbrains.kotlin.ir.builders.declarations.buildField
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrConstructorImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrFieldImpl
+import org.jetbrains.kotlin.ir.descriptors.WrappedClassConstructorDescriptor
+import org.jetbrains.kotlin.ir.descriptors.WrappedFieldDescriptor
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrInstanceInitializerCallImpl
@@ -65,7 +66,11 @@ class EnumUsageLowering(val context: JsIrBackendContext) : FileLoweringPass {
         val descriptor = WrappedFieldDescriptor()
         val symbol = IrFieldSymbolImpl(descriptor)
         return entry.run {
-            IrFieldImpl(startOffset, endOffset, origin, symbol, name, irClass.defaultType, Visibilities.PUBLIC, false, true, true).also {
+            IrFieldImpl(
+                startOffset, endOffset, origin, symbol, name, irClass.defaultType, Visibilities.PUBLIC,
+                isFinal = false, isExternal = true, isStatic = true,
+                isFakeOverride = origin == IrDeclarationOrigin.FAKE_OVERRIDE
+            ).also {
                 descriptor.bind(it)
                 it.parent = irClass
                 irClass.declarations += it
@@ -101,7 +106,7 @@ private fun createEntryAccessorName(enumName: String, enumEntry: IrEnumEntry) =
 
 private fun IrEnumEntry.getType(irClass: IrClass) = (correspondingClass ?: irClass).defaultType
 
-class EnumClassConstructorLowering(val context: JsIrBackendContext) : DeclarationContainerLoweringPass {
+class EnumClassConstructorLowering(val context: CommonBackendContext) : DeclarationContainerLoweringPass {
     override fun lower(irDeclarationContainer: IrDeclarationContainer) {
         irDeclarationContainer.transformDeclarationsFlat { declaration ->
             if (declaration is IrClass && declaration.isEnumClass &&
@@ -113,7 +118,7 @@ class EnumClassConstructorLowering(val context: JsIrBackendContext) : Declaratio
     }
 }
 
-class EnumClassConstructorTransformer(val context: JsIrBackendContext, private val irClass: IrClass) {
+class EnumClassConstructorTransformer(val context: CommonBackendContext, private val irClass: IrClass) {
     private val builder = context.createIrBuilder(irClass.symbol)
     private val enumEntries = irClass.declarations.filterIsInstance<IrEnumEntry>()
     private val loweredEnumConstructors = HashMap<IrConstructorSymbol, IrConstructor>()
@@ -191,9 +196,10 @@ class EnumClassConstructorTransformer(val context: JsIrBackendContext, private v
             enumConstructor.name,
             enumConstructor.visibility,
             enumConstructor.returnType,
-            enumConstructor.isInline,
-            enumConstructor.isExternal,
-            enumConstructor.isPrimary
+            isInline = enumConstructor.isInline,
+            isExternal = enumConstructor.isExternal,
+            isPrimary = enumConstructor.isPrimary,
+            isExpect = enumConstructor.isExpect
         ).apply {
             loweredConstructorDescriptor.bind(this)
             parent = enumClass
@@ -328,7 +334,7 @@ class EnumClassTransformer(val context: JsIrBackendContext, private val irClass:
     private val builder = context.createIrBuilder(irClass.symbol)
     private val enumEntries = irClass.declarations.filterIsInstance<IrEnumEntry>()
     private val enumName = irClass.name.identifier
-    private val throwISESymbol = context.throwISEymbol
+    private val throwISESymbol = context.throwISEsymbol
 
     fun transform(): List<IrDeclaration> {
 

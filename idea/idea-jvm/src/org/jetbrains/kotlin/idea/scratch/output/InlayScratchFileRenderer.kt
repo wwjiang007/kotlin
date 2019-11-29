@@ -7,13 +7,10 @@ package org.jetbrains.kotlin.idea.scratch.output
 
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorCustomElementRenderer
+import com.intellij.openapi.editor.Inlay
 import com.intellij.openapi.editor.impl.ComplementaryFontsRegistry
 import com.intellij.openapi.editor.impl.FontInfo
 import com.intellij.openapi.editor.markup.TextAttributes
-import com.intellij.ui.Colors
-import com.intellij.ui.JBColor
-import java.awt.Color
-import java.awt.Font
 import java.awt.Graphics
 import java.awt.Rectangle
 
@@ -21,58 +18,29 @@ class InlayScratchFileRenderer(val text: String, private val outputType: Scratch
     private fun getFontInfo(editor: Editor): FontInfo {
         val colorsScheme = editor.colorsScheme
         val fontPreferences = colorsScheme.fontPreferences
-        val attributes = getAttributes()
+        val attributes = getAttributesForOutputType(outputType)
         val fontStyle = attributes.fontType
         return ComplementaryFontsRegistry.getFontAbleToDisplay(
             'a'.toInt(), fontStyle, fontPreferences, FontInfo.getFontRenderContext(editor.contentComponent)
         )
     }
 
-    override fun calcWidthInPixels(editor: Editor): Int {
-        val fontInfo = getFontInfo(editor)
+    override fun calcWidthInPixels(inlay: Inlay<*>): Int {
+        val fontInfo = getFontInfo(inlay.editor)
         return fontInfo.fontMetrics().stringWidth(text)
     }
 
-    override fun paint(editor: Editor, g: Graphics, r: Rectangle, textAttributes: TextAttributes) {
-        val attributes = getAttributes()
+    override fun paint(inlay: Inlay<*>, g: Graphics, targetRegion: Rectangle, textAttributes: TextAttributes) {
+        val attributes = getAttributesForOutputType(outputType)
         val fgColor = attributes.foregroundColor ?: return
         g.color = fgColor
-        val fontInfo = getFontInfo(editor)
+        val fontInfo = getFontInfo(inlay.editor)
         g.font = fontInfo.font
         val metrics = fontInfo.fontMetrics()
-        g.drawString(text, r.x, r.y + metrics.ascent)
-    }
-
-    private fun getAttributes(): TextAttributes {
-        return when (outputType) {
-            ScratchOutputType.OUTPUT -> userOutputAttributes
-            ScratchOutputType.RESULT -> normalAttributes
-            ScratchOutputType.ERROR -> errorAttributes
-        }
+        g.drawString(text, targetRegion.x, targetRegion.y + metrics.ascent)
     }
 
     override fun toString(): String {
         return "${text.takeWhile { it.isWhitespace() }}${outputType.name}: ${text.trim()}"
-    }
-
-    companion object {
-        private val normalAttributes = TextAttributes(
-            JBColor.GRAY,
-            null, null, null,
-            Font.ITALIC
-        )
-
-        private val errorAttributes = TextAttributes(
-            JBColor(Colors.DARK_RED, Colors.DARK_RED),
-            null, null, null,
-            Font.ITALIC
-        )
-
-        private val userOutputColor = Color(0x5C5CFF)
-        private val userOutputAttributes = TextAttributes(
-            JBColor(userOutputColor, userOutputColor),
-            null, null, null,
-            Font.ITALIC
-        )
     }
 }

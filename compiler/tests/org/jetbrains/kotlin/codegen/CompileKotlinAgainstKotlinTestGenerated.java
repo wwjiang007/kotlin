@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
 @RunWith(JUnit3RunnerWithInners.class)
 public class CompileKotlinAgainstKotlinTestGenerated extends AbstractCompileKotlinAgainstKotlinTest {
     private void runTest(String testDataFilePath) throws Exception {
-        KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
     }
 
     private void runTestWithPackageReplacement(String testDataFilePath, String packageName) throws Exception {
@@ -30,7 +30,7 @@ public class CompileKotlinAgainstKotlinTestGenerated extends AbstractCompileKotl
     }
 
     public void testAllFilesPresentInCompileKotlinAgainstKotlin() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/compileKotlinAgainstKotlin"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/compileKotlinAgainstKotlin"), Pattern.compile("^(.+)\\.kt$"), true);
     }
 
     @TestMetadata("annotationInInterface.kt")
@@ -128,9 +128,19 @@ public class CompileKotlinAgainstKotlinTestGenerated extends AbstractCompileKotl
         runTest("compiler/testData/compileKotlinAgainstKotlin/enum.kt");
     }
 
+    @TestMetadata("expectClassActualTypeAlias.kt")
+    public void testExpectClassActualTypeAlias() throws Exception {
+        runTest("compiler/testData/compileKotlinAgainstKotlin/expectClassActualTypeAlias.kt");
+    }
+
     @TestMetadata("inlineClassFromBinaryDependencies.kt")
     public void testInlineClassFromBinaryDependencies() throws Exception {
         runTest("compiler/testData/compileKotlinAgainstKotlin/inlineClassFromBinaryDependencies.kt");
+    }
+
+    @TestMetadata("inlineClassInlineProperty.kt")
+    public void testInlineClassInlineProperty() throws Exception {
+        runTest("compiler/testData/compileKotlinAgainstKotlin/inlineClassInlineProperty.kt");
     }
 
     @TestMetadata("inlinedConstants.kt")
@@ -221,6 +231,11 @@ public class CompileKotlinAgainstKotlinTestGenerated extends AbstractCompileKotl
     @TestMetadata("kt21775.kt")
     public void testKt21775() throws Exception {
         runTest("compiler/testData/compileKotlinAgainstKotlin/kt21775.kt");
+    }
+
+    @TestMetadata("metadataForMembersInLocalClassInInitializer.kt")
+    public void testMetadataForMembersInLocalClassInInitializer() throws Exception {
+        runTest("compiler/testData/compileKotlinAgainstKotlin/metadataForMembersInLocalClassInInitializer.kt");
     }
 
     @TestMetadata("multifileClassInlineFunctionAccessingProperty.kt")
@@ -328,11 +343,11 @@ public class CompileKotlinAgainstKotlinTestGenerated extends AbstractCompileKotl
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Coroutines extends AbstractCompileKotlinAgainstKotlinTest {
         private void runTest(String testDataFilePath) throws Exception {
-            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+            KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
         }
 
         public void testAllFilesPresentInCoroutines() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/compileKotlinAgainstKotlin/coroutines"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/compileKotlinAgainstKotlin/coroutines"), Pattern.compile("^(.+)\\.kt$"), true);
         }
 
         @TestMetadata("builder.kt")
@@ -356,11 +371,11 @@ public class CompileKotlinAgainstKotlinTestGenerated extends AbstractCompileKotl
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Jvm8 extends AbstractCompileKotlinAgainstKotlinTest {
         private void runTest(String testDataFilePath) throws Exception {
-            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+            KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
         }
 
         public void testAllFilesPresentInJvm8() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/compileKotlinAgainstKotlin/jvm8"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/compileKotlinAgainstKotlin/jvm8"), Pattern.compile("^(.+)\\.kt$"), true);
         }
 
         @TestMetadata("compiler/testData/compileKotlinAgainstKotlin/jvm8/defaults")
@@ -368,11 +383,11 @@ public class CompileKotlinAgainstKotlinTestGenerated extends AbstractCompileKotl
         @RunWith(JUnit3RunnerWithInners.class)
         public static class Defaults extends AbstractCompileKotlinAgainstKotlinTest {
             private void runTest(String testDataFilePath) throws Exception {
-                KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+                KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
             }
 
             public void testAllFilesPresentInDefaults() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/compileKotlinAgainstKotlin/jvm8/defaults"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/compileKotlinAgainstKotlin/jvm8/defaults"), Pattern.compile("^(.+)\\.kt$"), true);
             }
 
             @TestMetadata("superCall.kt")
@@ -411,11 +426,11 @@ public class CompileKotlinAgainstKotlinTestGenerated extends AbstractCompileKotl
         @RunWith(JUnit3RunnerWithInners.class)
         public static class Jvm8against6 extends AbstractCompileKotlinAgainstKotlinTest {
             private void runTest(String testDataFilePath) throws Exception {
-                KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+                KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
             }
 
             public void testAllFilesPresentInJvm8against6() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/compileKotlinAgainstKotlin/jvm8/jvm8against6"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/compileKotlinAgainstKotlin/jvm8/jvm8against6"), Pattern.compile("^(.+)\\.kt$"), true);
             }
 
             @TestMetadata("jdk8Against6.kt")
@@ -453,11 +468,11 @@ public class CompileKotlinAgainstKotlinTestGenerated extends AbstractCompileKotl
             @RunWith(JUnit3RunnerWithInners.class)
             public static class Delegation extends AbstractCompileKotlinAgainstKotlinTest {
                 private void runTest(String testDataFilePath) throws Exception {
-                    KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+                    KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
                 }
 
                 public void testAllFilesPresentInDelegation() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/compileKotlinAgainstKotlin/jvm8/jvm8against6/delegation"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.ANY, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/compileKotlinAgainstKotlin/jvm8/jvm8against6/delegation"), Pattern.compile("^(.+)\\.kt$"), true);
                 }
 
                 @TestMetadata("diamond.kt")

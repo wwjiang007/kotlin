@@ -21,37 +21,36 @@ import javax.swing.Icon
 import java.io.Reader
 import org.jetbrains.kotlin.ide.konan.psi.*
 import org.jetbrains.kotlin.idea.KotlinIcons
-import org.jetbrains.kotlin.konan.library.KDEFINITIONS_FILE_EXTENSION
 
-
-const val NATIVE_DEFINITIONS_ID = "KND"
-const val NATIVE_DEFINITIONS_NAME = "Kotlin/Native Def"
-const val NATIVE_DEFINITIONS_DESCRIPTION = "Definitions file for Kotlin/Native C interop"
+const val KOTLIN_NATIVE_DEFINITIONS_FILE_EXTENSION = "def"
+const val KOTLIN_NATIVE_DEFINITIONS_ID = "KND"
+const val KOTLIN_NATIVE_DEFINITIONS_NAME = "Kotlin/Native Def"
+const val KOTLIN_NATIVE_DEFINITIONS_DESCRIPTION = "Definitions file for Kotlin/Native C interop"
 
 object NativeDefinitionsFileType : LanguageFileType(NativeDefinitionsLanguage.INSTANCE) {
 
-    override fun getName(): String = NATIVE_DEFINITIONS_NAME
+    override fun getName(): String = KOTLIN_NATIVE_DEFINITIONS_NAME
 
-    override fun getDescription(): String = NATIVE_DEFINITIONS_DESCRIPTION
+    override fun getDescription(): String = KOTLIN_NATIVE_DEFINITIONS_DESCRIPTION
 
-    override fun getDefaultExtension(): String = KDEFINITIONS_FILE_EXTENSION
+    override fun getDefaultExtension(): String = KOTLIN_NATIVE_DEFINITIONS_FILE_EXTENSION
 
     override fun getIcon(): Icon = KotlinIcons.NATIVE
 }
 
-class NativeDefinitionsLanguage private constructor() : Language(NATIVE_DEFINITIONS_ID) {
+class NativeDefinitionsLanguage private constructor() : Language(KOTLIN_NATIVE_DEFINITIONS_ID) {
     companion object {
         val INSTANCE = NativeDefinitionsLanguage()
     }
 
-    override fun getDisplayName(): String = NATIVE_DEFINITIONS_NAME
+    override fun getDisplayName(): String = KOTLIN_NATIVE_DEFINITIONS_NAME
 }
 
 class NativeDefinitionsFile(viewProvider: FileViewProvider) : PsiFileBase(viewProvider, NativeDefinitionsLanguage.INSTANCE) {
 
     override fun getFileType(): FileType = NativeDefinitionsFileType
 
-    override fun toString(): String = NATIVE_DEFINITIONS_DESCRIPTION
+    override fun toString(): String = KOTLIN_NATIVE_DEFINITIONS_DESCRIPTION
 
     override fun getIcon(flags: Int): Icon? = super.getIcon(flags)
 }
@@ -126,6 +125,8 @@ object NativeDefinitionsSyntaxHighlighter : SyntaxHighlighterBase() {
             NativeDefinitionsTypes.STRICT_ENUMS -> KNOWN_PROPERTIES_KEYS
             // known extensions
             NativeDefinitionsTypes.ANDROID -> KNOWN_EXTENSIONS_KEYS
+            NativeDefinitionsTypes.ANDROID_X64 -> KNOWN_EXTENSIONS_KEYS
+            NativeDefinitionsTypes.ANDROID_X86 -> KNOWN_EXTENSIONS_KEYS
             NativeDefinitionsTypes.ANDROID_ARM32 -> KNOWN_EXTENSIONS_KEYS
             NativeDefinitionsTypes.ANDROID_ARM64 -> KNOWN_EXTENSIONS_KEYS
             NativeDefinitionsTypes.ARM32 -> KNOWN_EXTENSIONS_KEYS
@@ -145,8 +146,16 @@ object NativeDefinitionsSyntaxHighlighter : SyntaxHighlighterBase() {
             NativeDefinitionsTypes.MIPS32 -> KNOWN_EXTENSIONS_KEYS
             NativeDefinitionsTypes.MIPSEL32 -> KNOWN_EXTENSIONS_KEYS
             NativeDefinitionsTypes.OSX -> KNOWN_EXTENSIONS_KEYS
+            NativeDefinitionsTypes.TVOS -> KNOWN_EXTENSIONS_KEYS
+            NativeDefinitionsTypes.TVOS_ARM64 -> KNOWN_EXTENSIONS_KEYS
+            NativeDefinitionsTypes.TVOS_X64 -> KNOWN_EXTENSIONS_KEYS
             NativeDefinitionsTypes.WASM -> KNOWN_EXTENSIONS_KEYS
             NativeDefinitionsTypes.WASM32 -> KNOWN_EXTENSIONS_KEYS
+            NativeDefinitionsTypes.WATCHOS -> KNOWN_EXTENSIONS_KEYS
+            NativeDefinitionsTypes.WATCHOS_ARM32 -> KNOWN_EXTENSIONS_KEYS
+            NativeDefinitionsTypes.WATCHOS_ARM64 -> KNOWN_EXTENSIONS_KEYS
+            NativeDefinitionsTypes.WATCHOS_X64 -> KNOWN_EXTENSIONS_KEYS
+            NativeDefinitionsTypes.WATCHOS_X86 -> KNOWN_EXTENSIONS_KEYS
             NativeDefinitionsTypes.X64 -> KNOWN_EXTENSIONS_KEYS
             else -> EMPTY_KEYS
         }

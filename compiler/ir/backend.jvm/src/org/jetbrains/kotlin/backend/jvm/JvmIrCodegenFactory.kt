@@ -21,19 +21,17 @@ import org.jetbrains.kotlin.codegen.*
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.descriptors.PackageFragmentDescriptor
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import org.jetbrains.kotlin.ir.util.ExternalDependenciesGenerator
 import org.jetbrains.kotlin.ir.util.SymbolTable
+import org.jetbrains.kotlin.ir.util.generateTypicalIrProviderList
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.psi2ir.Psi2IrTranslator
 import org.jetbrains.kotlin.psi2ir.PsiSourceManager
 
 class JvmIrCodegenFactory(private val phaseConfig: PhaseConfig) : CodegenFactory {
 
     override fun generateModule(state: GenerationState, files: Collection<KtFile>, errorHandler: CompilationErrorHandler) {
-        val psi2ir = Psi2IrTranslator(state.languageVersionSettings, facadeClassGenerator = JvmBackendFacade::facadeClassGenerator)
-        val psi2irContext = psi2ir.createGeneratorContext(state.module, state.bindingContext, extensions = JvmGeneratorExtensions)
-        val irModuleFragment = psi2ir.generateModuleFragment(psi2irContext, files)
-        JvmBackendFacade.doGenerateFilesInternal(state, errorHandler, irModuleFragment, psi2irContext, phaseConfig)
+        JvmBackendFacade.doGenerateFiles(files, state, errorHandler, phaseConfig)
     }
 
     fun generateModuleInFrontendIRMode(
@@ -43,8 +41,13 @@ class JvmIrCodegenFactory(private val phaseConfig: PhaseConfig) : CodegenFactory
         symbolTable: SymbolTable,
         sourceManager: PsiSourceManager
     ) {
+        val stubGeneratorExtensions = JvmStubGeneratorExtensions()
+        val irProviders = generateTypicalIrProviderList(
+            irModuleFragment.descriptor, irModuleFragment.irBuiltins, symbolTable, extensions = stubGeneratorExtensions
+        )
+        ExternalDependenciesGenerator(symbolTable, irProviders).generateUnboundSymbolsAsDependencies()
         JvmBackendFacade.doGenerateFilesInternal(
-            state, errorHandler, irModuleFragment, symbolTable, sourceManager, phaseConfig, firMode = true
+            state, errorHandler, irModuleFragment, symbolTable, sourceManager, phaseConfig, stubGeneratorExtensions
         )
     }
 

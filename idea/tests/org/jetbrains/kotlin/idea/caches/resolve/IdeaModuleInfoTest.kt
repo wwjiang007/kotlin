@@ -7,7 +7,6 @@ package org.jetbrains.kotlin.idea.caches.resolve
 
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.StdModuleTypes
-import com.intellij.openapi.projectRoots.ProjectJdkTable
 import com.intellij.openapi.roots.DependencyScope
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ModuleRootModificationUtil
@@ -18,7 +17,6 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.newvfs.impl.VfsRootAccess
 import com.intellij.psi.PsiManager
 import com.intellij.testFramework.ModuleTestCase
-import com.intellij.testFramework.PlatformTestCase
 import com.intellij.testFramework.PsiTestUtil
 import com.intellij.testFramework.UsefulTestCase
 import org.jetbrains.kotlin.codegen.forTestCompile.ForTestCompileRuntime
@@ -29,6 +27,7 @@ import org.jetbrains.kotlin.idea.framework.CommonLibraryKind
 import org.jetbrains.kotlin.idea.framework.JSLibraryKind
 import org.jetbrains.kotlin.idea.test.PluginTestCaseBase.*
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
+import org.jetbrains.kotlin.idea.util.getProjectJdkTableSafe
 import org.jetbrains.kotlin.test.JUnit3WithIdeaConfigurationRunner
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.util.addDependency
@@ -40,7 +39,6 @@ import org.junit.runner.RunWith
 
 @RunWith(JUnit3WithIdeaConfigurationRunner::class)
 class IdeaModuleInfoTest : ModuleTestCase() {
-
     fun testSimpleModuleDependency() {
         val (a, b) = modules()
         b.addDependency(a)
@@ -347,20 +345,29 @@ class IdeaModuleInfoTest : ModuleTestCase() {
     }
 
     fun testSdkForScript() {
+        // The first known jdk will be used for scripting if there is no jdk in the project
         runWriteAction {
-            ProjectJdkTable.getInstance().addJdk(mockJdk6())
-            ProjectJdkTable.getInstance().addJdk(mockJdk9())
+            val jdkTable = getProjectJdkTableSafe()
+
+            jdkTable.addJdk(mockJdk6())
+            jdkTable.addJdk(mockJdk9())
+
+            ProjectRootManager.getInstance(project).projectSdk = null
         }
 
+        val firstSDK = getProjectJdkTableSafe().allJdks.first()
+
         with(createFileInProject("script.kts").moduleInfo) {
-            dependencies().filterIsInstance<SdkInfo>().single { it.sdk == mockJdk6() }
+            dependencies().filterIsInstance<SdkInfo>().single { it.sdk == firstSDK }
         }
     }
 
     fun testSdkForScriptProjectSdk() {
         runWriteAction {
-            ProjectJdkTable.getInstance().addJdk(mockJdk6())
-            ProjectJdkTable.getInstance().addJdk(mockJdk9())
+            val jdkTable = getProjectJdkTableSafe()
+
+            jdkTable.addJdk(mockJdk6())
+            jdkTable.addJdk(mockJdk9())
 
             ProjectRootManager.getInstance(project).projectSdk = mockJdk9()
         }
@@ -374,8 +381,10 @@ class IdeaModuleInfoTest : ModuleTestCase() {
         val a = module("a")
 
         runWriteAction {
-            ProjectJdkTable.getInstance().addJdk(mockJdk6())
-            ProjectJdkTable.getInstance().addJdk(mockJdk9())
+            val jdkTable = getProjectJdkTableSafe()
+
+            jdkTable.addJdk(mockJdk6())
+            jdkTable.addJdk(mockJdk9())
 
             ProjectRootManager.getInstance(project).projectSdk = mockJdk6()
             with(ModuleRootManager.getInstance(a).modifiableModel) {
@@ -396,7 +405,7 @@ class IdeaModuleInfoTest : ModuleTestCase() {
             for (sourceFolder in contentEntry.sourceFolders) {
                 if (((!inTests && !sourceFolder.isTestSource) || (inTests && sourceFolder.isTestSource)) && sourceFolder.file != null) {
                     return runWriteAction {
-                        PlatformTestCase.getVirtualFile(fileToCopyIO).copy(this, sourceFolder.file!!, fileName)
+                        getVirtualFile(fileToCopyIO).copy(this, sourceFolder.file!!, fileName)
                     }
                 }
             }
@@ -407,7 +416,7 @@ class IdeaModuleInfoTest : ModuleTestCase() {
 
     private fun createFileInProject(fileName: String): VirtualFile {
         return runWriteAction {
-            PlatformTestCase.getVirtualFile(createTempFile(fileName, "")).copy(this, project.baseDir, fileName)
+            getVirtualFile(createTempFile(fileName, "")).copy(this, project.baseDir, fileName)
         }
     }
 

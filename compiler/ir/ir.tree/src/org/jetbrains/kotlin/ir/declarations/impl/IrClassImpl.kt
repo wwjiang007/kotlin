@@ -37,13 +37,14 @@ class IrClassImpl(
     override val symbol: IrClassSymbol,
     override val name: Name,
     override val kind: ClassKind,
-    override val visibility: Visibility,
-    override val modality: Modality,
+    override var visibility: Visibility,
+    override var modality: Modality,
     override val isCompanion: Boolean,
     override val isInner: Boolean,
     override val isData: Boolean,
     override val isExternal: Boolean,
-    override val isInline: Boolean
+    override val isInline: Boolean,
+    override val isExpect: Boolean
 ) :
     IrDeclarationBase(startOffset, endOffset, origin),
     IrClass {
@@ -64,7 +65,8 @@ class IrClassImpl(
                 isInner = symbol.descriptor.isInner,
                 isData = symbol.descriptor.isData,
                 isExternal = symbol.descriptor.isEffectivelyExternal(),
-                isInline = symbol.descriptor.isInline
+                isInline = symbol.descriptor.isInline,
+                isExpect = symbol.descriptor.isExpect
             )
 
     init {

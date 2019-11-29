@@ -1,6 +1,5 @@
 // !LANGUAGE: +InlineClasses
-// IGNORE_BACKEND: JVM_IR
-// This test fails on JVM_IR because of a missing implicit cast from UInt? to UInt.
+// IGNORE_BACKEND_FIR: JVM_IR
 
 inline class UInt(private val value: Int) {
     operator fun plus(other: UInt): UInt = UInt(value + other.asValue())

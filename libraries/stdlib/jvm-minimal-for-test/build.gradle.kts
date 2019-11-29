@@ -58,6 +58,7 @@ tasks.withType<KotlinCompile> {
         freeCompilerArgs += listOf(
             "-module-name",
             "kotlin-stdlib",
+            "-Xallow-kotlin-package",
             "-Xmulti-platform",
             "-Xuse-experimental=kotlin.contracts.ExperimentalContracts",
             "-Xuse-experimental=kotlin.Experimental"
@@ -75,7 +76,7 @@ publishing {
     publications {
         create<MavenPublication>("internal") {
             artifactId = "kotlin-stdlib-minimal-for-test"
-            artifact(jar)
+            artifact(jar.get())
         }
     }
 

@@ -6,16 +6,11 @@
 package org.jetbrains.kotlin.psi2ir.generators
 
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
-import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
+import org.jetbrains.kotlin.descriptors.PropertyDescriptor
+import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.SimpleType
 
 open class GeneratorExtensions {
-    open val externalDeclarationOrigin: ((DeclarationDescriptor) -> IrDeclarationOrigin)?
-        get() = null
-
     open val samConversion: SamConversion
         get() = SamConversion
 
@@ -32,4 +27,6 @@ open class GeneratorExtensions {
 
         companion object Instance : SamConversion()
     }
+
+    open fun computeFieldVisibility(descriptor: PropertyDescriptor): Visibility? = null
 }

@@ -5,10 +5,7 @@
 
 package org.jetbrains.kotlin.fir.resolve.calls
 
-import org.jetbrains.kotlin.fir.expressions.FirExpression
-import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
-import org.jetbrains.kotlin.fir.expressions.FirStatement
-import org.jetbrains.kotlin.fir.expressions.FirWrappedArgumentExpression
+import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.resolve.calls.inference.components.KotlinConstraintSystemCompleter
@@ -80,9 +77,11 @@ private fun Candidate.hasProperNonTrivialLowerConstraints(components: InferenceC
     val constructor = typeVariable.typeConstructor(context)
     val variableWithConstraints = csBuilder.currentStorage().notFixedTypeVariables[constructor] ?: return false
     val constraints = variableWithConstraints.constraints
-    return constraints.isNotEmpty() && constraints.all {
+    // TODO: support Exact annotation
+    // see KotlinCallCompleter:244
+    return constraints.isNotEmpty() && constraints.any {
         !it.type.typeConstructor(context).isIntegerLiteralTypeConstructor(context) &&
-                it.kind.isLower() && csBuilder.isProperType(it.type)
+                (it.kind.isLower() || it.kind.isEqual()) && csBuilder.isProperType(it.type)
     }
 
 }
@@ -155,7 +154,7 @@ class ConstraintSystemCompleter(val components: InferenceComponents) {
         direction: TypeVariableDirectionCalculator.ResolveDirection
     ) {
         val resultType = components.resultTypeResolver.findResultType(c, variableWithConstraints, direction)
-        c.fixVariable(variableWithConstraints.typeVariable, resultType)
+        c.fixVariable(variableWithConstraints.typeVariable, resultType, atom = null) // TODO: obtain atom for diagnostics
     }
 
     private fun analyzePostponeArgumentIfPossible(
@@ -182,6 +181,23 @@ class ConstraintSystemCompleter(val components: InferenceComponents) {
                     }
                     this.arguments.forEach { it.process(to) }
                 }
+                is FirWhenExpression -> {
+                    val candidate = (this.calleeReference as? FirNamedReferenceWithCandidate)?.candidate
+                    candidate?.postponedAtoms?.forEach {
+                        to.addIfNotNull(it.safeAs<PostponedResolvedAtomMarker>()?.takeUnless { it.analyzed })
+                    }
+                    this.branches.forEach { it.result.process(to) }
+                }
+
+                is FirTryExpression -> {
+                    val candidate = (this.calleeReference as? FirNamedReferenceWithCandidate)?.candidate
+                    candidate?.postponedAtoms?.forEach {
+                        to.addIfNotNull(it.safeAs<PostponedResolvedAtomMarker>()?.takeUnless { it.analyzed })
+                    }
+                    tryBlock.process(to)
+                    catches.forEach { it.block.process(to) }
+                }
+
                 is FirWrappedArgumentExpression -> this.expression.process(to)
                 // TOOD: WTF?
             }

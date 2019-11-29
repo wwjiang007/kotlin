@@ -42,7 +42,7 @@ class KtScratchReplExecutor(file: ScratchFile) : SequentialScratchExecutor(file)
     private var osProcessHandler: OSProcessHandler? = null
 
     override fun startExecution() {
-        val module = file.getModule()
+        val module = file.module
         val cmdLine = KotlinConsoleKeeper.createReplCommandLine(file.project, module)
 
         LOG.printDebugMessage("Execute REPL: ${cmdLine.commandLineString}")
@@ -52,11 +52,15 @@ class KtScratchReplExecutor(file: ScratchFile) : SequentialScratchExecutor(file)
     }
 
     override fun stopExecution(callback: (() -> Unit)?) {
-        val osProcessHandler = osProcessHandler ?: return
+        val processHandler = osProcessHandler
+        if (processHandler == null) {
+            callback?.invoke()
+            return
+        }
 
         try {
             if (callback != null) {
-                osProcessHandler.addProcessListener(object : ProcessAdapter() {
+                processHandler.addProcessListener(object : ProcessAdapter() {
                     override fun processTerminated(event: ProcessEvent) {
                         callback()
                     }
@@ -66,7 +70,7 @@ class KtScratchReplExecutor(file: ScratchFile) : SequentialScratchExecutor(file)
         } catch (e: Exception) {
             errorOccurs("Couldn't stop REPL process", e, false)
 
-            osProcessHandler.destroyProcess()
+            processHandler.destroyProcess()
             clearState()
         }
     }

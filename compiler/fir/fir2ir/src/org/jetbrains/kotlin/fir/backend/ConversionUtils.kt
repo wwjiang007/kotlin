@@ -6,9 +6,14 @@
 package org.jetbrains.kotlin.fir.backend
 
 import com.intellij.psi.PsiCompiledElement
-import org.jetbrains.kotlin.fir.*
+import org.jetbrains.kotlin.fir.FirElement
+import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.psi
+import org.jetbrains.kotlin.fir.references.FirReference
+import org.jetbrains.kotlin.fir.references.FirResolvedNamedReference
+import org.jetbrains.kotlin.fir.references.FirThisReference
 import org.jetbrains.kotlin.fir.resolve.toSymbol
-import org.jetbrains.kotlin.fir.symbols.ConeClassifierSymbol
+import org.jetbrains.kotlin.fir.symbols.AbstractFirBasedSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.*
 import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.ir.IrElement
@@ -16,7 +21,10 @@ import org.jetbrains.kotlin.ir.symbols.*
 import org.jetbrains.kotlin.ir.types.IrErrorType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.IrTypeArgument
-import org.jetbrains.kotlin.ir.types.impl.*
+import org.jetbrains.kotlin.ir.types.impl.IrErrorTypeImpl
+import org.jetbrains.kotlin.ir.types.impl.IrSimpleTypeImpl
+import org.jetbrains.kotlin.ir.types.impl.IrStarProjectionImpl
+import org.jetbrains.kotlin.ir.types.impl.makeTypeProjection
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffsetSkippingComments
 import org.jetbrains.kotlin.types.Variance
@@ -39,7 +47,7 @@ fun FirTypeRef.toIrType(session: FirSession, declarationStorage: Fir2IrDeclarati
     return type.toIrType(session, declarationStorage)
 }
 
-fun ConeKotlinType.toIrType(session: FirSession, declarationStorage: Fir2IrDeclarationStorage): IrType {
+fun ConeKotlinType.toIrType(session: FirSession, declarationStorage: Fir2IrDeclarationStorage, definitelyNotNull: Boolean = false): IrType {
     return when (this) {
         is ConeKotlinErrorType -> createErrorType()
         is ConeLookupTagBasedType -> {
@@ -47,17 +55,24 @@ fun ConeKotlinType.toIrType(session: FirSession, declarationStorage: Fir2IrDecla
             val irSymbol = firSymbol.toIrSymbol(session, declarationStorage)
             // TODO: annotations
             IrSimpleTypeImpl(
-                irSymbol, this.isMarkedNullable,
+                irSymbol, !definitelyNotNull && this.isMarkedNullable,
                 typeArguments.map { it.toIrTypeArgument(session, declarationStorage) },
                 emptyList()
             )
         }
         is ConeFlexibleType -> {
             // TODO: yet we take more general type. Not quite sure it's Ok
-            upperBound.toIrType(session, declarationStorage)
+            upperBound.toIrType(session, declarationStorage, definitelyNotNull)
         }
         is ConeCapturedType -> TODO()
-        is ConeDefinitelyNotNullType -> TODO()
+        is ConeDefinitelyNotNullType -> {
+            original.toIrType(session, declarationStorage, definitelyNotNull = true)
+        }
+        is ConeIntersectionType -> {
+            // TODO: add intersectionTypeApproximation
+            intersectedTypes.first().toIrType(session, declarationStorage, definitelyNotNull)
+        }
+        is ConeStubType -> createErrorType()
     }
 }
 
@@ -79,7 +94,7 @@ fun ConeKotlinTypeProjection.toIrTypeArgument(session: FirSession, declarationSt
     }
 }
 
-fun ConeClassifierSymbol.toIrSymbol(session: FirSession, declarationStorage: Fir2IrDeclarationStorage): IrClassifierSymbol {
+fun FirClassifierSymbol<*>.toIrSymbol(session: FirSession, declarationStorage: Fir2IrDeclarationStorage): IrClassifierSymbol {
     return when (this) {
         is FirTypeParameterSymbol -> {
             toTypeParameterSymbol(declarationStorage)
@@ -97,27 +112,31 @@ fun ConeClassifierSymbol.toIrSymbol(session: FirSession, declarationStorage: Fir
 }
 
 fun FirReference.toSymbol(declarationStorage: Fir2IrDeclarationStorage): IrSymbol? {
-    if (this is FirNamedReference) {
-        return toSymbol(declarationStorage)
-    }
-    return null
-}
-
-fun FirNamedReference.toSymbol(declarationStorage: Fir2IrDeclarationStorage): IrSymbol? {
-    if (this is FirResolvedCallableReference) {
-        when (val callableSymbol = this.coneSymbol) {
-            is FirFunctionSymbol<*> -> return callableSymbol.toFunctionSymbol(declarationStorage)
-            is FirPropertySymbol -> return callableSymbol.toPropertyOrFieldSymbol(declarationStorage)
-            is FirFieldSymbol -> return callableSymbol.toPropertyOrFieldSymbol(declarationStorage)
-            is FirBackingFieldSymbol -> return callableSymbol.toBackingFieldSymbol(declarationStorage)
-            is FirDelegateFieldSymbol<*> -> return callableSymbol.toBackingFieldSymbol(declarationStorage)
-            is FirVariableSymbol<*> -> return callableSymbol.toValueSymbol(declarationStorage)
+    return when (this) {
+        is FirResolvedNamedReference -> resolvedSymbol.toSymbol(declarationStorage)
+        is FirThisReference -> {
+            when (val boundSymbol = boundSymbol?.toSymbol(declarationStorage)) {
+                is IrClassSymbol -> boundSymbol.owner.thisReceiver?.symbol
+                is IrFunctionSymbol -> boundSymbol.owner.extensionReceiverParameter?.symbol
+                else -> null
+            }
         }
+        else -> null
     }
-    return null
 }
 
-fun FirClassSymbol.toClassSymbol(declarationStorage: Fir2IrDeclarationStorage): IrClassSymbol {
+private fun AbstractFirBasedSymbol<*>.toSymbol(declarationStorage: Fir2IrDeclarationStorage): IrSymbol? = when (this) {
+    is FirClassSymbol -> toClassSymbol(declarationStorage)
+    is FirFunctionSymbol<*> -> toFunctionSymbol(declarationStorage)
+    is FirPropertySymbol -> if (fir.isLocal) toValueSymbol(declarationStorage) else toPropertyOrFieldSymbol(declarationStorage)
+    is FirFieldSymbol -> toPropertyOrFieldSymbol(declarationStorage)
+    is FirBackingFieldSymbol -> toBackingFieldSymbol(declarationStorage)
+    is FirDelegateFieldSymbol<*> -> toBackingFieldSymbol(declarationStorage)
+    is FirVariableSymbol<*> -> toValueSymbol(declarationStorage)
+    else -> null
+}
+
+fun FirClassSymbol<*>.toClassSymbol(declarationStorage: Fir2IrDeclarationStorage): IrClassSymbol {
     return declarationStorage.getIrClassSymbol(this)
 }
 

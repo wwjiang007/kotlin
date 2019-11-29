@@ -13,8 +13,6 @@ plugins {
 
 publish()
 
-// todo: make lazy
-val jar: Jar by tasks
 val jarContents by configurations.creating
 
 sourcesJar()
@@ -47,7 +45,7 @@ dependencies {
     compileOnly(project(":kotlin-scripting-compiler"))
 
     compile("com.google.code.gson:gson:${rootProject.extra["versions.jar.gson"]}")
-    compile("de.undercouch:gradle-download-task:3.4.3")
+    compile("de.undercouch:gradle-download-task:4.0.2")
     
     compileOnly("com.android.tools.build:gradle:2.0.0")
     compileOnly("com.android.tools.build:gradle-core:2.0.0")
@@ -67,7 +65,7 @@ dependencies {
     runtime(project(":kotlin-reflect"))
 
     jarContents(compileOnly(intellijDep()) {
-        includeJars("asm-all", "serviceMessages", "gson", rootProject = rootProject)
+        includeJars("asm-all", "gson", "serviceMessages", rootProject = rootProject)
     })
 
     // com.android.tools.build:gradle has ~50 unneeded transitive dependencies
@@ -75,7 +73,8 @@ dependencies {
     compileOnly("com.android.tools.build:gradle-core:3.0.0") { isTransitive = false }
     compileOnly("com.android.tools.build:builder-model:3.0.0") { isTransitive = false }
 
-    testCompile(intellijDep()) { includeJars("serviceMessages", "junit", rootProject = rootProject) }
+    testCompile(intellijDep()) { includeJars( "junit", "serviceMessages", rootProject = rootProject) }
+
     testCompileOnly(project(":compiler"))
     testCompile(projectTests(":kotlin-build-common"))
     testCompile(project(":kotlin-android-extensions"))
@@ -91,7 +90,7 @@ if (kotlinBuildProperties.isInJpsBuildIdeaSync) {
     configurations.compile.get().exclude("com.android.tools.external.com-intellij", "intellij-core")
 }
 
-runtimeJar(rewriteDepsToShadedCompiler(jar)) {
+runtimeJar(rewriteDefaultJarDepsToShadedCompiler()).configure {
     dependsOn(jarContents)
 
     from {

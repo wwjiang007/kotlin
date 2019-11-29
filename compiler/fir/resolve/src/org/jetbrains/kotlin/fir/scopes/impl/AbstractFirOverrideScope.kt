@@ -8,81 +8,51 @@ package org.jetbrains.kotlin.fir.scopes.impl
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.*
-import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
-import org.jetbrains.kotlin.fir.resolve.substitution.substitutorByMap
+import org.jetbrains.kotlin.fir.scopes.FirOverrideChecker
 import org.jetbrains.kotlin.fir.scopes.FirScope
 import org.jetbrains.kotlin.fir.symbols.AbstractFirBasedSymbol
-import org.jetbrains.kotlin.fir.symbols.ConeCallableSymbol
-import org.jetbrains.kotlin.fir.typeContext
-import org.jetbrains.kotlin.fir.types.*
-import org.jetbrains.kotlin.fir.types.impl.ConeTypeParameterTypeImpl
-import org.jetbrains.kotlin.types.AbstractStrictEqualityTypeChecker
-import org.jetbrains.kotlin.utils.addToStdlib.cast
+import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
 
-abstract class AbstractFirOverrideScope(val session: FirSession) : FirScope() {
-    //base symbol as key
-    val overrides = mutableMapOf<ConeCallableSymbol, ConeCallableSymbol?>()
+abstract class AbstractFirOverrideScope(val session: FirSession, protected val overrideChecker: FirOverrideChecker) : FirScope() {
+    //base symbol as key, overridden as value
+    val overrideByBase = mutableMapOf<FirCallableSymbol<*>, FirCallableSymbol<*>?>()
 
-    val context: ConeTypeContext = session.typeContext
+    private fun isOverriddenFunction(overrideCandidate: FirSimpleFunction, baseDeclaration: FirSimpleFunction): Boolean {
+        return overrideChecker.isOverriddenFunction(overrideCandidate, baseDeclaration)
+    }
 
-    private fun isEqualTypes(a: ConeKotlinType, b: ConeKotlinType, substitution: ConeSubstitutor) =
-        AbstractStrictEqualityTypeChecker.strictEqualTypes(context, substitution.substituteOrSelf(a), substitution.substituteOrSelf(b))
+    private fun isOverriddenProperty(overrideCandidate: FirCallableMemberDeclaration<*>, baseDeclaration: FirProperty): Boolean {
+        return overrideChecker.isOverriddenProperty(overrideCandidate, baseDeclaration)
+    }
 
-    private fun isEqualTypes(a: FirTypeRef, b: FirTypeRef, substitution: ConeSubstitutor) =
-        isEqualTypes(a.cast<FirResolvedTypeRef>().type, b.cast<FirResolvedTypeRef>().type, substitution)
-
-    private fun isOverriddenFunCheck(member: FirNamedFunction, self: FirNamedFunction): Boolean {
-        if (member.valueParameters.size != self.valueParameters.size) return false
-        if (member.typeParameters.size != self.typeParameters.size) return false
-
-        val types = self.typeParameters.map {
-            ConeTypeParameterTypeImpl(it.symbol.toLookupTag(), false)
-        }
-        val substitution = substitutorByMap(member.typeParameters.map { it.symbol }.zip(types).toMap())
-        if (!member.typeParameters.zip(self.typeParameters).all { (a, b) ->
-                a.bounds.size == b.bounds.size &&
-                        a.bounds.zip(b.bounds).all { (aBound, bBound) -> isEqualTypes(aBound, bBound, substitution) }
+    private fun similarFunctionsOrBothProperties(
+        overrideCandidate: FirCallableMemberDeclaration<*>,
+        baseDeclaration: FirCallableMemberDeclaration<*>
+    ): Boolean {
+        return when (overrideCandidate) {
+            is FirSimpleFunction -> when (baseDeclaration) {
+                is FirSimpleFunction -> isOverriddenFunction(overrideCandidate, baseDeclaration)
+                is FirProperty -> isOverriddenProperty(overrideCandidate, baseDeclaration)
+                else -> false
             }
-        ) return false
-        if (!sameReceivers(member.receiverTypeRef, self.receiverTypeRef, substitution)) return false
-
-        return member.valueParameters.zip(self.valueParameters).all { (memberParam, selfParam) ->
-            isEqualTypes(memberParam.returnTypeRef, selfParam.returnTypeRef, substitution)
+            is FirConstructor -> false
+            is FirProperty -> baseDeclaration is FirProperty && isOverriddenProperty(overrideCandidate, baseDeclaration)
+            is FirField -> false
+            else -> error("Unknown fir callable type: $overrideCandidate, $baseDeclaration")
         }
     }
 
-    private fun sameReceivers(memberTypeRef: FirTypeRef?, selfTypeRef: FirTypeRef?, substitution: ConeSubstitutor): Boolean {
-        return when {
-            memberTypeRef != null && selfTypeRef != null -> isEqualTypes(memberTypeRef, selfTypeRef, substitution)
-            else -> memberTypeRef == null && selfTypeRef == null
-        }
-    }
+    // Receiver is super-type function here
+    protected open fun FirCallableSymbol<*>.getOverridden(overrideCandidates: Set<FirCallableSymbol<*>>): FirCallableSymbol<*>? {
+        if (overrideByBase.containsKey(this)) return overrideByBase[this]
 
-    protected fun ConeCallableSymbol.isOverridden(seen: Set<ConeCallableSymbol>): ConeCallableSymbol? {
-        if (overrides.containsKey(this)) return overrides[this]
-
-        fun similarFunctionsOrBothProperties(declaration: FirCallableDeclaration<*>, self: FirCallableDeclaration<*>): Boolean {
-            return when (declaration) {
-                is FirNamedFunction -> self is FirNamedFunction && isOverriddenFunCheck(declaration, self)
-                is FirConstructor -> false
-                is FirProperty -> self is FirProperty && sameReceivers(
-                    declaration.receiverTypeRef,
-                    self.receiverTypeRef,
-                    ConeSubstitutor.Empty // TODO
-                )
-                is FirField -> false
-                else -> error("Unknown fir callable type: $declaration, $self")
-            }
-        }
-
-        val self = (this as AbstractFirBasedSymbol<*>).fir as FirCallableMemberDeclaration<*>
-        val overriding = seen.firstOrNull {
-            val member = (it as AbstractFirBasedSymbol<*>).fir as FirCallableMemberDeclaration<*>
-            self.modality != Modality.FINAL
-                    && similarFunctionsOrBothProperties(member, self)
+        val baseDeclaration = (this as AbstractFirBasedSymbol<*>).fir as FirCallableMemberDeclaration<*>
+        val override = overrideCandidates.firstOrNull {
+            val overrideCandidate = (it as AbstractFirBasedSymbol<*>).fir as FirCallableMemberDeclaration<*>
+            baseDeclaration.modality != Modality.FINAL && similarFunctionsOrBothProperties(overrideCandidate, baseDeclaration)
         } // TODO: two or more overrides for one fun?
-        overrides[this] = overriding
-        return overriding
+        overrideByBase[this] = override
+        return override
     }
 
 }

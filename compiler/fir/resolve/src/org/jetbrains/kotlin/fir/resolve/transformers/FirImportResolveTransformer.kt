@@ -17,7 +17,7 @@ import org.jetbrains.kotlin.fir.visitors.compose
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 
-class FirImportResolveTransformer() : FirAbstractTreeTransformer(phase = FirResolvePhase.IMPORTS) {
+class FirImportResolveTransformer() : FirAbstractTreeTransformer<Nothing?>(phase = FirResolvePhase.IMPORTS) {
     override fun <E : FirElement> transformElement(element: E, data: Nothing?): CompositeTransformResult<E> {
         return element.compose()
     }
@@ -33,8 +33,8 @@ class FirImportResolveTransformer() : FirAbstractTreeTransformer(phase = FirReso
     }
 
     override fun transformFile(file: FirFile, data: Nothing?): CompositeTransformResult<FirFile> {
-        session = file.fileSession
-        symbolProvider = FirSymbolProvider.getInstance(file.fileSession)
+        session = file.session
+        symbolProvider = FirSymbolProvider.getInstance(file.session)
         return file.also { it.transformChildren(this, null) }.compose()
     }
 

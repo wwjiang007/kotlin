@@ -1,13 +1,12 @@
-// !LANGUAGE: +AllowContractsForCustomFunctions +UseCallsInPlaceEffect +ReadDeserializedContracts
 // !USE_EXPERIMENTAL: kotlin.contracts.ExperimentalContracts
-// IGNORE_BACKEND: JVM_IR
 // IGNORE_BACKEND: NATIVE
+
 // FILE: 1.kt
+
 package test
 
 import kotlin.contracts.*
 
-@Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE")
 public inline fun <R> myrun(block: () -> R): R {
     contract {
         callsInPlace(block, InvocationKind.EXACTLY_ONCE)
@@ -15,8 +14,8 @@ public inline fun <R> myrun(block: () -> R): R {
     return block()
 }
 
-
 // FILE: 2.kt
+
 import test.*
 
 fun test(b: Boolean): Int {
@@ -33,7 +32,6 @@ fun test(b: Boolean): Int {
 }
 
 fun box(): String {
-
     if (test(true) != 1) return "Fail 1"
     if (test(false) != -1) return "Fail 2"
     return "OK"

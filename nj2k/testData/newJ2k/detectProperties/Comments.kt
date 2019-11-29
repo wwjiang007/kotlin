@@ -22,4 +22,5 @@ internal class A(// comment for field2 setter
     var property: Int
         get() = 1
         set(value) {}
+
 }

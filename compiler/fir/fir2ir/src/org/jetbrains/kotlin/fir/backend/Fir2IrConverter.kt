@@ -9,14 +9,12 @@ import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.descriptors.FirModuleDescriptor
+import org.jetbrains.kotlin.fir.psi
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.impl.IrModuleFragmentImpl
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
-import org.jetbrains.kotlin.ir.util.ConstantValueGenerator
-import org.jetbrains.kotlin.ir.util.ExternalDependenciesGenerator
-import org.jetbrains.kotlin.ir.util.SymbolTable
-import org.jetbrains.kotlin.ir.util.TypeTranslator
+import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi2ir.PsiSourceManager
 
@@ -55,6 +53,8 @@ object Fir2IrConverter {
         symbolTable: SymbolTable,
         builtIns: IrBuiltIns
     ) {
-        ExternalDependenciesGenerator(irModule.descriptor, symbolTable, builtIns).generateUnboundSymbolsAsDependencies()
+        // TODO: provide StubGeneratorExtensions for correct lazy stub IR generation on JVM
+        ExternalDependenciesGenerator(symbolTable, generateTypicalIrProviderList(irModule.descriptor, builtIns, symbolTable))
+            .generateUnboundSymbolsAsDependencies()
     }
 }

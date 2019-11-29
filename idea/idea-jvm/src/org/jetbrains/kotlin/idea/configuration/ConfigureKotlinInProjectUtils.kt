@@ -31,12 +31,12 @@ import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.idea.util.findFirstPsiJavaModule
 import org.jetbrains.kotlin.idea.util.isDev
 import org.jetbrains.kotlin.idea.util.isEap
+import org.jetbrains.kotlin.idea.util.isSnapshot
 import org.jetbrains.kotlin.idea.util.projectStructure.allModules
 import org.jetbrains.kotlin.idea.util.projectStructure.sdk
 import org.jetbrains.kotlin.idea.util.projectStructure.version
 import org.jetbrains.kotlin.idea.versions.SuppressNotificationState
 import org.jetbrains.kotlin.idea.versions.hasKotlinJsKjsmFile
-import org.jetbrains.kotlin.idea.util.isSnapshot
 import org.jetbrains.kotlin.idea.vfilefinder.IDEVirtualFileFinder
 import org.jetbrains.kotlin.resolve.jvm.modules.KOTLIN_STDLIB_MODULE_NAME
 import org.jetbrains.kotlin.utils.ifEmpty
@@ -72,7 +72,7 @@ val DEFAULT_GRADLE_PLUGIN_REPOSITORY = RepositoryDescription(
 fun devRepository(version: String) = RepositoryDescription(
     "teamcity.kotlin.dev",
     "Teamcity Repository of Kotlin Development Builds",
-    "https://teamcity.jetbrains.com/guestAuth/app/rest/builds/buildType:(id:Kotlin_dev_Compiler),number:$version,branch:default:any/artifacts/content/maven/",
+    "https://teamcity.jetbrains.com/guestAuth/app/rest/builds/buildType:(id:Kotlin_KotlinPublic_Compiler),number:$version,branch:(default:any)/artifacts/content/maven",
     null,
     isSnapshot = false
 )
@@ -180,7 +180,10 @@ fun getConfiguratorByName(name: String): KotlinProjectConfigurator? {
     return allConfigurators().firstOrNull { it.name == name }
 }
 
-fun allConfigurators() = Extensions.getExtensions(KotlinProjectConfigurator.EP_NAME)
+fun allConfigurators(): Array<KotlinProjectConfigurator> {
+    @Suppress("DEPRECATION")
+    return Extensions.getExtensions(KotlinProjectConfigurator.EP_NAME)
+}
 
 fun getCanBeConfiguredModules(project: Project, configurator: KotlinProjectConfigurator): List<Module> {
     return ModuleSourceRootMap(project).groupByBaseModules(project.allModules())
@@ -224,6 +227,7 @@ fun getConfigurationPossibilitiesForConfigureNotification(
                     runnableConfigurators.add(configurator)
                 }
                 ConfigureKotlinStatus.CONFIGURED -> moduleAlreadyConfigured = true
+                else -> {}
             }
         }
         if (moduleCanBeConfigured && !moduleAlreadyConfigured && !SuppressNotificationState.isKotlinNotConfiguredSuppressed(
@@ -271,7 +275,7 @@ fun hasKotlinCommonRuntimeInScope(scope: GlobalSearchScope): Boolean {
 
 class LibraryKindSearchScope(
     val module: Module,
-    val baseScope: GlobalSearchScope,
+    baseScope: GlobalSearchScope,
     val libraryKind: PersistentLibraryKind<*>
 ) : DelegatingGlobalSearchScope(baseScope) {
     override fun contains(file: VirtualFile): Boolean {

@@ -9,6 +9,9 @@ repositories {
             artifact("[artifact]_[revision](-[classifier]).[ext]")
             artifact("[artifact]_[revision](-[classifier]).[ext]")
         }
+        metadataSources {
+            artifact()
+        }
     }
 }
 
@@ -69,12 +72,14 @@ fun unzipSdkTask(
             }
         }
     }
-    prepareSdk.dependsOn(unzipTask)
+    prepareSdk.configure {
+        dependsOn(unzipTask)
+    }
 
     additionalConfig?.also {
         dependencies.add(it.name, dependency)
     }
-    
+
     return unzipTask
 }
 
@@ -90,7 +95,7 @@ val clean by task<Delete> {
     delete(buildDir)
 }
 
-val extractAndroidJar by tasks.creating {
+val extractAndroidJar by tasks.registering {
     dependsOn(androidPlatform)
     inputs.files(androidPlatform)
     val targetFile = File(libsDestDir, "android.jar")

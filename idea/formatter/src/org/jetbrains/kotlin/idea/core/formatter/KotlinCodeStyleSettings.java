@@ -1,23 +1,13 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.core.formatter;
 
 import com.intellij.application.options.CodeStyle;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.InvalidDataException;
 import com.intellij.openapi.util.WriteExternalException;
@@ -33,8 +23,6 @@ import org.jetbrains.kotlin.idea.util.ReflectionUtil;
 import static com.intellij.util.ReflectionUtil.copyFields;
 
 public class KotlinCodeStyleSettings extends CustomCodeStyleSettings {
-    public static final KotlinCodeStyleSettings DEFAULT = new KotlinCodeStyleSettings(new CodeStyleSettings());
-
     public final PackageEntryTable PACKAGES_TO_USE_STAR_IMPORTS = new PackageEntryTable();
     public boolean SPACE_AROUND_RANGE = false;
     public boolean SPACE_BEFORE_TYPE_COLON = false;
@@ -150,9 +138,11 @@ public class KotlinCodeStyleSettings extends CustomCodeStyleSettings {
 
         if (KotlinStyleGuideCodeStyle.CODE_STYLE_ID.equals(customDefaults)) {
             KotlinStyleGuideCodeStyle.Companion.applyToKotlinCustomSettings(this, true);
-        } else if (KotlinObsoleteCodeStyle.CODE_STYLE_ID.equals(customDefaults)) {
+        }
+        else if (KotlinObsoleteCodeStyle.CODE_STYLE_ID.equals(customDefaults)) {
             KotlinObsoleteCodeStyle.Companion.applyToKotlinCustomSettings(this, true);
-        } else if (customDefaults == null && FormatterUtilKt.isDefaultOfficialCodeStyle()) {
+        }
+        else if (customDefaults == null && FormatterUtilKt.isDefaultOfficialCodeStyle()) {
             // Temporary load settings against previous defaults
             settingsAgainstPreviousDefaults = new KotlinCodeStyleSettings(null, true);
             KotlinObsoleteCodeStyle.Companion.applyToKotlinCustomSettings(settingsAgainstPreviousDefaults, true);
@@ -179,5 +169,13 @@ public class KotlinCodeStyleSettings extends CustomCodeStyleSettings {
         if (settingsAgainstPreviousDefaults != null) {
             copyFrom(settingsAgainstPreviousDefaults);
         }
+    }
+
+    public static KotlinCodeStyleSettings defaultSettings() {
+        return ServiceManager.getService(KotlinCodeStyleSettingsHolder.class).defaultSettings;
+    }
+
+    public static final class KotlinCodeStyleSettingsHolder {
+        private final KotlinCodeStyleSettings defaultSettings = new KotlinCodeStyleSettings(new CodeStyleSettings());
     }
 }

@@ -5,18 +5,22 @@
 
 package org.jetbrains.kotlin.gradle.targets.js.subtargets
 
+import org.gradle.api.NamedDomainObjectContainer
+import org.gradle.api.plugins.ExtensionAware
 import org.gradle.language.base.plugins.LifecycleBasePlugin
+import org.jetbrains.kotlin.gradle.plugin.AbstractKotlinTargetConfigurator
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
+import org.jetbrains.kotlin.gradle.plugin.KotlinTargetWithTests
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJsCompilation
 import org.jetbrains.kotlin.gradle.plugin.whenEvaluated
+import org.jetbrains.kotlin.gradle.targets.js.KotlinJsPlatformTestRun
 import org.jetbrains.kotlin.gradle.targets.js.KotlinJsTarget
 import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsSubTargetDsl
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin
 import org.jetbrains.kotlin.gradle.targets.js.npm.NpmResolverPlugin
 import org.jetbrains.kotlin.gradle.targets.js.npm.npmProject
-import org.jetbrains.kotlin.gradle.targets.js.npm.tasks.KotlinPackageJsonTask
 import org.jetbrains.kotlin.gradle.targets.js.testing.KotlinJsTest
-import org.jetbrains.kotlin.gradle.tasks.createOrRegisterTask
+import org.jetbrains.kotlin.gradle.tasks.registerTask
 import org.jetbrains.kotlin.gradle.testing.internal.configureConventions
 import org.jetbrains.kotlin.gradle.testing.internal.kotlinTestRegistry
 import org.jetbrains.kotlin.gradle.utils.lowerCamelCaseName
@@ -28,14 +32,17 @@ abstract class KotlinJsSubTarget(
     val project get() = target.project
     private val nodeJs = NodeJsRootPlugin.apply(project.rootProject)
 
-    val runTaskName = disambiguateCamelCased("run")
-    val testTaskName = disambiguateCamelCased("test")
+    abstract val testTaskDescription: String
+
+    final override lateinit var testRuns: NamedDomainObjectContainer<KotlinJsPlatformTestRun>
+        private set
 
     fun configure() {
         NpmResolverPlugin.apply(project)
 
+        configureBuildVariants()
         configureTests()
-        configureRun()
+        configureMain()
 
         target.compilations.all {
             val npmProject = it.npmProject
@@ -43,21 +50,39 @@ abstract class KotlinJsSubTarget(
         }
     }
 
-    protected fun disambiguateCamelCased(name: String): String =
-        lowerCamelCaseName(target.disambiguationClassifier, disambiguationClassifier, name)
+    override fun testTask(body: KotlinJsTest.() -> Unit) {
+        testRuns.getByName(KotlinTargetWithTests.DEFAULT_TEST_RUN_NAME).executionTask.configure(body)
+    }
+
+    protected fun disambiguateCamelCased(vararg names: String): String =
+        lowerCamelCaseName(target.disambiguationClassifier, disambiguationClassifier, *names)
+
+    abstract fun configureBuildVariants()
 
     private fun configureTests() {
-        target.compilations.all { compilation ->
-            if (compilation.name == KotlinCompilation.TEST_COMPILATION_NAME) {
-                configureTests(compilation)
-            }
+        testRuns = project.container(KotlinJsPlatformTestRun::class.java) { name -> KotlinJsPlatformTestRun(name, this) }.also {
+            (this as ExtensionAware).extensions.add(this::testRuns.name, it)
+        }
+
+        testRuns.all { configureTestRunDefaults(it) }
+        testRuns.create(KotlinTargetWithTests.DEFAULT_TEST_RUN_NAME)
+    }
+
+    protected open fun configureTestRunDefaults(testRun: KotlinJsPlatformTestRun) {
+        target.compilations.matching { it.name == KotlinCompilation.TEST_COMPILATION_NAME }.all { compilation ->
+            configureTestsRun(testRun, compilation)
         }
     }
 
-    abstract val testTaskDescription: String
+    private fun configureTestsRun(testRun: KotlinJsPlatformTestRun, compilation: KotlinJsCompilation) {
+        fun KotlinJsPlatformTestRun.subtargetTestTaskName(): String = disambiguateCamelCased(
+            lowerCamelCaseName(
+                name.takeIf { it != KotlinTargetWithTests.DEFAULT_TEST_RUN_NAME },
+                AbstractKotlinTargetConfigurator.testTaskNameSuffix
+            )
+        )
 
-    private fun configureTests(compilation: KotlinJsCompilation) {
-        val testJs = project.createOrRegisterTask<KotlinJsTest>(testTaskName) { testJs ->
+        val testJs = project.registerTask<KotlinJsTest>(testRun.subtargetTestTaskName()) { testJs ->
             val compileTask = compilation.compileKotlinTask
 
             testJs.group = LifecycleBasePlugin.VERIFICATION_GROUP
@@ -77,7 +102,14 @@ abstract class KotlinJsSubTarget(
             testJs.configureConventions()
         }
 
-        target.project.kotlinTestRegistry.registerTestTask(testJs, target.testTask.doGetTask())
+        testRun.executionTask = testJs
+
+        target.testRuns.matching { it.name == testRun.name }.all { parentTestRun ->
+            target.project.kotlinTestRegistry.registerTestTask(
+                testJs,
+                parentTestRun.executionTask
+            )
+        }
 
         project.whenEvaluated {
             testJs.configure {
@@ -90,17 +122,17 @@ abstract class KotlinJsSubTarget(
 
     protected abstract fun configureDefaultTestFramework(it: KotlinJsTest)
 
-    fun configureRun() {
+    private fun configureMain() {
         target.compilations.all { compilation ->
             if (compilation.name == KotlinCompilation.MAIN_COMPILATION_NAME) {
-                configureRun(compilation)
+                configureMain(compilation)
             }
         }
     }
 
-    protected abstract fun configureRun(compilation: KotlinJsCompilation)
+    protected abstract fun configureMain(compilation: KotlinJsCompilation)
 
-    override fun testTask(body: KotlinJsTest.() -> Unit) {
-        (project.tasks.getByName(testTaskName) as KotlinJsTest).body()
+    companion object {
+        const val RUN_TASK_NAME = "run"
     }
 }

@@ -20,21 +20,20 @@ import com.intellij.debugger.DebuggerBundle;
 import com.intellij.ide.util.MemberChooser;
 import com.intellij.ide.util.TreeClassChooser;
 import com.intellij.ide.util.TreeClassChooserFactory;
+import com.intellij.openapi.application.TransactionGuard;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.TextFieldWithBrowseButton;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.*;
 import com.intellij.psi.search.GlobalSearchScope;
-import kotlin.Unit;
+import com.intellij.ui.DocumentAdapter;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.idea.core.util.DescriptorMemberChooserObject;
-import org.jetbrains.kotlin.idea.core.util.UiUtilsKt;
 import org.jetbrains.kotlin.psi.KtProperty;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.util.List;
 
 public abstract class AddFieldBreakpointDialog extends DialogWrapper {
@@ -52,46 +51,41 @@ public abstract class AddFieldBreakpointDialog extends DialogWrapper {
 
     @Override
     protected JComponent createCenterPanel() {
-        UiUtilsKt.onTextChange(
-                myClassChooser.getTextField(),
-                (DocumentEvent e) -> {
-                    updateUI();
-                    return Unit.INSTANCE;
-                }
-        );
+    myClassChooser.getTextField().getDocument().addDocumentListener(new DocumentAdapter() {
+        @Override
+        public void textChanged(@NotNull DocumentEvent event) {
+            updateUI();
+        }
+    });
 
-        myClassChooser.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                PsiClass currentClass = getSelectedClass();
-                TreeClassChooser chooser = TreeClassChooserFactory.getInstance(myProject).createAllProjectScopeChooser(
-                        DebuggerBundle.message("add.field.breakpoint.dialog.classchooser.title"));
-                if (currentClass != null) {
-                    PsiFile containingFile = currentClass.getContainingFile();
-                    if (containingFile != null) {
-                        PsiDirectory containingDirectory = containingFile.getContainingDirectory();
-                        if (containingDirectory != null) {
-                            chooser.selectDirectory(containingDirectory);
-                        }
+        myClassChooser.addActionListener(e -> {
+            PsiClass currentClass = getSelectedClass();
+            TreeClassChooser chooser = TreeClassChooserFactory.getInstance(myProject).createAllProjectScopeChooser(
+                    DebuggerBundle.message("add.field.breakpoint.dialog.classchooser.title"));
+            if (currentClass != null) {
+                PsiFile containingFile = currentClass.getContainingFile();
+                if (containingFile != null) {
+                    PsiDirectory containingDirectory = containingFile.getContainingDirectory();
+                    if (containingDirectory != null) {
+                        chooser.selectDirectory(containingDirectory);
                     }
                 }
-                chooser.showDialog();
-                PsiClass selectedClass = chooser.getSelected();
-                if (selectedClass != null) {
-                    myClassChooser.setText(selectedClass.getQualifiedName());
-                }
+            }
+            chooser.showDialog();
+            PsiClass selectedClass = chooser.getSelected();
+            if (selectedClass != null) {
+                myClassChooser.setText(selectedClass.getQualifiedName());
             }
         });
 
-        myFieldChooser.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(@NotNull ActionEvent e) {
-                PsiClass selectedClass = getSelectedClass();
+        myFieldChooser.addActionListener(e -> {
+            PsiClass selectedClass = getSelectedClass();
+            if (selectedClass != null) {
                 DescriptorMemberChooserObject[] properties = FieldBreakpointDialogUtilKt.collectProperties(selectedClass);
-                MemberChooser<DescriptorMemberChooserObject> chooser = new MemberChooser<DescriptorMemberChooserObject>(properties, false, false, myProject);
+                MemberChooser<DescriptorMemberChooserObject> chooser = new MemberChooser<>(properties, false, false, myProject);
                 chooser.setTitle(DebuggerBundle.message("add.field.breakpoint.dialog.field.chooser.title", properties.length));
                 chooser.setCopyJavadocVisible(false);
-                chooser.show();
+                TransactionGuard.getInstance().submitTransactionAndWait(chooser::show);
                 List<DescriptorMemberChooserObject> selectedElements = chooser.getSelectedElements();
                 if (selectedElements != null && selectedElements.size() == 1) {
                     KtProperty field = (KtProperty) selectedElements.get(0).getElement();
@@ -109,9 +103,9 @@ public abstract class AddFieldBreakpointDialog extends DialogWrapper {
     }
 
     private PsiClass getSelectedClass() {
-        PsiManager psiManager = PsiManager.getInstance(myProject);
-        String classQName = myClassChooser.getText();
-        if (classQName == null || classQName.isEmpty()) {
+    PsiManager psiManager = PsiManager.getInstance(myProject);
+    String classQName = myClassChooser.getText();
+    if (StringUtil.isEmpty(classQName)) {
             return null;
         }
         return JavaPsiFacade.getInstance(psiManager.getProject()).findClass(classQName, GlobalSearchScope.allScope(myProject));

@@ -7,13 +7,16 @@ package org.jetbrains.kotlin.idea.fir
 
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.fir.FirElement
-import org.jetbrains.kotlin.fir.FirReference
 import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.psi
+import org.jetbrains.kotlin.fir.references.*
 import org.jetbrains.kotlin.fir.render
 import org.jetbrains.kotlin.fir.resolve.FirProvider
-import org.jetbrains.kotlin.fir.resolve.transformers.*
+import org.jetbrains.kotlin.fir.resolve.ResolutionMode
+import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.FirDesignatedBodyResolveTransformer
+import org.jetbrains.kotlin.fir.resolve.transformers.runResolve
 import org.jetbrains.kotlin.fir.scopes.ProcessorAction
-import org.jetbrains.kotlin.fir.scopes.impl.FirTopLevelDeclaredMemberScope
+import org.jetbrains.kotlin.fir.scopes.impl.selfImportingScope
 import org.jetbrains.kotlin.fir.symbols.CallableId
 import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
 import org.jetbrains.kotlin.fir.types.FirErrorTypeRef
@@ -39,7 +42,7 @@ private fun FirFile.findCallableMember(
     packageFqName: FqName, klassFqName: FqName?, declName: Name
 ): FirCallableDeclaration<*> {
     val memberScope =
-        if (klassFqName == null) FirTopLevelDeclaredMemberScope(this, session)
+        if (klassFqName == null) selfImportingScope(this.packageFqName, session)
         else provider.getClassDeclaredMemberScope(ClassId(packageFqName, klassFqName, false))!!
     var result: FirCallableDeclaration<*>? = null
     val processor = { symbol: FirCallableSymbol<*> ->
@@ -141,7 +144,7 @@ private fun FirDeclaration.runResolve(
             designation.iterator(), state.getSession(psi as KtElement),
             implicitTypeOnly = toPhase == FirResolvePhase.IMPLICIT_TYPES_BODY_RESOLVE
         )
-        file.transform<FirFile, Nothing?>(transformer, null)
+        file.transform<FirFile, ResolutionMode>(transformer, ResolutionMode.ContextDependent)
     }
 }
 
@@ -171,6 +174,20 @@ fun KtElement.getOrBuildFir(
             }
 
             override fun visitReference(reference: FirReference) {}
+
+            override fun visitControlFlowGraphReference(controlFlowGraphReference: FirControlFlowGraphReference) {}
+
+            override fun visitNamedReference(namedReference: FirNamedReference) {}
+
+            override fun visitResolvedNamedReference(resolvedNamedReference: FirResolvedNamedReference) {}
+
+            override fun visitDelegateFieldReference(delegateFieldReference: FirDelegateFieldReference) {}
+
+            override fun visitBackingFieldReference(backingFieldReference: FirBackingFieldReference) {}
+
+            override fun visitSuperReference(superReference: FirSuperReference) {}
+
+            override fun visitThisReference(thisReference: FirThisReference) {}
 
             override fun visitErrorTypeRef(errorTypeRef: FirErrorTypeRef) {}
         })

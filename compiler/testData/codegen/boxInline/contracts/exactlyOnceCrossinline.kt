@@ -1,12 +1,12 @@
-// !LANGUAGE: +AllowContractsForCustomFunctions +UseCallsInPlaceEffect +ReadDeserializedContracts
 // !USE_EXPERIMENTAL: kotlin.contracts.ExperimentalContracts
-// IGNORE_BACKEND: JVM_IR, NATIVE, JS_IR
+// IGNORE_BACKEND: NATIVE
+
 // FILE: 1.kt
+
 package test
 
 import kotlin.contracts.*
 
-@Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE")
 public inline fun myrun(crossinline block: () -> Unit): Unit {
     contract {
         callsInPlace(block, InvocationKind.EXACTLY_ONCE)
@@ -16,6 +16,7 @@ public inline fun myrun(crossinline block: () -> Unit): Unit {
 }
 
 // FILE: 2.kt
+
 import test.*
 
 fun box(): String {

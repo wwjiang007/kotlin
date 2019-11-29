@@ -6,10 +6,7 @@
 package org.jetbrains.kotlin.backend.common.ir
 
 import org.jetbrains.kotlin.backend.common.CommonBackendContext
-import org.jetbrains.kotlin.builtins.KOTLIN_REFLECT_FQ_NAME
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns
-import org.jetbrains.kotlin.builtins.PrimitiveType
-import org.jetbrains.kotlin.builtins.UnsignedType
+import org.jetbrains.kotlin.builtins.*
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.SimpleFunctionDescriptor
 import org.jetbrains.kotlin.descriptors.findClassAcrossModuleDependencies
@@ -31,6 +28,7 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.calls.components.isVararg
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.util.OperatorNameConventions
+import org.jetbrains.kotlin.util.capitalizeDecapitalize.toLowerCaseAsciiOnly
 
 // This is what Context collects about IR.
 abstract class Ir<out T : CommonBackendContext>(val context: T, val irModule: IrModuleFragment) {
@@ -46,16 +44,14 @@ abstract class Ir<out T : CommonBackendContext>(val context: T, val irModule: Ir
     open fun shouldGenerateHandlerParameterForDefaultBodyFun() = false
 }
 
-// Some symbols below are used in kotlin-native, so they can't be private
-@Suppress("MemberVisibilityCanBePrivate", "PropertyName")
-abstract class Symbols<out T : CommonBackendContext>(val context: T, private val symbolTable: ReferenceSymbolTable) {
-
-    protected val builtIns
-        get() = context.builtIns
-
+/**
+ * Symbols for builtins that are available without any context and are not specific to any backend
+ */
+open class BuiltinSymbolsBase(protected val builtIns: KotlinBuiltIns, private val symbolTable: ReferenceSymbolTable) {
     protected fun builtInsPackage(vararg packageNameSegments: String) =
-        context.builtIns.builtInsModule.getPackage(FqName.fromSegments(listOf(*packageNameSegments))).memberScope
+        builtIns.builtInsModule.getPackage(FqName.fromSegments(listOf(*packageNameSegments))).memberScope
 
+    // consider making this public so it can be used to easily locate stdlib functions from any place (in particular, plugins and lowerings)
     private fun getSimpleFunction(
         name: Name,
         vararg packageNameSegments: String = arrayOf("kotlin"),
@@ -77,17 +73,9 @@ abstract class Symbols<out T : CommonBackendContext>(val context: T, private val
     open val externalSymbolTable: ReferenceSymbolTable
         get() = symbolTable
 
-    abstract val ThrowNullPointerException: IrFunctionSymbol
-    abstract val ThrowNoWhenBranchMatchedException: IrFunctionSymbol
-    abstract val ThrowTypeCastException: IrFunctionSymbol
-
-    abstract val ThrowUninitializedPropertyAccessException: IrSimpleFunctionSymbol
-
-    abstract val stringBuilder: IrClassSymbol
-
-    abstract val defaultConstructorMarker: IrClassSymbol
-
     val iterator = getClass(Name.identifier("Iterator"), "kotlin", "collections")
+
+    val charSequence = getClass(Name.identifier("CharSequence"), "kotlin")
 
     val primitiveIteratorsByType = PrimitiveType.values().associate { type ->
         val iteratorClass = getClass(Name.identifier(type.typeName.asString() + "Iterator"), "kotlin", "collections")
@@ -105,6 +93,12 @@ abstract class Symbols<out T : CommonBackendContext>(val context: T, private val
     val longProgression = progression("LongProgression")
     val progressionClasses = listOf(charProgression, intProgression, longProgression)
     val progressionClassesTypes = progressionClasses.map { it.descriptor.defaultType }.toSet()
+
+    val getProgressionLastElementByReturnType = builtInsPackage("kotlin", "internal").getContributedFunctions(
+        Name.identifier("getProgressionLastElement"),
+        NoLookupLocation.FROM_BACKEND
+    ).filter { it.containingDeclaration !is BuiltInsPackageFragment }
+        .map { Pair(it.returnType!!, symbolTable.referenceSimpleFunction(it)) }.toMap()
 
     val any = symbolTable.referenceClass(builtIns.any)
     val unit = symbolTable.referenceClass(builtIns.unit)
@@ -125,7 +119,7 @@ abstract class Symbols<out T : CommonBackendContext>(val context: T, private val
     }
 
     val primitiveArrayOfByType = PrimitiveType.values().associate { type ->
-        val function = getSimpleFunction(Name.identifier(type.name.toLowerCase() + "ArrayOf")) {
+        val function = getSimpleFunction(Name.identifier(type.name.toLowerCaseAsciiOnly() + "ArrayOf")) {
             it.extensionReceiverParameter == null && it.dispatchReceiverParameter == null && it.valueParameters.size == 1 &&
                     it.valueParameters[0].isVararg
         }
@@ -180,22 +174,6 @@ abstract class Symbols<out T : CommonBackendContext>(val context: T, private val
     val mutableIterator = symbolTable.referenceClass(builtIns.mutableIterator)
     val mutableListIterator = symbolTable.referenceClass(builtIns.mutableListIterator)
 
-    abstract val copyRangeTo: Map<ClassDescriptor, IrSimpleFunctionSymbol>
-
-    abstract val coroutineImpl: IrClassSymbol
-
-    abstract val coroutineSuspendedGetter: IrSimpleFunctionSymbol
-
-    abstract val getContinuation: IrSimpleFunctionSymbol
-
-    abstract val coroutineContextGetter: IrSimpleFunctionSymbol
-
-    abstract val suspendCoroutineUninterceptedOrReturn: IrSimpleFunctionSymbol
-
-    abstract val coroutineGetContext: IrSimpleFunctionSymbol
-
-    abstract val returnIfSuspended: IrSimpleFunctionSymbol
-
     private val binaryOperatorCache = mutableMapOf<Triple<Name, KotlinType, KotlinType>, IrSimpleFunctionSymbol>()
 
     fun getBinaryOperator(name: Name, lhsType: KotlinType, rhsType: KotlinType): IrSimpleFunctionSymbol {
@@ -226,6 +204,14 @@ abstract class Symbols<out T : CommonBackendContext>(val context: T, private val
     open fun functionN(n: Int): IrClassSymbol = symbolTable.referenceClass(builtIns.getFunction(n))
     open fun suspendFunctionN(n: Int): IrClassSymbol = symbolTable.referenceClass(builtIns.getSuspendFunction(n))
 
+    fun kproperty0(): IrClassSymbol = symbolTable.referenceClass(builtIns.kProperty0)
+    fun kproperty1(): IrClassSymbol = symbolTable.referenceClass(builtIns.kProperty1)
+    fun kproperty2(): IrClassSymbol = symbolTable.referenceClass(builtIns.kProperty2)
+
+    fun kmutableproperty0(): IrClassSymbol = symbolTable.referenceClass(builtIns.kMutableProperty0)
+    fun kmutableproperty1(): IrClassSymbol = symbolTable.referenceClass(builtIns.kMutableProperty1)
+    fun kmutableproperty2(): IrClassSymbol = symbolTable.referenceClass(builtIns.kMutableProperty2)
+
     val extensionToString = getSimpleFunction(Name.identifier("toString")) {
         it.dispatchReceiverParameter == null && it.extensionReceiverParameter != null &&
                 KotlinBuiltIns.isNullableAny(it.extensionReceiverParameter!!.type) && it.valueParameters.size == 0
@@ -236,6 +222,37 @@ abstract class Symbols<out T : CommonBackendContext>(val context: T, private val
                 KotlinBuiltIns.isStringOrNullableString(it.extensionReceiverParameter!!.type) && it.valueParameters.size == 1 &&
                 KotlinBuiltIns.isNullableAny(it.valueParameters.first().type)
     }
+}
+
+// Some symbols below are used in kotlin-native, so they can't be private
+@Suppress("MemberVisibilityCanBePrivate", "PropertyName")
+abstract class Symbols<out T : CommonBackendContext>(val context: T, symbolTable: ReferenceSymbolTable) :
+    BuiltinSymbolsBase(context.builtIns, symbolTable) {
+    abstract val ThrowNullPointerException: IrFunctionSymbol
+    abstract val ThrowNoWhenBranchMatchedException: IrFunctionSymbol
+    abstract val ThrowTypeCastException: IrFunctionSymbol
+
+    abstract val ThrowUninitializedPropertyAccessException: IrSimpleFunctionSymbol
+
+    abstract val stringBuilder: IrClassSymbol
+
+    abstract val defaultConstructorMarker: IrClassSymbol
+
+    abstract val copyRangeTo: Map<ClassDescriptor, IrSimpleFunctionSymbol>
+
+    abstract val coroutineImpl: IrClassSymbol
+
+    abstract val coroutineSuspendedGetter: IrSimpleFunctionSymbol
+
+    abstract val getContinuation: IrSimpleFunctionSymbol
+
+    abstract val coroutineContextGetter: IrSimpleFunctionSymbol
+
+    abstract val suspendCoroutineUninterceptedOrReturn: IrSimpleFunctionSymbol
+
+    abstract val coroutineGetContext: IrSimpleFunctionSymbol
+
+    abstract val returnIfSuspended: IrSimpleFunctionSymbol
 
     companion object {
         fun isLateinitIsInitializedPropertyGetter(symbol: IrFunctionSymbol): Boolean =

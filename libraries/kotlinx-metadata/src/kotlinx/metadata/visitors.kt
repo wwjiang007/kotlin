@@ -180,6 +180,42 @@ abstract class KmPackageVisitor @JvmOverloads constructor(delegate: KmPackageVis
 }
 
 /**
+ * A visitor to visit module fragments. The module fragment can have no more than one package, and any number of classes,
+ * and must have at least one declaration.
+ *
+ * When using this class, [visitEnd] must be called exactly once and after calls to all other visit* methods.
+ */
+abstract class KmModuleFragmentVisitor @JvmOverloads constructor(private val delegate: KmModuleFragmentVisitor? = null) {
+
+    /**
+     * Visits a package within the module fragment.
+     */
+    open fun visitPackage(): KmPackageVisitor? =
+        delegate?.visitPackage()
+
+    /**
+     * Visits a class within the module fragment.
+     */
+    open fun visitClass(): KmClassVisitor? =
+        delegate?.visitClass()
+
+    /**
+     * Visits the extensions of the given type on the module fragment.
+     *
+     * @param type the type of extension visitor to be returned.
+     */
+    open fun visitExtensions(type: KmExtensionType): KmModuleFragmentExtensionVisitor? =
+        delegate?.visitExtensions(type)
+
+    /**
+     * Visits the end of the module fragment.
+     */
+    open fun visitEnd() {
+        delegate?.visitEnd()
+    }
+}
+
+/**
  * A visitor to visit the metadata of a synthetic class generated for a Kotlin lambda.
  *
  * When using this class, [visitFunction] must be called first, followed by [visitEnd].
@@ -429,6 +465,14 @@ abstract class KmTypeAliasVisitor @JvmOverloads constructor(private val delegate
         delegate?.visitVersionRequirement()
 
     /**
+     * Visits the extensions of the given type on the type alias.
+     *
+     * @param type the type of extension visitor to be returned
+     */
+    open fun visitExtensions(type: KmExtensionType): KmTypeAliasExtensionVisitor? =
+        delegate?.visitExtensions(type)
+
+    /**
      * Visits the end of the type alias.
      */
     open fun visitEnd() {
@@ -458,6 +502,14 @@ abstract class KmValueParameterVisitor @JvmOverloads constructor(private val del
      */
     open fun visitVarargElementType(flags: Flags): KmTypeVisitor? =
         delegate?.visitVarargElementType(flags)
+
+    /**
+     * Visits the extensions of the given type on the value parameter.
+     *
+     * @param type the type of extension visitor to be returned
+     */
+    open fun visitExtensions(type: KmExtensionType): KmValueParameterExtensionVisitor? =
+        delegate?.visitExtensions(type)
 
     /**
      * Visits the end of the value parameter.

@@ -42,6 +42,7 @@ internal class PropertiesHighlightingVisitor(holder: AnnotationHolder, bindingCo
         val resolvedCall = expression.getResolvedCall(bindingContext)
 
         val attributesKey = resolvedCall?.let { call ->
+            @Suppress("DEPRECATION")
             Extensions.getExtensions(HighlighterExtension.EP_NAME).firstNotNullResult { extension ->
                 extension.highlightCall(expression, call)
             }
@@ -96,14 +97,20 @@ internal class PropertiesHighlightingVisitor(holder: AnnotationHolder, bindingCo
                 // The property is set in VariablesHighlightingVisitor
                 null
 
-            descriptor.extensionReceiverParameter != null ->
+            KotlinHighlightingUtil.hasExtensionReceiverParameter(descriptor) ->
                 if (descriptor.isSynthesized) SYNTHETIC_EXTENSION_PROPERTY else EXTENSION_PROPERTY
 
             DescriptorUtils.isStaticDeclaration(descriptor) ->
-                PACKAGE_PROPERTY
+                if(KotlinHighlightingUtil.hasCustomPropertyDeclaration(descriptor))
+                    PACKAGE_PROPERTY_CUSTOM_PROPERTY_DECLARATION
+                else
+                    PACKAGE_PROPERTY
 
             else ->
-                INSTANCE_PROPERTY
+                if (KotlinHighlightingUtil.hasCustomPropertyDeclaration(descriptor))
+                    INSTANCE_PROPERTY_CUSTOM_PROPERTY_DECLARATION
+                else
+                    INSTANCE_PROPERTY
         }
     }
 }

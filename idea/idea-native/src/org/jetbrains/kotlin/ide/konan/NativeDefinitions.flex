@@ -51,6 +51,8 @@ STRICT_ENUMS="strictEnums"
 
 // known platforms
 ANDROID="android"
+ANDROID_X64="android_x64"
+ANDROID_X86="android_x86"
 ANDROID_ARM32="android_arm32"
 ANDROID_ARM64="android_arm64"
 ARM32="arm32"
@@ -70,8 +72,16 @@ MINGW_X64="mingw_x64"
 MIPS32="mips32"
 MIPSEL32="mipsel32"
 OSX="osx"
+TVOS="tvos"
+TVOS_ARM64="tvos_arm64"
+TVOS_X64="tvos_x64"
 WASM="wasm"
 WASM32="wasm32"
+WATCHOS="watchos"
+WATCHOS_ARM32="watchos_arm32"
+WATCHOS_ARM64="watchos_arm64"
+WATCHOS_X64="watchos_x64"
+WATCHOS_X86="watchos_x86"
 X64="x64"
 
 
@@ -112,6 +122,8 @@ X64="x64"
 
 <WAITING_PLATFORM> {
   [.]{ANDROID} { return ANDROID; }
+  [.]{ANDROID_X64} { return ANDROID_X64; }
+  [.]{ANDROID_X86} { return ANDROID_X86; }
   [.]{ANDROID_ARM32} { return ANDROID_ARM32; }
   [.]{ANDROID_ARM64} { return ANDROID_ARM64; }
   [.]{ARM32} { return ARM32; }
@@ -131,8 +143,16 @@ X64="x64"
   [.]{MIPS32} { return MIPS32; }
   [.]{MIPSEL32} { return MIPSEL32; }
   [.]{OSX} { return OSX; }
+  [.]{TVOS} { return TVOS; }
+  [.]{TVOS_ARM64} { return TVOS_ARM64; }
+  [.]{TVOS_X64} { return TVOS_X64; }
   [.]{WASM} { return WASM; }
   [.]{WASM32} { return WASM32; }
+  [.]{WATCHOS} { return WATCHOS; }
+  [.]{WATCHOS_ARM32} { return WATCHOS_ARM32; }
+  [.]{WATCHOS_ARM64} { return WATCHOS_ARM64; }
+  [.]{WATCHOS_X64} { return WATCHOS_X64; }
+  [.]{WATCHOS_X86} { return WATCHOS_X86; }
   [.]{X64} { return X64; }
   [.]{PLATFORM_CHAR}+ { return UNKNOWN_PLATFORM; }
   {SEPARATOR} { yybegin(WAITING_VALUE); return SEPARATOR; }

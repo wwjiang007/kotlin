@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.ideaExt.idea
+
 /*
  * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
@@ -20,32 +22,42 @@ dependencies {
 sourceSets {
     "main" {
         projectDefault()
-        java.srcDir("visitors")
+        this.java.srcDir("gen")
     }
 }
 
 val generatorClasspath by configurations.creating
 
 dependencies {
-    generatorClasspath(project("visitors-generator"))
+    generatorClasspath(project("tree-generator"))
 }
 
-val generateVisitors by tasks.creating(NoDebugJavaExec::class) {
-    val generationRoot = "$projectDir/src/org/jetbrains/kotlin/fir/"
-    val output = "$projectDir/visitors"
+val generationRoot = projectDir.resolve("gen")
 
-    val allSourceFiles = fileTree(generationRoot) {
+val generateTree by tasks.registering(NoDebugJavaExec::class) {
+
+    val generatorRoot = "$projectDir/tree-generator/src/"
+
+    val generatorConfigurationFiles = fileTree(generatorRoot) {
         include("**/*.kt")
     }
 
-    inputs.files(allSourceFiles)
-    outputs.dirs(output)
+    inputs.files(generatorConfigurationFiles)
+    outputs.dirs(generationRoot)
 
+    args(generationRoot)
     classpath = generatorClasspath
-    args(generationRoot, output)
-    main = "org.jetbrains.kotlin.fir.visitors.generator.VisitorsGeneratorKt"
+    main = "org.jetbrains.kotlin.fir.tree.generator.MainKt"
+    systemProperties["line.separator"] = "\n"
 }
 
 val compileKotlin by tasks
 
-compileKotlin.dependsOn(generateVisitors)
+compileKotlin.dependsOn(generateTree)
+
+if (kotlinBuildProperties.isInJpsBuildIdeaSync) {
+    apply(plugin = "idea")
+    idea {
+        this.module.generatedSourceDirs.add(generationRoot)
+    }
+}

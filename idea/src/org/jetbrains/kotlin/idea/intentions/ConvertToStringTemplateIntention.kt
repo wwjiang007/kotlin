@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.core.replaced
 import org.jetbrains.kotlin.idea.inspections.IntentionBasedInspection
+import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator
@@ -47,7 +48,10 @@ open class ConvertToStringTemplateIntention : SelfTargetingOffsetIndependentInte
     }
 
     override fun applyTo(element: KtBinaryExpression, editor: Editor?) {
-        element.replaced(buildReplacement(element))
+        val replacement = buildReplacement(element)
+        runWriteAction {
+            element.replaced(replacement)
+        }
     }
 
     companion object {
@@ -60,7 +64,7 @@ open class ConvertToStringTemplateIntention : SelfTargetingOffsetIndependentInte
         }
 
         @JvmStatic
-        protected fun buildReplacement(expression: KtBinaryExpression): KtStringTemplateExpression {
+        fun buildReplacement(expression: KtBinaryExpression): KtStringTemplateExpression {
             val rightText = buildText(expression.right, false)
             return fold(expression.left, rightText, KtPsiFactory(expression))
         }

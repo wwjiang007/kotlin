@@ -1,7 +1,11 @@
-// FALSE
-// Important for 173 branch! OOCB is TRUE in this test because of IDEA-185462
+// OUT_OF_CODE_BLOCK: FALSE
+// ERROR: Unresolved reference: awhen
+enum class A {
+    e1, e2, e3
+}
 
 class B(val a: A)
+
 val B.foo: Int
     get() {
         return <caret>when (a) {

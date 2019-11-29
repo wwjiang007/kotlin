@@ -223,7 +223,9 @@ private val OVERRIDE_RENDERER = withOptions {
         it.type.constructor.declarationDescriptor?.annotations?.hasAnnotation(ExperimentalUsageChecker.EXPERIMENTAL_FQ_NAME) ?: false
     }
     presentableUnresolvedTypes = true
+    informativeErrorType = false
 }
+
 
 private val EXPECT_RENDERER = OVERRIDE_RENDERER.withOptions {
     modifiers = setOf(VISIBILITY, MODALITY, OVERRIDE, INNER, MEMBER_KIND)
@@ -231,13 +233,11 @@ private val EXPECT_RENDERER = OVERRIDE_RENDERER.withOptions {
     secondaryConstructorsAsPrimary = false
     renderDefaultVisibility = false
     renderDefaultModality = false
-    renderTypeExpansions = true
 }
 
 private val ACTUAL_RENDERER = EXPECT_RENDERER.withOptions {
     modifiers = modifiers + ACTUAL
     actualPropertiesInPrimaryConstructor = true
-    renderTypeExpansions = false
     renderConstructorDelegation = true
 }
 

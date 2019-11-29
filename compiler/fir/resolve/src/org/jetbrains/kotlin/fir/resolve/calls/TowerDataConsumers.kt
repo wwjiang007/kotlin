@@ -11,7 +11,7 @@ import org.jetbrains.kotlin.fir.scopes.ProcessorAction
 import org.jetbrains.kotlin.fir.symbols.AbstractFirBasedSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirNamedFunctionSymbol
-import org.jetbrains.kotlin.fir.types.ConeClassType
+import org.jetbrains.kotlin.fir.types.ConeClassLikeType
 import org.jetbrains.kotlin.fir.types.ConeStarProjection
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.name.Name
@@ -52,7 +52,7 @@ class QualifiedReceiverTowerDataConsumer<T : AbstractFirBasedSymbol<*>>(
         if (skipGroup(group, resultCollector)) return ProcessorAction.NEXT
         if (kind != TowerDataKind.EMPTY) return ProcessorAction.NEXT
 
-        return QualifiedReceiverTowerLevel(session).processElementsByName(
+        return QualifiedReceiverTowerLevel(session, candidateFactory.bodyResolveComponents).processElementsByName(
             token,
             name,
             explicitReceiver,
@@ -64,7 +64,7 @@ class QualifiedReceiverTowerDataConsumer<T : AbstractFirBasedSymbol<*>>(
         override fun consumeCandidate(
             symbol: T,
             dispatchReceiverValue: ClassDispatchReceiverValue?,
-            implicitExtensionReceiverValue: ImplicitReceiverValue?
+            implicitExtensionReceiverValue: ImplicitReceiverValue<*>?
         ): ProcessorAction {
             assert(dispatchReceiverValue == null)
             resultCollector.consumeCandidate(
@@ -92,13 +92,15 @@ class PrioritizedTowerDataConsumer(
         group: Int
     ): ProcessorAction {
         if (skipGroup(group, resultCollector)) return ProcessorAction.NEXT
+        var empty = true
         for ((index, consumer) in consumers.withIndex()) {
             val action = consumer.consume(kind, towerScopeLevel, group * consumers.size + index)
-            if (action.stop()) {
-                return ProcessorAction.STOP
+            when (action) {
+                ProcessorAction.STOP -> return action
+                ProcessorAction.NEXT -> empty = false
             }
         }
-        return ProcessorAction.NEXT
+        return if (empty) ProcessorAction.NONE else ProcessorAction.NEXT
     }
 }
 
@@ -123,16 +125,18 @@ class AccumulatingTowerDataConsumer(
         if (skipGroup(group, resultCollector)) return ProcessorAction.NEXT
         accumulatedTowerData += TowerData(kind, towerScopeLevel, group)
 
-        if (initialConsumer.consume(kind, towerScopeLevel, group).stop()) {
-            return ProcessorAction.STOP
+        var empty = true
+        when (val action = initialConsumer.consume(kind, towerScopeLevel, group)) {
+            ProcessorAction.STOP -> return action
+            ProcessorAction.NEXT -> empty = false
         }
         for (consumer in additionalConsumers) {
-            val action = consumer.consume(kind, towerScopeLevel, group)
-            if (action.stop()) {
-                return ProcessorAction.STOP
+            when (val action = consumer.consume(kind, towerScopeLevel, group)) {
+                ProcessorAction.STOP -> return action
+                ProcessorAction.NEXT -> empty = false
             }
         }
-        return ProcessorAction.NEXT
+        return if (empty) ProcessorAction.NONE else ProcessorAction.NEXT
     }
 
     fun addConsumer(consumer: TowerDataConsumer): ProcessorAction {
@@ -167,13 +171,14 @@ class ExplicitReceiverTowerDataConsumer<T : AbstractFirBasedSymbol<*>>(
         if (skipGroup(group, resultCollector)) return ProcessorAction.NEXT
         return when (kind) {
             TowerDataKind.EMPTY ->
-                MemberScopeTowerLevel(session, explicitReceiver, scopeSession = candidateFactory.inferenceComponents.scopeSession)
-                    .processElementsByName(
-                        token,
-                        name,
-                        explicitReceiver = null,
-                        processor = EmptyKindTowerProcessor(group)
-                    )
+                MemberScopeTowerLevel(
+                    session, resultCollector.components, explicitReceiver, scopeSession = candidateFactory.bodyResolveComponents.scopeSession
+                ).processElementsByName(
+                    token,
+                    name,
+                    explicitReceiver = null,
+                    processor = EmptyKindTowerProcessor(group)
+                )
             TowerDataKind.TOWER_LEVEL -> {
                 if (token == TowerScopeLevel.Token.Objects) return ProcessorAction.NEXT
                 towerScopeLevel.processElementsByName(
@@ -191,7 +196,7 @@ class ExplicitReceiverTowerDataConsumer<T : AbstractFirBasedSymbol<*>>(
         override fun consumeCandidate(
             symbol: T,
             dispatchReceiverValue: ClassDispatchReceiverValue?,
-            implicitExtensionReceiverValue: ImplicitReceiverValue?
+            implicitExtensionReceiverValue: ImplicitReceiverValue<*>?
         ): ProcessorAction {
             resultCollector.consumeCandidate(
                 group,
@@ -210,17 +215,17 @@ class ExplicitReceiverTowerDataConsumer<T : AbstractFirBasedSymbol<*>>(
         override fun consumeCandidate(
             symbol: T,
             dispatchReceiverValue: ClassDispatchReceiverValue?,
-            implicitExtensionReceiverValue: ImplicitReceiverValue?
+            implicitExtensionReceiverValue: ImplicitReceiverValue<*>?
         ): ProcessorAction {
             if (symbol is FirNamedFunctionSymbol && symbol.callableId.packageName.startsWith(defaultPackage)) {
                 val explicitReceiverType = explicitReceiver.type
-                if (dispatchReceiverValue == null && explicitReceiverType is ConeClassType) {
+                if (dispatchReceiverValue == null && explicitReceiverType is ConeClassLikeType) {
                     val declarationReceiverTypeRef =
                         (symbol as? FirCallableSymbol<*>)?.fir?.receiverTypeRef as? FirResolvedTypeRef
                     val declarationReceiverType = declarationReceiverTypeRef?.type
-                    if (declarationReceiverType is ConeClassType) {
+                    if (declarationReceiverType is ConeClassLikeType) {
                         if (!AbstractTypeChecker.isSubtypeOf(
-                                candidateFactory.inferenceComponents.ctx,
+                                candidateFactory.bodyResolveComponents.inferenceComponents.ctx,
                                 explicitReceiverType,
                                 declarationReceiverType.lookupTag.constructClassType(
                                     declarationReceiverType.typeArguments.map { ConeStarProjection }.toTypedArray(),
@@ -280,7 +285,7 @@ class NoExplicitReceiverTowerDataConsumer<T : AbstractFirBasedSymbol<*>>(
         override fun consumeCandidate(
             symbol: T,
             dispatchReceiverValue: ClassDispatchReceiverValue?,
-            implicitExtensionReceiverValue: ImplicitReceiverValue?
+            implicitExtensionReceiverValue: ImplicitReceiverValue<*>?
         ): ProcessorAction {
             resultCollector.consumeCandidate(
                 group,

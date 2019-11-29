@@ -20,6 +20,7 @@ import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.scripting.definitions.KotlinScriptDefinition
 import org.jetbrains.kotlin.scripting.definitions.ScriptDefinition
+import org.jetbrains.kotlin.scripting.withCorrectExtension
 import java.io.File
 import java.net.URL
 import kotlin.reflect.KClass
@@ -30,7 +31,6 @@ import kotlin.script.experimental.dependencies.ScriptDependencies
 import kotlin.script.experimental.host.*
 import kotlin.script.experimental.jvm.*
 import kotlin.script.experimental.jvm.compat.mapToDiagnostics
-import kotlin.script.experimental.jvm.impl.refineWith
 import kotlin.script.experimental.jvm.impl.toClassPathOrEmpty
 import kotlin.script.experimental.jvm.impl.toDependencies
 
@@ -79,9 +79,7 @@ open class KtFileScriptSource(val ktFile: KtFile, preloadedText: String? = null)
     override val name: String? get() = ktFile.name
 
     override fun equals(other: Any?): Boolean =
-        this === other
-                || (other as? KtFileScriptSource)?.let { ktFile == it.ktFile } == true
-                || super.equals(other)
+        this === other || (other as? KtFileScriptSource)?.let { ktFile == it.ktFile } == true
 
     override fun hashCode(): Int = ktFile.hashCode()
 }
@@ -97,7 +95,8 @@ class ScriptLightVirtualFile(name: String, private val _path: String?, text: Str
         charset = CharsetToolkit.UTF8_CHARSET
     }
 
-    override fun getPath(): String = _path ?: super.getPath()
+    override fun getPath(): String = _path ?: if (parent != null) parent.path + "/" + name else name
+
     override fun getCanonicalPath(): String? = path
 }
 
@@ -113,7 +112,7 @@ abstract class ScriptCompilationConfigurationWrapper(val script: SourceCode) {
     abstract val dependenciesSources: List<File>
     abstract val javaHome: File?
     abstract val defaultImports: List<String>
-    abstract val importedScripts: List<File>
+    abstract val importedScripts: List<SourceCode>
 
     override fun equals(other: Any?): Boolean = script == (other as? ScriptCompilationConfigurationWrapper)?.script
 
@@ -140,9 +139,8 @@ abstract class ScriptCompilationConfigurationWrapper(val script: SourceCode) {
         override val defaultImports: List<String>
             get() = configuration?.get(ScriptCompilationConfiguration.defaultImports).orEmpty()
 
-        override val importedScripts: List<File>
-            get() = configuration?.get(ScriptCompilationConfiguration.importScripts)
-                ?.mapNotNull { (it as? FileBasedScriptSource)?.file }.orEmpty()
+        override val importedScripts: List<SourceCode>
+            get() = configuration?.get(ScriptCompilationConfiguration.importScripts).orEmpty()
 
         @Suppress("OverridingDeprecatedMember")
         override val legacyDependencies: ScriptDependencies?
@@ -177,8 +175,8 @@ abstract class ScriptCompilationConfigurationWrapper(val script: SourceCode) {
         override val defaultImports: List<String>
             get() = legacyDependencies?.imports.orEmpty()
 
-        override val importedScripts: List<File>
-            get() = legacyDependencies?.scripts.orEmpty()
+        override val importedScripts: List<SourceCode>
+            get() = legacyDependencies?.scripts?.map { FileScriptSource(it) }.orEmpty()
 
         override val configuration: ScriptCompilationConfiguration?
             get() {
@@ -231,7 +229,10 @@ fun refineScriptCompilationConfiguration(
             .onSuccess {
                 it.refineBeforeCompiling(script, collectedData)
             }.onSuccess {
-                ScriptCompilationConfigurationWrapper.FromCompilationConfiguration(ktFileSource, it).asSuccess()
+                ScriptCompilationConfigurationWrapper.FromCompilationConfiguration(
+                    ktFileSource,
+                    it.adjustByDefinition(definition)
+                ).asSuccess()
             }
     } else {
         val file = script.getVirtualFile(definition)
@@ -262,10 +263,26 @@ fun refineScriptCompilationConfiguration(
         else
             ScriptCompilationConfigurationWrapper.FromLegacy(
                 ktFileSource,
-                result.dependencies?.adjustByDefinition(definition.legacyDefinition),
+                result.dependencies?.adjustByDefinition(definition),
                 definition
             ).asSuccess(result.reports.mapToDiagnostics())
     }
+}
+
+fun ScriptDependencies.adjustByDefinition(definition: ScriptDefinition): ScriptDependencies {
+    val additionalClasspath = additionalClasspath(definition).filterNot { classpath.contains(it) }
+    if (additionalClasspath.isEmpty()) return this
+
+    return copy(classpath = classpath + additionalClasspath)
+}
+
+fun ScriptCompilationConfiguration.adjustByDefinition(definition: ScriptDefinition): ScriptCompilationConfiguration {
+    return this.withUpdatedClasspath(additionalClasspath(definition))
+}
+
+private fun additionalClasspath(definition: ScriptDefinition): List<File> {
+    return (definition.asLegacyOrNull<KotlinScriptDefinitionFromAnnotatedTemplate>()?.templateClasspath
+        ?: definition.hostConfiguration[ScriptingHostConfiguration.configurationDependencies].toClassPathOrEmpty())
 }
 
 internal fun makeScriptContents(
@@ -290,7 +307,7 @@ fun SourceCode.getVirtualFile(definition: ScriptDefinition): VirtualFile {
         val vFile = LocalFileSystem.getInstance().findFileByIoFile(file)
         if (vFile != null) return vFile
     }
-    val scriptName = name ?: "script.${definition.fileExtension}"
+    val scriptName = withCorrectExtension(name ?: definition.defaultClassName, definition.fileExtension)
     val scriptPath = when (this) {
         is FileScriptSource -> file.path
         is ExternalSourceCode -> externalLocation.toString()

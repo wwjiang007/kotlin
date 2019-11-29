@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2000-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -25,10 +25,12 @@ import org.jetbrains.kotlin.kdoc.parser.KDocElementTypes
 import org.jetbrains.kotlin.lexer.KtTokens.*
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.*
+import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 private val QUALIFIED_OPERATION = TokenSet.create(DOT, SAFE_ACCESS)
 private val QUALIFIED_EXPRESSIONS = TokenSet.create(DOT_QUALIFIED_EXPRESSION, SAFE_ACCESS_EXPRESSION)
 private val ELVIS_SET = TokenSet.create(ELVIS)
+private val QUALIFIED_EXPRESSIONS_WITHOUT_WRAP = TokenSet.create(IMPORT_DIRECTIVE, PACKAGE_DIRECTIVE)
 
 private const val KDOC_COMMENT_INDENT = 1
 
@@ -120,53 +122,124 @@ abstract class KotlinCommonBlock(
         return nodeSubBlocks
     }
 
-    private fun splitSubBlocksOnDot(nodeSubBlocks: List<ASTBlock>): List<ASTBlock> {
-        val operationBlockIndex = nodeSubBlocks.indexOfBlockWithType(QUALIFIED_OPERATION)
-        if (operationBlockIndex != -1) {
-            // Create fake ".something" or "?.something" block here, so child indentation will be
-            // relative to it when it starts from new line (see Indent javadoc).
-
-            val isNonFirstChainedCall = operationBlockIndex > 0 && isCallBlock(nodeSubBlocks[operationBlockIndex - 1])
-
-            // enforce indent to children when there's a line break before the dot in any call in the chain (meaning that
-            // the call chain following that call is indented)
-            val enforceIndentToChildren = anyCallInCallChainIsWrapped(nodeSubBlocks[operationBlockIndex - 1])
-
-            val indentType = if (settings.kotlinCustomSettings.CONTINUATION_INDENT_FOR_CHAINED_CALLS) {
-                if (enforceIndentToChildren) Indent.Type.CONTINUATION else Indent.Type.CONTINUATION_WITHOUT_FIRST
-            } else {
-                Indent.Type.NORMAL
-            }
-            val indent = Indent.getIndent(
-                indentType, false,
-                enforceIndentToChildren
-            )
-            val wrap = if ((settings.kotlinCommonSettings.WRAP_FIRST_METHOD_IN_CALL_CHAIN || isNonFirstChainedCall) &&
-                canWrapCallChain(node))
-                Wrap.createWrap(settings.kotlinCommonSettings.METHOD_CALL_CHAIN_WRAP, true)
-            else
-                null
-
-            return nodeSubBlocks.splitAtIndex(operationBlockIndex, indent, wrap)
+    private fun ASTNode.isQualifiedNode(): Boolean {
+        var currentNode: ASTNode? = this
+        while (currentNode != null) {
+            if (currentNode.elementType in QUALIFIED_EXPRESSIONS) return true
+            if (currentNode.elementType != PARENTHESIZED && currentNode.psi?.safeAs<KtPostfixExpression>()
+                    ?.operationToken != EXCLEXCL
+            ) return false
+            currentNode = currentNode.treeParent
         }
-        return nodeSubBlocks
+
+        return false
     }
 
-    private fun List<ASTBlock>.splitAtIndex(index: Int, indent: Indent?, wrap: Wrap?): List<ASTBlock> {
-        val operationBlock = this[index]
-        val operationSyntheticBlock = SyntheticKotlinBlock(
-            operationBlock.requireNode(),
-            subList(index, size),
-            null, indent, wrap, spacingBuilder
-        ) {
-            val parent = it.treeParent ?: node
-            val skipOperationNodeParent = if (parent.elementType === OPERATION_REFERENCE) {
-                parent.treeParent ?: parent
-            } else {
-                parent
+    private fun splitSubBlocksOnDot(nodeSubBlocks: List<ASTBlock>): List<ASTBlock> {
+        if (node.treeParent?.isQualifiedNode() == true) return nodeSubBlocks
+        if (!canWrapCallChain(node)) return nodeSubBlocks
+
+        val operationBlockIndex = nodeSubBlocks.indexOfBlockWithType(QUALIFIED_OPERATION)
+        if (operationBlockIndex == -1) return nodeSubBlocks
+
+        val block = nodeSubBlocks.first()
+        val wrap = createWrapForQualifiedExpression(block.requireNode())
+        val indent = createIndentForQualifiedExpression(block)
+        val newBlock = block.processBlock(indent, wrap)
+        return nodeSubBlocks.replaceBlock(newBlock, 0).splitAtIndex(operationBlockIndex, indent, wrap)
+    }
+
+    private fun ASTBlock.processBlock(indent: Indent, wrap: Wrap?): ASTBlock {
+        val currentNode = requireNode()
+
+        @Suppress("UNCHECKED_CAST")
+        val subBlocks = subBlocks as List<ASTBlock>
+        val elementType = currentNode.elementType
+        val index = when (elementType) {
+            PARENTHESIZED -> subBlocks.indexOfFirst { block ->
+                val type = block.requireNode().elementType
+                type != LPAR && type !in WHITE_SPACE_OR_COMMENT_BIT_SET
             }
-            createSyntheticSpacingNodeBlock(skipOperationNodeParent)
+            POSTFIX_EXPRESSION, in QUALIFIED_EXPRESSIONS -> 0
+            else -> return this
         }
+
+        val resultWrap = wrap.takeIf { elementType != PARENTHESIZED } ?: createWrapForQualifiedExpression(currentNode)
+        val newBlock = subBlocks.elementAt(index).processBlock(indent, resultWrap)
+        return subBlocks.replaceBlock(newBlock, index).let {
+            val operationIndex = subBlocks.indexOfBlockWithType(QUALIFIED_OPERATION)
+            if (operationIndex != -1)
+                it.splitAtIndex(operationIndex, indent, resultWrap)
+            else
+                it
+        }.wrapToBlock(currentNode, this)
+    }
+
+    private fun List<ASTBlock>.replaceBlock(
+        block: ASTBlock,
+        index: Int = 0
+    ): List<ASTBlock> = subList(0, index) + block + (takeIf { index + 1 < it.size }?.subList(index + 1, size) ?: emptyList())
+
+    private fun createWrapForQualifiedExpression(node: ASTNode): Wrap? {
+        val isNonFirstChainedCall = (node.treeParent)?.isQualifiedNode() == true
+
+        return if (isNonFirstChainedCall)
+            Wrap.createWrap(
+                settings.kotlinCommonSettings.METHOD_CALL_CHAIN_WRAP,
+                settings.kotlinCommonSettings.WRAP_FIRST_METHOD_IN_CALL_CHAIN
+            )
+        else
+            null
+    }
+
+    private fun createIndentForQualifiedExpression(block: ASTBlock): Indent {
+        // enforce indent to children when there's a line break before the dot in any call in the chain (meaning that
+        // the call chain following that call is indented)
+        val enforceIndentToChildren = anyCallInCallChainIsWrapped(block)
+
+        val indentType = if (settings.kotlinCustomSettings.CONTINUATION_INDENT_FOR_CHAINED_CALLS) {
+            if (enforceIndentToChildren) Indent.Type.CONTINUATION else Indent.Type.CONTINUATION_WITHOUT_FIRST
+        } else {
+            Indent.Type.NORMAL
+        }
+
+        return Indent.getIndent(
+            indentType, false,
+            enforceIndentToChildren
+        )
+    }
+
+    private fun List<ASTBlock>.wrapToBlock(
+        anchor: ASTNode?,
+        parentBlock: ASTBlock?
+    ): ASTBlock = splitAtIndex(0, null, null, anchor, parentBlock).single()
+
+    private fun List<ASTBlock>.splitAtIndex(
+        index: Int,
+        indent: Indent?,
+        wrap: Wrap?,
+        anchor: ASTNode? = null,
+        parentBlock: ASTBlock? = null
+    ): List<ASTBlock> {
+        val operationBlock = this[index]
+        val createParentSyntheticSpacingBlock: (ASTNode) -> ASTBlock = if (parentBlock != null) {
+            { parentBlock }
+        } else {
+            {
+                val parent = it.treeParent ?: node
+                val skipOperationNodeParent = if (parent.elementType === OPERATION_REFERENCE) {
+                    parent.treeParent ?: parent
+                } else {
+                    parent
+                }
+                createSyntheticSpacingNodeBlock(skipOperationNodeParent)
+            }
+        }
+        val operationSyntheticBlock = SyntheticKotlinBlock(
+            anchor ?: operationBlock.requireNode(),
+            subList(index, size),
+            null, indent, wrap, spacingBuilder, createParentSyntheticSpacingBlock
+        )
 
         return subList(0, index) + operationSyntheticBlock
     }
@@ -185,16 +258,13 @@ abstract class KotlinCommonBlock(
 
     private fun isCallBlock(astBlock: ASTBlock): Boolean {
         val node = astBlock.requireNode()
-        return node.elementType in QUALIFIED_EXPRESSIONS && node.lastChildNode?.elementType == CALL_EXPRESSION
+        val lastChildElementType = node.lastChildNode?.elementType
+        return node.isQualifiedNode() && (lastChildElementType == CALL_EXPRESSION || lastChildElementType == REFERENCE_EXPRESSION)
     }
 
     private fun canWrapCallChain(node: ASTNode): Boolean {
-        val callChainParent = node.parents().firstOrNull { it.elementType !in QUALIFIED_EXPRESSIONS } ?: return true
-        return callChainParent.elementType in CODE_BLOCKS ||
-                callChainParent.elementType == PROPERTY ||
-                (callChainParent.elementType == BINARY_EXPRESSION &&
-                        (callChainParent.psi as KtBinaryExpression).operationToken in ALL_ASSIGNMENTS) ||
-                callChainParent.elementType == RETURN
+        val callChainParent = node.parents().firstOrNull { !it.isQualifiedNode() } ?: return true
+        return callChainParent.elementType !in QUALIFIED_EXPRESSIONS_WITHOUT_WRAP
     }
 
     private fun splitSubBlocksOnElvis(nodeSubBlocks: List<ASTBlock>): List<ASTBlock> {
@@ -521,7 +591,8 @@ abstract class KotlinCommonBlock(
             elementType === VALUE_PARAMETER_LIST -> {
                 if (parentElementType === FUN ||
                     parentElementType === PRIMARY_CONSTRUCTOR ||
-                    parentElementType === SECONDARY_CONSTRUCTOR) {
+                    parentElementType === SECONDARY_CONSTRUCTOR
+                ) {
                     val wrap = Wrap.createWrap(commonSettings.METHOD_PARAMETERS_WRAP, false)
                     return { childElement ->
                         if (childElement.elementType === VALUE_PARAMETER && !childElement.startsWithAnnotation())
@@ -541,8 +612,7 @@ abstract class KotlinCommonBlock(
                 return getWrappingStrategyForItemList(commonSettings.ENUM_CONSTANTS_WRAP, ENUM_ENTRY)
 
             elementType === MODIFIER_LIST -> {
-                val parent = node.treeParent.psi
-                when (parent) {
+                when (val parent = node.treeParent.psi) {
                     is KtParameter ->
                         return getWrappingStrategyForItemList(
                             commonSettings.PARAMETER_ANNOTATION_WRAP,
@@ -612,9 +682,11 @@ abstract class KotlinCommonBlock(
                         }
                     }
                 }
-                if (nodePsi.operationToken == ELVIS) {
+                if (nodePsi.operationToken == ELVIS && nodePsi.getStrictParentOfType<KtStringTemplateExpression>() == null) {
                     return { childElement ->
-                        if (childElement.elementType == OPERATION_REFERENCE) {
+                        if (childElement.elementType == OPERATION_REFERENCE && (childElement.psi as? KtOperationReferenceExpression)
+                                ?.operationSignTokenType == ELVIS
+                        ) {
                             Wrap.createWrap(settings.kotlinCustomSettings.WRAP_ELVIS_EXPRESSIONS, true)
                         } else {
                             null
@@ -661,6 +733,12 @@ private fun hasLineBreakBefore(node: ASTNode): Boolean {
         .dropWhile { it.psi is PsiComment }
         .firstOrNull()
     return prevSibling?.elementType == TokenType.WHITE_SPACE && prevSibling?.textContains('\n') == true
+}
+
+private fun hasDoubleLineBreakBefore(node: ASTNode): Boolean {
+    val prevSibling = node.leaves(false).firstOrNull() ?: return false
+
+    return prevSibling.text.count { it == '\n' } >= 2
 }
 
 fun NodeIndentStrategy.PositionStrategy.continuationIf(
@@ -908,8 +986,10 @@ private fun getAlignmentForChildInParenthesis(
             val childNodeType = node.elementType
 
             val prev = getPrevWithoutWhitespace(node)
-            if (prev != null && prev.elementType === TokenType.ERROR_ELEMENT || childNodeType === TokenType.ERROR_ELEMENT) {
-                // Prefer align to parameters on incomplete code (case of line break after comma, when next parameters is absent)
+            val hasTrailingComma = childNodeType === closeBracket && prev?.elementType == COMMA
+
+            if (hasTrailingComma && hasDoubleLineBreakBefore(node)) {
+                // Prefer align to parameters on code with trailing comma (case of line break after comma, when before closing bracket there was a line break)
                 return parameterAlignment
             }
 
@@ -947,7 +1027,8 @@ private fun getWrappingStrategyForItemList(wrapType: Int, itemTypes: TokenSet, w
         val thisType = childElement.elementType
         val prevType = getPrevWithoutWhitespace(childElement)?.elementType
         if (thisType in itemTypes || prevType in itemTypes &&
-            thisType != EOL_COMMENT && prevType != EOL_COMMENT)
+            thisType != EOL_COMMENT && prevType != EOL_COMMENT
+        )
             itemWrap
         else
             null

@@ -8,7 +8,6 @@ package org.jetbrains.kotlin.idea.completion.test.weighers;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
-import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -22,7 +21,7 @@ import java.util.regex.Pattern;
 @RunWith(JUnit3RunnerWithInners.class)
 public class BasicCompletionWeigherTestGenerated extends AbstractBasicCompletionWeigherTest {
     private void runTest(String testDataFilePath) throws Exception {
-        KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+        KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
     }
 
     @TestMetadata("AfterNullable.kt")
@@ -31,7 +30,7 @@ public class BasicCompletionWeigherTestGenerated extends AbstractBasicCompletion
     }
 
     public void testAllFilesPresentInBasic() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), true);
     }
 
     @TestMetadata("CallableReference_NothingLast.kt")
@@ -214,12 +213,191 @@ public class BasicCompletionWeigherTestGenerated extends AbstractBasicCompletion
         runTest("idea/idea-completion/testData/weighers/basic/UnavailableDslReceiver.kt");
     }
 
+    @TestMetadata("idea/idea-completion/testData/weighers/basic/contextualReturn")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class ContextualReturn extends AbstractBasicCompletionWeigherTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInContextualReturn() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/contextualReturn"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), true);
+        }
+
+        @TestMetadata("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class NoReturnType extends AbstractBasicCompletionWeigherTest {
+            private void runTest(String testDataFilePath) throws Exception {
+                KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
+            }
+
+            public void testAllFilesPresentInNoReturnType() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), true);
+            }
+
+            @TestMetadata("BeginOfNestedBlock.kt")
+            public void testBeginOfNestedBlock() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType/BeginOfNestedBlock.kt");
+            }
+
+            @TestMetadata("BeginOfTopLevelBlock.kt")
+            public void testBeginOfTopLevelBlock() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType/BeginOfTopLevelBlock.kt");
+            }
+
+            @TestMetadata("EndOfNestedBlock.kt")
+            public void testEndOfNestedBlock() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType/EndOfNestedBlock.kt");
+            }
+
+            @TestMetadata("EndOfTopLevelBlock.kt")
+            public void testEndOfTopLevelBlock() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType/EndOfTopLevelBlock.kt");
+            }
+
+            @TestMetadata("ForWithBody.kt")
+            public void testForWithBody() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType/ForWithBody.kt");
+            }
+
+            @TestMetadata("ForWithoutBody.kt")
+            public void testForWithoutBody() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType/ForWithoutBody.kt");
+            }
+
+            @TestMetadata("IfWithoutBody.kt")
+            public void testIfWithoutBody() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType/IfWithoutBody.kt");
+            }
+
+            @TestMetadata("InElvis.kt")
+            public void testInElvis() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType/InElvis.kt");
+            }
+
+            @TestMetadata("InElvisWhenSmartCompletionWins.kt")
+            public void testInElvisWhenSmartCompletionWins() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType/InElvisWhenSmartCompletionWins.kt");
+            }
+
+            @TestMetadata("InWhenSingleExpression.kt")
+            public void testInWhenSingleExpression() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType/InWhenSingleExpression.kt");
+            }
+
+            @TestMetadata("InWhenWithBody.kt")
+            public void testInWhenWithBody() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType/InWhenWithBody.kt");
+            }
+        }
+
+        @TestMetadata("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType")
+        @TestDataPath("$PROJECT_ROOT")
+        @RunWith(JUnit3RunnerWithInners.class)
+        public static class WithReturnType extends AbstractBasicCompletionWeigherTest {
+            private void runTest(String testDataFilePath) throws Exception {
+                KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
+            }
+
+            public void testAllFilesPresentInWithReturnType() throws Exception {
+                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), true);
+            }
+
+            @TestMetadata("BeginOfNestedBlock.kt")
+            public void testBeginOfNestedBlock() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/BeginOfNestedBlock.kt");
+            }
+
+            @TestMetadata("BeginOfTopLevelBlock.kt")
+            public void testBeginOfTopLevelBlock() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/BeginOfTopLevelBlock.kt");
+            }
+
+            @TestMetadata("EndOfNestedBlock.kt")
+            public void testEndOfNestedBlock() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/EndOfNestedBlock.kt");
+            }
+
+            @TestMetadata("EndOfTopLevelBlock.kt")
+            public void testEndOfTopLevelBlock() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/EndOfTopLevelBlock.kt");
+            }
+
+            @TestMetadata("ForWithBody.kt")
+            public void testForWithBody() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/ForWithBody.kt");
+            }
+
+            @TestMetadata("ForWithoutBody.kt")
+            public void testForWithoutBody() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/ForWithoutBody.kt");
+            }
+
+            @TestMetadata("IfWithoutBody.kt")
+            public void testIfWithoutBody() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/IfWithoutBody.kt");
+            }
+
+            @TestMetadata("InElvis.kt")
+            public void testInElvis() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/InElvis.kt");
+            }
+
+            @TestMetadata("InElvisInReturn.kt")
+            public void testInElvisInReturn() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/InElvisInReturn.kt");
+            }
+
+            @TestMetadata("InElvisWhenSmartCompletionWins.kt")
+            public void testInElvisWhenSmartCompletionWins() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/InElvisWhenSmartCompletionWins.kt");
+            }
+
+            @TestMetadata("InIfAsReturnedExpression.kt")
+            public void testInIfAsReturnedExpression() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/InIfAsReturnedExpression.kt");
+            }
+
+            @TestMetadata("InIfInWhenWithBodyAsReturnedExpression.kt")
+            public void testInIfInWhenWithBodyAsReturnedExpression() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/InIfInWhenWithBodyAsReturnedExpression.kt");
+            }
+
+            @TestMetadata("InNotElvisBinaryOperator.kt")
+            public void testInNotElvisBinaryOperator() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/InNotElvisBinaryOperator.kt");
+            }
+
+            @TestMetadata("InWhenAsReturnedExpression.kt")
+            public void testInWhenAsReturnedExpression() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/InWhenAsReturnedExpression.kt");
+            }
+
+            @TestMetadata("InWhenSingleExpression.kt")
+            public void testInWhenSingleExpression() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/InWhenSingleExpression.kt");
+            }
+
+            @TestMetadata("InWhenWithBody.kt")
+            public void testInWhenWithBody() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/InWhenWithBody.kt");
+            }
+
+            @TestMetadata("InWhenWithBodyAsReturnedExpression.kt")
+            public void testInWhenWithBodyAsReturnedExpression() throws Exception {
+                runTest("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType/InWhenWithBodyAsReturnedExpression.kt");
+            }
+        }
+    }
+
     @TestMetadata("idea/idea-completion/testData/weighers/basic/expectedInfo")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
     public static class ExpectedInfo extends AbstractBasicCompletionWeigherTest {
         private void runTest(String testDataFilePath) throws Exception {
-            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+            KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
         }
 
         @TestMetadata("AfterAs.kt")
@@ -228,7 +406,7 @@ public class BasicCompletionWeigherTestGenerated extends AbstractBasicCompletion
         }
 
         public void testAllFilesPresentInExpectedInfo() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/expectedInfo"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/expectedInfo"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), true);
         }
 
         @TestMetadata("CompanionObjectMethod.kt")
@@ -307,11 +485,11 @@ public class BasicCompletionWeigherTestGenerated extends AbstractBasicCompletion
     @RunWith(JUnit3RunnerWithInners.class)
     public static class ParameterNameAndType extends AbstractBasicCompletionWeigherTest {
         private void runTest(String testDataFilePath) throws Exception {
-            KotlinTestUtils.runTest(this::doTest, TargetBackend.ANY, testDataFilePath);
+            KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
         }
 
         public void testAllFilesPresentInParameterNameAndType() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/parameterNameAndType"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), TargetBackend.ANY, true);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/parameterNameAndType"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), true);
         }
 
         @TestMetadata("Deprecated.kt")

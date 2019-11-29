@@ -11,7 +11,6 @@ import org.jetbrains.kotlin.codegen.ClassBuilder
 import org.jetbrains.kotlin.codegen.StackValue
 import org.jetbrains.kotlin.codegen.TransformationMethodVisitor
 import org.jetbrains.kotlin.codegen.inline.*
-import org.jetbrains.kotlin.codegen.optimization.DeadCodeEliminationMethodTransformer
 import org.jetbrains.kotlin.codegen.optimization.boxing.isUnitInstance
 import org.jetbrains.kotlin.codegen.optimization.common.*
 import org.jetbrains.kotlin.codegen.optimization.fixStack.FixStackMethodTransformer
@@ -83,8 +82,7 @@ class CoroutineTransformerMethodVisitor(
     override fun performTransformations(methodNode: MethodNode) {
         removeFakeContinuationConstructorCall(methodNode)
 
-        // Remove redundant markers which came from compiled bytecode
-        cleanUpReturnsUnitMarkers(methodNode)
+        replaceReturnsUnitMarkersWithPushingUnitOnStack(methodNode)
 
         replaceFakeContinuationsWithRealOnes(
             methodNode,
@@ -146,7 +144,8 @@ class CoroutineTransformerMethodVisitor(
         val suspensionPointLineNumbers = suspensionPoints.map { findSuspensionPointLineNumber(it) }
 
         val continuationLabels = suspensionPoints.withIndex().map {
-            transformCallAndReturnContinuationLabel(it.index + 1, it.value, methodNode, suspendMarkerVarIndex)
+            transformCallAndReturnContinuationLabel(
+                it.index + 1, it.value, methodNode, suspendMarkerVarIndex, suspensionPointLineNumbers[it.index])
         }
 
         methodNode.instructions.apply {
@@ -228,8 +227,51 @@ class CoroutineTransformerMethodVisitor(
         )
     }
 
-    private fun cleanUpReturnsUnitMarkers(methodNode: MethodNode) {
-        for (marker in methodNode.instructions.asSequence().filter(::isReturnsUnitMarker)) {
+    /* Put { POP, GETSTATIC Unit } after suspension point if suspension point is a call of suspend function, that returns Unit.
+     *
+     * Otherwise, upon resume, the function would seem to not return Unit, despite being declared as returning Unit.
+     *
+     * This happens when said function is tail-call and its callee does not return Unit.
+     *
+     * Let's have an example
+     *
+     *   suspend fun int(): Int = suspendCoroutine { ...; 1 }
+     *
+     *   suspend fun unit() {
+     *     int()
+     *   }
+     *
+     *   suspend fun main() {
+     *     println(unit())
+     *   }
+     *
+     * So, in order to understand the necessity of { POP, GETSTATIC Unit } inside `main`, we need to consider two different scenarios
+     *
+     *   1. `unit` is not a tail-call function.
+     *   2. `unit` is a tail-call function.
+     *
+     * When `unit` is a not tail-call function, calling `resumeWith` on its continuation will resume `unit`,
+     * it will hit { GETSTATIC Unit; ARETURN } and this Unit will be the result of the suspend call. `unit`'s continuation will then call
+     * `main` continuation's `resumeWith`, passing the Unit instance. The continuation in turn will resume `main` and the Unit will be
+     * the result of `unit()` call. This result will then printed.
+     *
+     * However, when `unit` is a tail-call function, there is no continuation, generated for it. This is the point of tail-call
+     * optimization. Thus, resume call will skip `unit` and land direcly in `main` continuation's `resumeWith`. And its result is not
+     * Unit. Thus, we must ignore this result on call-site and use Unit instead. In other words, POP the result and GETSTATIC Unit
+     * instead.
+     */
+    private fun replaceReturnsUnitMarkersWithPushingUnitOnStack(methodNode: MethodNode) {
+        for (marker in methodNode.instructions.asSequence().filter(::isReturnsUnitMarker).toList()) {
+            assert(marker.next?.next?.let { isAfterSuspendMarker(it) } == true) {
+                "Expected AfterSuspendMarker after ReturnUnitMarker, got ${marker.next?.next}"
+            }
+            methodNode.instructions.insert(
+                marker.next.next,
+                withInstructionAdapter {
+                    pop()
+                    getstatic("kotlin/Unit", "INSTANCE", "Lkotlin/Unit;")
+                }
+            )
             methodNode.instructions.removeAll(listOf(marker.previous, marker))
         }
     }
@@ -702,12 +744,13 @@ class CoroutineTransformerMethodVisitor(
         id: Int,
         suspension: SuspensionPoint,
         methodNode: MethodNode,
-        suspendMarkerVarIndex: Int
+        suspendMarkerVarIndex: Int,
+        suspendPointLineNumber: LineNumberNode?
     ): LabelNode {
         val continuationLabel = LabelNode()
         val continuationLabelAfterLoadedResult = LabelNode()
         val suspendElementLineNumber = lineNumber
-        var nextLineNumberNode = suspension.suspensionCallEnd.findNextOrNull { it is LineNumberNode } as? LineNumberNode
+        var nextLineNumberNode = nextDefinitelyHitLineNumber(suspension)
         with(methodNode.instructions) {
             // Save state
             insertBefore(
@@ -746,7 +789,6 @@ class CoroutineTransformerMethodVisitor(
             }
             remove(possibleTryCatchBlockStart.previous)
 
-            val afterSuspensionPointLineNumber = nextLineNumberNode?.line ?: suspendElementLineNumber
             insert(possibleTryCatchBlockStart, withInstructionAdapter {
                 generateResumeWithExceptionCheck(languageVersionSettings.isReleaseCoroutines(), dataIndex, exceptionIndex)
 
@@ -755,17 +797,23 @@ class CoroutineTransformerMethodVisitor(
 
                 visitLabel(continuationLabelAfterLoadedResult.label)
 
-                // Extend next instruction linenumber. Can't use line number of suspension point here because both non-suspended execution
-                // and re-entering after suspension passes this label.
-                if (possibleTryCatchBlockStart.next?.opcode?.let {
-                        it != Opcodes.ASTORE && it != Opcodes.CHECKCAST && it != Opcodes.INVOKESTATIC &&
-                                it != Opcodes.INVOKEVIRTUAL && it != Opcodes.INVOKEINTERFACE
-                    } == true
-                ) {
-                    visitLineNumber(afterSuspensionPointLineNumber, continuationLabelAfterLoadedResult.label)
-                } else {
-                    // But keep the linenumber if the result of the call is is used afterwards
-                    nextLineNumberNode = null
+                if (nextLineNumberNode != null) {
+                    // If there is a clear next linenumber instruction, extend it. Can't use line number of suspension point
+                    // here because both non-suspended execution and re-entering after suspension passes this label.
+                    if (possibleTryCatchBlockStart.next?.opcode?.let {
+                            it != Opcodes.ASTORE && it != Opcodes.CHECKCAST && it != Opcodes.INVOKESTATIC &&
+                                    it != Opcodes.INVOKEVIRTUAL && it != Opcodes.INVOKEINTERFACE
+                        } == true
+                    ) {
+                        visitLineNumber(nextLineNumberNode!!.line, continuationLabelAfterLoadedResult.label)
+                    } else {
+                        // But keep the linenumber if the result of the call is used afterwards
+                        nextLineNumberNode = null
+                    }
+                } else if (suspendPointLineNumber != null) {
+                    // If there is no clear next linenumber instruction, the continuation is still on the
+                    // same line as the suspend point.
+                    visitLineNumber(suspendPointLineNumber.line, continuationLabelAfterLoadedResult.label)
                 }
             })
 
@@ -777,6 +825,18 @@ class CoroutineTransformerMethodVisitor(
         }
 
         return continuationLabel
+    }
+
+    // Find the next line number instruction that is defintely hit. That is, a line number
+    // that comes before any branch or method call.
+    private fun nextDefinitelyHitLineNumber(suspension: SuspensionPoint): LineNumberNode? {
+        var next = suspension.suspensionCallEnd.next
+        while (next != null) {
+            if (next.isBranchOrCall) return null
+            else if (next is LineNumberNode) return next
+            else next = next.next
+        }
+        return next
     }
 
     // It's necessary to preserve some sensible invariants like there should be no jump in the middle of try-catch-block

@@ -5,8 +5,6 @@
 
 package org.jetbrains.kotlin.backend.js
 
-import org.jetbrains.kotlin.backend.common.descriptors.WrappedClassConstructorDescriptor
-import org.jetbrains.kotlin.backend.common.descriptors.WrappedFieldDescriptor
 import org.jetbrains.kotlin.backend.common.ir.DeclarationFactory
 import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.backend.common.ir.copyTypeParametersFrom
@@ -19,6 +17,8 @@ import org.jetbrains.kotlin.ir.backend.js.utils.Namer
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrConstructorImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrFieldImpl
+import org.jetbrains.kotlin.ir.descriptors.WrappedClassConstructorDescriptor
+import org.jetbrains.kotlin.ir.descriptors.WrappedFieldDescriptor
 import org.jetbrains.kotlin.ir.symbols.impl.IrConstructorSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrFieldSymbolImpl
 import org.jetbrains.kotlin.ir.types.IrType
@@ -62,9 +62,10 @@ class JsDeclarationFactory : DeclarationFactory {
             name,
             fieldType,
             visibility,
-            true,
-            false,
-            false
+            isFinal = true,
+            isExternal = false,
+            isStatic = false,
+            isFakeOverride = origin == IrDeclarationOrigin.FAKE_OVERRIDE
         ).also {
             descriptor.bind(it)
             it.parent = parent
@@ -96,9 +97,10 @@ class JsDeclarationFactory : DeclarationFactory {
             oldConstructor.name,
             oldConstructor.visibility,
             oldConstructor.returnType,
-            oldConstructor.isInline,
-            oldConstructor.isExternal,
-            oldConstructor.isPrimary
+            isInline = oldConstructor.isInline,
+            isExternal = oldConstructor.isExternal,
+            isPrimary = oldConstructor.isPrimary,
+            isExpect = oldConstructor.isExpect
         ).also {
             descriptor.bind(it)
             it.parent = oldConstructor.parent

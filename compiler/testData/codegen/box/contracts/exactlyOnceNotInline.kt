@@ -1,10 +1,9 @@
-// !LANGUAGE: +AllowContractsForCustomFunctions +UseCallsInPlaceEffect +ReadDeserializedContracts
 // !USE_EXPERIMENTAL: kotlin.contracts.ExperimentalContracts
-// IGNORE_BACKEND: JVM_IR, NATIVE, JS_IR
+// IGNORE_BACKEND_FIR: JVM_IR
+// IGNORE_BACKEND: NATIVE
 
 import kotlin.contracts.*
 
-@Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE")
 public fun myrun(block: () -> Unit) {
     contract {
         callsInPlace(block, InvocationKind.EXACTLY_ONCE)

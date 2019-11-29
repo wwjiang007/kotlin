@@ -5,29 +5,35 @@
 
 package org.jetbrains.kotlin.fir.symbols.impl
 
-import org.jetbrains.kotlin.fir.declarations.FirClassLikeDeclaration
-import org.jetbrains.kotlin.fir.declarations.FirRegularClass
-import org.jetbrains.kotlin.fir.declarations.FirTypeAlias
-import org.jetbrains.kotlin.fir.symbols.*
+import org.jetbrains.kotlin.fir.FirSymbolOwner
+import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.symbols.ConeClassLikeLookupTag
 import org.jetbrains.kotlin.name.ClassId
+import org.jetbrains.kotlin.name.FqName
 
-sealed class FirClassLikeSymbol<D : FirClassLikeDeclaration<D>>(
-    override val classId: ClassId
-) : ConeClassLikeSymbol, AbstractFirBasedSymbol<D>() {
+sealed class FirClassLikeSymbol<D>(
+    val classId: ClassId
+) : FirClassifierSymbol<D>() where D : FirClassLikeDeclaration<D>, D : FirSymbolOwner<D> {
+    abstract override fun toLookupTag(): ConeClassLikeLookupTag
+
     override fun equals(other: Any?): Boolean =
         other is FirClassLikeSymbol<*> && fir == other.fir
 
     override fun hashCode(): Int = fir.hashCode()
 }
 
-class FirClassSymbol(classId: ClassId) : FirClassLikeSymbol<FirRegularClass>(classId), ConeClassSymbol {
-    override fun toLookupTag(): ConeClassLikeLookupTag = ConeClassLikeLookupTagImpl(classId)
+sealed class FirClassSymbol<C : FirClass<C>>(classId: ClassId) : FirClassLikeSymbol<C>(classId) {
+    private val lookupTag =
+        if (classId.isLocal) ConeClassLookupTagWithFixedSymbol(classId, this)
+        else ConeClassLikeLookupTagImpl(classId)
+
+    override fun toLookupTag(): ConeClassLikeLookupTag = lookupTag
 }
 
-class FirTypeAliasSymbol(override val classId: ClassId) : FirClassLikeSymbol<FirTypeAlias>(classId), ConeTypeAliasSymbol {
-    override fun toLookupTag(): TypeAliasLookupTagImpl = TypeAliasLookupTagImpl(classId)
-}
+class FirRegularClassSymbol(classId: ClassId) : FirClassSymbol<FirRegularClass>(classId)
 
-class TypeAliasLookupTagImpl(
-    override val classId: ClassId
-) : ConeTypeAliasLookupTag()
+class FirAnonymousObjectSymbol : FirClassSymbol<FirAnonymousObject>(ClassId(FqName.ROOT, FqName("anonymous"), true))
+
+class FirTypeAliasSymbol(classId: ClassId) : FirClassLikeSymbol<FirTypeAlias>(classId) {
+    override fun toLookupTag() = ConeClassLikeLookupTagImpl(classId)
+}

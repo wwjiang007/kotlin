@@ -15,9 +15,9 @@ import org.jetbrains.kotlin.name.FqName
 class Context {
     lateinit var packageFqName: FqName
     var className: FqName = FqName.ROOT
-    val currentClassId get() = ClassId(packageFqName, className, false)
+    val currentClassId get() = ClassId(packageFqName, className, firFunctions.isNotEmpty())
 
-    val firFunctions = mutableListOf<FirFunction>()
+    val firFunctions = mutableListOf<FirFunction<*>>()
     val firFunctionCalls = mutableListOf<FirFunctionCall>()
     val firLabels = mutableListOf<FirLabel>()
     val firLoops = mutableListOf<FirLoop>()

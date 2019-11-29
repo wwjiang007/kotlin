@@ -17,11 +17,10 @@ where advanced options include:
                              default is 'disable' in language version 1.2 and below,
                              'enable' since language version 1.3
   -Xdump-declarations-to=<path> Path to JSON file to dump Java to Kotlin declaration mappings
-  -Xdisable-default-scripting-plugin
-                             Do not enable scripting plugin by default
   -Xdisable-standard-script  Disable standard kotlin script support
   -Xfriend-paths=<path>      Paths to output directories for friend modules (whose internals should be visible)
   -Xmultifile-parts-inherit  Compile multifile classes as a hierarchy of parts and facade
+  -Xir-check-local-names     Check that names of local classes and anonymous objects are the same in the IR backend as in the old backend
   -Xmodule-path=<path>       Paths where to find Java 9+ modules
   -Xjava-package-prefix      Package prefix for Java files
   -Xjava-source-roots=<path> Paths to directories with Java source files
@@ -78,12 +77,17 @@ where advanced options include:
                              Should be a subset of sources passed as free arguments
   -Xcoroutines={enable|warn|error}
                              Enable coroutines or report warnings or errors on declarations and use sites of 'suspend' modifier
+  -Xdisable-default-scripting-plugin
+                             Do not enable scripting plugin by default
   -Xdisable-phases           Disable backend phases
   -Xdump-directory           Dump backend state into directory
   -Xdump-fqname              FqName of declaration that should be dumped
   -Xdump-perf=<path>         Dump detailed performance statistics to the specified file
   -Xeffect-system            Enable experimental language feature: effect system
   -Xexperimental=<fq.name>   Enable and propagate usages of experimental API for marker annotation with the given fully qualified name
+  -Xexplicit-api={strict|warning|disable}
+                             Force compiler to report errors on all public API declarations without explicit visibility or return type.
+                             Use 'warning' level to issue warnings instead of errors.
   -Xinline-classes           Enable experimental inline classes
   -Xintellij-plugin-root=<path> Path to the kotlin-compiler.jar or directory where IntelliJ configuration files can be found
   -Xlegacy-smart-cast-after-try Allow var smart casts despite assignment in try block
@@ -110,6 +114,7 @@ where advanced options include:
   -Xskip-metadata-version-check Load classes with bad metadata version anyway (incl. pre-release classes)
   -Xuse-experimental=<fq.name> Enable, but don't propagate usages of experimental API for marker annotation with the given fully qualified name
   -Xuse-fir                  Compile using Front-end IR. Warning: this feature is far from being production-ready
+  -Xuse-mixed-named-arguments Enable Support named arguments in their own position even if the result appears as mixed
   -Xverbose-phases           Be verbose while performing these backend phases
 
 Advanced options are non-standard and may be changed or removed without any notice.

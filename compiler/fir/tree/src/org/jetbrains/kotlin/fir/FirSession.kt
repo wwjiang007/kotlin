@@ -6,6 +6,8 @@
 package org.jetbrains.kotlin.fir
 
 import org.jetbrains.kotlin.analyzer.ModuleInfo
+import org.jetbrains.kotlin.fir.types.FirTypeRef
+import org.jetbrains.kotlin.fir.types.impl.*
 import org.jetbrains.kotlin.utils.Jsr305State
 import kotlin.properties.ReadOnlyProperty
 import kotlin.reflect.KClass
@@ -16,6 +18,7 @@ abstract class FirSession(val sessionProvider: FirSessionProvider?) {
 
     val jsr305State: Jsr305State? get() = null
 
+    val builtinTypes: BuiltinTypes = BuiltinTypes()
 
     val components: MutableMap<KClass<*>, Any> = mutableMapOf()
 
@@ -37,10 +40,23 @@ abstract class FirSession(val sessionProvider: FirSessionProvider?) {
     }
 }
 
+class BuiltinTypes {
+    val unitType: FirImplicitBuiltinTypeRef = FirImplicitUnitTypeRef(null)
+    val anyType: FirImplicitBuiltinTypeRef = FirImplicitAnyTypeRef(null)
+    val nullableAnyType: FirImplicitBuiltinTypeRef = FirImplicitNullableAnyTypeRef(null)
+    val enumType: FirImplicitBuiltinTypeRef = FirImplicitEnumTypeRef(null)
+    val annotationType: FirImplicitBuiltinTypeRef = FirImplicitAnnotationTypeRef(null)
+    val booleanType: FirImplicitBuiltinTypeRef = FirImplicitBooleanTypeRef(null)
+    val nothingType: FirImplicitBuiltinTypeRef = FirImplicitNothingTypeRef(null)
+    val nullableNothingType: FirImplicitBuiltinTypeRef = FirImplicitNullableNothingTypeRef(null)
+    val stringType: FirImplicitBuiltinTypeRef = FirImplicitStringTypeRef(null)
+}
+
 interface FirSessionProvider {
     fun getSession(moduleInfo: ModuleInfo): FirSession?
 }
 
+@Deprecated("This is very slow, introduce & use componentArrayAccessor instead")
 inline fun <reified T : Any> FirSession.service(): T =
     getService(T::class)
 

@@ -35,6 +35,9 @@ val proguardLibraries by configurations.creating {
 // Libraries to copy to the lib directory
 val libraries by configurations.creating {
     exclude("org.jetbrains.kotlin", "kotlin-stdlib-common")
+    attributes {
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.JAR))
+    }
 }
 
 // Compiler plugins should be copied without `kotlin-` prefix
@@ -83,10 +86,11 @@ val distLibraryProjects = listOfNotNull(
     ":kotlin-scripting-compiler",
     ":kotlin-scripting-compiler-impl",
     ":kotlin-scripting-jvm",
+    ":kotlin-scripting-js",
+    ":js:js.engines",
     ":kotlin-stdlib-js-ir".takeIf { kotlinBuildProperties.jsIrDist },
     ":kotlin-source-sections-compiler-plugin",
-    ":kotlin-test:kotlin-test-js",
-    ":kotlin-test:kotlin-test-js-ir".takeIf { kotlinBuildProperties.jsIrDist },
+    ":kotlin-test:kotlin-test-js".takeIf { !kotlinBuildProperties.isInJpsBuildIdeaSync },
     ":kotlin-test:kotlin-test-junit",
     ":kotlin-test:kotlin-test-junit5",
     ":kotlin-test:kotlin-test-jvm",
@@ -108,8 +112,7 @@ val distSourcesProjects = listOfNotNull(
     ":kotlin-annotations-jvm",
     ":kotlin-script-runtime",
     ":kotlin-stdlib-js-ir".takeIf { kotlinBuildProperties.jsIrDist },
-    ":kotlin-test:kotlin-test-js",
-    ":kotlin-test:kotlin-test-js-ir".takeIf { kotlinBuildProperties.jsIrDist },
+    ":kotlin-test:kotlin-test-js".takeIf { !kotlinBuildProperties.isInJpsBuildIdeaSync },
     ":kotlin-test:kotlin-test-junit",
     ":kotlin-test:kotlin-test-junit5",
     ":kotlin-test:kotlin-test-jvm",
@@ -133,7 +136,7 @@ dependencies {
         files(
             firstFromJavaHomeThatExists("jre/lib/rt.jar", "../Classes/classes.jar"),
             firstFromJavaHomeThatExists("jre/lib/jsse.jar", "../Classes/jsse.jar"),
-            toolsJar()
+            toolsJarFile()
         )
     )
 
@@ -144,7 +147,9 @@ dependencies {
     libraries(intellijDep()) { includeIntellijCoreJarDependencies(project) { it.startsWith("trove4j") } }
     libraries(commonDep("io.ktor", "ktor-network"))
     libraries(kotlinStdlib("jdk8"))
-    libraries(kotlinStdlib("js"))
+    if (!kotlinBuildProperties.isInJpsBuildIdeaSync) {
+        libraries(kotlinStdlib("js", "distLibrary"))
+    }
 
     distLibraryProjects.forEach {
         libraries(project(it)) { isTransitive = false }
@@ -246,7 +251,7 @@ val proguard by task<ProGuardTask> {
 
     val outputJar = fileFrom(buildDir, "libs", "$compilerBaseName-after-proguard.jar")
 
-    inputs.files(packCompiler.outputs.files.singleFile)
+    inputs.files(packCompiler.get().outputs.files.singleFile)
     outputs.file(outputJar)
 
     libraryjars(mapOf("filter" to "!META-INF/versions/**"), proguardLibraries)
@@ -255,7 +260,7 @@ val proguard by task<ProGuardTask> {
 
     // This properties are used by proguard config compiler.pro
     doFirst {
-        System.setProperty("kotlin-compiler-jar-before-shrink", packCompiler.outputs.files.singleFile.canonicalPath)
+        System.setProperty("kotlin-compiler-jar-before-shrink", packCompiler.get().outputs.files.singleFile.canonicalPath)
         System.setProperty("kotlin-compiler-jar", outputJar.canonicalPath)
     }
 }
@@ -267,7 +272,7 @@ val jar = runtimeJar {
     dependsOn(pack)
 
     from {
-        zipTree(pack.outputs.files.singleFile)
+        zipTree(pack.get().outputs.files.singleFile)
     }
 
     manifest.attributes["Class-Path"] = compilerManifestClassPath

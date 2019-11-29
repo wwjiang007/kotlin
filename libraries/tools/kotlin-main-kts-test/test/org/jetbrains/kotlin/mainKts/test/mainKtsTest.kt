@@ -7,15 +7,13 @@ package org.jetbrains.kotlin.mainKts.test
 import org.jetbrains.kotlin.mainKts.MainKtsScript
 import org.junit.Assert
 import org.junit.Test
-import java.io.ByteArrayOutputStream
-import java.io.File
-import java.io.PrintStream
+import java.io.*
 import kotlin.script.experimental.api.*
 import kotlin.script.experimental.host.toScriptSource
-import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
-import kotlin.script.experimental.jvmhost.createJvmCompilationConfigurationFromTemplate
 import kotlin.script.experimental.jvm.baseClassLoader
 import kotlin.script.experimental.jvm.jvm
+import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
+import kotlin.script.experimental.jvmhost.createJvmCompilationConfigurationFromTemplate
 
 fun evalFile(scriptFile: File): ResultWithDiagnostics<EvaluationResult> {
 
@@ -70,7 +68,7 @@ class MainKtsTest {
     @Test
     fun testResolveError() {
         val res = evalFile(File("$TEST_DATA_ROOT/hello-resolve-error.main.kts"))
-        assertFailed("Unrecognized set of arguments to ivy resolver: abracadabra", res)
+        assertFailed("File 'abracadabra' not found", res)
     }
 
     @Test
@@ -90,6 +88,32 @@ class MainKtsTest {
         Assert.assertEquals(listOf("Hi from common", "Hi from middle", "sharedVar == 5"), out)
     }
 
+    @Test
+    fun testCompilerOptions() {
+
+        val out = captureOut {
+            val res = evalFile(File("$TEST_DATA_ROOT/compile-java6.main.kts"))
+            assertSucceeded(res)
+            assertIsJava6Bytecode(res)
+        }.lines()
+
+        Assert.assertEquals(listOf("Hi from sub", "Hi from super", "Hi from random"), out)
+    }
+
+    private fun assertIsJava6Bytecode(res: ResultWithDiagnostics<EvaluationResult>) {
+        val scriptClassResource = res.valueOrThrow().returnValue.scriptClass!!.java.run {
+            getResource("$simpleName.class")
+        }
+
+        DataInputStream(ByteArrayInputStream(scriptClassResource.readBytes())).use { stream ->
+            val header = stream.readInt()
+            if (0xCAFEBABE.toInt() != header) throw IOException("Invalid header class header: $header")
+            val minor = stream.readUnsignedShort()
+            val major = stream.readUnsignedShort()
+            Assert.assertTrue(major == 50)
+        }
+    }
+
     private fun assertSucceeded(res: ResultWithDiagnostics<EvaluationResult>) {
         Assert.assertTrue(
             "test failed:\n  ${res.reports.joinToString("\n  ") { it.message + if (it.exception == null) "" else ": ${it.exception}" }}",
@@ -107,7 +131,7 @@ class MainKtsTest {
     }
 }
 
-private fun captureOut(body: () -> Unit): String {
+internal fun captureOut(body: () -> Unit): String {
     val outStream = ByteArrayOutputStream()
     val prevOut = System.out
     System.setOut(PrintStream(outStream))

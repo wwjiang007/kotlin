@@ -8,7 +8,6 @@ package org.jetbrains.kotlin.cli;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
-import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -24,11 +23,11 @@ public class CliTestGenerated extends AbstractCliTest {
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Jvm extends AbstractCliTest {
         private void runTest(String testDataFilePath) throws Exception {
-            KotlinTestUtils.runTest(this::doJvmTest, TargetBackend.ANY, testDataFilePath);
+            KotlinTestUtils.runTest(this::doJvmTest, this, testDataFilePath);
         }
 
         public void testAllFilesPresentInJvm() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cli/jvm"), Pattern.compile("^(.+)\\.args$"), TargetBackend.ANY, false);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cli/jvm"), Pattern.compile("^(.+)\\.args$"), false);
         }
 
         @TestMetadata("apiVersion.args")
@@ -346,6 +345,11 @@ public class CliTestGenerated extends AbstractCliTest {
             runTest("compiler/testData/cli/jvm/javaSrcWrongPackage.args");
         }
 
+        @TestMetadata("javacKotlinJavaInterdependency.args")
+        public void testJavacKotlinJavaInterdependency() throws Exception {
+            runTest("compiler/testData/cli/jvm/javacKotlinJavaInterdependency.args");
+        }
+
         @TestMetadata("jdkPathDoesNotExist.args")
         public void testJdkPathDoesNotExist() throws Exception {
             runTest("compiler/testData/cli/jvm/jdkPathDoesNotExist.args");
@@ -641,6 +645,11 @@ public class CliTestGenerated extends AbstractCliTest {
             runTest("compiler/testData/cli/jvm/unsupportedTypeAlias.args");
         }
 
+        @TestMetadata("useMixedNamedArgumentsFlag.args")
+        public void testUseMixedNamedArgumentsFlag() throws Exception {
+            runTest("compiler/testData/cli/jvm/useMixedNamedArgumentsFlag.args");
+        }
+
         @TestMetadata("warningJdkWithNoJdk.args")
         public void testWarningJdkWithNoJdk() throws Exception {
             runTest("compiler/testData/cli/jvm/warningJdkWithNoJdk.args");
@@ -717,11 +726,11 @@ public class CliTestGenerated extends AbstractCliTest {
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Js extends AbstractCliTest {
         private void runTest(String testDataFilePath) throws Exception {
-            KotlinTestUtils.runTest(this::doJsTest, TargetBackend.ANY, testDataFilePath);
+            KotlinTestUtils.runTest(this::doJsTest, this, testDataFilePath);
         }
 
         public void testAllFilesPresentInJs() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cli/js"), Pattern.compile("^(.+)\\.args$"), TargetBackend.ANY, false);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cli/js"), Pattern.compile("^(.+)\\.args$"), false);
         }
 
         @TestMetadata("createMetadata.args")
@@ -767,6 +776,11 @@ public class CliTestGenerated extends AbstractCliTest {
         @TestMetadata("libraryDirNotFound.args")
         public void testLibraryDirNotFound() throws Exception {
             runTest("compiler/testData/cli/js/libraryDirNotFound.args");
+        }
+
+        @TestMetadata("moduleWithMetadataOnlyDependency.args")
+        public void testModuleWithMetadataOnlyDependency() throws Exception {
+            runTest("compiler/testData/cli/js/moduleWithMetadataOnlyDependency.args");
         }
 
         @TestMetadata("modulesWithSameNames.args")
@@ -890,11 +904,11 @@ public class CliTestGenerated extends AbstractCliTest {
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Js_dce extends AbstractCliTest {
         private void runTest(String testDataFilePath) throws Exception {
-            KotlinTestUtils.runTest(this::doJsDceTest, TargetBackend.ANY, testDataFilePath);
+            KotlinTestUtils.runTest(this::doJsDceTest, this, testDataFilePath);
         }
 
         public void testAllFilesPresentInJs_dce() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cli/js-dce"), Pattern.compile("^(.+)\\.args$"), TargetBackend.ANY, false);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cli/js-dce"), Pattern.compile("^(.+)\\.args$"), false);
         }
 
         @TestMetadata("dceHelp.args")
@@ -963,11 +977,11 @@ public class CliTestGenerated extends AbstractCliTest {
     @RunWith(JUnit3RunnerWithInners.class)
     public static class Metadata extends AbstractCliTest {
         private void runTest(String testDataFilePath) throws Exception {
-            KotlinTestUtils.runTest(this::doMetadataTest, TargetBackend.ANY, testDataFilePath);
+            KotlinTestUtils.runTest(this::doMetadataTest, this, testDataFilePath);
         }
 
         public void testAllFilesPresentInMetadata() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cli/metadata"), Pattern.compile("^(.+)\\.args$"), TargetBackend.ANY, false);
+            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cli/metadata"), Pattern.compile("^(.+)\\.args$"), false);
         }
 
         @TestMetadata("kotlinPackage.args")

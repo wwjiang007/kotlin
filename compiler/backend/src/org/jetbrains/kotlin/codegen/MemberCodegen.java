@@ -507,9 +507,18 @@ public abstract class MemberCodegen<T extends KtPureElement/* TODO: & KtDeclarat
                     if (i == declarations.size() - 1 && this instanceof ScriptCodegen) {
                         bodyExpressionType = expressionCodegen.expressionType(body);
                     }
+
+                    if (declaration instanceof KtClassInitializer) {
+                        KtClassInitializer classInitializer = (KtClassInitializer) declaration;
+                        expressionCodegen.markLineNumber(classInitializer.getInitKeyword(), true);
+                        expressionCodegen.v.nop();
+                    }
+
                     expressionCodegen.gen(body, bodyExpressionType);
-                    expressionCodegen.markLineNumber(declaration, true);
-                    nopSeparatorNeeded = true;
+                    if (declaration instanceof KtClassInitializer) {
+                        expressionCodegen.markLineNumber(declaration, true);
+                        nopSeparatorNeeded = true;
+                    }
                 }
             }
         }
@@ -627,7 +636,7 @@ public abstract class MemberCodegen<T extends KtPureElement/* TODO: & KtDeclarat
     }
 
     protected void generatePropertyMetadataArrayFieldIfNeeded(@NotNull Type thisAsmType) {
-        List<VariableDescriptorWithAccessors> delegatedProperties = bindingContext.get(CodegenBinding.DELEGATED_PROPERTIES, thisAsmType);
+        List<VariableDescriptorWithAccessors> delegatedProperties = bindingContext.get(CodegenBinding.DELEGATED_PROPERTIES_WITH_METADATA, thisAsmType);
         if (delegatedProperties == null || delegatedProperties.isEmpty()) return;
 
         v.newField(NO_ORIGIN, ACC_STATIC | ACC_FINAL | ACC_SYNTHETIC, JvmAbi.DELEGATED_PROPERTIES_ARRAY_NAME,

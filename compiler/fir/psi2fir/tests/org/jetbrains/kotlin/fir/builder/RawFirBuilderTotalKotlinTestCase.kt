@@ -9,13 +9,13 @@ import com.intellij.testFramework.TestDataPath
 import org.jetbrains.kotlin.fir.FirElement
 import org.jetbrains.kotlin.fir.FirRenderer
 import org.jetbrains.kotlin.fir.declarations.FirDeclaration
-import org.jetbrains.kotlin.fir.declarations.FirErrorDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.expressions.FirErrorExpression
 import org.jetbrains.kotlin.fir.expressions.FirExpression
 import org.jetbrains.kotlin.fir.expressions.FirQualifiedAccess
 import org.jetbrains.kotlin.fir.expressions.FirStatement
 import org.jetbrains.kotlin.fir.expressions.impl.FirExpressionStub
+import org.jetbrains.kotlin.fir.psi
 import org.jetbrains.kotlin.fir.references.FirErrorNamedReference
 import org.jetbrains.kotlin.fir.render
 import org.jetbrains.kotlin.fir.visitors.FirVisitorVoid
@@ -76,11 +76,11 @@ class RawFirBuilderTotalKotlinTestCase : AbstractRawFirBuilderTestCase() {
                         val calleeReference = qualifiedAccess.calleeReference
                         if (calleeReference is FirErrorNamedReference) {
                             errorReferences++
-                            println(calleeReference.errorReason)
+                            println(calleeReference.diagnostic.reason)
                         } else {
                             normalReferences++
                         }
-                        super.visitQualifiedAccess(qualifiedAccess)
+                        visitStatement(qualifiedAccess)
                     }
 
                     override fun visitExpression(expression: FirExpression) {
@@ -101,11 +101,11 @@ class RawFirBuilderTotalKotlinTestCase : AbstractRawFirBuilderTestCase() {
                         statement.acceptChildren(this)
                     }
 
-                    override fun visitErrorDeclaration(errorDeclaration: FirErrorDeclaration) {
-                        errorDeclarations++
-                        println(errorDeclaration.render())
-                        errorDeclaration.psi?.let { println(it) }
-                    }
+//                    override fun visitErrorDeclaration(errorDeclaration: FirErrorDeclaration) {
+//                        errorDeclarations++
+//                        println(errorDeclaration.render())
+//                        errorDeclaration.psi?.let { println(it) }
+//                    }
 
                     override fun visitDeclaration(declaration: FirDeclaration) {
                         normalDeclarations++

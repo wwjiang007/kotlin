@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.backend.common.FileLoweringPass
 import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.backend.common.ir.copyTypeParametersFrom
 import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
@@ -147,7 +148,7 @@ private fun buildInitDeclaration(constructor: IrConstructor, irClass: IrClass): 
         functionName,
         type,
         constructor.parent,
-        constructor.visibility,
+        Visibilities.INTERNAL,
         Modality.FINAL,
         constructor.isInline,
         constructor.isExternal
@@ -237,7 +238,7 @@ private class CallsiteRedirectionTransformer(context: JsIrBackendContext) : IrEl
     private fun replaceSecondaryConstructorWithFactoryFunction(
         call: IrFunctionAccessExpression,
         newTarget: IrSimpleFunctionSymbol
-    ) = IrCallImpl(call.startOffset, call.endOffset, call.type, newTarget, newTarget.descriptor, call.typeArgumentsCount).apply {
+    ) = IrCallImpl(call.startOffset, call.endOffset, call.type, newTarget, call.typeArgumentsCount).apply {
 
         copyTypeArgumentsFrom(call)
 

@@ -13,7 +13,6 @@ import org.gradle.process.internal.ExecActionFactory
 import java.io.ByteArrayOutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
-import java.nio.CharBuffer
 import kotlin.concurrent.thread
 
 internal fun Project.execWithProgress(description: String, readStdErr: Boolean = false, body: (ExecAction) -> Unit): ExecResult {
@@ -24,7 +23,7 @@ internal fun Project.execWithProgress(description: String, readStdErr: Boolean =
     val stdInPipe = PipedInputStream()
     val exec = services.get(ExecActionFactory::class.java).newExecAction()
     body(exec)
-    return project.operation(description) {
+    return project!!.operation(description) {
         progress(description)
         exec.standardOutput = PipedOutputStream(stdInPipe)
         val outputReaderThread = thread(name = "output reader for [$description]") {
@@ -32,7 +31,7 @@ internal fun Project.execWithProgress(description: String, readStdErr: Boolean =
                 val buffer = StringBuilder()
                 while (true) {
                     val read = reader.read()
-                    if (read == -1) break;
+                    if (read == -1) break
                     val ch = read.toChar()
                     if (ch == '\b' || ch == '\n' || ch == '\r') {
                         if (buffer.isNotEmpty()) {
@@ -55,7 +54,13 @@ internal fun Project.execWithProgress(description: String, readStdErr: Boolean =
         val result = exec.execute()
         outputReaderThread.join()
         if (result.exitValue != 0) {
-            error(stderr.toString() + "\n" + stdout)
+            error(
+                """
+                Process '$description' returns ${result.exitValue}
+                $stderr
+                $stdout
+                """.trimIndent()
+            )
         }
         result
     }

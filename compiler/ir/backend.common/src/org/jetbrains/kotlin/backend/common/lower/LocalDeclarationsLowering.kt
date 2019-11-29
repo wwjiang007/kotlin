@@ -23,6 +23,10 @@ import org.jetbrains.kotlin.ir.declarations.impl.IrConstructorImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrFieldImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrValueParameterImpl
+import org.jetbrains.kotlin.ir.descriptors.WrappedClassConstructorDescriptor
+import org.jetbrains.kotlin.ir.descriptors.WrappedFieldDescriptor
+import org.jetbrains.kotlin.ir.descriptors.WrappedSimpleFunctionDescriptor
+import org.jetbrains.kotlin.ir.descriptors.WrappedValueParameterDescriptor
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
@@ -31,7 +35,9 @@ import org.jetbrains.kotlin.ir.symbols.impl.IrFieldSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrSimpleFunctionSymbolImpl
 import org.jetbrains.kotlin.ir.symbols.impl.IrValueParameterSymbolImpl
 import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.util.constructedClass
 import org.jetbrains.kotlin.ir.util.dump
+import org.jetbrains.kotlin.ir.util.parentAsClass
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import org.jetbrains.kotlin.ir.visitors.acceptVoid
@@ -48,20 +54,32 @@ interface LocalNameProvider {
     }
 }
 
+interface VisibilityPolicy {
+    fun forClass(declaration: IrClass, inInlineFunctionScope: Boolean): Visibility =
+        declaration.visibility
+
+    fun forConstructor(declaration: IrConstructor, inInlineFunctionScope: Boolean): Visibility =
+        Visibilities.PRIVATE
+
+    companion object {
+        val DEFAULT = object : VisibilityPolicy {}
+    }
+}
+
 val IrDeclaration.parentsWithSelf: Sequence<IrDeclarationParent>
     get() = generateSequence(this as? IrDeclarationParent) { (it as? IrDeclaration)?.parent }
 
 val IrDeclaration.parents: Sequence<IrDeclarationParent>
     get() = parentsWithSelf.drop(1)
 
-object BOUND_VALUE_PARAMETER: IrDeclarationOriginImpl("BOUND_VALUE_PARAMETER")
+object BOUND_VALUE_PARAMETER : IrDeclarationOriginImpl("BOUND_VALUE_PARAMETER")
 
-object BOUND_RECEIVER_PARAMETER: IrDeclarationOriginImpl("BOUND_RECEIVER_PARAMETER")
+object BOUND_RECEIVER_PARAMETER : IrDeclarationOriginImpl("BOUND_RECEIVER_PARAMETER")
 
 class LocalDeclarationsLowering(
     val context: BackendContext,
     val localNameProvider: LocalNameProvider = LocalNameProvider.DEFAULT,
-    val loweredConstructorVisibility: Visibility = Visibilities.PRIVATE
+    val visibilityPolicy: VisibilityPolicy = VisibilityPolicy.DEFAULT
 ) :
     FileLoweringPass {
 
@@ -107,11 +125,12 @@ class LocalDeclarationsLowering(
         override lateinit var transformedDeclaration: IrSimpleFunction
     }
 
-    private class LocalClassConstructorContext(override val declaration: IrConstructor) : LocalContextWithClosureAsParameters() {
+    private class LocalClassConstructorContext(override val declaration: IrConstructor, val inInlineFunctionScope: Boolean) :
+        LocalContextWithClosureAsParameters() {
         override lateinit var transformedDeclaration: IrConstructor
     }
 
-    private class LocalClassContext(val declaration: IrClass) : LocalContext() {
+    private class LocalClassContext(val declaration: IrClass, val inInlineFunctionScope: Boolean) : LocalContext() {
         lateinit var closure: Closure
 
         // NOTE: This map is iterated over in `rewriteClassMembers` and we're relying on
@@ -269,7 +288,6 @@ class LocalDeclarationsLowering(
                     expression.startOffset, expression.endOffset,
                     context.irBuiltIns.unitType,
                     newCallee.symbol,
-                    newCallee.descriptor,
                     expression.typeArgumentsCount
                 ).also {
                     it.fillArguments2(expression, newCallee)
@@ -327,7 +345,6 @@ class LocalDeclarationsLowering(
                     expression.startOffset, expression.endOffset,
                     expression.type, // TODO functional type for transformed descriptor
                     newCallee.symbol,
-                    newCallee.descriptor,
                     expression.typeArgumentsCount,
                     expression.origin
                 ).also {
@@ -426,9 +443,9 @@ class LocalDeclarationsLowering(
                 oldCall.startOffset, oldCall.endOffset,
                 newCallee.returnType,
                 newCallee.symbol,
-                newCallee.descriptor,
                 oldCall.typeArgumentsCount,
-                oldCall.origin, oldCall.superQualifierSymbol
+                oldCall.origin,
+                oldCall.superQualifierSymbol
             ).also {
                 it.copyTypeArgumentsFrom(oldCall)
             }
@@ -438,6 +455,7 @@ class LocalDeclarationsLowering(
                 oldCall.startOffset, oldCall.endOffset,
                 newCallee.returnType,
                 newCallee.symbol,
+                newCallee.parentAsClass.typeParameters.size,
                 oldCall.origin
             ).also {
                 it.copyTypeArgumentsFrom(oldCall)
@@ -449,6 +467,8 @@ class LocalDeclarationsLowering(
             }
 
             localClasses.values.forEach {
+                val localClassVisibility = visibilityPolicy.forClass(it.declaration, it.inInlineFunctionScope)
+                it.declaration.visibility = localClassVisibility
                 createFieldsForCapturedValues(it)
             }
 
@@ -502,10 +522,13 @@ class LocalDeclarationsLowering(
                 Visibilities.PRIVATE,
                 Modality.FINAL,
                 oldDeclaration.returnType,
-                oldDeclaration.isInline,
-                oldDeclaration.isExternal,
-                oldDeclaration.isTailrec,
-                oldDeclaration.isSuspend
+                isInline = oldDeclaration.isInline,
+                isExternal = oldDeclaration.isExternal,
+                isTailrec = oldDeclaration.isTailrec,
+                isSuspend = oldDeclaration.isSuspend,
+                isExpect = oldDeclaration.isExpect,
+                isFakeOverride = oldDeclaration.isFakeOverride,
+                isOperator = oldDeclaration.isOperator
             )
             newDescriptor.bind(newDeclaration)
 
@@ -533,6 +556,7 @@ class LocalDeclarationsLowering(
             oldDeclaration: IrFunction,
             newDeclaration: IrFunction
         ) = ArrayList<IrValueParameter>(capturedValues.size + oldDeclaration.valueParameters.size).apply {
+            val generatedNames = mutableSetOf<Name>()
             capturedValues.mapIndexedTo(this) { i, capturedValue ->
                 val parameterDescriptor = WrappedValueParameterDescriptor()
                 val p = capturedValue.owner
@@ -542,7 +566,7 @@ class LocalDeclarationsLowering(
                     if (p.descriptor is ReceiverParameterDescriptor && newDeclaration is IrConstructor)
                         BOUND_RECEIVER_PARAMETER else BOUND_VALUE_PARAMETER,
                     IrValueParameterSymbolImpl(parameterDescriptor),
-                    suggestNameForCapturedValue(p),
+                    suggestNameForCapturedValue(p, generatedNames),
                     i,
                     p.type,
                     null,
@@ -589,10 +613,16 @@ class LocalDeclarationsLowering(
             val newDescriptor = WrappedClassConstructorDescriptor(oldDeclaration.descriptor.annotations, oldDeclaration.descriptor.source)
             val newSymbol = IrConstructorSymbolImpl(newDescriptor)
 
+            val loweredConstructorVisibility =
+                visibilityPolicy.forConstructor(oldDeclaration, constructorContext.inInlineFunctionScope)
+
             val newDeclaration = IrConstructorImpl(
                 oldDeclaration.startOffset, oldDeclaration.endOffset, oldDeclaration.origin,
-                newSymbol, oldDeclaration.name, loweredConstructorVisibility, oldDeclaration.returnType, oldDeclaration.isInline,
-                oldDeclaration.isExternal, oldDeclaration.isPrimary
+                newSymbol, oldDeclaration.name, loweredConstructorVisibility, oldDeclaration.returnType,
+                isInline = oldDeclaration.isInline,
+                isExternal = oldDeclaration.isExternal,
+                isPrimary = oldDeclaration.isPrimary,
+                isExpect = oldDeclaration.isExpect
             )
 
             newDescriptor.bind(newDeclaration)
@@ -637,7 +667,8 @@ class LocalDeclarationsLowering(
                 visibility,
                 isFinal = true,
                 isExternal = false,
-                isStatic = false
+                isStatic = false,
+                isFakeOverride = false
             ).also {
                 descriptor.bind(it)
                 it.parent = parent
@@ -646,13 +677,13 @@ class LocalDeclarationsLowering(
 
         private fun createFieldsForCapturedValues(localClassContext: LocalClassContext) {
             val classDeclaration = localClassContext.declaration
-
+            val generatedNames = mutableSetOf<Name>()
             localClassContext.closure.capturedValues.forEach { capturedValue ->
 
                 val irField = createFieldForCapturedValue(
                     classDeclaration.startOffset,
                     classDeclaration.endOffset,
-                    suggestNameForCapturedValue(capturedValue.owner),
+                    suggestNameForCapturedValue(capturedValue.owner, generatedNames),
                     Visibilities.PRIVATE,
                     classDeclaration,
                     capturedValue.owner.type
@@ -670,12 +701,22 @@ class LocalDeclarationsLowering(
             }
         }
 
-        private fun suggestNameForCapturedValue(declaration: IrValueDeclaration): Name =
-            if (declaration.name.isSpecial) {
-                val oldNameStr = declaration.name.asString()
-                oldNameStr.substring(1, oldNameStr.length - 1).synthesizedName
+        private fun Name.stripSpecialMarkers(): String =
+            if (isSpecial) asString().substring(1, asString().length - 1) else asString()
+
+        private fun suggestNameForCapturedValue(declaration: IrValueDeclaration, existing: MutableSet<Name>): Name {
+            val base = if (declaration.name.isSpecial) {
+                val oldName = declaration.name.stripSpecialMarkers()
+                val parentName = (declaration.parent as? IrDeclarationWithName)?.name?.stripSpecialMarkers()
+                if (parentName != null) "$oldName$$parentName" else oldName
             } else
-                declaration.name.asString().synthesizedName
+                declaration.name.asString()
+            var chosen = base.synthesizedName
+            var suffix = 0
+            while (!existing.add(chosen))
+                chosen = "$base$${++suffix}".synthesizedName
+            return chosen
+        }
 
 
         private fun collectClosureForLocalDeclarations() {
@@ -726,9 +767,9 @@ class LocalDeclarationsLowering(
                 override fun visitConstructor(declaration: IrConstructor) {
                     super.visitConstructor(declaration)
 
-                    if (!(declaration.parent as IrClass).isLocalNotInner()) return
+                    if (!declaration.constructedClass.isLocalNotInner()) return
 
-                    localClassConstructors[declaration] = LocalClassConstructorContext(declaration)
+                    localClassConstructors[declaration] = LocalClassConstructorContext(declaration, inInlineFunctionScope)
                 }
 
                 override fun visitClassNew(declaration: IrClass) {
@@ -736,9 +777,12 @@ class LocalDeclarationsLowering(
 
                     if (!declaration.isLocalNotInner()) return
 
-                    val localClassContext = LocalClassContext(declaration)
+                    val localClassContext = LocalClassContext(declaration, inInlineFunctionScope)
                     localClasses[declaration] = localClassContext
                 }
+
+                private val inInlineFunctionScope: Boolean
+                    get() = allScopes.any { scope -> (scope.irElement as? IrFunction)?.isInline ?: false }
             })
         }
     }

@@ -15,7 +15,6 @@ import org.jetbrains.kotlin.fir.resolve.FirProvider
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.fir.resolve.impl.FirProviderImpl
 import org.jetbrains.kotlin.fir.scopes.FirScope
-import org.jetbrains.kotlin.fir.symbols.ConeCallableSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirClassLikeSymbol
 import org.jetbrains.kotlin.idea.stubindex.*
@@ -34,18 +33,18 @@ class IdeFirProvider(
     // TODO: invalidation?
     private val files = mutableMapOf<KtFile, FirFile>()
 
-    override fun getFirClassifierByFqName(fqName: ClassId): FirClassLikeDeclaration<*>? {
-        return cacheProvider.getFirClassifierByFqName(fqName) ?: run {
+    override fun getFirClassifierByFqName(classId: ClassId): FirClassLikeDeclaration<*>? {
+        return cacheProvider.getFirClassifierByFqName(classId) ?: run {
 
-            val classes = KotlinFullClassNameIndex.getInstance().get(fqName.asSingleFqName().asString(), project, scope)
+            val classes = KotlinFullClassNameIndex.getInstance().get(classId.asSingleFqName().asString(), project, scope)
             val ktClass = classes.firstOrNull {
-                fqName.packageFqName == it.containingKtFile.packageFqName
+                classId.packageFqName == it.containingKtFile.packageFqName
             } ?: return null // TODO: what if two of them?
             val ktFile = ktClass.containingKtFile
 
             getOrBuildFile(ktFile)
 
-            cacheProvider.getFirClassifierByFqName(fqName)
+            cacheProvider.getFirClassifierByFqName(classId)
         }
     }
 
@@ -77,7 +76,12 @@ class IdeFirProvider(
         return cacheProvider.getFirClassifierContainerFile(fqName)
     }
 
-    override fun getFirCallableContainerFile(symbol: ConeCallableSymbol): FirFile? {
+    override fun getFirClassifierContainerFileIfAny(fqName: ClassId): FirFile? {
+        getFirClassifierByFqName(fqName)
+        return cacheProvider.getFirClassifierContainerFileIfAny(fqName)
+    }
+
+    override fun getFirCallableContainerFile(symbol: FirCallableSymbol<*>): FirFile? {
         return cacheProvider.getFirCallableContainerFile(symbol)
     }
 

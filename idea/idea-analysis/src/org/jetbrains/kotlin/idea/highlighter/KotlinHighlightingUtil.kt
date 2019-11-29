@@ -18,11 +18,13 @@ package org.jetbrains.kotlin.idea.highlighter
 
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiManager
+import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
+import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.idea.caches.project.NotUnderContentRootModuleInfo
 import org.jetbrains.kotlin.idea.caches.project.getModuleInfo
 import org.jetbrains.kotlin.idea.core.script.IdeScriptReportSink
+import org.jetbrains.kotlin.idea.core.script.ScriptConfigurationManager
 import org.jetbrains.kotlin.idea.core.script.ScriptDefinitionsManager
-import org.jetbrains.kotlin.idea.core.script.ScriptsCompilationConfigurationUpdater
 import org.jetbrains.kotlin.idea.util.ProjectRootsUtil
 import org.jetbrains.kotlin.idea.util.isRunningInCidrIde
 import org.jetbrains.kotlin.psi.KtCodeFragment
@@ -70,13 +72,26 @@ object KotlinHighlightingUtil {
     @Suppress("DEPRECATION")
     private fun shouldHighlightScript(ktFile: KtFile): Boolean {
         if (isRunningInCidrIde) return false // There is no Java support in CIDR. So do not highlight errors in KTS if running in CIDR.
-        if (!ScriptsCompilationConfigurationUpdater.areDependenciesCached(ktFile)) return false
-        if (IdeScriptReportSink.getReports(ktFile.virtualFile).any { it.severity == ScriptDiagnostic.Severity.FATAL }) {
+        if (!ScriptConfigurationManager.getInstance(ktFile.project).hasConfiguration(ktFile)) return false
+        if (IdeScriptReportSink.getReports(ktFile).any { it.severity == ScriptDiagnostic.Severity.FATAL }) {
             return false
         }
 
         if (!ScriptDefinitionsManager.getInstance(ktFile.project).isReady()) return false
 
         return ProjectRootsUtil.isInProjectSource(ktFile, includeScriptsOutsideSourceRoots = true)
+    }
+
+    fun hasCustomPropertyDeclaration(descriptor: PropertyDescriptor): Boolean {
+        var hasCustomPropertyDeclaration = false
+        if (!hasExtensionReceiverParameter(descriptor)) {
+            if (descriptor.getter?.isDefault == false || descriptor.setter?.isDefault == false)
+                hasCustomPropertyDeclaration = true
+        }
+        return hasCustomPropertyDeclaration
+    }
+
+    fun hasExtensionReceiverParameter(descriptor: PropertyDescriptor): Boolean {
+        return descriptor.extensionReceiverParameter != null
     }
 }

@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.idea.caches.resolve
 
+import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiManager
 import org.jetbrains.kotlin.asJava.KotlinAsJavaSupport
@@ -19,16 +20,17 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtFileClassProvider
 import org.jetbrains.kotlin.psi.analysisContext
 import org.jetbrains.kotlin.platform.jvm.isJvm
+import org.jetbrains.kotlin.scripting.definitions.runReadAction
 
-class KtFileClassProviderImpl(val kotlinAsJavaSupport: KotlinAsJavaSupport) :
-    KtFileClassProvider {
+class KtFileClassProviderImpl(val project: Project) : KtFileClassProvider {
+
     override fun getFileClasses(file: KtFile): Array<PsiClass> {
         if (file.project.isInDumbMode()) {
             return PsiClass.EMPTY_ARRAY
         }
 
         // TODO We don't currently support finding light classes for scripts
-        if (file.isCompiled || file.isScript()) {
+        if (file.isCompiled || runReadAction { file.isScript() }) {
             return PsiClass.EMPTY_ARRAY
         }
 
@@ -44,6 +46,8 @@ class KtFileClassProviderImpl(val kotlinAsJavaSupport: KotlinAsJavaSupport) :
 
         val jvmClassInfo = JvmFileClassUtil.getFileClassInfoNoResolve(file)
         val fileClassFqName = file.javaFileFacadeFqName
+
+        val kotlinAsJavaSupport = KotlinAsJavaSupport.getInstance(project)
 
         val facadeClasses = when {
             file.analysisContext != null && file.hasTopLevelCallables() ->

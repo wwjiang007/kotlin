@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -15,7 +15,6 @@ import org.jetbrains.kotlin.ir.expressions.IrClassReference
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrGetClass
 import org.jetbrains.kotlin.ir.types.*
-import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.ir.util.isFunction
 import org.jetbrains.kotlin.ir.util.isThrowable
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
@@ -43,7 +42,6 @@ class ClassReferenceLowering(val context: JsIrBackendContext) : FileLoweringPass
             IrType::isDouble to "doubleClass",
             IrType::isArray to "arrayClass",
             IrType::isString to "stringClass",
-            IrType::isThrowable to "throwableClass",
             IrType::isBooleanArray to "booleanArrayClass",
             IrType::isCharArray to "charArrayClass",
             IrType::isByteArray to "byteArrayClass",
@@ -61,6 +59,7 @@ class ClassReferenceLowering(val context: JsIrBackendContext) : FileLoweringPass
         mapOf(
             IrType::isAny to "anyClass",
             IrType::isNumber to "numberClass",
+            IrType::isThrowable to "throwableClass",
             IrType::isNothing to "nothingClass"
         ).mapValues {
             primitiveClassProperty(it.value)
@@ -79,7 +78,7 @@ class ClassReferenceLowering(val context: JsIrBackendContext) : FileLoweringPass
 
     private fun getPrimitiveClass(target: IrSimpleFunction, returnType: IrType) =
         JsIrBuilder.buildCall(target.symbol, returnType).apply {
-            dispatchReceiver = JsIrBuilder.buildGetObjectValue(primitiveClassesObject.owner.defaultType, primitiveClassesObject)
+            dispatchReceiver = JsIrBuilder.buildGetObjectValue(primitiveClassesObject.defaultType, primitiveClassesObject)
         }
 
     private fun getFinalPrimitiveKClass(returnType: IrType, typeArgument: IrType): IrCall? {

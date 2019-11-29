@@ -28,6 +28,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import org.jetbrains.annotations.TestOnly
 import org.jetbrains.kotlin.idea.editor.fixers.range
+import org.jetbrains.kotlin.idea.intentions.callExpression
 import org.jetbrains.kotlin.lexer.KotlinLexer
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry
@@ -41,8 +42,8 @@ private val PsiElement.templateContentRange: TextRange?
     }
 
 
-private fun PsiFile.getTemplateIfAtLiteral(offset: Int): KtStringTemplateExpression? {
-    val at = this.findElementAt(offset) ?: return null
+private fun PsiFile.getTemplateIfAtLiteral(offset: Int, at: PsiElement? = findElementAt(offset)): KtStringTemplateExpression? {
+    if (at == null) return null
     return when (at.node?.elementType) {
         KtTokens.REGULAR_STRING_PART, KtTokens.ESCAPE_SEQUENCE, KtTokens.LONG_TEMPLATE_ENTRY_START, KtTokens.SHORT_TEMPLATE_ENTRY_START -> at.parent.parent as? KtStringTemplateExpression
         KtTokens.CLOSING_QUOTE -> if (offset == at.startOffset) at.parent as? KtStringTemplateExpression else null
@@ -123,17 +124,20 @@ class KotlinLiteralCopyPasteProcessor : CopyPastePreProcessor {
         }
         PsiDocumentManager.getInstance(project).commitDocument(editor.document)
         val selectionModel = editor.selectionModel
-        val beginTp = file.getTemplateIfAtLiteral(selectionModel.selectionStart) ?: return text
+        val begin = file.findElementAt(selectionModel.selectionStart) ?: return text
+        val beginTp = file.getTemplateIfAtLiteral(selectionModel.selectionStart, begin) ?: return text
         val endTp = file.getTemplateIfAtLiteral(selectionModel.selectionEnd) ?: return text
         if (beginTp.isSingleQuoted() != endTp.isSingleQuoted()) {
             return text
         }
 
+        val templateTokenSequence = TemplateTokenSequence(text)
+
         return if (beginTp.isSingleQuoted()) {
             val res = StringBuilder()
             val lineBreak = "\\n\"+\n \""
             var endsInLineBreak = false
-            TemplateTokenSequence(text).forEach {
+            templateTokenSequence.forEach {
                 when (it) {
                     is LiteralChunk -> StringUtil.escapeStringCharacters(it.text.length, it.text, "\$\"", res)
                     is EntryChunk -> res.append(it.text)
@@ -147,13 +151,32 @@ class KotlinLiteralCopyPasteProcessor : CopyPastePreProcessor {
                 res.toString()
             }
         } else {
+            fun TemplateChunk?.indent() = when (this) {
+                is LiteralChunk -> this.text
+                is EntryChunk -> this.text
+                else -> ""
+            }.takeWhile { it.isWhitespace() }
+
+            val indent =
+                if (beginTp.firstChild?.text == "\"\"\"" &&
+                    beginTp.getQualifiedExpressionForReceiver()?.callExpression?.calleeExpression?.text == "trimIndent" &&
+                    templateTokenSequence.firstOrNull()?.indent() == templateTokenSequence.lastOrNull()?.indent()
+                ) {
+                    begin.parent?.prevSibling?.takeIf { it.text != "\n" }?.text
+                } else {
+                    null
+                } ?: ""
+
             val tripleQuoteRe = Regex("[\"]{3,}")
-            TemplateTokenSequence(text).map { chunk ->
+            templateTokenSequence.mapIndexed { index, chunk ->
                 when (chunk) {
-                    is LiteralChunk -> chunk.text.replace("\$", "\${'$'}").let { escapedDollar ->
-                        tripleQuoteRe.replace(escapedDollar) { "\"\"" + "\${'\"'}".repeat(it.value.count() - 2) }
+                    is LiteralChunk -> {
+                        val replaced = chunk.text.replace("\$", "\${'$'}").let { escapedDollar ->
+                            tripleQuoteRe.replace(escapedDollar) { "\"\"" + "\${'\"'}".repeat(it.value.count() - 2) }
+                        }
+                        if (index == 0) replaced else indent + replaced
                     }
-                    is EntryChunk -> chunk.text
+                    is EntryChunk -> if (index == 0) chunk.text else indent + chunk.text
                     is NewLineChunk -> "\n"
                 }
             }.joinToString(separator = "")

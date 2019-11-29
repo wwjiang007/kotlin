@@ -6,10 +6,12 @@
 package org.jetbrains.kotlin.idea.debugger.evaluate
 
 import com.intellij.debugger.engine.DebugProcessImpl
+import com.intellij.debugger.engine.DebuggerManagerThreadImpl
 import com.intellij.debugger.engine.SuspendContextImpl
 import com.intellij.debugger.engine.evaluation.EvaluateException
 import com.intellij.debugger.engine.evaluation.EvaluateExceptionUtil
 import com.intellij.debugger.engine.evaluation.EvaluationContextImpl
+import com.intellij.debugger.impl.DebuggerContextImpl
 import com.intellij.debugger.impl.DebuggerUtilsEx
 import com.intellij.debugger.jdi.StackFrameProxyImpl
 import com.intellij.debugger.jdi.VirtualMachineProxyImpl
@@ -40,11 +42,15 @@ class ExecutionContext(val evaluationContext: EvaluationContextImpl, val framePr
     }
 
     @Throws(EvaluateException::class)
-    fun invokeMethod(obj: ObjectReference, method: Method, args: List<Value?>): Value? {
-        return debugProcess.invokeInstanceMethod(evaluationContext, obj, method, args, invokePolicy)
+    fun invokeMethod(obj: ObjectReference, method: Method, args: List<Value?>, invocationOptions: Int = 0): Value? {
+        return debugProcess.invokeInstanceMethod(evaluationContext, obj, method, args, invocationOptions)
     }
 
     fun invokeMethod(type: ClassType, method: Method, args: List<Value?>): Value? {
+        return debugProcess.invokeMethod(evaluationContext, type, method, args)
+    }
+
+    fun invokeMethod(type: InterfaceType, method: Method, args: List<Value?>): Value? {
         return debugProcess.invokeMethod(evaluationContext, type, method, args)
     }
 

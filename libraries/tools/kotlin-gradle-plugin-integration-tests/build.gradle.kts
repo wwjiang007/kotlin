@@ -105,19 +105,23 @@ tasks.withType<Test> {
         ":kotlin-reflect:install",
         ":kotlin-annotation-processing-gradle:install",
         ":kotlin-test:kotlin-test-jvm:install",
+        ":kotlin-test:kotlin-test-js:install",
         ":kotlin-gradle-subplugin-example:install",
         ":kotlin-stdlib-jdk8:install",
+        ":kotlin-stdlib-js:install",
         ":examples:annotation-processor-example:install",
         ":kotlin-scripting-common:install",
         ":kotlin-scripting-jvm:install",
         ":kotlin-scripting-compiler-embeddable:install",
-        ":kotlin-test-nodejs-runner:install"
+        ":kotlin-test-js-runner:install",
+        ":kotlin-source-map-loader:install"
     )
 
     executable = "${rootProject.extra["JDK_18"]!!}/bin/java"
 
     systemProperty("kotlinVersion", rootProject.extra["kotlinVersion"] as String)
     systemProperty("runnerGradleVersion", gradle.gradleVersion)
+    systemProperty("jdk9Home", rootProject.extra["JDK_9"] as String)
     systemProperty("jdk10Home", rootProject.extra["JDK_10"] as String)
     systemProperty("jdk11Home", rootProject.extra["JDK_11"] as String)
 

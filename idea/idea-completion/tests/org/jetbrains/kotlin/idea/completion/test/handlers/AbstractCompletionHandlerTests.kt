@@ -19,34 +19,33 @@ import org.jetbrains.kotlin.utils.addToStdlib.indexOfOrNull
 import java.io.File
 
 abstract class AbstractCompletionHandlerTest(private val defaultCompletionType: CompletionType) : CompletionHandlerTestBase() {
-    private val INVOCATION_COUNT_PREFIX = "INVOCATION_COUNT:"
-    private val LOOKUP_STRING_PREFIX = "ELEMENT:"
-    private val ELEMENT_TEXT_PREFIX = "ELEMENT_TEXT:"
-    private val TAIL_TEXT_PREFIX = "TAIL_TEXT:"
-    private val COMPLETION_CHAR_PREFIX = "CHAR:"
-    private val COMPLETION_CHARS_PREFIX = "CHARS:"
-    private val CODE_STYLE_SETTING_PREFIX = "CODE_STYLE_SETTING:"
+
+    companion object {
+        val INVOCATION_COUNT_PREFIX = "INVOCATION_COUNT:"
+        val LOOKUP_STRING_PREFIX = "ELEMENT:"
+        val ELEMENT_TEXT_PREFIX = "ELEMENT_TEXT:"
+        val TAIL_TEXT_PREFIX = "TAIL_TEXT:"
+        val COMPLETION_CHAR_PREFIX = "CHAR:"
+        val COMPLETION_CHARS_PREFIX = "CHARS:"
+        val CODE_STYLE_SETTING_PREFIX = "CODE_STYLE_SETTING:"
+    }
 
     protected open fun doTest(testPath: String) {
-        setUpFixture(testPath)
+        setUpFixture(fileName())
 
         val tempSettings = CodeStyle.getSettings(project).clone()
         CodeStyle.setTemporarySettings(project, tempSettings)
         val fileText = FileUtil.loadFile(File(testPath))
         val configured = configureCompilerOptions(fileText, project, module)
         try {
-            assertTrue("\"<caret>\" is missing in file \"$testPath\"", fileText.contains("<caret>"));
+            assertTrue("\"<caret>\" is missing in file \"$testPath\"", fileText.contains("<caret>"))
 
 
             val invocationCount = InTextDirectivesUtils.getPrefixedInt(fileText, INVOCATION_COUNT_PREFIX) ?: 1
             val lookupString = InTextDirectivesUtils.findStringWithPrefixes(fileText, LOOKUP_STRING_PREFIX)
             val itemText = InTextDirectivesUtils.findStringWithPrefixes(fileText, ELEMENT_TEXT_PREFIX)
             val tailText = InTextDirectivesUtils.findStringWithPrefixes(fileText, TAIL_TEXT_PREFIX)
-
-            val completionChars = completionChars(
-                char = InTextDirectivesUtils.findStringWithPrefixes(fileText, COMPLETION_CHAR_PREFIX),
-                chars = InTextDirectivesUtils.findStringWithPrefixes(fileText, COMPLETION_CHARS_PREFIX)
-            )
+            val completionChars = completionChars(fileText)
 
             val completionType = ExpectedCompletionUtils.getCompletionType(fileText) ?: defaultCompletionType
 
@@ -58,8 +57,7 @@ abstract class AbstractCompletionHandlerTest(private val defaultCompletionType: 
                 val settingValue = line.substring(index + 1).trim()
                 val (field, settings) = try {
                     kotlinStyleSettings::class.java.getField(settingName) to kotlinStyleSettings
-                }
-                catch (e: NoSuchFieldException) {
+                } catch (e: NoSuchFieldException) {
                     commonStyleSettings::class.java.getField(settingName) to commonStyleSettings
                 }
                 when (field.type.name) {
@@ -70,6 +68,7 @@ abstract class AbstractCompletionHandlerTest(private val defaultCompletionType: 
             }
 
             doTestWithTextLoaded(
+                myFixture,
                 completionType,
                 invocationCount,
                 lookupString,
@@ -98,10 +97,10 @@ abstract class AbstractCompletionHandlerTest(private val defaultCompletionType: 
     override fun getProjectDescriptor() = KotlinWithJdkAndRuntimeLightProjectDescriptor.INSTANCE
 }
 
-abstract class AbstractBasicCompletionHandlerTest() : AbstractCompletionHandlerTest(CompletionType.BASIC)
+abstract class AbstractBasicCompletionHandlerTest : AbstractCompletionHandlerTest(CompletionType.BASIC)
 
-abstract class AbstractSmartCompletionHandlerTest() : AbstractCompletionHandlerTest(CompletionType.SMART)
+abstract class AbstractSmartCompletionHandlerTest : AbstractCompletionHandlerTest(CompletionType.SMART)
 
-abstract class AbstractCompletionCharFilterTest() : AbstractCompletionHandlerTest(CompletionType.BASIC)
+abstract class AbstractCompletionCharFilterTest : AbstractCompletionHandlerTest(CompletionType.BASIC)
 
-abstract class AbstractKeywordCompletionHandlerTest() : AbstractCompletionHandlerTest(CompletionType.BASIC)
+abstract class AbstractKeywordCompletionHandlerTest : AbstractCompletionHandlerTest(CompletionType.BASIC)

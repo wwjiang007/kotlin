@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.ir.declarations
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.types.IrType
 
@@ -28,13 +29,16 @@ interface IrClass :
 
     override val descriptor: ClassDescriptor
 
+    override var visibility: Visibility
+
     val kind: ClassKind
-    val modality: Modality
+    var modality: Modality
     val isCompanion: Boolean
     val isInner: Boolean
     val isData: Boolean
     val isExternal: Boolean
     val isInline: Boolean
+    val isExpect: Boolean
 
     val superTypes: MutableList<IrType>
 

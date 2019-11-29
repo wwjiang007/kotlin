@@ -15,31 +15,52 @@ import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinToJVMBytecodeCompiler
+import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.fir.scopes.ProcessorAction
 import org.jetbrains.kotlin.test.ConfigurationKind
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.TestJdkKind
+import java.io.FileOutputStream
+import java.io.PrintStream
 import kotlin.system.measureNanoTime
 
-private val PASSES = 1
+private val USE_NI = System.getProperty("fir.bench.oldfe.ni", "true") == "true"
 
 class NonFirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
-
-
     private var totalTime = 0L
     private var files = 0
+
+    private val times = mutableListOf<Long>()
 
     private fun runAnalysis(moduleData: ModuleData, environment: KotlinCoreEnvironment) {
         val project = environment.project
 
         val time = measureNanoTime {
-            KotlinToJVMBytecodeCompiler.analyze(environment, null)
+            try {
+                KotlinToJVMBytecodeCompiler.analyze(environment, null)
+            } catch (e: Throwable) {
+                var exception: Throwable? = e
+                while (exception != null && exception != exception.cause) {
+                    exception.printStackTrace()
+                    exception = exception.cause
+                }
+                throw e
+            }
         }
 
         files += environment.getSourceFiles().size
         totalTime += time
         println("Time is ${time * 1e-6} ms")
+    }
 
+    private fun writeMessageToLog(message: String) {
+        PrintStream(FileOutputStream(reportDir().resolve("report-$reportDateStr.log"), true)).use { stream ->
+            stream.println(message)
+        }
+    }
+
+    private fun dumpTime(message: String, time: Long) {
+        writeMessageToLog("$message: ${time * 1e-6} ms")
     }
 
     override fun processModule(moduleData: ModuleData): ProcessorAction {
@@ -55,6 +76,19 @@ class NonFirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
         configuration.addAll(
             CONTENT_ROOTS,
             moduleData.sources.filter { it.extension == "kt" }.map { KotlinSourceRoot(it.absolutePath, false) })
+
+        if (USE_NI) {
+            configuration.languageVersionSettings =
+                LanguageVersionSettingsImpl(
+                    LanguageVersion.KOTLIN_1_4, ApiVersion.KOTLIN_1_3, specificFeatures = mapOf(
+                        LanguageFeature.NewInference to LanguageFeature.State.ENABLED
+                    )
+                )
+        }
+
+        System.getProperty("fir.bench.oldfe.jvm_target")?.let {
+            configuration.put(JVMConfigurationKeys.JVM_TARGET, JvmTarget.fromString(it) ?: error("Unknown JvmTarget"))
+        }
         configuration.put(MESSAGE_COLLECTOR_KEY, object : MessageCollector {
             override fun clear() {
 
@@ -83,14 +117,21 @@ class NonFirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
     }
 
 
-    override fun afterPass() {}
+    override fun afterPass(pass: Int) {}
     override fun beforePass() {}
 
     fun testTotalKotlin() {
+        writeMessageToLog("use_ni: $USE_NI")
+
         for (i in 0 until PASSES) {
             runTestOnce(i)
-            println("Total time is ${totalTime * 1e-6} ms")
+            times += totalTime
+            dumpTime("Pass $i", totalTime)
             totalTime = 0L
         }
+
+        val bestTime = times.min()!!
+        val bestPass = times.indexOf(bestTime)
+        dumpTime("Best pass: $bestPass", bestTime)
     }
 }

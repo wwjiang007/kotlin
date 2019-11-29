@@ -583,6 +583,8 @@ public inline fun String.reversed(): String {
  * If any of two pairs would have the same key the last one gets added to the map.
  * 
  * The returned map preserves the entry iteration order of the original char sequence.
+ * 
+ * @sample samples.text.Strings.associate
  */
 public inline fun <K, V> CharSequence.associate(transform: (Char) -> Pair<K, V>): Map<K, V> {
     val capacity = mapCapacity(length).coerceAtLeast(16)
@@ -596,6 +598,8 @@ public inline fun <K, V> CharSequence.associate(transform: (Char) -> Pair<K, V>)
  * If any two characters would have the same key returned by [keySelector] the last one gets added to the map.
  * 
  * The returned map preserves the entry iteration order of the original char sequence.
+ * 
+ * @sample samples.text.Strings.associateBy
  */
 public inline fun <K> CharSequence.associateBy(keySelector: (Char) -> K): Map<K, Char> {
     val capacity = mapCapacity(length).coerceAtLeast(16)
@@ -608,6 +612,8 @@ public inline fun <K> CharSequence.associateBy(keySelector: (Char) -> K): Map<K,
  * If any two characters would have the same key returned by [keySelector] the last one gets added to the map.
  * 
  * The returned map preserves the entry iteration order of the original char sequence.
+ * 
+ * @sample samples.text.Strings.associateByWithValueTransform
  */
 public inline fun <K, V> CharSequence.associateBy(keySelector: (Char) -> K, valueTransform: (Char) -> V): Map<K, V> {
     val capacity = mapCapacity(length).coerceAtLeast(16)
@@ -620,6 +626,8 @@ public inline fun <K, V> CharSequence.associateBy(keySelector: (Char) -> K, valu
  * and value is the character itself.
  * 
  * If any two characters would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
+ * @sample samples.text.Strings.associateByTo
  */
 public inline fun <K, M : MutableMap<in K, in Char>> CharSequence.associateByTo(destination: M, keySelector: (Char) -> K): M {
     for (element in this) {
@@ -634,6 +642,8 @@ public inline fun <K, M : MutableMap<in K, in Char>> CharSequence.associateByTo(
  * and value is provided by the [valueTransform] function applied to characters of the given char sequence.
  * 
  * If any two characters would have the same key returned by [keySelector] the last one gets added to the map.
+ * 
+ * @sample samples.text.Strings.associateByToWithValueTransform
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> CharSequence.associateByTo(destination: M, keySelector: (Char) -> K, valueTransform: (Char) -> V): M {
     for (element in this) {
@@ -647,6 +657,8 @@ public inline fun <K, V, M : MutableMap<in K, in V>> CharSequence.associateByTo(
  * provided by [transform] function applied to each character of the given char sequence.
  * 
  * If any of two pairs would have the same key the last one gets added to the map.
+ * 
+ * @sample samples.text.Strings.associateTo
  */
 public inline fun <K, V, M : MutableMap<in K, in V>> CharSequence.associateTo(destination: M, transform: (Char) -> Pair<K, V>): M {
     for (element in this) {
@@ -676,6 +688,8 @@ public inline fun <V> CharSequence.associateWith(valueSelector: (Char) -> V): Ma
  * where key is the character itself and value is provided by the [valueSelector] function applied to that key.
  * 
  * If any two characters are equal, the last one overwrites the former value in the map.
+ * 
+ * @sample samples.text.Strings.associateWithTo
  */
 @SinceKotlin("1.3")
 public inline fun <V, M : MutableMap<in Char, in V>> CharSequence.associateWithTo(destination: M, valueSelector: (Char) -> V): M {
@@ -735,6 +749,8 @@ public fun CharSequence.toSet(): Set<Char> {
 
 /**
  * Returns a single list of all elements yielded from results of [transform] function being invoked on each character of original char sequence.
+ * 
+ * @sample samples.collections.Collections.Transformations.flatMap
  */
 public inline fun <R> CharSequence.flatMap(transform: (Char) -> Iterable<R>): List<R> {
     return flatMapTo(ArrayList<R>(), transform)
@@ -1374,11 +1390,12 @@ public fun CharSequence.windowed(size: Int, step: Int = 1, partialWindows: Boole
 public fun <R> CharSequence.windowed(size: Int, step: Int = 1, partialWindows: Boolean = false, transform: (CharSequence) -> R): List<R> {
     checkWindowSizeStep(size, step)
     val thisSize = this.length
-    val result = ArrayList<R>((thisSize + step - 1) / step)
+    val resultCapacity = thisSize / step + if (thisSize % step == 0) 0 else 1
+    val result = ArrayList<R>(resultCapacity)
     var index = 0
-    while (index < thisSize) {
+    while (index in 0 until thisSize) {
         val end = index + size
-        val coercedEnd = if (end > thisSize) { if (partialWindows) thisSize else break } else end
+        val coercedEnd = if (end < 0 || end > thisSize) { if (partialWindows) thisSize else break } else end
         result.add(transform(subSequence(index, coercedEnd)))
         index += step
     }
@@ -1426,7 +1443,11 @@ public fun CharSequence.windowedSequence(size: Int, step: Int = 1, partialWindow
 public fun <R> CharSequence.windowedSequence(size: Int, step: Int = 1, partialWindows: Boolean = false, transform: (CharSequence) -> R): Sequence<R> {
     checkWindowSizeStep(size, step)
     val windows = (if (partialWindows) indices else 0 until length - size + 1) step step
-    return windows.asSequence().map { index -> transform(subSequence(index, (index + size).coerceAtMost(length))) }
+    return windows.asSequence().map { index ->
+        val end = index + size
+        val coercedEnd = if (end < 0 || end > length) length else end
+        transform(subSequence(index, coercedEnd))
+    }
 }
 
 /**

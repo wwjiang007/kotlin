@@ -18,6 +18,8 @@ public interface NativeDefinitionsTypes {
   IElementType ANDROID = new NativeDefinitionsTokenType("android");
   IElementType ANDROID_ARM32 = new NativeDefinitionsTokenType("android_arm32");
   IElementType ANDROID_ARM64 = new NativeDefinitionsTokenType("android_arm64");
+  IElementType ANDROID_X64 = new NativeDefinitionsTokenType("ANDROID_X64");
+  IElementType ANDROID_X86 = new NativeDefinitionsTokenType("ANDROID_X86");
   IElementType ARM32 = new NativeDefinitionsTokenType("arm32");
   IElementType ARM64 = new NativeDefinitionsTokenType("arm64");
   IElementType CODE_CHARS = new NativeDefinitionsTokenType("CODE_CHARS");
@@ -60,11 +62,19 @@ public interface NativeDefinitionsTypes {
   IElementType SEPARATOR = new NativeDefinitionsTokenType("SEPARATOR");
   IElementType STATIC_LIBRARIES = new NativeDefinitionsTokenType("staticLibraries");
   IElementType STRICT_ENUMS = new NativeDefinitionsTokenType("strictEnums");
+  IElementType TVOS = new NativeDefinitionsTokenType("TVOS");
+  IElementType TVOS_ARM64 = new NativeDefinitionsTokenType("TVOS_ARM64");
+  IElementType TVOS_X64 = new NativeDefinitionsTokenType("TVOS_X64");
   IElementType UNKNOWN_KEY = new NativeDefinitionsTokenType("<unknown key>");
   IElementType UNKNOWN_PLATFORM = new NativeDefinitionsTokenType("<unknown platform>");
   IElementType VALUE = new NativeDefinitionsTokenType("VALUE");
   IElementType WASM = new NativeDefinitionsTokenType("wasm");
   IElementType WASM32 = new NativeDefinitionsTokenType("wasm32");
+  IElementType WATCHOS = new NativeDefinitionsTokenType("WATCHOS");
+  IElementType WATCHOS_ARM32 = new NativeDefinitionsTokenType("WATCHOS_ARM32");
+  IElementType WATCHOS_ARM64 = new NativeDefinitionsTokenType("WATCHOS_ARM64");
+  IElementType WATCHOS_X64 = new NativeDefinitionsTokenType("WATCHOS_X64");
+  IElementType WATCHOS_X86 = new NativeDefinitionsTokenType("WATCHOS_X86");
   IElementType X64 = new NativeDefinitionsTokenType("x64");
 
   class Factory {

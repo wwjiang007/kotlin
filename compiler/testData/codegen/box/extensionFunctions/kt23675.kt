@@ -1,6 +1,6 @@
-//WITH_RUNTIME
-
-// IGNORE_BACKEND: JS_IR
+// IGNORE_BACKEND_FIR: JVM_IR
+// WITH_RUNTIME
+// KJS_WITH_FULL_RUNTIME
 
 class Environment(
     val fieldAccessedInsideChild: Int,

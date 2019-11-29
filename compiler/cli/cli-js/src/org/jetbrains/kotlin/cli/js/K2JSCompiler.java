@@ -36,6 +36,7 @@ import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys;
 import org.jetbrains.kotlin.cli.common.CommonCompilerPerformanceManager;
 import org.jetbrains.kotlin.cli.common.ExitCode;
 import org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArguments;
+import org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArgumentsKt;
 import org.jetbrains.kotlin.cli.common.arguments.K2JsArgumentConstants;
 import org.jetbrains.kotlin.cli.common.config.ContentRootsKt;
 import org.jetbrains.kotlin.cli.common.messages.AnalyzerWithCompilerReport;
@@ -45,7 +46,6 @@ import org.jetbrains.kotlin.cli.common.messages.MessageUtil;
 import org.jetbrains.kotlin.cli.common.output.OutputUtilsKt;
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
-import org.jetbrains.kotlin.cli.jvm.plugins.PluginCliParser;
 import org.jetbrains.kotlin.config.*;
 import org.jetbrains.kotlin.incremental.components.ExpectActualTracker;
 import org.jetbrains.kotlin.incremental.components.LookupTracker;
@@ -94,6 +94,9 @@ public class K2JSCompiler extends CLICompiler<K2JSCompilerArguments> {
             irCompiler = new K2JsIrCompiler();
         return irCompiler;
     }
+
+    @Override
+    protected void addPlatformOptions(@NotNull List<String> $self, @NotNull K2JSCompilerArguments arguments) {}
 
     static {
         moduleKindMap.put(K2JsArgumentConstants.MODULE_PLAIN, ModuleKind.PLAIN);
@@ -183,8 +186,13 @@ public class K2JSCompiler extends CLICompiler<K2JSCompilerArguments> {
     ) {
         MessageCollector messageCollector = configuration.getNotNull(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY);
 
-        if (arguments.getIrBackend()) {
-            return getIrCompiler().doExecute(arguments, configuration, rootDisposable, paths);
+        ExitCode exitCode = OK;
+
+        if (K2JSCompilerArgumentsKt.isIrBackendEnabled(arguments)) {
+            exitCode = getIrCompiler().doExecute(arguments, configuration.copy(), rootDisposable, paths);
+        }
+        if (K2JSCompilerArgumentsKt.isPreIrBackendDisabled(arguments)) {
+            return exitCode;
         }
 
         if (arguments.getFreeArgs().isEmpty() && !IncrementalCompilation.isEnabledForJs()) {
@@ -195,8 +203,7 @@ public class K2JSCompiler extends CLICompiler<K2JSCompilerArguments> {
             return COMPILATION_ERROR;
         }
 
-        ExitCode pluginLoadResult =
-                PluginCliParser.loadPluginsSafe(arguments.getPluginClasspaths(), arguments.getPluginOptions(), configuration);
+        ExitCode pluginLoadResult = loadPlugins(paths, arguments, configuration);
         if (pluginLoadResult != ExitCode.OK) return pluginLoadResult;
 
         configuration.put(JSConfigurationKeys.LIBRARIES, configureLibraries(arguments, paths, messageCollector));
@@ -318,9 +325,9 @@ public class K2JSCompiler extends CLICompiler<K2JSCompilerArguments> {
 
         AnalyzerWithCompilerReport.Companion.reportDiagnostics(translationResult.getDiagnostics(), messageCollector);
 
-        if (!(translationResult instanceof TranslationResult.Success)) return ExitCode.COMPILATION_ERROR;
+        if (translationResult instanceof TranslationResult.Fail) return ExitCode.COMPILATION_ERROR;
 
-        TranslationResult.Success successResult = (TranslationResult.Success) translationResult;
+        TranslationResult.SuccessBase successResult = (TranslationResult.SuccessBase) translationResult;
         OutputFileCollection outputFiles = successResult.getOutputFiles(outputFile, outputPrefixFile, outputPostfixFile);
 
         if (outputFile.isDirectory()) {
@@ -386,8 +393,10 @@ public class K2JSCompiler extends CLICompiler<K2JSCompilerArguments> {
             @NotNull CompilerConfiguration configuration, @NotNull K2JSCompilerArguments arguments,
             @NotNull Services services
     ) {
-        if (arguments.getIrBackend()) {
+        if (K2JSCompilerArgumentsKt.isIrBackendEnabled(arguments)) {
             getIrCompiler().setupPlatformSpecificArgumentsAndServices(configuration, arguments, services);
+        }
+        if (K2JSCompilerArgumentsKt.isPreIrBackendDisabled(arguments)) {
             return;
         }
 
@@ -434,6 +443,8 @@ public class K2JSCompiler extends CLICompiler<K2JSCompilerArguments> {
             List<String> friendPaths = ArraysKt.filterNot(arguments.getFriendModules().split(File.pathSeparator), String::isEmpty);
             configuration.put(JSConfigurationKeys.FRIEND_PATHS, friendPaths);
         }
+
+        configuration.put(JSConfigurationKeys.METADATA_ONLY, arguments.getMetadataOnly());
 
         String moduleKindName = arguments.getModuleKind();
         ModuleKind moduleKind = moduleKindName != null ? moduleKindMap.get(moduleKindName) : ModuleKind.PLAIN;

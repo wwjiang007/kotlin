@@ -18,6 +18,7 @@ import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.isNull
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
+import org.jetbrains.kotlin.resolve.calls.callUtil.reportTrailingLambdaErrorOr
 import org.jetbrains.kotlin.resolve.calls.context.BasicCallResolutionContext
 import org.jetbrains.kotlin.resolve.calls.inference.model.*
 import org.jetbrains.kotlin.resolve.calls.model.*
@@ -31,7 +32,7 @@ import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluat
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.resolve.scopes.receivers.ExpressionReceiver
 import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.typeUtil.unCapture
+import org.jetbrains.kotlin.utils.addToStdlib.cast
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 class DiagnosticReporterByTrackingStrategy(
@@ -118,23 +119,34 @@ class DiagnosticReporterByTrackingStrategy(
             SmartCastDiagnostic::class.java -> reportSmartCast(diagnostic as SmartCastDiagnostic)
             UnstableSmartCast::class.java -> reportUnstableSmartCast(diagnostic as UnstableSmartCast)
             TooManyArguments::class.java -> {
-                reportIfNonNull(callArgument.psiExpression) {
-                    trace.report(TOO_MANY_ARGUMENTS.on(it, (diagnostic as TooManyArguments).descriptor))
+                trace.reportTrailingLambdaErrorOr(callArgument.psiExpression) { expr ->
+                    TOO_MANY_ARGUMENTS.on(expr, (diagnostic as TooManyArguments).descriptor)
                 }
 
                 trace.markAsReported()
             }
-            VarargArgumentOutsideParentheses::class.java ->
-                reportIfNonNull(callArgument.psiExpression) { trace.report(VARARG_OUTSIDE_PARENTHESES.on(it)) }
+            VarargArgumentOutsideParentheses::class.java -> trace.reportTrailingLambdaErrorOr(callArgument.psiExpression) { expr ->
+                VARARG_OUTSIDE_PARENTHESES.on(expr)
+            }
 
             MixingNamedAndPositionArguments::class.java ->
                 trace.report(MIXING_NAMED_AND_POSITIONED_ARGUMENTS.on(callArgument.psiCallArgument.valueArgument.asElement()))
 
             NoneCallableReferenceCandidates::class.java -> {
-                val expression =
-                    (diagnostic as NoneCallableReferenceCandidates).argument.psiExpression.safeAs<KtCallableReferenceExpression>()
+                val expression = diagnostic.cast<NoneCallableReferenceCandidates>()
+                    .argument.safeAs<CallableReferenceKotlinCallArgumentImpl>()?.ktCallableReferenceExpression
                 reportIfNonNull(expression) {
                     trace.report(UNRESOLVED_REFERENCE.on(it.callableReference, it.callableReference))
+                }
+            }
+
+            CallableReferenceCandidatesAmbiguity::class.java -> {
+                val ambiguityDiagnostic = diagnostic as CallableReferenceCandidatesAmbiguity
+                val expression = ambiguityDiagnostic.argument.psiExpression.safeAs<KtCallableReferenceExpression>()
+                val candidates = ambiguityDiagnostic.candidates.map { it.candidate }
+                reportIfNonNull(expression) {
+                    trace.report(CALLABLE_REFERENCE_RESOLUTION_AMBIGUITY.on(it.callableReference, candidates))
+                    trace.record(BindingContext.AMBIGUOUS_REFERENCE_TARGET, it.callableReference, candidates)
                 }
             }
 
@@ -257,7 +269,7 @@ class DiagnosticReporterByTrackingStrategy(
                         val index = parameterTypes.indexOf(constraintError.upperKotlinType.unwrap())
                         val lambdaExpression = lambda.psiExpression as? KtLambdaExpression ?: return@lambda
                         val parameter = lambdaExpression.valueParameters.getOrNull(index) ?: return@lambda
-                        trace.report(Errors.EXPECTED_PARAMETER_TYPE_MISMATCH.on(parameter, constraintError.upperKotlinType.unCapture()))
+                        trace.report(Errors.EXPECTED_PARAMETER_TYPE_MISMATCH.on(parameter, constraintError.upperKotlinType))
                         return
                     }
 
@@ -277,8 +289,8 @@ class DiagnosticReporterByTrackingStrategy(
                     trace.report(
                         Errors.TYPE_MISMATCH.on(
                             deparenthesized,
-                            constraintError.upperKotlinType.unCapture(),
-                            constraintError.lowerKotlinType.unCapture()
+                            constraintError.upperKotlinType,
+                            constraintError.lowerKotlinType
                         )
                     )
                 }
@@ -289,8 +301,8 @@ class DiagnosticReporterByTrackingStrategy(
                         trace.report(
                             Errors.TYPE_MISMATCH.on(
                                 it,
-                                constraintError.upperKotlinType.unCapture(),
-                                constraintError.lowerKotlinType.unCapture()
+                                constraintError.upperKotlinType,
+                                constraintError.lowerKotlinType
                             )
                         )
                     }
@@ -301,6 +313,24 @@ class DiagnosticReporterByTrackingStrategy(
                     trace.report(
                         UPPER_BOUND_VIOLATED.on(
                             typeArgumentReference,
+                            constraintError.upperKotlinType,
+                            constraintError.lowerKotlinType
+                        )
+                    )
+                }
+
+                (position as? FixVariableConstraintPosition)?.let {
+                    val morePreciseDiagnosticExists = allDiagnostics.any { other ->
+                        other is NewConstraintError && other.position.from !is FixVariableConstraintPosition
+                    }
+                    if (morePreciseDiagnosticExists) return
+
+                    val call = it.resolvedAtom?.atom?.safeAs<PSIKotlinCall>()?.psiCall ?: call
+                    val expression = call.calleeExpression ?: return
+
+                    trace.reportDiagnosticOnce(
+                        TYPE_MISMATCH.on(
+                            expression,
                             constraintError.upperKotlinType,
                             constraintError.lowerKotlinType
                         )
@@ -327,10 +357,13 @@ class DiagnosticReporterByTrackingStrategy(
             }
 
             NotEnoughInformationForTypeParameter::class.java -> {
-                if (allDiagnostics.any {it is ConstrainingTypeIsError || it is NewConstraintError || it is WrongCountOfTypeArguments})
-                    return
-
                 val error = diagnostic as NotEnoughInformationForTypeParameter
+                if (allDiagnostics.any {
+                        (it is ConstrainingTypeIsError && it.typeVariable == error.typeVariable)
+                                || it is NewConstraintError || it is WrongCountOfTypeArguments
+                    }
+                ) return
+
                 val call = error.resolvedAtom.atom?.safeAs<PSIKotlinCall>()?.psiCall ?: call
                 val expression = call.calleeExpression ?: return
                 val typeVariableName = when (val typeVariable = error.typeVariable) {

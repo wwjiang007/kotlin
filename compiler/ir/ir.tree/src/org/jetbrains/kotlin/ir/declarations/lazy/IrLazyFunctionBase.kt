@@ -23,14 +23,19 @@ abstract class IrLazyFunctionBase(
     endOffset: Int,
     origin: IrDeclarationOrigin,
     override val name: Name,
-    override val visibility: Visibility,
+    override var visibility: Visibility,
     override val isInline: Boolean,
     override val isExternal: Boolean,
+    override val isExpect: Boolean,
     stubGenerator: DeclarationStubGenerator,
     typeTranslator: TypeTranslator
 ) :
     IrLazyDeclarationBase(startOffset, endOffset, origin, stubGenerator, typeTranslator),
     IrFunction {
+
+    val initialSignatureFunction: IrFunction? by lazyVar {
+        descriptor.initialSignatureDescriptor?.takeIf { it != descriptor }?.original?.let(stubGenerator::generateFunctionStub)
+    }
 
     override var dispatchReceiverParameter: IrValueParameter? by lazyVar {
         typeTranslator.buildWithScope(this) {

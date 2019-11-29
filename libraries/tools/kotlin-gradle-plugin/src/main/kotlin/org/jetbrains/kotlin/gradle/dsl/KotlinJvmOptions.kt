@@ -5,7 +5,7 @@ package org.jetbrains.kotlin.gradle.dsl
 interface KotlinJvmOptions  : org.jetbrains.kotlin.gradle.dsl.KotlinCommonOptions {
 
     /**
-     * Include Kotlin runtime in to resulting .jar
+     * Include Kotlin runtime into the resulting JAR
      * Default value: false
      */
      var includeRuntime: kotlin.Boolean
@@ -17,33 +17,39 @@ interface KotlinJvmOptions  : org.jetbrains.kotlin.gradle.dsl.KotlinCommonOption
      var javaParameters: kotlin.Boolean
 
     /**
-     * Path to JDK home directory to include into classpath, if differs from default JAVA_HOME
+     * Include a custom JDK from the specified location into the classpath instead of the default JAVA_HOME
      * Default value: null
      */
      var jdkHome: kotlin.String?
 
     /**
-     * Target version of the generated JVM bytecode (1.6, 1.8, 9, 10, 11 or 12), default is 1.6
-     * Possible values: "1.6", "1.8", "9", "10", "11", "12"
+     * Target version of the generated JVM bytecode (1.6, 1.8, 9, 10, 11, 12 or 13), default is 1.6
+     * Possible values: "1.6", "1.8", "9", "10", "11", "12", "13"
      * Default value: "1.6"
      */
      var jvmTarget: kotlin.String
 
     /**
-     * Don't include Java runtime into classpath
+     * Don't automatically include the Java runtime into the classpath
      * Default value: false
      */
      var noJdk: kotlin.Boolean
 
     /**
-     * Don't include kotlin-reflect.jar into classpath
+     * Don't automatically include Kotlin reflection into the classpath
      * Default value: true
      */
      var noReflect: kotlin.Boolean
 
     /**
-     * Don't include kotlin-stdlib.jar or kotlin-reflect.jar into classpath
+     * Don't automatically include the Kotlin/JVM stdlib and Kotlin reflection into the classpath
      * Default value: true
      */
      var noStdlib: kotlin.Boolean
+
+    /**
+     * Use the IR backend
+     * Default value: false
+     */
+     var useIR: kotlin.Boolean
 }

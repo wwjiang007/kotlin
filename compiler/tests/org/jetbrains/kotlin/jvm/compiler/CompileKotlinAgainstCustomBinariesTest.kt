@@ -199,8 +199,36 @@ class CompileKotlinAgainstCustomBinariesTest : AbstractKotlinCompilerIntegration
         doTestBrokenLibrary("library", "test/Super.class")
     }
 
+    fun testIncompleteHierarchyMissingInterface() {
+        doTestBrokenLibrary("library", "test/A.class")
+    }
+
+    fun testIncompleteHierarchyOnlyImport() {
+        doTestBrokenLibrary("library", "test/Super.class")
+    }
+
+    fun testMissingStaticClass() {
+        doTestBrokenLibrary("library", "test/C\$D.class")
+    }
+
+    fun testIncompleteHierarchyNoErrors() {
+        doTestBrokenLibrary("library", "test/Super.class")
+    }
+
+    fun testIncompleteHierarchyErrorPositions() {
+        doTestBrokenLibrary("library", "test/Super.class")
+    }
+
+    fun testIncompleteHierarchyOfEnclosingClass() {
+        doTestBrokenLibrary("library", "test/Super.class")
+    }
+
     fun testMissingDependencySimple() {
         doTestBrokenLibrary("library", "a/A.class")
+    }
+
+    fun testNonTransitiveDependencyWithJavac() {
+        doTestBrokenLibrary("library", "my/Some.class", additionalOptions = listOf("-Xuse-javac", "-Xcompile-java"))
     }
 
     fun testComputeSupertypeWithMissingDependency() {
@@ -586,6 +614,14 @@ class CompileKotlinAgainstCustomBinariesTest : AbstractKotlinCompilerIntegration
                 // TODO: "-Xfriend-paths=${library.path}"
             )
         )
+    }
+
+    fun testInlineAnonymousObjectWithDifferentTarget() {
+        val library = compileLibrary("library", additionalOptions = listOf("-jvm-target", "1.6"))
+        compileKotlin("source.kt", tmpdir, listOf(library), additionalOptions = listOf("-jvm-target", "1.8"))
+        val classLoader =
+            URLClassLoader(arrayOf(library.toURI().toURL(), tmpdir.toURI().toURL()), ForTestCompileRuntime.runtimeJarClassLoader())
+        classLoader.loadClass("SourceKt").getDeclaredMethod("main").invoke(null)
     }
 
     companion object {

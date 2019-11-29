@@ -44,24 +44,12 @@ class AutoboxingTransformer(val context: JsIrBackendContext) : AbstractValueUsag
 
         val actualType = when (this) {
             is IrConstructorCall -> symbol.owner.returnType
-            is IrCall -> {
-                val function = this.symbol.owner
-                if (function.let { it is IrSimpleFunction && it.isSuspend }) {
-                    irBuiltIns.anyNType
-                } else {
-                    function.realOverrideTarget.returnType
-                }
-            }
+            is IrCall -> symbol.owner.realOverrideTarget.returnType
             is IrGetField -> this.symbol.owner.type
 
-            is IrTypeOperatorCall -> when (this.operator) {
-                IrTypeOperator.IMPLICIT_INTEGER_COERCION ->
-                    // TODO: is it a workaround for inconsistent IR?
-                    this.typeOperand
-
-                IrTypeOperator.CAST, IrTypeOperator.IMPLICIT_CAST -> context.irBuiltIns.anyNType
-
-                else -> this.type
+            is IrTypeOperatorCall -> {
+                assert(operator == IrTypeOperator.REINTERPRET_CAST) { "Only REINTERPRET_CAST expected at this point" }
+                this.typeOperand
             }
 
             is IrGetValue -> {
@@ -85,7 +73,7 @@ class AutoboxingTransformer(val context: JsIrBackendContext) : AbstractValueUsag
         if (actualType.isUnit() && !expectedType.isUnit()) {
             // Don't materialize Unit if value is known to be proper Unit on runtime
             if (!this.isGetUnit()) {
-                val unitValue = JsIrBuilder.buildGetObjectValue(actualType, context.symbolTable.referenceClass(context.builtIns.unit))
+                val unitValue = JsIrBuilder.buildGetObjectValue(actualType, context.irBuiltIns.unitClass)
                 return JsIrBuilder.buildComposite(actualType, listOf(this, unitValue))
             }
         }

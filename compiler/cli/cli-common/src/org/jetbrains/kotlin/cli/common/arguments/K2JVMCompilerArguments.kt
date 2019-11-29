@@ -18,35 +18,36 @@ class K2JVMCompilerArguments : CommonCompilerArguments() {
     @Argument(value = "-d", valueDescription = "<directory|jar>", description = "Destination for generated class files")
     var destination: String? by NullableStringFreezableVar(null)
 
-    @Argument(value = "-classpath", shortName = "-cp", valueDescription = "<path>", description = "Paths where to find user class files")
+    @Argument(
+        value = "-classpath",
+        shortName = "-cp",
+        valueDescription = "<path>",
+        description = "List of directories and JAR/ZIP archives to search for user class files")
     var classpath: String? by NullableStringFreezableVar(null)
 
     @GradleOption(DefaultValues.BooleanFalseDefault::class)
-    @Argument(value = "-include-runtime", description = "Include Kotlin runtime in to resulting .jar")
+    @Argument(value = "-include-runtime", description = "Include Kotlin runtime into the resulting JAR")
     var includeRuntime: Boolean by FreezableVar(false)
 
     @GradleOption(DefaultValues.StringNullDefault::class)
     @Argument(
         value = "-jdk-home",
         valueDescription = "<path>",
-        description = "Path to JDK home directory to include into classpath, if differs from default JAVA_HOME"
+        description = "Include a custom JDK from the specified location into the classpath instead of the default JAVA_HOME"
     )
     var jdkHome: String? by NullableStringFreezableVar(null)
 
     @GradleOption(DefaultValues.BooleanFalseDefault::class)
-    @Argument(value = "-no-jdk", description = "Don't include Java runtime into classpath")
+    @Argument(value = "-no-jdk", description = "Don't automatically include the Java runtime into the classpath")
     var noJdk: Boolean by FreezableVar(false)
 
     @GradleOption(DefaultValues.BooleanTrueDefault::class)
-    @Argument(value = "-no-stdlib", description = "Don't include kotlin-stdlib.jar or kotlin-reflect.jar into classpath")
+    @Argument(value = "-no-stdlib", description = "Don't automatically include the Kotlin/JVM stdlib and Kotlin reflection into the classpath")
     var noStdlib: Boolean by FreezableVar(false)
 
     @GradleOption(DefaultValues.BooleanTrueDefault::class)
-    @Argument(value = "-no-reflect", description = "Don't include kotlin-reflect.jar into classpath")
+    @Argument(value = "-no-reflect", description = "Don't automatically include Kotlin reflection into the classpath")
     var noReflect: Boolean by FreezableVar(false)
-
-    @Argument(value = "-script", description = "Evaluate the script file")
-    var script: Boolean by FreezableVar(false)
 
     @Argument(
         value = "-script-templates",
@@ -62,7 +63,7 @@ class K2JVMCompilerArguments : CommonCompilerArguments() {
     @Argument(
         value = "-jvm-target",
         valueDescription = "<version>",
-        description = "Target version of the generated JVM bytecode (1.6, 1.8, 9, 10, 11 or 12), default is 1.6"
+        description = "Target version of the generated JVM bytecode (1.6, 1.8, 9, 10, 11, 12 or 13), default is 1.6"
     )
     var jvmTarget: String? by NullableStringFreezableVar(JvmTarget.DEFAULT.description)
 
@@ -72,8 +73,15 @@ class K2JVMCompilerArguments : CommonCompilerArguments() {
 
     // Advanced options
 
+    @GradleOption(DefaultValues.BooleanFalseDefault::class)
     @Argument(value = "-Xuse-ir", description = "Use the IR backend")
     var useIR: Boolean by FreezableVar(false)
+
+    @Argument(
+        value = "-Xir-check-local-names",
+        description = "Check that names of local classes and anonymous objects are the same in the IR backend as in the old backend"
+    )
+    var irCheckLocalNames: Boolean by FreezableVar(false)
 
     @Argument(value = "-Xmodule-path", valueDescription = "<path>", description = "Paths where to find Java 9+ modules")
     var javaModulePath: String? by NullableStringFreezableVar(null)
@@ -248,9 +256,6 @@ class K2JVMCompilerArguments : CommonCompilerArguments() {
     )
     var jvmDefault: String by FreezableVar(JvmDefaultMode.DEFAULT.description)
 
-    @Argument(value = "-Xdisable-default-scripting-plugin", description = "Do not enable scripting plugin by default")
-    var disableDefaultScriptingPlugin: Boolean by FreezableVar(false)
-
     @Argument(value = "-Xdisable-standard-script", description = "Disable standard kotlin script support")
     var disableStandardScript: Boolean by FreezableVar(false)
 
@@ -298,6 +303,7 @@ class K2JVMCompilerArguments : CommonCompilerArguments() {
         result[JvmAnalysisFlags.inheritMultifileParts] = inheritMultifileParts
         result[JvmAnalysisFlags.sanitizeParentheses] = sanitizeParentheses
         result[JvmAnalysisFlags.suppressMissingBuiltinsError] = suppressMissingBuiltinsError
+        result[JvmAnalysisFlags.irCheckLocalNames] = irCheckLocalNames
         return result
     }
 

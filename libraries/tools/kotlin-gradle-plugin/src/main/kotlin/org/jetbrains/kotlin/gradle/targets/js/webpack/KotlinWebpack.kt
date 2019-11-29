@@ -16,10 +16,11 @@ import org.gradle.deployment.internal.DeploymentRegistry
 import org.gradle.process.internal.ExecHandle
 import org.gradle.process.internal.ExecHandleFactory
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJsCompilation
-import org.jetbrains.kotlin.gradle.targets.js.NpmPackageVersion
+import org.jetbrains.kotlin.gradle.targets.js.RequiredKotlinJsDependency
 import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsRootPlugin
 import org.jetbrains.kotlin.gradle.targets.js.npm.RequiresNpmDependencies
 import org.jetbrains.kotlin.gradle.targets.js.npm.npmProject
+import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig.Mode
 import org.jetbrains.kotlin.gradle.testing.internal.reportsDir
 import org.jetbrains.kotlin.gradle.utils.injected
 import java.io.File
@@ -47,10 +48,16 @@ open class KotlinWebpack : DefaultTask(), RequiresNpmDependencies {
             target.project.path + "@" + target.name + ":" + it.compilationName
         }
 
+    @Input
+    var mode: Mode = Mode.DEVELOPMENT
+
     @get:PathSensitive(PathSensitivity.ABSOLUTE)
     @get:InputFile
-    val entry: File
-        get() = compilation.compileKotlinTask.outputFile
+    var entry: File? = null
+        get() = field ?: compilation.compileKotlinTask.outputFile
+
+    @get:Internal
+    internal var resolveFromModulesFirst: Boolean = false
 
     @Suppress("unused")
     val runtimeClasspath: FileCollection
@@ -89,7 +96,7 @@ open class KotlinWebpack : DefaultTask(), RequiresNpmDependencies {
     var report: Boolean = false
 
     open val reportDir: File
-        @OutputDirectory get() = project.reportsDir.resolve("webpack").resolve(entry.nameWithoutExtension)
+        @OutputDirectory get() = project.reportsDir.resolve("webpack").resolve(entry!!.nameWithoutExtension)
 
     open val evaluatedConfigFile: File
         @OutputFile get() = reportDir.resolve("webpack.config.evaluated.js")
@@ -104,12 +111,16 @@ open class KotlinWebpack : DefaultTask(), RequiresNpmDependencies {
     @Optional
     var devServer: KotlinWebpackConfig.DevServer? = null
 
+    @Input
+    var devtool: KotlinWebpackConfig.Devtool = KotlinWebpackConfig.Devtool.EVAL_SOURCE_MAP
+
     private fun createRunner() = KotlinWebpackRunner(
         compilation.npmProject,
         configFile,
         execHandleFactory,
         bin,
         KotlinWebpackConfig(
+            mode = mode,
             entry = entry,
             reportEvaluatedConfigFile = if (saveEvaluatedConfigFile) evaluatedConfigFile else null,
             outputPath = destinationDirectory,
@@ -117,15 +128,16 @@ open class KotlinWebpack : DefaultTask(), RequiresNpmDependencies {
             configDirectory = configDirectory,
             bundleAnalyzerReportDir = if (report) reportDir else null,
             devServer = devServer,
+            devtool = devtool,
             sourceMaps = sourceMaps,
-            sourceMapsRuntime = sourceMaps
+            resolveFromModulesFirst = resolveFromModulesFirst
         )
     )
 
     override val nodeModulesRequired: Boolean
         @Internal get() = true
 
-    override val requiredNpmDependencies: Collection<NpmPackageVersion>
+    override val requiredNpmDependencies: Collection<RequiredKotlinJsDependency>
         @Internal get() = createRunner().config.getRequiredDependencies(versions)
 
     @TaskAction

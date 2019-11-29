@@ -43,7 +43,8 @@ class IrFieldImpl(
     override val visibility: Visibility,
     override val isFinal: Boolean,
     override val isExternal: Boolean,
-    override val isStatic: Boolean
+    override val isStatic: Boolean,
+    override val isFakeOverride: Boolean
 ) : IrDeclarationBase(startOffset, endOffset, origin),
     IrField {
 
@@ -52,14 +53,16 @@ class IrFieldImpl(
         endOffset: Int,
         origin: IrDeclarationOrigin,
         symbol: IrFieldSymbol,
-        type: IrType
+        type: IrType,
+        visibility: Visibility = symbol.descriptor.visibility
     ) :
             this(
                 startOffset, endOffset, origin, symbol,
-                symbol.descriptor.name, type, symbol.descriptor.visibility,
+                symbol.descriptor.name, type, visibility,
                 isFinal = !symbol.descriptor.isVar,
                 isExternal = symbol.descriptor.isEffectivelyExternal(),
-                isStatic = symbol.descriptor.dispatchReceiverParameter == null
+                isStatic = symbol.descriptor.dispatchReceiverParameter == null,
+                isFakeOverride = origin == IrDeclarationOrigin.FAKE_OVERRIDE
             )
 
     constructor(
@@ -78,13 +81,6 @@ class IrFieldImpl(
     override val descriptor: PropertyDescriptor = symbol.descriptor
 
     override var initializer: IrExpressionBody? = null
-
-    @Suppress("OverridingDeprecatedMember")
-    override var correspondingProperty: IrProperty?
-        get() = correspondingPropertySymbol?.owner
-        set(value) {
-            correspondingPropertySymbol = value?.symbol
-        }
 
     override var correspondingPropertySymbol: IrPropertySymbol? = null
 

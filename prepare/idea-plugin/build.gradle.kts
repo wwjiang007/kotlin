@@ -3,7 +3,7 @@ import java.util.regex.Pattern.quote
 description = "Kotlin IDEA plugin"
 
 plugins {
-    `java-base`
+    java
 }
 
 repositories {
@@ -33,6 +33,7 @@ val projectsToShadow by extra(listOf(
         ":idea:jvm-debugger:jvm-debugger-core",
         ":idea:jvm-debugger:jvm-debugger-evaluation",
         ":idea:jvm-debugger:jvm-debugger-sequence",
+        ":idea:scripting-support",
         ":idea:idea-j2k",
         ":idea:formatter",
         ":compiler:psi",
@@ -46,7 +47,6 @@ val projectsToShadow by extra(listOf(
         ":compiler:frontend",
         ":compiler:frontend.common",
         ":compiler:frontend.java",
-        ":idea:ide-common",
         ":idea",
         ":idea:idea-native",
         ":idea:idea-core",
@@ -102,11 +102,13 @@ val libraryProjects = listOf(
     ":kotlin-scripting-jvm",
     ":kotlin-util-io",
     ":kotlin-util-klib",
+    ":kotlin-util-klib-metadata",
     ":kotlin-allopen-compiler-plugin",
     ":kotlin-noarg-compiler-plugin",
     ":kotlin-sam-with-receiver-compiler-plugin",
     ":plugins:android-extensions-compiler",
-    ":kotlinx-serialization-compiler-plugin"
+    ":kotlinx-serialization-compiler-plugin",
+    ":idea:ide-common"
 )
 
 // Gradle tooling model jars are loaded into Gradle during import and should present in plugin as separate jar
@@ -114,6 +116,7 @@ val gradleToolingModel by configurations.creating
 
 val libraries by configurations.creating {
     extendsFrom(gradleToolingModel)
+    exclude("org.jetbrains.intellij.deps", "trove4j") // Idea already has trove4j
 }
 
 val jpsPlugin by configurations.creating
@@ -122,8 +125,6 @@ configurations.all {
     resolutionStrategy {
         preferProjectModules()
     }
-
-    exclude("org.jetbrains.intellij.deps", "trove4j") // Idea already has trove4j
 }
 
 dependencies {
@@ -150,14 +151,24 @@ dependencies {
     gradleToolingModel(project(":plugins:android-extensions-ide")) { isTransitive = false }
     gradleToolingModel(project(":noarg-ide-plugin")) { isTransitive = false }
     gradleToolingModel(project(":allopen-ide-plugin")) { isTransitive = false }
+    gradleToolingModel(project(":idea:idea-gradle-tooling-api")) { isTransitive = false }
 
     jpsPlugin(project(":kotlin-jps-plugin")) { isTransitive = false }
+
+
+    (libraries.dependencies + gradleToolingModel.dependencies)
+        .map { if (it is ProjectDependency) it.dependencyProject else it }
+        .forEach(::compile)
 }
 
 val jar = runtimeJar {
     from("$rootDir/resources/kotlinManifest.properties")
-    archiveName = "kotlin-plugin.jar"
-}
+    archiveFileName.set("kotlin-plugin.jar")
+}.get() // make it eager to avoid corresponding refactorings in the kotlin-ultimate part for now
+
+sourcesJar()
+
+javadocJar()
 
 val ideaPluginDir: File by rootProject.extra
 tasks.register<Sync>("ideaPlugin") {
@@ -176,3 +187,5 @@ tasks.register<Sync>("ideaPlugin") {
     rename(quote("-$version"), "")
     rename(quote("-$bootstrapKotlinVersion"), "")
 }
+
+apply(from = "$rootDir/gradle/kotlinPluginPublication.gradle.kts")

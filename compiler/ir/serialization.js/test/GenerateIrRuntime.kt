@@ -9,14 +9,18 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.vfs.StandardFileSystems
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.PsiManager
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
+import org.jetbrains.kotlin.cli.common.messages.GroupingMessageCollector
+import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.js.config.JSConfigurationKeys
-import org.jetbrains.kotlin.library.KotlinLibrary
+import org.jetbrains.kotlin.library.resolver.KotlinLibraryResolveResult
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.multiplatform.isCommonSource
 import org.jetbrains.kotlin.serialization.js.ModuleKind
+import org.jetbrains.kotlin.util.Logger
 import java.io.File
 
 fun buildConfiguration(environment: KotlinCoreEnvironment, moduleName: String): CompilerConfiguration {
@@ -59,7 +63,7 @@ fun buildKLib(
     moduleName: String,
     sources: List<String>,
     outputPath: String,
-    dependencies: List<KotlinLibrary>,
+    allDependencies: KotlinLibraryResolveResult,
     commonSources: List<String>
 ) {
     generateKLib(
@@ -72,7 +76,7 @@ fun buildKLib(
             file
         },
         configuration = buildConfiguration(environment, moduleName),
-        allDependencies = dependencies,
+        allDependencies = allDependencies,
         friendDependencies = emptyList(),
         outputKlibPath = outputPath,
         nopack = true
@@ -113,12 +117,21 @@ fun main(args: Array<String>) {
         error("Please set path to .klm file: `-o some/dir/module-name.klm`")
     }
 
-    val name = outputPath.takeLastWhile { it != '/' }
+    val resolvedLibraries = jsResolveLibraries(
+        dependencies, messageCollectorLogger(MessageCollector.NONE)
+    )
 
-    val dependencyKLibs = dependencies.map {
-        val file = File(it)
-        loadKlib(file.path)
+    buildKLib(File(outputPath).absolutePath, listOfKtFilesFrom(inputFiles), outputPath, resolvedLibraries, listOfKtFilesFrom(commonSources))
+}
+
+// Copied here from `K2JsIrCompiler` instead of reusing in order to avoid circular dependencies between Gradle tasks
+private fun messageCollectorLogger(collector: MessageCollector) = object : Logger {
+    override fun warning(message: String)= collector.report(CompilerMessageSeverity.STRONG_WARNING, message)
+    override fun error(message: String) = collector.report(CompilerMessageSeverity.ERROR, message)
+    override fun log(message: String) = collector.report(CompilerMessageSeverity.LOGGING, message)
+    override fun fatal(message: String): Nothing {
+        collector.report(CompilerMessageSeverity.ERROR, message)
+        (collector as? GroupingMessageCollector)?.flush()
+        kotlin.error(message)
     }
-
-    buildKLib(name.dropLast(4), listOfKtFilesFrom(inputFiles), outputPath, dependencyKLibs, listOfKtFilesFrom(commonSources))
 }

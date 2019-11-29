@@ -168,14 +168,14 @@ abstract class AbstractKotlinKapt3IntegrationTest : CodegenTestCase() {
         }
     }
 
-    protected class Kapt3ExtensionForTests(options: KaptOptions, private val processors: List<Processor>) : AbstractKapt3Extension(
-        options, MessageCollectorBackedKaptLogger(options), compilerConfiguration = CompilerConfiguration.EMPTY
+    protected inner class Kapt3ExtensionForTests(options: KaptOptions, private val processors: List<Processor>) : AbstractKapt3Extension(
+        options, MessageCollectorBackedKaptLogger(options), compilerConfiguration = myEnvironment.configuration
     ) {
         internal var savedStubs: String? = null
         internal var savedBindings: Map<String, KaptJavaFileObject>? = null
 
         override fun loadProcessors() = LoadedProcessors(
-            processors.map { IncrementalProcessor(it, DeclaredProcType.NON_INCREMENTAL) },
+            processors.map { IncrementalProcessor(it, DeclaredProcType.NON_INCREMENTAL, logger) },
             Kapt3ExtensionForTests::class.java.classLoader)
 
         override fun saveStubs(kaptContext: KaptContext, stubs: List<KaptStub>) {

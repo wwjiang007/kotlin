@@ -13,9 +13,6 @@ object AnalysisFlags {
     val multiPlatformDoNotCheckActual by AnalysisFlag.Delegates.Boolean
 
     @JvmStatic
-    val allowKotlinPackage by AnalysisFlag.Delegates.Boolean
-
-    @JvmStatic
     val experimental by AnalysisFlag.Delegates.ListOfStrings
 
     @JvmStatic
@@ -31,8 +28,14 @@ object AnalysisFlags {
     val allowResultReturnType by AnalysisFlag.Delegates.Boolean
 
     @JvmStatic
+    val explicitApiMode by AnalysisFlag.Delegates.ApiModeDisabledByDefault
+
+    @JvmStatic
     val constraintSystemForOverloadResolution by AnalysisFlag.Delegates.ConstraintSystemForOverloadResolution
 
     @JvmStatic
     val useTypeRefinement by AnalysisFlag.Delegates.Boolean
+
+    @JvmStatic
+    val ideMode by AnalysisFlag.Delegates.Boolean
 }

@@ -36,10 +36,6 @@ import kotlin.script.templates.standard.SimpleScriptTemplate
 
 class ScriptingHostTest : TestCase() {
 
-    companion object {
-        const val TEST_DATA_DIR = "libraries/scripting/jvm-host-test/testData"
-    }
-
     @Test
     fun testSimpleUsage() {
         val greeting = "Hello from script!"
@@ -52,6 +48,22 @@ class ScriptingHostTest : TestCase() {
             BasicJvmScriptingHost().evalWithTemplate<SimpleScriptTemplate>("println(\"$greeting\")".toScriptSource()).throwOnFailure()
         }
         Assert.assertEquals(greeting, output2)
+    }
+
+    @Test
+    fun testSourceWithName() {
+        val greeting = "Hello from script!"
+        val output = captureOut {
+            val basicJvmScriptingHost = BasicJvmScriptingHost()
+            basicJvmScriptingHost.eval(
+                "println(\"$greeting\")".toScriptSource("name"),
+                createJvmCompilationConfigurationFromTemplate<SimpleScript>(basicJvmScriptingHost.hostConfiguration) {
+                    updateClasspath(classpathFromClass<SimpleScript>())
+                },
+                createJvmEvaluationConfigurationFromTemplate<SimpleScript>(basicJvmScriptingHost.hostConfiguration)
+            ).throwOnFailure()
+        }
+        Assert.assertEquals(greeting, output)
     }
 
     @Test
@@ -192,6 +204,23 @@ class ScriptingHostTest : TestCase() {
     }
 
     @Test
+    fun testSimpleImportWithImplicitReceiver() {
+        val greeting = listOf("Hello from helloWithVal script!", "Hello from imported helloWithVal script!")
+        val script = "println(\"Hello from imported \$helloScriptName script!\")"
+        val compilationConfiguration = createJvmCompilationConfigurationFromTemplate<SimpleScriptTemplate> {
+            makeSimpleConfigurationWithTestImport()
+            implicitReceivers(String::class)
+        }
+        val evaluationConfiguration = createJvmEvaluationConfigurationFromTemplate<SimpleScriptTemplate> {
+            implicitReceivers("abc")
+        }
+        val output = captureOut {
+            BasicJvmScriptingHost().eval(script.toScriptSource(), compilationConfiguration, evaluationConfiguration).throwOnFailure()
+        }.lines()
+        Assert.assertEquals(greeting, output)
+    }
+
+    @Test
     fun testDiamondImportWithoutSharing() {
         val greeting = listOf("Hi from common", "Hi from middle", "Hi from common", "sharedVar == 3")
         val output = doDiamondImportTest()
@@ -250,7 +279,7 @@ class ScriptingHostTest : TestCase() {
         assertTrue(res is ResultWithDiagnostics.Failure)
         val report = res.reports.find { it.message.startsWith("Source file or directory not found") }
         assertNotNull(report)
-        assertEquals("/script.kts", report?.sourcePath)
+        assertEquals("script.kts", report?.sourcePath)
     }
 
     @Test
@@ -426,7 +455,7 @@ internal fun ScriptCompilationConfiguration.Builder.makeSimpleConfigurationWithT
     updateClasspath(classpathFromClass<ScriptingHostTest>()) // the lambda below should be in the classpath
     refineConfiguration {
         beforeCompiling { ctx ->
-            val importedScript = File(ScriptingHostTest.TEST_DATA_DIR, "importTest/helloWithVal.kts")
+            val importedScript = File(TEST_DATA_DIR, "importTest/helloWithVal.kts")
             if ((ctx.script as? FileBasedScriptSource)?.file?.canonicalFile == importedScript.canonicalFile) {
                 ctx.compilationConfiguration
             } else {

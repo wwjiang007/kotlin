@@ -24,6 +24,10 @@ object SerializationPluginErrorsRendering : DefaultErrorMessages.Extension {
                     "Make sure that you've setup your buildscript correctly and re-import project."
         )
         MAP.put(
+            SerializationErrors.EXPLICIT_SERIALIZABLE_IS_REQUIRED,
+            "Explicit @Serializable annotation on enum class is required when @SerialName or @SerialInfo annotations are used on its members."
+        )
+        MAP.put(
             SerializationErrors.SERIALIZABLE_ANNOTATION_IGNORED,
             "@Serializable annotation is ignored because it is impossible to serialize automatically interfaces or enums. " +
                     "Provide serializer manually via e.g. companion object"
@@ -45,13 +49,13 @@ object SerializationPluginErrorsRendering : DefaultErrorMessages.Extension {
             SerializationErrors.SERIALIZER_NOT_FOUND,
             "Serializer has not been found for type ''{0}''. " +
                     "To use context serializer as fallback, explicitly annotate type or property with @ContextualSerialization",
-            Renderers.RENDER_TYPE
+            Renderers.RENDER_TYPE_WITH_ANNOTATIONS
         )
         MAP.put(
             SerializationErrors.SERIALIZER_NULLABILITY_INCOMPATIBLE,
             "Type ''{1}'' is non-nullable and therefore can not be serialized with serializer for nullable type ''{0}''",
-            Renderers.RENDER_TYPE,
-            Renderers.RENDER_TYPE
+            Renderers.RENDER_TYPE_WITH_ANNOTATIONS,
+            Renderers.RENDER_TYPE_WITH_ANNOTATIONS
         )
         MAP.put(
             SerializationErrors.TRANSIENT_MISSING_INITIALIZER,

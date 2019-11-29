@@ -13,7 +13,6 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.Result
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.components.ServiceManager
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.externalSystem.importing.ImportSpecBuilder
 import com.intellij.openapi.externalSystem.model.DataNode
 import com.intellij.openapi.externalSystem.model.project.ProjectData
@@ -27,7 +26,6 @@ import com.intellij.openapi.externalSystem.util.ExternalSystemUtil
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.projectRoots.ProjectJdkTable
 import com.intellij.openapi.projectRoots.SimpleJavaSdkType
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ProjectRootManager
@@ -44,9 +42,10 @@ import com.intellij.testFramework.UsefulTestCase
 import com.intellij.util.containers.ContainerUtil
 import com.intellij.util.containers.ContainerUtilRt
 import junit.framework.TestCase
+import org.jetbrains.kotlin.idea.codeInsight.gradle.ExternalSystemImportingTestCase.LATEST_STABLE_GRADLE_PLUGIN_VERSION
 import org.jetbrains.kotlin.idea.codeInsight.gradle.GradleImportingTestCase
-import org.jetbrains.kotlin.idea.configuration.*
-import org.jetbrains.kotlin.utils.PrintingLogger
+import org.jetbrains.kotlin.idea.configuration.KotlinGradleAbstractMultiplatformModuleBuilder
+import org.jetbrains.kotlin.idea.util.getProjectJdkTableSafe
 import org.jetbrains.plugins.gradle.service.execution.GradleExecutionHelper
 import org.jetbrains.plugins.gradle.settings.DistributionType
 import org.jetbrains.plugins.gradle.settings.GradleExecutionSettings
@@ -59,7 +58,7 @@ import java.io.IOException
 
 abstract class AbstractGradleMultiplatformWizardTest : ProjectWizardTestCase<AbstractProjectWizard>() {
 
-    private val pluginVersion = "1.3.50-dev-796"
+    private val pluginVersion = LATEST_STABLE_GRADLE_PLUGIN_VERSION
 
     override fun createWizard(project: Project?, directory: File): AbstractProjectWizard {
         return NewProjectWizard(project, ModulesProvider.EMPTY_MODULES_PROVIDER, directory.path)
@@ -85,66 +84,50 @@ abstract class AbstractGradleMultiplatformWizardTest : ProjectWizardTestCase<Abs
         performImport: Boolean = true,
         useQualifiedModuleNames: Boolean = false
     ): Project {
-        // TODO: check whether it's necessary to have templates in sources
-        // Temporary workaround for duplicated bundled template
-        class PrintingFactory : Logger.Factory {
-            override fun getLoggerInstance(category: String): Logger {
-                return PrintingLogger(System.out)
-            }
-        }
+        val project = createProject { step ->
+            if (step is ProjectTypeStep) {
+                TestCase.assertTrue(step.setSelectedTemplate("Kotlin", builder.presentableName))
+                val steps = myWizard.sequence.selectedSteps
+                TestCase.assertEquals(4, steps.size)
+                val projectBuilder = myWizard.projectBuilder
+                UsefulTestCase.assertInstanceOf(projectBuilder, builder::class.java)
+                with(projectBuilder as KotlinGradleAbstractMultiplatformModuleBuilder) {
+                    explicitPluginVersion = pluginVersion
+                }
 
-        val oldFactory = getLoggerFactory()
-
-        try {
-            Logger.setFactory(PrintingFactory::class.java)
-
-            val project = createProject { step ->
-                if (step is ProjectTypeStep) {
-                    TestCase.assertTrue(step.setSelectedTemplate("Kotlin", builder.presentableName))
-                    val steps = myWizard.sequence.selectedSteps
-                    TestCase.assertEquals(4, steps.size)
-                    val projectBuilder = myWizard.projectBuilder
-                    UsefulTestCase.assertInstanceOf(projectBuilder, builder::class.java)
-                    with(projectBuilder as KotlinGradleAbstractMultiplatformModuleBuilder) {
-                        explicitPluginVersion = pluginVersion
-                    }
-
-                    myProject.reconfigureGradleSettings {
-                        distributionType = DistributionType.DEFAULT_WRAPPED
-                    }
+                myProject.reconfigureGradleSettings {
+                    distributionType = DistributionType.DEFAULT_WRAPPED
                 }
             }
-
-            val modules = ModuleManager.getInstance(project).modules
-            TestCase.assertEquals(1, modules.size)
-            val module = modules[0]
-            TestCase.assertTrue(ModuleRootManager.getInstance(module).isSdkInherited)
-
-            val root = ProjectRootManager.getInstance(project).contentRoots[0]
-
-            val settingsScript = VfsUtilCore.findRelativeFile("settings.gradle", root)
-            TestCase.assertNotNull(settingsScript)
-            val settingsScriptText = StringUtil.convertLineSeparators(VfsUtilCore.loadText(settingsScript!!))
-            TestCase.assertTrue("rootProject.name = " in settingsScriptText)
-            if (metadataInside) {
-                TestCase.assertTrue("enableFeaturePreview('GRADLE_METADATA')" in settingsScriptText)
-            }
-
-            File(root.canonicalPath).assertNoEmptyChildren()
-
-            val buildScript = VfsUtilCore.findRelativeFile("build.gradle", root)!!
-            val buildScriptText = StringUtil.convertLineSeparators(VfsUtilCore.loadText(buildScript))
-            println(buildScriptText)
-
-            if (!performImport) return project
-            doImportProject(project, useQualifiedModuleNames)
-            if (testClassNames.isNotEmpty()) {
-                doTestProject(project, *testClassNames)
-            }
-            return project
-        } finally {
-            Logger.setFactory(oldFactory)
         }
+
+        val modules = ModuleManager.getInstance(project).modules
+        TestCase.assertEquals(1, modules.size)
+        val module = modules[0]
+        TestCase.assertTrue(ModuleRootManager.getInstance(module).isSdkInherited)
+
+        val root = ProjectRootManager.getInstance(project).contentRoots[0]
+
+        val settingsScript = VfsUtilCore.findRelativeFile("settings.gradle", root)
+        TestCase.assertNotNull(settingsScript)
+        val settingsScriptText = StringUtil.convertLineSeparators(VfsUtilCore.loadText(settingsScript!!))
+        TestCase.assertTrue("rootProject.name = " in settingsScriptText)
+        if (metadataInside) {
+            TestCase.assertTrue("enableFeaturePreview('GRADLE_METADATA')" in settingsScriptText)
+        }
+
+        File(root.canonicalPath).assertNoEmptyChildren()
+
+        val buildScript = VfsUtilCore.findRelativeFile("build.gradle", root)!!
+        val buildScriptText = StringUtil.convertLineSeparators(VfsUtilCore.loadText(buildScript))
+        println(buildScriptText)
+
+        if (!performImport) return project
+        doImportProject(project, useQualifiedModuleNames)
+        if (testClassNames.isNotEmpty()) {
+            doTestProject(project, *testClassNames)
+        }
+        return project
     }
 
     private fun File.assertNoEmptyChildren() {
@@ -195,7 +178,7 @@ abstract class AbstractGradleMultiplatformWizardTest : ProjectWizardTestCase<Abs
                 }
             })
 
-        GradleSettings.getInstance(project).gradleVmOptions = "-Xmx128m -XX:MaxPermSize=64m"
+        GradleSettings.getInstance(project).gradleVmOptions = "-Xmx256m -XX:MaxPermSize=64m"
         val wrapperJarFrom = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(GradleImportingTestCase.wrapperJar())!!
         val wrapperJarFromTo = project.createProjectSubFile("gradle/wrapper/gradle-wrapper.jar")
         runWrite {
@@ -267,7 +250,7 @@ abstract class AbstractGradleMultiplatformWizardTest : ProjectWizardTestCase<Abs
             addSdk(SimpleJavaSdkType().createJdk("_other", javaHome))
 
             println("ProjectWizardTestCase.configureJdk:")
-            println(listOf(*ProjectJdkTable.getInstance().allJdks))
+            println(listOf(*getProjectJdkTableSafe().allJdks))
 
             FileTypeManager.getInstance().associateExtension(GroovyFileType.GROOVY_FILE_TYPE, "gradle")
         }

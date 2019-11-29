@@ -31,51 +31,41 @@ import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.lexer.KtSingleValueToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.types.SimpleType
 import org.jetbrains.kotlin.types.expressions.OperatorConventions
-import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.jetbrains.org.objectweb.asm.Opcodes.*
 import org.jetbrains.org.objectweb.asm.Type
 
 class IrIntrinsicMethods(val irBuiltIns: IrBuiltIns, val symbols: JvmSymbols) {
-
-    private val KOTLIN_INTERNAL_IR = FqName("kotlin.internal.ir")
-    private val KOTLIN_JVM = FqName("kotlin.jvm")
-    private val KOTLIN_JVM_INTERNAL_UNSAFE = FqName("kotlin.jvm.internal.unsafe")
+    private val kotlinJvm = FqName("kotlin.jvm")
+    private val kotlinJvmInternalUnsafe = FqName("kotlin.jvm.internal.unsafe")
 
     private val intrinsicsMap = (
             listOf(
-                Key(KOTLIN_JVM, FqName("T"), "<get-javaClass>", emptyList()) to JavaClassProperty,
+                Key(kotlinJvm, FqName("T"), "<get-javaClass>", emptyList()) to JavaClassProperty,
                 Key(
-                    KOTLIN_JVM,
+                    kotlinJvm,
                     KotlinBuiltIns.FQ_NAMES.kClass.toSafe(),
                     "<get-java>",
                     emptyList()
                 ) to KClassJavaProperty,
                 Key(
-                    KOTLIN_JVM_INTERNAL_UNSAFE,
+                    kotlinJvmInternalUnsafe,
                     null,
-                    "monitorEnter",
+                    "access\$monitorEnter\$0",
                     listOf(KotlinBuiltIns.FQ_NAMES.any.toSafe())
                 ) to MonitorInstruction.MONITOR_ENTER,
                 Key(
-                    KOTLIN_JVM_INTERNAL_UNSAFE,
+                    kotlinJvmInternalUnsafe,
                     null,
-                    "monitorExit",
+                    "access\$monitorExit\$1",
                     listOf(KotlinBuiltIns.FQ_NAMES.any.toSafe())
                 ) to MonitorInstruction.MONITOR_EXIT,
                 Key(
-                    KOTLIN_JVM,
+                    kotlinJvm,
                     KotlinBuiltIns.FQ_NAMES.array.toSafe(),
                     "isArrayOf",
                     emptyList()
                 ) to IsArrayOf,
-                Key(
-                    KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME,
-                    KotlinBuiltIns.FQ_NAMES.any.toSafe(),
-                    "toString",
-                    emptyList()
-                ) to ToString,
                 Key(
                     KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME,
                     null,
@@ -90,16 +80,19 @@ class IrIntrinsicMethods(val irBuiltIns: IrBuiltIns, val symbols: JvmSymbols) {
                 ) to Clone,
                 irBuiltIns.eqeqSymbol.toKey()!! to Equals(KtTokens.EQEQ),
                 irBuiltIns.eqeqeqSymbol.toKey()!! to Equals(KtTokens.EQEQEQ),
-                irBuiltIns.ieee754equalsFunByOperandType[irBuiltIns.float]!!.toKey()!! to Ieee754Equals(Type.FLOAT_TYPE),
-                irBuiltIns.ieee754equalsFunByOperandType[irBuiltIns.double]!!.toKey()!! to Ieee754Equals(Type.DOUBLE_TYPE),
+                irBuiltIns.ieee754equalsFunByOperandType[irBuiltIns.floatClass]!!.toKey()!! to Ieee754Equals(Type.FLOAT_TYPE),
+                irBuiltIns.ieee754equalsFunByOperandType[irBuiltIns.doubleClass]!!.toKey()!! to Ieee754Equals(Type.DOUBLE_TYPE),
                 irBuiltIns.booleanNotSymbol.toKey()!! to Not,
                 irBuiltIns.enumValueOfSymbol.toKey()!! to IrEnumValueOf,
                 irBuiltIns.noWhenBranchMatchedExceptionSymbol.toKey()!! to IrNoWhenBranchMatchedException,
                 irBuiltIns.illegalArgumentExceptionSymbol.toKey()!! to IrIllegalArgumentException,
-                irBuiltIns.checkNotNullSymbol.toKey()!! to IrCheckNotNull,
                 irBuiltIns.andandSymbol.toKey()!! to AndAnd,
                 irBuiltIns.ororSymbol.toKey()!! to OrOr,
-                symbols.unsafeCoerceIntrinsicSymbol.toKey()!! to UnsafeCoerce
+                irBuiltIns.dataClassArrayMemberHashCodeSymbol.toKey()!! to IrDataClassArrayMemberHashCode,
+                irBuiltIns.dataClassArrayMemberToStringSymbol.toKey()!! to IrDataClassArrayMemberToString,
+                symbols.unsafeCoerceIntrinsic.toKey()!! to UnsafeCoerce,
+                symbols.signatureStringIntrinsic.toKey()!! to SignatureString,
+                symbols.reassignParameterIntrinsic.toKey()!! to ReassignParameter
             ) +
                     numberConversionMethods() +
                     unaryFunForPrimitives("plus", UnaryPlus) +
@@ -110,7 +103,6 @@ class IrIntrinsicMethods(val irBuiltIns: IrBuiltIns, val symbols: JvmSymbols) {
                     unaryFunForPrimitives("inc", INC) +
                     unaryFunForPrimitives("dec", DEC) +
                     unaryFunForPrimitives("hashCode", HashCode) +
-                    unaryFunForPrimitives("toString", ToString) +
                     binaryFunForPrimitives("equals", EQUALS, irBuiltIns.anyClass) +
                     binaryFunForPrimitivesAcrossPrimitives("rangeTo", RangeTo) +
                     binaryOp("plus", IADD) +
@@ -248,9 +240,12 @@ class IrIntrinsicMethods(val irBuiltIns: IrBuiltIns, val symbols: JvmSymbols) {
             }
 
 
-        private fun primitiveComparisonIntrinsics(typeToIrFun: Map<SimpleType, IrSimpleFunctionSymbol>, operator: KtSingleValueToken) =
+        private fun primitiveComparisonIntrinsics(
+            typeToIrFun: Map<IrClassifierSymbol, IrSimpleFunctionSymbol>,
+            operator: KtSingleValueToken
+        ): List<Pair<Key, PrimitiveComparison>> =
             typeToIrFun.map { (type, irFunSymbol) ->
-                irFunSymbol.toKey()!! to PrimitiveComparison(type, operator)
+                irFunSymbol.toKey()!! to PrimitiveComparison(type.descriptor.defaultType, operator)
             }
     }
 }

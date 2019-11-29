@@ -1,6 +1,3 @@
-
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
 plugins {
     kotlin("jvm")
     id("jps-compatible")
@@ -25,6 +22,7 @@ dependencies {
     compileOnly(project(":kotlin-android-extensions-runtime"))
     compileOnly(intellijDep())
     compileOnly(intellijPluginDep("android"))
+    compileOnly(intellijPluginDep("gradle"))
 
     testCompile(project(":kotlin-test:kotlin-test-jvm"))
     testCompile(projectTests(":idea:idea-test-framework")) { isTransitive = false }
@@ -55,9 +53,7 @@ dependencies {
 
     testRuntime(intellijPluginDep("android"))
 
-    if (Platform[181].orHigher()) {
-        testRuntime(intellijPluginDep("smali"))
-    }
+    testRuntime(intellijPluginDep("smali"))
 
     testRuntime(intellijPluginDep("copyright"))
     testRuntime(intellijPluginDep("coverage"))
@@ -73,15 +69,20 @@ dependencies {
     }
 
     testRuntime(intellijPluginDep("testng"))
+
+    if (Ide.AS36.orHigher()) {
+        testRuntime(intellijPluginDep("android-layoutlib"))
+        testRuntime(intellijPluginDep("android-wizardTemplate-plugin"))
+    }
 }
 
 sourceSets {
-    if (Ide.AS33.orHigher() || Ide.IJ191.orHigher()) {
-        "main" { }
-        "test" { }
-    } else {
+    if (Ide.IJ183()) {
         "main" { projectDefault() }
         "test" { projectDefault() }
+    } else {
+        "main" { }
+        "test" { }
     }
 }
 

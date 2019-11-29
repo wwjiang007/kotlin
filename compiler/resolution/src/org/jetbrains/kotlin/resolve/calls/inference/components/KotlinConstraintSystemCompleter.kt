@@ -41,7 +41,7 @@ class KotlinConstraintSystemCompleter(
         // mutable operations
         fun addError(error: KotlinCallDiagnostic)
 
-        fun fixVariable(variable: TypeVariableMarker, resultType: KotlinTypeMarker)
+        fun fixVariable(variable: TypeVariableMarker, resultType: KotlinTypeMarker, atom: ResolvedAtom?)
     }
 
     fun runCompletion(
@@ -87,7 +87,7 @@ class KotlinConstraintSystemCompleter(
                 val variableWithConstraints = c.notFixedTypeVariables.getValue(variableForFixation.variable)
 
                 if (variableForFixation.hasProperConstraint)
-                    fixVariable(c, topLevelType, variableWithConstraints, postponedKtPrimitives)
+                    fixVariable(c, topLevelType, variableWithConstraints, postponedKtPrimitives, topLevelAtoms)
                 else
                     processVariableWhenNotEnoughInformation(c, variableWithConstraints, topLevelAtoms)
 
@@ -145,7 +145,7 @@ class KotlinConstraintSystemCompleter(
             to.addIfNotNull(this.safeAs<PostponedResolvedAtom>()?.takeUnless { it.analyzed })
 
             if (analyzed) {
-                subResolvedAtoms.forEach { it.process(to) }
+                subResolvedAtoms?.forEach { it.process(to) }
             }
         }
 
@@ -166,7 +166,7 @@ class KotlinConstraintSystemCompleter(
 
         fun ResolvedAtom.process(to: LinkedHashSet<TypeConstructor>) {
             val typeVariables = when (this) {
-                is ResolvedCallAtom -> substitutor.freshVariables
+                is ResolvedCallAtom -> freshVariablesSubstitutor.freshVariables
                 is ResolvedCallableReferenceAtom -> candidate?.freshSubstitutor?.freshVariables.orEmpty()
                 is ResolvedLambdaAtom -> listOfNotNull(typeVariableForLambdaReturnType)
                 else -> emptyList()
@@ -177,7 +177,7 @@ class KotlinConstraintSystemCompleter(
             }
 
             if (analyzed) {
-                subResolvedAtoms.forEach { it.process(to) }
+                subResolvedAtoms?.forEach { it.process(to) }
             }
         }
 
@@ -206,19 +206,22 @@ class KotlinConstraintSystemCompleter(
         c: Context,
         topLevelType: UnwrappedType,
         variableWithConstraints: VariableWithConstraints,
-        postponedResolveKtPrimitives: List<PostponedResolvedAtom>
+        postponedResolveKtPrimitives: List<PostponedResolvedAtom>,
+        topLevelAtoms: List<ResolvedAtom>
     ) {
         val direction = TypeVariableDirectionCalculator(c, postponedResolveKtPrimitives, topLevelType).getDirection(variableWithConstraints)
-        fixVariable(c, variableWithConstraints, direction)
+        fixVariable(c, variableWithConstraints, direction, topLevelAtoms)
     }
 
     fun fixVariable(
         c: Context,
         variableWithConstraints: VariableWithConstraints,
-        direction: TypeVariableDirectionCalculator.ResolveDirection
+        direction: TypeVariableDirectionCalculator.ResolveDirection,
+        topLevelAtoms: List<ResolvedAtom>
     ) {
         val resultType = resultTypeResolver.findResultType(c, variableWithConstraints, direction)
-        c.fixVariable(variableWithConstraints.typeVariable, resultType)
+        val resolvedAtom = findResolvedAtomBy(variableWithConstraints.typeVariable, topLevelAtoms) ?: topLevelAtoms.firstOrNull()
+        c.fixVariable(variableWithConstraints.typeVariable, resultType, resolvedAtom)
     }
 
     private fun processVariableWhenNotEnoughInformation(
@@ -238,13 +241,13 @@ class KotlinConstraintSystemCompleter(
         else
             ErrorUtils.createErrorType("Cannot infer type variable $typeVariable")
 
-        c.fixVariable(typeVariable, resultErrorType)
+        c.fixVariable(typeVariable, resultErrorType, resolvedAtom)
     }
 
     private fun findResolvedAtomBy(typeVariable: TypeVariableMarker, topLevelAtoms: List<ResolvedAtom>): ResolvedAtom? {
         fun ResolvedAtom.check(): ResolvedAtom? {
             val suitableCall = when (this) {
-                is ResolvedCallAtom -> typeVariable in substitutor.freshVariables
+                is ResolvedCallAtom -> typeVariable in freshVariablesSubstitutor.freshVariables
                 is ResolvedCallableReferenceAtom -> candidate?.freshSubstitutor?.freshVariables?.let { typeVariable in it } ?: false
                 is ResolvedLambdaAtom -> typeVariable == typeVariableForLambdaReturnType
                 else -> false
@@ -254,7 +257,7 @@ class KotlinConstraintSystemCompleter(
                 return this
             }
 
-            subResolvedAtoms.forEach { subResolvedAtom ->
+            subResolvedAtoms?.forEach { subResolvedAtom ->
                 subResolvedAtom.check()?.let { result -> return@check result }
             }
 

@@ -19,12 +19,16 @@ package org.jetbrains.kotlin.backend.jvm.intrinsics
 import com.intellij.psi.tree.IElementType
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.backend.jvm.codegen.*
+import org.jetbrains.kotlin.backend.jvm.ir.isSmartcastFromHigherThanNullable
+import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.codegen.AsmUtil.comparisonOperandType
 import org.jetbrains.kotlin.codegen.BranchedValue
 import org.jetbrains.kotlin.codegen.NumberCompare
 import org.jetbrains.kotlin.codegen.ObjectCompare
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.ir.expressions.IrFunctionAccessExpression
 import org.jetbrains.kotlin.lexer.KtSingleValueToken
+import org.jetbrains.kotlin.resolve.jvm.JvmPrimitiveType
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.org.objectweb.asm.Label
@@ -82,15 +86,49 @@ class BooleanComparison(val op: IElementType, val a: MaterialValue, val b: Mater
     }
 }
 
+
+class NonIEEE754FloatComparison(val op: IElementType, val a: MaterialValue, val b: MaterialValue) : BooleanValue(a.codegen) {
+    private val numberCompareOpcode = NumberCompare.getNumberCompareOpcode(op)
+
+    private fun invokeStaticComparison(type: Type) {
+        when (type) {
+            Type.FLOAT_TYPE -> mv.invokestatic("java/lang/Float", "compare", "(FF)I", false)
+            Type.DOUBLE_TYPE -> mv.invokestatic("java/lang/Double", "compare", "(DD)I", false)
+            else -> throw UnsupportedOperationException()
+        }
+    }
+
+    override fun jumpIfFalse(target: Label) {
+        invokeStaticComparison(a.type)
+        mv.visitJumpInsn(numberCompareOpcode, target)
+    }
+
+    override fun jumpIfTrue(target: Label) {
+        invokeStaticComparison(a.type)
+        mv.visitJumpInsn(BranchedValue.negatedOperations[numberCompareOpcode]!!, target)
+    }
+}
+
 class PrimitiveComparison(
     private val primitiveNumberType: KotlinType,
     private val operatorToken: KtSingleValueToken
 ) : IntrinsicMethod() {
     override fun invoke(expression: IrFunctionAccessExpression, codegen: ExpressionCodegen, data: BlockInfo): PromisedValue? {
-        val parameterType = codegen.typeMapper.kotlinTypeMapper.mapType(primitiveNumberType)
+        val parameterType = Type.getType(JvmPrimitiveType.get(KotlinBuiltIns.getPrimitiveType(primitiveNumberType)!!).desc)
         val (left, right) = expression.receiverAndArgs()
         val a = left.accept(codegen, data).coerce(parameterType, left.type).materialized
         val b = right.accept(codegen, data).coerce(parameterType, right.type).materialized
-        return BooleanComparison(operatorToken, a, b)
+
+        val useNonIEEE754Comparison =
+            !codegen.context.state.languageVersionSettings.supportsFeature(LanguageFeature.ProperIeee754Comparisons)
+                    && (parameterType == Type.FLOAT_TYPE || parameterType == Type.DOUBLE_TYPE)
+                    && (left.isSmartcastFromHigherThanNullable(codegen.context) || right.isSmartcastFromHigherThanNullable(codegen.context))
+
+        return if (useNonIEEE754Comparison) {
+            NonIEEE754FloatComparison(operatorToken, a, b)
+        } else {
+            BooleanComparison(operatorToken, a, b)
+        }
     }
 }
+

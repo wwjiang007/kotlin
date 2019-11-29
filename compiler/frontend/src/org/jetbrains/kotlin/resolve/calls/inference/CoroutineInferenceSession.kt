@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.resolve.BindingTrace
+import org.jetbrains.kotlin.resolve.MissingSupertypesResolver
 import org.jetbrains.kotlin.resolve.TemporaryBindingTrace
 import org.jetbrains.kotlin.resolve.calls.ArgumentTypeResolver
 import org.jetbrains.kotlin.resolve.calls.components.CompletedCallInfo
@@ -49,7 +50,8 @@ class CoroutineInferenceSession(
     private val doubleColonExpressionResolver: DoubleColonExpressionResolver,
     private val deprecationResolver: DeprecationResolver,
     private val moduleDescriptor: ModuleDescriptor,
-    private val typeApproximator: TypeApproximator
+    private val typeApproximator: TypeApproximator,
+    private val missingSupertypesResolver: MissingSupertypesResolver
 ) : ManyCandidatesResolver<CallableDescriptor>(
     psiCallResolver, postponedArgumentsAnalyzer, kotlinConstraintSystemCompleter, callComponents, builtIns
 ) {
@@ -204,7 +206,7 @@ class CoroutineInferenceSession(
         val atomCompleter = createResolvedAtomCompleter(resultingSubstitutor, completedCall.context)
         val resultCallAtom = completedCall.callResolutionResult.resultCallAtom
 
-        for (subResolvedAtom in resultCallAtom.subResolvedAtoms) {
+        resultCallAtom.subResolvedAtoms?.forEach { subResolvedAtom ->
             atomCompleter.completeAll(subResolvedAtom)
         }
         atomCompleter.completeResolvedCall(resultCallAtom, completedCall.callResolutionResult.diagnostics)
@@ -222,7 +224,7 @@ class CoroutineInferenceSession(
         return ResolvedAtomCompleter(
             resultSubstitutor, context, kotlinToResolvedCallTransformer,
             expressionTypingServices, argumentTypeResolver, doubleColonExpressionResolver, builtIns,
-            deprecationResolver, moduleDescriptor, context.dataFlowValueFactory, typeApproximator
+            deprecationResolver, moduleDescriptor, context.dataFlowValueFactory, typeApproximator, missingSupertypesResolver
         )
     }
 }

@@ -23,20 +23,22 @@ task sourcesJar(type: Jar, dependsOn: classes) {
     from sourceSets.main.kotlin
 }
 
-classes.dependsOn.remove("compileJava")
-
 artifacts {
     archives sourcesJar
 }
 
 javadocJar()
 
+tasks.withType(org.jetbrains.kotlin.gradle.dsl.KotlinCompile) {
+    kotlinOptions.freeCompilerArgs += "-Xallow-kotlin-package"
+}
+
 compileKotlinCommon {
     kotlinOptions {
-        freeCompilerArgs = [
+        freeCompilerArgs += [
                 "-module-name", project.name,
-                "-Xallow-kotlin-package",
                 "-Xuse-experimental=kotlin.contracts.ExperimentalContracts"
         ]
     }
 }
+

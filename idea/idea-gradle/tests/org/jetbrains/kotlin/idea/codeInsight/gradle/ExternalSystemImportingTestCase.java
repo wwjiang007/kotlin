@@ -32,10 +32,7 @@ import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil;
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.module.ModuleManager;
-import com.intellij.openapi.roots.DependencyScope;
-import com.intellij.openapi.roots.ModuleOrderEntry;
-import com.intellij.openapi.roots.ModuleRootManager;
-import com.intellij.openapi.roots.OrderEntry;
+import com.intellij.openapi.roots.*;
 import com.intellij.openapi.util.Couple;
 import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.util.text.StringUtil;
@@ -54,6 +51,9 @@ import org.apache.log4j.Level;
 
 // part of com.intellij.openapi.externalSystem.test.ExternalSystemImportingTestCase
 public abstract class ExternalSystemImportingTestCase extends ExternalSystemTestCase {
+
+    public static final String MINIMAL_SUPPORTED_GRADLE_PLUGIN_VERSION = "1.3.0";
+    public static final String LATEST_STABLE_GRADLE_PLUGIN_VERSION = "1.3.50";
 
     private Logger logger;
 
@@ -247,8 +247,12 @@ public abstract class ExternalSystemImportingTestCase extends ExternalSystemTest
                      expectedScopes, actualScopes);
     }
 
-    protected void assertNoDepForModule(String moduleName, String depName) {
+    protected void assertNoModuleDepForModule(String moduleName, String depName) {
         assertEmpty("No dependency '" + depName + "' was expected", collectModuleDeps(moduleName, depName, ModuleOrderEntry.class));
+    }
+
+    protected void assertNoLibraryDepForModule(String moduleName, String depName) {
+        assertEmpty("No dependency '" + depName + "' was expected", collectModuleDeps(moduleName, depName, LibraryOrderEntry.class));
     }
 
     @NotNull

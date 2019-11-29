@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.idea.parameterInfo;
 
+import com.intellij.lang.parameterInfo.CreateParameterInfoContext;
 import com.intellij.lang.parameterInfo.UpdateParameterInfoContext;
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.project.Project;
@@ -19,10 +20,12 @@ public class MockUpdateParameterInfoContext implements UpdateParameterInfoContex
     private int myCurrentParameter = -1;
     private PsiFile myFile;
     private JavaCodeInsightTestFixture myFixture;
+    private CreateParameterInfoContext createParameterInfoContext;
 
-    MockUpdateParameterInfoContext(PsiFile file, JavaCodeInsightTestFixture fixture) {
+    MockUpdateParameterInfoContext(PsiFile file, JavaCodeInsightTestFixture fixture, CreateParameterInfoContext context) {
         myFile = file;
         myFixture = fixture;
+        createParameterInfoContext = context;
     }
     
 
@@ -73,7 +76,7 @@ public class MockUpdateParameterInfoContext implements UpdateParameterInfoContex
 
     @Override
     public Object[] getObjectsToView() {
-        return ArrayUtil.EMPTY_OBJECT_ARRAY;
+        return createParameterInfoContext.getItemsToShow();
     }
 
     @Override
@@ -117,8 +120,7 @@ public class MockUpdateParameterInfoContext implements UpdateParameterInfoContex
         return myFixture.getEditor();
     }
 
-    //@Override since 183
-    //add `@Override` when BUNCH: 182 is dropped
+    @Override
     public boolean isSingleParameterInfo() {
         return false;
     }

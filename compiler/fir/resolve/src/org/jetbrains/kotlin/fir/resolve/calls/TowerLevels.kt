@@ -7,29 +7,28 @@ package org.jetbrains.kotlin.fir.resolve.calls
 
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.fir.FirSession
-import org.jetbrains.kotlin.fir.declarations.FirCallableDeclaration
-import org.jetbrains.kotlin.fir.declarations.FirCallableMemberDeclaration
-import org.jetbrains.kotlin.fir.declarations.FirConstructor
+import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.declarations.impl.FirConstructorImpl
 import org.jetbrains.kotlin.fir.declarations.impl.FirImportImpl
 import org.jetbrains.kotlin.fir.declarations.impl.FirResolvedImportImpl
+import org.jetbrains.kotlin.fir.declarations.impl.FirValueParameterImpl
 import org.jetbrains.kotlin.fir.expressions.FirResolvedQualifier
-import org.jetbrains.kotlin.fir.resolve.FirSymbolProvider
-import org.jetbrains.kotlin.fir.resolve.ScopeSession
-import org.jetbrains.kotlin.fir.resolve.scope
+import org.jetbrains.kotlin.fir.resolve.*
+import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
+import org.jetbrains.kotlin.fir.resolve.substitution.substitutorByMap
 import org.jetbrains.kotlin.fir.resolve.transformers.ReturnTypeCalculatorWithJump
-import org.jetbrains.kotlin.fir.scopes.FirPosition
 import org.jetbrains.kotlin.fir.scopes.FirScope
 import org.jetbrains.kotlin.fir.scopes.ProcessorAction
+import org.jetbrains.kotlin.fir.scopes.impl.FirAbstractImportingScope
 import org.jetbrains.kotlin.fir.scopes.impl.FirExplicitSimpleImportingScope
-import org.jetbrains.kotlin.fir.scopes.processClassifiersByNameWithAction
-import org.jetbrains.kotlin.fir.service
 import org.jetbrains.kotlin.fir.symbols.AbstractFirBasedSymbol
-import org.jetbrains.kotlin.fir.symbols.ConeCallableSymbol
-import org.jetbrains.kotlin.fir.symbols.ConeSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.*
+import org.jetbrains.kotlin.fir.types.*
+import org.jetbrains.kotlin.fir.types.impl.FirResolvedTypeRefImpl
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.utils.addToStdlib.cast
+import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 interface TowerScopeLevel {
 
@@ -47,11 +46,11 @@ interface TowerScopeLevel {
         processor: TowerScopeLevelProcessor<T>
     ): ProcessorAction
 
-    interface TowerScopeLevelProcessor<T : ConeSymbol> {
+    interface TowerScopeLevelProcessor<T : AbstractFirBasedSymbol<*>> {
         fun consumeCandidate(
             symbol: T,
             dispatchReceiverValue: ClassDispatchReceiverValue?,
-            implicitExtensionReceiverValue: ImplicitReceiverValue?
+            implicitExtensionReceiverValue: ImplicitReceiverValue<*>?
         ): ProcessorAction
     }
 
@@ -69,7 +68,9 @@ abstract class SessionBasedTowerLevel(val session: FirSession) : TowerScopeLevel
     protected fun AbstractFirBasedSymbol<*>.dispatchReceiverValue(): ClassDispatchReceiverValue? {
         return when (this) {
             is FirNamedFunctionSymbol -> fir.dispatchReceiverValue(session)
-            is FirClassSymbol -> ClassDispatchReceiverValue(fir.symbol)
+            is FirPropertySymbol -> fir.dispatchReceiverValue(session)
+            is FirFieldSymbol -> fir.dispatchReceiverValue(session)
+            is FirClassSymbol -> ClassDispatchReceiverValue(this)
             else -> null
         }
     }
@@ -88,8 +89,9 @@ abstract class SessionBasedTowerLevel(val session: FirSession) : TowerScopeLevel
 //     or given implicit or explicit receiver, otherwise
 class MemberScopeTowerLevel(
     session: FirSession,
+    val bodyResolveComponents: BodyResolveComponents,
     val dispatchReceiver: ReceiverValue,
-    val implicitExtensionReceiver: ImplicitReceiverValue? = null,
+    val implicitExtensionReceiver: ImplicitReceiverValue<*>? = null,
     val scopeSession: ScopeSession
 ) : SessionBasedTowerLevel(session) {
     private fun <T : AbstractFirBasedSymbol<*>> processMembers(
@@ -99,7 +101,7 @@ class MemberScopeTowerLevel(
     ): ProcessorAction {
         if (implicitExtensionReceiver != null && explicitExtensionReceiver != null) return ProcessorAction.NEXT
         val extensionReceiver = implicitExtensionReceiver ?: explicitExtensionReceiver
-        val scope = dispatchReceiver.type.scope(session, scopeSession) ?: return ProcessorAction.NEXT
+        val scope = dispatchReceiver.scope(session, scopeSession) ?: return ProcessorAction.NEXT
         if (scope.processScopeMembers { candidate ->
                 if (candidate is FirCallableSymbol<*> && candidate.hasConsistentExtensionReceiver(extensionReceiver)) {
                     // NB: we do not check dispatchReceiverValue != null here,
@@ -130,10 +132,10 @@ class MemberScopeTowerLevel(
                 this.processPropertiesByName(name, symbol.cast())
             }
             TowerScopeLevel.Token.Functions -> processMembers(processor, explicitExtensionReceiver) { symbol ->
-                this.processFunctionsByName(name, symbol.cast())
+                this.processFunctionsAndConstructorsByName(name, session, bodyResolveComponents, symbol.cast())
             }
             TowerScopeLevel.Token.Objects -> processMembers(processor, explicitExtensionReceiver) { symbol ->
-                this.processClassifiersByNameWithAction(name, FirPosition.OTHER, symbol.cast())
+                this.processClassifiersByName(name, symbol.cast())
             }
         }
     }
@@ -143,14 +145,24 @@ class MemberScopeTowerLevel(
 // We can access here members of currently accessible scope which is not influenced by explicit receiver
 // We can either have no explicit receiver at all, or it can be an extension receiver
 // An explicit receiver never can be a dispatch receiver at this level
-// So: dispatch receiver = strictly NONE
+// So: dispatch receiver = strictly none (EXCEPTIONS: importing scopes with import from objects, synthetic field variable)
 // So: extension receiver = either none or explicit
 // (if explicit receiver exists, it always *should* be an extension receiver)
 class ScopeTowerLevel(
     session: FirSession,
+    private val bodyResolveComponents: BodyResolveComponents,
     val scope: FirScope,
-    val implicitExtensionReceiver: ImplicitReceiverValue? = null
+    val implicitExtensionReceiver: ImplicitReceiverValue<*>? = null,
+    private val extensionsOnly: Boolean = false
 ) : SessionBasedTowerLevel(session) {
+    private fun FirCallableSymbol<*>.hasConsistentReceivers(extensionReceiver: ReceiverValue?): Boolean =
+        when {
+            extensionsOnly && !hasExtensionReceiver() -> false
+            !hasConsistentExtensionReceiver(extensionReceiver) -> false
+            scope is FirAbstractImportingScope -> true
+            else -> dispatchReceiverValue().let { it == null || it.klassSymbol.fir.classKind == ClassKind.OBJECT }
+        }
+
     override fun <T : AbstractFirBasedSymbol<*>> processElementsByName(
         token: TowerScopeLevel.Token<T>,
         name: Name,
@@ -164,26 +176,34 @@ class ScopeTowerLevel(
         @Suppress("UNCHECKED_CAST")
         return when (token) {
             TowerScopeLevel.Token.Properties -> scope.processPropertiesByName(name) { candidate ->
-                if (candidate.hasConsistentExtensionReceiver(extensionReceiver) && candidate.dispatchReceiverValue() == null) {
+                if (candidate.hasConsistentReceivers(extensionReceiver)) {
+                    val dispatchReceiverValue = when (candidate) {
+                        is FirBackingFieldSymbol -> candidate.fir.symbol.dispatchReceiverValue()
+                        else -> candidate.dispatchReceiverValue()
+                    }
                     processor.consumeCandidate(
-                        candidate as T, dispatchReceiverValue = null,
+                        candidate as T, dispatchReceiverValue = dispatchReceiverValue,
                         implicitExtensionReceiverValue = implicitExtensionReceiver
                     )
                 } else {
                     ProcessorAction.NEXT
                 }
             }
-            TowerScopeLevel.Token.Functions -> scope.processFunctionsByName(name) { candidate ->
-                if (candidate.hasConsistentExtensionReceiver(extensionReceiver) && candidate.dispatchReceiverValue() == null) {
+            TowerScopeLevel.Token.Functions -> scope.processFunctionsAndConstructorsByName(
+                name,
+                session,
+                bodyResolveComponents
+            ) { candidate ->
+                if (candidate.hasConsistentReceivers(extensionReceiver)) {
                     processor.consumeCandidate(
-                        candidate as T, dispatchReceiverValue = null,
+                        candidate as T, dispatchReceiverValue = candidate.dispatchReceiverValue(),
                         implicitExtensionReceiverValue = implicitExtensionReceiver
                     )
                 } else {
                     ProcessorAction.NEXT
                 }
             }
-            TowerScopeLevel.Token.Objects -> scope.processClassifiersByNameWithAction(name, FirPosition.OTHER) {
+            TowerScopeLevel.Token.Objects -> scope.processClassifiersByName(name) {
                 processor.consumeCandidate(
                     it as T, dispatchReceiverValue = null,
                     implicitExtensionReceiverValue = null
@@ -196,7 +216,10 @@ class ScopeTowerLevel(
 /**
  *  Handles only statics and top-levels, DOES NOT handle objects/companions members
  */
-class QualifiedReceiverTowerLevel(session: FirSession) : SessionBasedTowerLevel(session) {
+class QualifiedReceiverTowerLevel(
+    session: FirSession,
+    private val bodyResolveComponents: BodyResolveComponents
+) : SessionBasedTowerLevel(session) {
     override fun <T : AbstractFirBasedSymbol<*>> processElementsByName(
         token: TowerScopeLevel.Token<T>,
         name: Name,
@@ -204,45 +227,253 @@ class QualifiedReceiverTowerLevel(session: FirSession) : SessionBasedTowerLevel(
         processor: TowerScopeLevel.TowerScopeLevelProcessor<T>
     ): ProcessorAction {
         val qualifiedReceiver = explicitReceiver?.explicitReceiverExpression as FirResolvedQualifier
-        val scope = FirExplicitSimpleImportingScope(
-            listOf(
-                FirResolvedImportImpl(
-                    FirImportImpl(null, FqName.topLevel(name), false, null),
-                    qualifiedReceiver.packageFqName,
-                    qualifiedReceiver.relativeClassFqName
+        val classId = qualifiedReceiver.classId
+        val scope = when {
+            token == TowerScopeLevel.Token.Objects || classId == null -> {
+                FirExplicitSimpleImportingScope(
+                    listOf(
+                        FirResolvedImportImpl(
+                            FirImportImpl(null, FqName.topLevel(name), false, null),
+                            qualifiedReceiver.packageFqName,
+                            qualifiedReceiver.relativeClassFqName
+                        )
+                    ), session, bodyResolveComponents.scopeSession
                 )
-            ), session
-        )
+            }
+            else -> {
+                session.firSymbolProvider.getClassUseSiteMemberScope(classId, session, bodyResolveComponents.scopeSession)
+                    ?: return ProcessorAction.NEXT
+            }
+        }
 
-        @Suppress("UNCHECKED_CAST")
-        return if (token == TowerScopeLevel.Token.Objects) {
-            scope.processClassifiersByNameWithAction(name, FirPosition.OTHER) {
+        val processorForCallables: (FirCallableSymbol<*>) -> ProcessorAction = {
+            val fir = it.fir
+            if (fir is FirCallableMemberDeclaration<*> && fir.isStatic ||
+                it.callableId.classId == null ||
+                fir is FirConstructor && !fir.isInner
+            ) {
+                @Suppress("UNCHECKED_CAST")
+                processor.consumeCandidate(it as T, null, null)
+            } else {
+                ProcessorAction.NEXT
+            }
+        }
+
+        return when (token) {
+            TowerScopeLevel.Token.Objects -> scope.processClassifiersByName(name) {
+                @Suppress("UNCHECKED_CAST")
                 processor.consumeCandidate(it as T, null, null)
             }
-        } else {
-            scope.processCallables(name, token.cast()) {
-                val fir = it.fir
-                if (fir is FirCallableMemberDeclaration<*> && fir.isStatic || it.callableId.classId == null) {
-                    processor.consumeCandidate(it as T, null, null)
-                } else {
-                    ProcessorAction.NEXT
-                }
+            TowerScopeLevel.Token.Functions -> {
+                scope.processFunctionsAndConstructorsByName(name, session, bodyResolveComponents, processorForCallables)
             }
+            TowerScopeLevel.Token.Properties -> scope.processPropertiesByName(name, processorForCallables)
+
         }
     }
 }
 
 fun FirCallableDeclaration<*>.dispatchReceiverValue(session: FirSession): ClassDispatchReceiverValue? {
-    // TODO: this is not true at least for inner class constructors
+    // TODO: this is not true atCall least for inner class constructors
     if (this is FirConstructor) return null
-    val id = (this.symbol as ConeCallableSymbol).callableId.classId ?: return null
-    val symbol = session.service<FirSymbolProvider>().getClassLikeSymbolByFqName(id) as? FirClassSymbol ?: return null
-    val regularClass = symbol.fir
+    val id = this.symbol.callableId.classId ?: return null
+    val symbol = session.firSymbolProvider.getClassLikeSymbolByFqName(id) as? FirClassSymbol ?: return null
 
-    // TODO: this is also not true, but objects can be also imported
-    if (regularClass.classKind == ClassKind.OBJECT) return null
-
-    return ClassDispatchReceiverValue(regularClass.symbol)
+    return ClassDispatchReceiverValue(symbol)
 }
 
 private fun FirCallableSymbol<*>.hasExtensionReceiver(): Boolean = this.fir.receiverTypeRef != null
+
+private fun FirScope.processFunctionsAndConstructorsByName(
+    name: Name,
+    session: FirSession,
+    bodyResolveComponents: BodyResolveComponents,
+    processor: (FirCallableSymbol<*>) -> ProcessorAction
+): ProcessorAction {
+    val matchedClassSymbol = getFirstClassifierOrNull(name) as? FirClassLikeSymbol<*>
+
+    if (processConstructors(
+            matchedClassSymbol,
+            processor,
+            session,
+            bodyResolveComponents.scopeSession,
+            name
+        ).stop()
+    ) {
+        return ProcessorAction.STOP
+    }
+
+    if (processSyntheticConstructors(
+            matchedClassSymbol,
+            processor,
+            bodyResolveComponents
+        ).stop()
+    ) {
+        return ProcessorAction.STOP
+    }
+
+    return processFunctionsByName(name) {
+        if (it is FirConstructorSymbol) ProcessorAction.NEXT
+        else processor(it)
+    }
+}
+
+private fun FirScope.getFirstClassifierOrNull(name: Name): FirClassifierSymbol<*>? {
+    var result: FirClassifierSymbol<*>? = null
+    processClassifiersByName(name) {
+        result = it
+        ProcessorAction.STOP
+    }
+
+    return result
+}
+
+private fun finalExpansionName(symbol: FirTypeAliasSymbol, session: FirSession): Name? {
+    val expandedType = symbol.fir.expandedTypeRef.coneTypeUnsafe<ConeClassLikeType>()
+    val typeAliasSymbol = expandedType.lookupTag.toSymbol(session)?.safeAs<FirTypeAliasSymbol>()
+
+    return if (typeAliasSymbol != null)
+        finalExpansionName(typeAliasSymbol, session)
+    else
+        expandedType.lookupTag.classId.shortClassName
+}
+
+val SAM_PARAMETER_NAME = Name.identifier("block")
+
+private fun processSyntheticConstructors(
+    matchedSymbol: FirClassLikeSymbol<*>?,
+    processor: (FirFunctionSymbol<*>) -> ProcessorAction,
+    bodyResolveComponents: BodyResolveComponents
+): ProcessorAction {
+    if (matchedSymbol == null) return ProcessorAction.NEXT
+    if (matchedSymbol !is FirRegularClassSymbol) return ProcessorAction.NEXT
+
+    val function = bodyResolveComponents.samResolver.getSamConstructor(matchedSymbol.fir) ?: return ProcessorAction.NEXT
+
+    return processor(function.symbol)
+}
+
+private fun processConstructors(
+    matchedSymbol: FirClassLikeSymbol<*>?,
+    processor: (FirFunctionSymbol<*>) -> ProcessorAction,
+    session: FirSession,
+    scopeSession: ScopeSession,
+    name: Name
+): ProcessorAction {
+    try {
+        if (matchedSymbol != null) {
+            val scope = when (matchedSymbol) {
+                is FirTypeAliasSymbol -> {
+                    val type = matchedSymbol.fir.expandedTypeRef.coneTypeUnsafe<ConeClassLikeType>().fullyExpandedType(session)
+                    val basicScope = type.scope(session, scopeSession)
+
+                    if (basicScope != null && type.typeArguments.isNotEmpty()) {
+                        prepareSubstitutingScopeForTypeAliasConstructors(
+                            matchedSymbol, type, session, basicScope
+                        ) ?: return ProcessorAction.STOP
+                    } else basicScope
+                }
+                is FirClassSymbol -> matchedSymbol.buildUseSiteMemberScope(session, scopeSession)
+            }
+
+            val constructorName = when (matchedSymbol) {
+                is FirTypeAliasSymbol -> finalExpansionName(matchedSymbol, session) ?: return ProcessorAction.NEXT
+                is FirClassSymbol -> name
+            }
+
+            //TODO: why don't we use declared member scope at this point?
+            if (scope != null && scope.processFunctionsByName(
+                    constructorName,
+                    processor
+                ) == ProcessorAction.STOP
+            ) {
+                return ProcessorAction.STOP
+            }
+        }
+        return ProcessorAction.NEXT
+    } catch (e: Throwable) {
+        throw RuntimeException("While processing constructors", e)
+    }
+}
+
+private class TypeAliasConstructorsSubstitutingScope(
+    private val typeAliasSymbol: FirTypeAliasSymbol,
+    private val substitutor: ConeSubstitutor,
+    private val delegatingScope: FirScope
+) : FirScope() {
+    override fun processFunctionsByName(name: Name, processor: (FirFunctionSymbol<*>) -> ProcessorAction): ProcessorAction {
+        return delegatingScope.processFunctionsByName(name) {
+            val toProcess = if (it is FirConstructorSymbol) {
+                it.fir.createTypeAliasConstructor(substitutor, typeAliasSymbol.fir.typeParameters).symbol
+            } else {
+                it
+            }
+
+            processor(toProcess)
+        }
+    }
+}
+
+private fun prepareSubstitutingScopeForTypeAliasConstructors(
+    typeAliasSymbol: FirTypeAliasSymbol,
+    expandedType: ConeClassLikeType,
+    session: FirSession,
+    delegatingScope: FirScope
+): FirScope? {
+    val expandedClass = expandedType.lookupTag.toSymbol(session)?.fir as? FirRegularClass ?: return null
+
+    val resultingTypeArguments = expandedType.typeArguments.map {
+        // We don't know how to handle cases like yet
+        // typealias A = ArrayList<*>()
+        it as? ConeKotlinType ?: return null
+    }
+
+    val substitutor = substitutorByMap(
+        expandedClass.typeParameters.map { it.symbol }.zip(resultingTypeArguments).toMap()
+    );
+
+    return TypeAliasConstructorsSubstitutingScope(typeAliasSymbol, substitutor, delegatingScope)
+}
+
+private fun FirConstructor.createTypeAliasConstructor(
+    substitutor: ConeSubstitutor,
+    typeParameters: List<FirTypeParameter>
+): FirConstructor {
+    val newReturnTypeRef = returnTypeRef.substitute(substitutor)
+
+    val newParameterTypeRefs = valueParameters.map { valueParameter ->
+        valueParameter.returnTypeRef.substitute(substitutor)
+    }
+
+    if (newReturnTypeRef == null && newParameterTypeRefs.all { it == null }) return this
+
+    return FirConstructorImpl(
+        source, session, newReturnTypeRef ?: returnTypeRef, receiverTypeRef, status,
+        FirConstructorSymbol(symbol.callableId, overriddenSymbol = symbol)
+    ).apply {
+        resolvePhase = this@createTypeAliasConstructor.resolvePhase
+        valueParameters += this@createTypeAliasConstructor.valueParameters.zip(
+            newParameterTypeRefs
+        ) { valueParameter, newTypeRef ->
+            with(valueParameter) {
+                FirValueParameterImpl(
+                    source,
+                    session,
+                    newTypeRef ?: returnTypeRef,
+                    name,
+                    FirVariableSymbol(valueParameter.symbol.callableId),
+                    defaultValue,
+                    isCrossinline,
+                    isNoinline,
+                    isVararg
+                )
+            }
+        }
+        this.typeParameters += typeParameters
+    }
+}
+
+private fun FirTypeRef.substitute(substitutor: ConeSubstitutor): FirResolvedTypeRef? =
+    coneTypeUnsafe<ConeKotlinType>()
+        .let(substitutor::substituteOrNull)
+        ?.let { FirResolvedTypeRefImpl(source, it) }

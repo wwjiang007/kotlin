@@ -6,21 +6,26 @@
 package org.jetbrains.kotlin.fir.resolve.calls
 
 import org.jetbrains.kotlin.fir.declarations.FirAnonymousFunction
+import org.jetbrains.kotlin.fir.expressions.FirCallableReferenceAccess
+import org.jetbrains.kotlin.fir.resolve.DoubleColonLHS
 import org.jetbrains.kotlin.fir.resolve.constructType
-import org.jetbrains.kotlin.fir.service
+import org.jetbrains.kotlin.fir.resolve.createFunctionalType
+import org.jetbrains.kotlin.fir.resolve.firSymbolProvider
 import org.jetbrains.kotlin.fir.symbols.StandardClassIds
+import org.jetbrains.kotlin.fir.symbols.impl.ConeClassLikeLookupTagImpl
 import org.jetbrains.kotlin.fir.symbols.invoke
 import org.jetbrains.kotlin.fir.types.*
+import org.jetbrains.kotlin.fir.types.impl.ConeClassLikeTypeImpl
 import org.jetbrains.kotlin.resolve.calls.inference.ConstraintSystemBuilder
+import org.jetbrains.kotlin.resolve.calls.inference.model.SimpleConstraintSystemConstraintPosition
 import org.jetbrains.kotlin.resolve.calls.model.PostponedResolvedAtomMarker
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
-fun preprocessLambdaArgument(
+fun Candidate.preprocessLambdaArgument(
     csBuilder: ConstraintSystemBuilder,
     argument: FirAnonymousFunction,
     expectedType: ConeKotlinType?,
     expectedTypeRef: FirTypeRef,
-    acceptLambdaAtoms: (PostponedResolvedAtomMarker) -> Unit,
     forceResolution: Boolean = false
 ) {
     if (expectedType != null && !forceResolution && csBuilder.isTypeVariable(expectedType)) {
@@ -32,6 +37,9 @@ fun preprocessLambdaArgument(
             ?: extraLambdaInfo(expectedType, expectedTypeRef, argument, csBuilder)
 
     if (expectedType != null) {
+        // TODO: add SAM conversion processing
+        val lambdaType = createFunctionalType(resolvedArgument.parameters, resolvedArgument.receiver, resolvedArgument.returnType)
+        csBuilder.addSubtypeConstraint(lambdaType, expectedType, SimpleConstraintSystemConstraintPosition)
 //        val lambdaType = createFunctionType(
 //            csBuilder.builtIns, Annotations.EMPTY, resolvedArgument.receiver,
 //            resolvedArgument.parameters, null, resolvedArgument.returnType, resolvedArgument.isSuspend
@@ -39,15 +47,21 @@ fun preprocessLambdaArgument(
 //        csBuilder.addSubtypeConstraint(lambdaType, expectedType, ArgumentConstraintPosition(argument))
     }
 
-    acceptLambdaAtoms(resolvedArgument)
+    postponedAtoms += resolvedArgument
 }
 
+fun Candidate.preprocessCallableReference(
+    argument: FirCallableReferenceAccess,
+    expectedType: ConeKotlinType
+) {
+    val lhs = bodyResolveComponents.doubleColonExpressionResolver.resolveDoubleColonLHS(argument)
+    postponedAtoms += ResolvedCallableReferenceAtom(argument, expectedType, lhs)
+}
 
-private val ConeKotlinType.isBuiltinFunctionalType: Boolean
-    get () {
-        val type = this
-        return when (type) {
-            is ConeClassType -> type.lookupTag.classId.asString().startsWith("kotlin/Function")
+val ConeKotlinType.isBuiltinFunctionalType: Boolean
+    get() {
+        return when (this) {
+            is ConeClassLikeType -> this.lookupTag.classId.asString().startsWith("kotlin/Function")
             else -> false
         }
     }
@@ -57,7 +71,7 @@ private val ConeKotlinType.isSuspendFunctionType: Boolean
     get() {
         val type = this
         return when (type) {
-            is ConeClassType -> {
+            is ConeClassLikeType -> {
                 val classId = type.lookupTag.classId
                 classId.packageFqName.asString() == "kotlin" && classId.relativeClassName.asString().startsWith("SuspendFunction")
             }
@@ -66,28 +80,22 @@ private val ConeKotlinType.isSuspendFunctionType: Boolean
     }
 
 private fun ConeKotlinType.receiverType(expectedTypeRef: FirTypeRef): ConeKotlinType? {
-    if (isFunctionalTypeWithReceiver(expectedTypeRef)) {
+    if (expectedTypeRef.isExtensionFunctionType()) {
         return (this.typeArguments.first() as ConeTypedProjection).type
     }
     return null
 }
 
-private fun isFunctionalTypeWithReceiver(typeRef: FirTypeRef) =
-    typeRef.annotations.any {
-        val coneTypeSafe = it.annotationTypeRef.coneTypeSafe<ConeClassType>() ?: return@any false
-        coneTypeSafe.lookupTag.classId.asString() == "kotlin/ExtensionFunctionType"
-    }
-
-private val ConeKotlinType.returnType: ConeKotlinType?
+val ConeKotlinType.returnType: ConeKotlinType?
     get() {
-        require(this is ConeClassType)
+        require(this is ConeClassLikeType)
         val projection = typeArguments.last()
         return (projection as? ConeTypedProjection)?.type
     }
 
-private val ConeKotlinType.valueParameterTypes: List<ConeKotlinType?>
+val ConeKotlinType.valueParameterTypes: List<ConeKotlinType?>
     get() {
-        require(this is ConeClassType)
+        require(this is ConeClassLikeType)
         return typeArguments.dropLast(1).map {
             (it as? ConeTypedProjection)?.type
         }
@@ -107,7 +115,7 @@ private fun extraLambdaInfo(
     val isSuspend = expectedType?.isSuspendFunctionType ?: false
 
     val isFunctionSupertype =
-        expectedType != null && expectedType.isBuiltinFunctionalType//isNotNullOrNullableFunctionSupertype(expectedType)
+        expectedType != null && expectedType.lowerBoundIfFlexible().isBuiltinFunctionalType//isNotNullOrNullableFunctionSupertype(expectedType)
     val argumentAsFunctionExpression = argument//.safeAs<FunctionExpression>()
 
     val typeVariable = TypeVariableForLambdaReturnType(argument, "_L")
@@ -118,7 +126,7 @@ private fun extraLambdaInfo(
             ?: expectedType?.typeArguments?.singleOrNull()?.safeAs<ConeTypedProjection>()?.type?.takeIf { isFunctionSupertype }
             ?: typeVariable.defaultType
 
-    val nothingType = StandardClassIds.Nothing(argument.session.service()).constructType(emptyArray(), false)
+    val nothingType = StandardClassIds.Nothing(argument.session.firSymbolProvider).constructType(emptyArray(), false)
     val parameters = argument.valueParameters?.map {
         it.returnTypeRef.coneTypeSafe<ConeKotlinType>() ?: nothingType
     } ?: emptyList()
@@ -134,12 +142,14 @@ internal fun extractLambdaInfoFromFunctionalType(
     expectedTypeRef: FirTypeRef,
     argument: FirAnonymousFunction
 ): ResolvedLambdaAtom? {
-    if (expectedType == null || !expectedType.isBuiltinFunctionalType) return null
-    val parameters = extractLambdaParameters(expectedType, argument)
+    if (expectedType == null) return null
+    if (expectedType is ConeFlexibleType) return extractLambdaInfoFromFunctionalType(expectedType.lowerBound, expectedTypeRef, argument)
+    if (!expectedType.isBuiltinFunctionalType) return null
 
     val argumentAsFunctionExpression = argument//.safeAs<FunctionExpression>()
     val receiverType = argumentAsFunctionExpression.receiverType ?: expectedType.receiverType(expectedTypeRef)
     val returnType = argumentAsFunctionExpression.returnType ?: expectedType.returnType ?: return null
+    val parameters = extractLambdaParameters(expectedType, argument, expectedTypeRef.isExtensionFunctionType())
 
     return ResolvedLambdaAtom(
         argument,
@@ -151,11 +161,11 @@ internal fun extractLambdaInfoFromFunctionalType(
     )
 }
 
-private fun extractLambdaParameters(expectedType: ConeKotlinType, argument: FirAnonymousFunction): List<ConeKotlinType> {
+private fun extractLambdaParameters(expectedType: ConeKotlinType, argument: FirAnonymousFunction, expectedTypeIsExtensionFunctionType: Boolean): List<ConeKotlinType> {
     val parameters = argument.valueParameters
-    val expectedParameters = expectedType.valueParameterTypes
+    val expectedParameters = expectedType.extractParametersForFunctionalType(expectedTypeIsExtensionFunctionType)
 
-    val nullableAnyType = StandardClassIds.Any(argument.session.service()).constructType(emptyArray(), true)
+    val nullableAnyType = StandardClassIds.Any(argument.session.firSymbolProvider).constructType(emptyArray(), true)
 
     if (parameters.isEmpty()) {
         return expectedParameters.map { it?.type ?: nullableAnyType }
@@ -167,8 +177,17 @@ private fun extractLambdaParameters(expectedType: ConeKotlinType, argument: FirA
     }
 }
 
-class TypeVariableForLambdaReturnType(val argument: FirAnonymousFunction, name: String) : ConeTypeVariable(name)
+private fun ConeKotlinType.extractParametersForFunctionalType(isExtensionFunctionType: Boolean): List<ConeKotlinType?> {
+    return valueParameterTypes.let {
+        if (isExtensionFunctionType) {
+            it.drop(1)
+        } else {
+            it
+        }
+    }
+}
 
+class TypeVariableForLambdaReturnType(val argument: FirAnonymousFunction, name: String) : ConeTypeVariable(name)
 
 class ResolvedLambdaAtom(
     val atom: FirAnonymousFunction,
@@ -194,4 +213,75 @@ class ResolvedLambdaAtom(
 
     override val inputTypes: Collection<ConeKotlinType> get() = receiver?.let { parameters + it } ?: parameters
     override val outputType: ConeKotlinType get() = returnType
+}
+
+class ResolvedCallableReferenceAtom(
+    val reference: FirCallableReferenceAccess,
+    val expectedType: ConeKotlinType?,
+    val lhs: DoubleColonLHS?
+) : PostponedResolvedAtomMarker {
+    override var analyzed: Boolean = false
+    var postponed: Boolean = false
+
+    var resultingCandidate: Pair<Candidate, CandidateApplicability>? = null
+
+    override val inputTypes: Collection<ConeKotlinType>
+        get() {
+            if (!postponed) return emptyList()
+            return extractInputOutputTypesFromCallableReferenceExpectedType(expectedType)?.inputTypes ?: listOfNotNull(expectedType)
+        }
+    override val outputType: ConeKotlinType?
+        get() {
+            if (!postponed) return null
+            return extractInputOutputTypesFromCallableReferenceExpectedType(expectedType)?.outputType
+        }
+}
+
+private data class InputOutputTypes(val inputTypes: List<ConeKotlinType>, val outputType: ConeKotlinType)
+
+private fun extractInputOutputTypesFromCallableReferenceExpectedType(expectedType: ConeKotlinType?): InputOutputTypes? {
+    if (expectedType == null) return null
+
+    return when {
+        expectedType.isBuiltinFunctionalType || expectedType.isSuspendFunctionType ->
+            extractInputOutputTypesFromFunctionType(expectedType)
+
+//        ReflectionTypes.isBaseTypeForNumberedReferenceTypes(expectedType) ->
+//            InputOutputTypes(emptyList(), expectedType.arguments.single().type.unwrap())
+//
+//        ReflectionTypes.isNumberedKFunction(expectedType) -> {
+//            val functionFromSupertype = expectedType.immediateSupertypes().first { it.isFunctionType }.unwrap()
+//            extractInputOutputTypesFromFunctionType(functionFromSupertype)
+//        }
+//
+//        ReflectionTypes.isNumberedKSuspendFunction(expectedType) -> {
+//            val kSuspendFunctionType = expectedType.immediateSupertypes().first { it.isSuspendFunctionType }.unwrap()
+//            extractInputOutputTypesFromFunctionType(kSuspendFunctionType)
+//        }
+//
+//        ReflectionTypes.isNumberedKPropertyOrKMutablePropertyType(expectedType) -> {
+//            val functionFromSupertype = expectedType.supertypes().first { it.isFunctionType }.unwrap()
+//            extractInputOutputTypesFromFunctionType(functionFromSupertype)
+//        }
+
+        else -> null
+    }
+}
+
+private fun extractInputOutputTypesFromFunctionType(functionType: ConeKotlinType): InputOutputTypes {
+    val receiver = null// TODO: functionType.receiverType()
+    val parameters = functionType.valueParameterTypes.map {
+        it ?: ConeClassLikeTypeImpl(
+            ConeClassLikeLookupTagImpl(StandardClassIds.Nothing), emptyArray(),
+            isNullable = false
+        )
+    }
+
+    val inputTypes = /*listOfNotNull(receiver) +*/ parameters
+    val outputType = functionType.returnType ?: ConeClassLikeTypeImpl(
+        ConeClassLikeLookupTagImpl(StandardClassIds.Any), emptyArray(),
+        isNullable = true
+    )
+
+    return InputOutputTypes(inputTypes, outputType)
 }

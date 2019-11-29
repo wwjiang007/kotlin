@@ -5,7 +5,6 @@
 
 package org.jetbrains.kotlin.checkers;
 
-import com.intellij.openapi.util.io.FileUtil;
 import kotlin.io.FilesKt;
 import kotlin.text.Charsets;
 import org.jetbrains.annotations.NotNull;
@@ -15,11 +14,9 @@ import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
 import org.jetbrains.kotlin.codegen.forTestCompile.ForTestCompileRuntime;
 import org.jetbrains.kotlin.config.CompilerConfiguration;
+import org.jetbrains.kotlin.config.JVMConfigurationKeys;
 import org.jetbrains.kotlin.parsing.KotlinParserDefinition;
-import org.jetbrains.kotlin.test.ConfigurationKind;
-import org.jetbrains.kotlin.test.InTextDirectivesUtils;
-import org.jetbrains.kotlin.test.KotlinTestUtils;
-import org.jetbrains.kotlin.test.TestJdkKind;
+import org.jetbrains.kotlin.test.*;
 import org.jetbrains.kotlin.test.testFramework.KtUsefulTestCase;
 
 import java.io.File;
@@ -75,6 +72,10 @@ public abstract class KotlinMultiFileTestWithJava<M, F> extends KtUsefulTestCase
             ContentRootsKt.addKotlinSourceRoot(configuration, kotlinSourceRoot.getPath());
         }
 
+        // Currently, we're testing IDE behavior when generating the .txt files for comparison, but this can be changed.
+        // The main difference is the fact that the new class file reading implementation doesn't load parameter names from JDK classes.
+        configuration.put(JVMConfigurationKeys.USE_PSI_CLASS_FILES_READING, true);
+
         performCustomConfiguration(configuration);
         return KotlinCoreEnvironment.createForTests(getTestRootDisposable(), configuration, getEnvironmentConfigFiles());
     }
@@ -104,12 +105,13 @@ public abstract class KotlinMultiFileTestWithJava<M, F> extends KtUsefulTestCase
         result.add(KotlinTestUtils.getAnnotationsJar());
         result.addAll(getExtraClasspath());
 
-        boolean loadAndroidAnnotations = InTextDirectivesUtils.isDirectiveDefined(
-                FilesKt.readText(file, Charsets.UTF_8), "ANDROID_ANNOTATIONS"
-        );
+        String fileText = FilesKt.readText(file, Charsets.UTF_8);
 
-        if (loadAndroidAnnotations) {
+        if (InTextDirectivesUtils.isDirectiveDefined(fileText, "ANDROID_ANNOTATIONS")) {
             result.add(ForTestCompileRuntime.androidAnnotationsForTests());
+        }
+        if (InTextDirectivesUtils.isDirectiveDefined(fileText, "STDLIB_JDK8")) {
+            result.add(ForTestCompileRuntime.runtimeJarForTestsWithJdk8());
         }
 
         return result;
@@ -159,7 +161,7 @@ public abstract class KotlinMultiFileTestWithJava<M, F> extends KtUsefulTestCase
     protected abstract void doMultiFileTest(File file, Map<String, ModuleAndDependencies> modules, List<F> files) throws Exception;
 
     protected List<F> createTestFiles(File file, String expectedText, Map<String, ModuleAndDependencies> modules) {
-        return KotlinTestUtils.createTestFiles(file.getName(), expectedText, new KotlinTestUtils.TestFileFactory<M, F>() {
+        return TestFiles.createTestFiles(file.getName(), expectedText, new TestFiles.TestFileFactory<M, F>() {
             @Override
             public F createFile(
                     @Nullable M module,

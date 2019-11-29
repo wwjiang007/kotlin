@@ -244,7 +244,11 @@ internal class DescriptorRendererImpl(
             if (type is UnresolvedType && presentableUnresolvedTypes) {
                 append(type.presentableName)
             } else {
-                append(type.constructor.toString()) // Debug name of an error type is more informative
+                if (type is ErrorType && !informativeErrorType) {
+                    append(type.presentableName)
+                } else {
+                    append(type.constructor.toString()) // Debug name of an error type is more informative
+                }
             }
             append(renderTypeArguments(type.arguments))
         } else {
@@ -481,7 +485,7 @@ internal class DescriptorRendererImpl(
             visibility = visibility.normalize()
         }
         if (!renderDefaultVisibility && visibility == Visibilities.DEFAULT_VISIBILITY) return false
-        builder.append(renderKeyword(visibility.displayName)).append(" ")
+        builder.append(renderKeyword(visibility.internalDisplayName)).append(" ")
         return true
     }
 
@@ -723,7 +727,8 @@ internal class DescriptorRendererImpl(
 
     private fun renderConstructor(constructor: ConstructorDescriptor, builder: StringBuilder) {
         builder.renderAnnotations(constructor)
-        val visibilityRendered = renderVisibility(constructor.visibility, builder)
+        val visibilityRendered = (options.renderDefaultVisibility || constructor.constructedClass.modality != Modality.SEALED)
+                && renderVisibility(constructor.visibility, builder)
         renderMemberKind(constructor, builder)
 
         val constructorKeywordRendered = renderConstructorKeyword || !constructor.isPrimary || visibilityRendered

@@ -8,17 +8,17 @@ package org.jetbrains.kotlin.fir.lightTree.fir
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.FirProperty
 import org.jetbrains.kotlin.fir.declarations.FirValueParameter
+import org.jetbrains.kotlin.fir.declarations.impl.FirDeclarationStatusImpl
 import org.jetbrains.kotlin.fir.declarations.impl.FirDefaultPropertyGetter
 import org.jetbrains.kotlin.fir.declarations.impl.FirDefaultPropertySetter
-import org.jetbrains.kotlin.fir.declarations.impl.FirMemberPropertyImpl
-import org.jetbrains.kotlin.fir.expressions.FirBlock
-import org.jetbrains.kotlin.fir.expressions.FirExpression
+import org.jetbrains.kotlin.fir.declarations.impl.FirPropertyImpl
+import org.jetbrains.kotlin.fir.diagnostics.DiagnosticKind
+import org.jetbrains.kotlin.fir.diagnostics.FirSimpleDiagnostic
 import org.jetbrains.kotlin.fir.expressions.impl.FirQualifiedAccessExpressionImpl
 import org.jetbrains.kotlin.fir.lightTree.fir.modifier.Modifier
-import org.jetbrains.kotlin.fir.references.FirPropertyFromParameterCallableReference
+import org.jetbrains.kotlin.fir.references.impl.FirPropertyFromParameterResolvedNamedReference
 import org.jetbrains.kotlin.fir.symbols.CallableId
 import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
-import org.jetbrains.kotlin.fir.types.FirErrorTypeRef
 import org.jetbrains.kotlin.fir.types.FirImplicitTypeRef
 import org.jetbrains.kotlin.fir.types.impl.FirErrorTypeRefImpl
 
@@ -37,34 +37,37 @@ class ValueParameter(
         val name = this.firValueParameter.name
         var type = this.firValueParameter.returnTypeRef
         if (type is FirImplicitTypeRef) {
-            type = FirErrorTypeRefImpl(null, "Incomplete code")
+            type = FirErrorTypeRefImpl(null, FirSimpleDiagnostic("Incomplete code", DiagnosticKind.Syntax))
         }
 
-        return FirMemberPropertyImpl(
-            session,
+        val status = FirDeclarationStatusImpl(modifiers.getVisibility(), modifiers.getModality()).apply {
+            isExpect = modifiers.hasExpect()
+            isActual = modifiers.hasActual()
+            isOverride = modifiers.hasOverride()
+            isConst = false
+            isLateInit = false
+        }
+
+        return FirPropertyImpl(
             null,
-            FirPropertySymbol(callableId),
+            session,
+            type,
+            null,
             name,
-            modifiers.getVisibility(),
-            modifiers.getModality(),
-            modifiers.hasExpect(),
-            modifiers.hasActual(),
-            isOverride = modifiers.hasOverride(),
-            isConst = false,
-            isLateInit = false,
-            receiverTypeRef = null,
-            returnTypeRef = type,
-            isVar = this.isVar,
-            initializer = FirQualifiedAccessExpressionImpl(null).apply {
-                calleeReference = FirPropertyFromParameterCallableReference(
+            FirQualifiedAccessExpressionImpl(null).apply {
+                calleeReference = FirPropertyFromParameterResolvedNamedReference(
                     null, name, this@ValueParameter.firValueParameter.symbol
                 )
             },
-            delegate = null
+            null,
+            this.isVar,
+            FirPropertySymbol(callableId),
+            false,
+            status
         ).apply {
             annotations += this@ValueParameter.firValueParameter.annotations
-            getter = FirDefaultPropertyGetter(session, null, type, modifiers.getVisibility())
-            setter = if (this.isVar) FirDefaultPropertySetter(session, null, type, modifiers.getVisibility()) else null
+            getter = FirDefaultPropertyGetter(null, session, type, modifiers.getVisibility())
+            setter = if (this.isVar) FirDefaultPropertySetter(null, session, type, modifiers.getVisibility()) else null
         }
     }
 }

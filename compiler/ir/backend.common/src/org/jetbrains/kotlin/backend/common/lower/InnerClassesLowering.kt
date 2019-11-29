@@ -5,18 +5,12 @@
 
 package org.jetbrains.kotlin.backend.common.lower
 
-import org.jetbrains.kotlin.backend.common.BackendContext
-import org.jetbrains.kotlin.backend.common.BodyLoweringPass
-import org.jetbrains.kotlin.backend.common.ClassLoweringPass
-import org.jetbrains.kotlin.backend.common.IrElementTransformerVoidWithContext
+import org.jetbrains.kotlin.backend.common.*
 import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.builders.irGet
 import org.jetbrains.kotlin.ir.builders.irSetField
-import org.jetbrains.kotlin.ir.declarations.IrClass
-import org.jetbrains.kotlin.ir.declarations.IrConstructor
-import org.jetbrains.kotlin.ir.declarations.IrFunction
-import org.jetbrains.kotlin.ir.declarations.IrValueParameter
+import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
@@ -122,9 +116,9 @@ val innerClassConstructorCallsPhase = makeIrFilePhase(
     description = "Handle constructor calls for inner classes"
 )
 
-class InnerClassConstructorCallsLowering(val context: BackendContext) : BodyLoweringPass {
-    override fun lower(irBody: IrBody) {
-        irBody.transformChildrenVoid(object : IrElementTransformerVoid() {
+class InnerClassConstructorCallsLowering(val context: BackendContext) : FileLoweringPass {
+    override fun lower(irFile: IrFile) {
+        irFile.transformChildrenVoid(object : IrElementTransformerVoid() {
             override fun visitConstructorCall(expression: IrConstructorCall): IrExpression {
                 expression.transformChildrenVoid(this)
 
@@ -134,8 +128,9 @@ class InnerClassConstructorCallsLowering(val context: BackendContext) : BodyLowe
                 if (!parent.isInner) return expression
 
                 val newCallee = context.declarationFactory.getInnerClassConstructorWithOuterThisParameter(callee.owner)
+                val classTypeParametersCount = expression.typeArgumentsCount - expression.constructorTypeArgumentsCount
                 val newCall = IrConstructorCallImpl.fromSymbolOwner(
-                    expression.startOffset, expression.endOffset, expression.type, newCallee.symbol, expression.origin
+                    expression.startOffset, expression.endOffset, expression.type, newCallee.symbol, classTypeParametersCount, expression.origin
                 )
 
                 newCall.copyTypeArgumentsFrom(expression)
@@ -156,8 +151,7 @@ class InnerClassConstructorCallsLowering(val context: BackendContext) : BodyLowe
 
                 val newCallee = context.declarationFactory.getInnerClassConstructorWithOuterThisParameter(classConstructor)
                 val newCall = IrDelegatingConstructorCallImpl(
-                    expression.startOffset, expression.endOffset, context.irBuiltIns.unitType, newCallee.symbol, newCallee.descriptor,
-                    expression.typeArgumentsCount
+                    expression.startOffset, expression.endOffset, context.irBuiltIns.unitType, newCallee.symbol, expression.typeArgumentsCount
                 ).apply { copyTypeArgumentsFrom(expression) }
 
                 newCall.putValueArgument(0, dispatchReceiver)
@@ -183,19 +177,17 @@ class InnerClassConstructorCallsLowering(val context: BackendContext) : BodyLowe
                         endOffset,
                         type,
                         newCallee.symbol,
-                        newCallee.descriptor,
                         typeArgumentsCount,
                         origin
                     )
                 }
 
                 newReference.let {
+                    it.copyTypeArgumentsFrom(expression)
+                    // TODO: This is wrong, since we moved all parameters into value parameters,
+                    //       but changing it breaks JS IR in CallableReferenceLowering.
                     it.dispatchReceiver = expression.dispatchReceiver
                     it.extensionReceiver = expression.extensionReceiver
-                    for (t in 0 until expression.typeArgumentsCount) {
-                        it.putTypeArgument(t, expression.getTypeArgument(t))
-                    }
-
                     for (v in 0 until expression.valueArgumentsCount) {
                         it.putValueArgument(v, expression.getValueArgument(v))
                     }

@@ -26,7 +26,9 @@ import static com.intellij.openapi.editor.colors.TextAttributesKey.createTextAtt
 public class KotlinHighlightingColors {
     // default keys (mostly syntax elements)
     public static final TextAttributesKey KEYWORD = createTextAttributesKey("KOTLIN_KEYWORD", JavaHighlightingColors.KEYWORD);
-    public static final TextAttributesKey BUILTIN_ANNOTATION = createTextAttributesKey("KOTLIN_BUILTIN_ANNOTATION", JavaHighlightingColors.KEYWORD);
+    public static final TextAttributesKey BUILTIN_ANNOTATION = createTextAttributesKey("KOTLIN_BUILTIN_ANNOTATION", KotlinHighlightingColors.KEYWORD);
+    public static final TextAttributesKey VAL_KEYWORD = createTextAttributesKey("KOTLIN_KEYWORD_VAL", KotlinHighlightingColors.KEYWORD);
+    public static final TextAttributesKey VAR_KEYWORD = createTextAttributesKey("KOTLIN_KEYWORD_VAR", KotlinHighlightingColors.KEYWORD);
     public static final TextAttributesKey NUMBER = createTextAttributesKey("KOTLIN_NUMBER", DefaultLanguageHighlighterColors.NUMBER);
     public static final TextAttributesKey STRING = createTextAttributesKey("KOTLIN_STRING", DefaultLanguageHighlighterColors.STRING);
     public static final TextAttributesKey STRING_ESCAPE = createTextAttributesKey("KOTLIN_STRING_ESCAPE", DefaultLanguageHighlighterColors.VALID_STRING_ESCAPE);
@@ -73,15 +75,18 @@ public class KotlinHighlightingColors {
     public static final TextAttributesKey SYNTHETIC_EXTENSION_PROPERTY = createTextAttributesKey("KOTLIN_SYNTHETIC_EXTENSION_PROPERTY", EXTENSION_PROPERTY);
     public static final TextAttributesKey DYNAMIC_PROPERTY_CALL = createTextAttributesKey("KOTLIN_DYNAMIC_PROPERTY_CALL");
     public static final TextAttributesKey ANDROID_EXTENSIONS_PROPERTY_CALL = createTextAttributesKey("KOTLIN_ANDROID_EXTENSIONS_PROPERTY_CALL");
+    public static final TextAttributesKey INSTANCE_PROPERTY_CUSTOM_PROPERTY_DECLARATION = createTextAttributesKey("KOTLIN_INSTANCE_PROPERTY_CUSTOM_PROPERTY_DECLARATION", INSTANCE_PROPERTY);
+    public static final TextAttributesKey PACKAGE_PROPERTY_CUSTOM_PROPERTY_DECLARATION = createTextAttributesKey("KOTLIN_PACKAGE_PROPERTY_CUSTOM_PROPERTY_DECLARATION", PACKAGE_PROPERTY);
 
     // functions
-    public static final TextAttributesKey FUNCTION_LITERAL_DEFAULT_PARAMETER = createTextAttributesKey("KOTLIN_CLOSURE_DEFAULT_PARAMETER");
+    public static final TextAttributesKey FUNCTION_LITERAL_DEFAULT_PARAMETER = createTextAttributesKey("KOTLIN_CLOSURE_DEFAULT_PARAMETER", PARAMETER);
     public static final TextAttributesKey FUNCTION_DECLARATION = createTextAttributesKey("KOTLIN_FUNCTION_DECLARATION", DefaultLanguageHighlighterColors.FUNCTION_DECLARATION);
     public static final TextAttributesKey FUNCTION_CALL = createTextAttributesKey("KOTLIN_FUNCTION_CALL", DefaultLanguageHighlighterColors.FUNCTION_CALL);
     public static final TextAttributesKey PACKAGE_FUNCTION_CALL = createTextAttributesKey("KOTLIN_PACKAGE_FUNCTION_CALL", DefaultLanguageHighlighterColors.STATIC_METHOD);
     public static final TextAttributesKey EXTENSION_FUNCTION_CALL = createTextAttributesKey("KOTLIN_EXTENSION_FUNCTION_CALL", DefaultLanguageHighlighterColors.STATIC_METHOD);
     public static final TextAttributesKey CONSTRUCTOR_CALL = createTextAttributesKey("KOTLIN_CONSTRUCTOR", DefaultLanguageHighlighterColors.FUNCTION_CALL);
     public static final TextAttributesKey DYNAMIC_FUNCTION_CALL = createTextAttributesKey("KOTLIN_DYNAMIC_FUNCTION_CALL");
+    public static final TextAttributesKey SUSPEND_FUNCTION_CALL = createTextAttributesKey("KOTLIN_SUSPEND_FUNCTION_CALL", KotlinHighlightingColors.FUNCTION_CALL);
     public static final TextAttributesKey VARIABLE_AS_FUNCTION_CALL = createTextAttributesKey("KOTLIN_VARIABLE_AS_FUNCTION");
     public static final TextAttributesKey VARIABLE_AS_FUNCTION_LIKE_CALL = createTextAttributesKey("KOTLIN_VARIABLE_AS_FUNCTION_LIKE");
 

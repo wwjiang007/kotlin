@@ -5,6 +5,8 @@ plugins {
 
 jvmTarget = "1.6"
 
+publish()
+
 dependencies {
     compile(project(":kotlin-script-runtime"))
     compile(kotlinStdlib())
@@ -15,6 +17,8 @@ dependencies {
     compileOnly(project(":compiler:cli-common"))
     compileOnly(project(":kotlin-reflect-api"))
     compileOnly(intellijCoreDep())
+    publishedRuntime(project(":kotlin-compiler"))
+    publishedRuntime(project(":kotlin-reflect"))
 }
 
 sourceSets {
@@ -22,7 +26,9 @@ sourceSets {
     "test" {}
 }
 
-publish()
+tasks.withType<org.jetbrains.kotlin.gradle.dsl.KotlinCompile<*>> {
+    kotlinOptions.freeCompilerArgs += "-Xallow-kotlin-package"
+}
 
 standardPublicJars()
 

@@ -5,226 +5,207 @@
 
 package org.jetbrains.kotlin.backend.jvm.lower
 
-import org.jetbrains.kotlin.backend.common.ClassLoweringPass
-import org.jetbrains.kotlin.backend.common.CommonBackendContext
+import org.jetbrains.kotlin.backend.common.FileLoweringPass
 import org.jetbrains.kotlin.backend.common.IrElementTransformerVoidWithContext
 import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.backend.common.ir.createImplicitParameterDeclarationWithWrappedDescriptor
 import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
 import org.jetbrains.kotlin.backend.common.lower.irBlock
 import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
+import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
-import org.jetbrains.kotlin.backend.jvm.localDeclarationsPhase
+import org.jetbrains.kotlin.backend.jvm.ir.erasedUpperBound
+import org.jetbrains.kotlin.codegen.SamWrapperCodegen.FUNCTION_FIELD_NAME
+import org.jetbrains.kotlin.codegen.SamWrapperCodegen.SAM_WRAPPER_SUFFIX
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.builders.declarations.*
-import org.jetbrains.kotlin.ir.declarations.*
-import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.declarations.IrClass
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
+import org.jetbrains.kotlin.ir.declarations.IrFile
+import org.jetbrains.kotlin.ir.declarations.IrFunction
+import org.jetbrains.kotlin.ir.expressions.IrExpression
+import org.jetbrains.kotlin.ir.expressions.IrGetValue
+import org.jetbrains.kotlin.ir.expressions.IrTypeOperator
+import org.jetbrains.kotlin.ir.expressions.IrTypeOperatorCall
 import org.jetbrains.kotlin.ir.expressions.impl.IrInstanceInitializerCallImpl
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classifierOrFail
 import org.jetbrains.kotlin.ir.types.isNullable
-import org.jetbrains.kotlin.ir.util.constructors
-import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
-import org.jetbrains.kotlin.ir.util.functions
-import org.jetbrains.kotlin.ir.util.isNullConst
-import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
+import org.jetbrains.kotlin.ir.types.makeNullable
+import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.load.java.JavaVisibilities
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.util.OperatorNameConventions
 
 internal val singleAbstractMethodPhase = makeIrFilePhase(
     ::SingleAbstractMethodLowering,
     name = "SingleAbstractMethod",
-    description = "Replace SAM conversions with instances of interface-implementing classes",
-    prerequisite = setOf(localDeclarationsPhase)
+    description = "Replace SAM conversions with instances of interface-implementing classes"
 )
 
-class SingleAbstractMethodLowering(val context: CommonBackendContext) : ClassLoweringPass {
-    override fun lower(irClass: IrClass) {
-        val cachedImplementations = mutableMapOf<Pair<IrType, IrType>, IrClass>()
-        val localImplementations = mutableListOf<IrClass>()
-        irClass.transformChildrenVoid(object : IrElementTransformerVoidWithContext() {
-            override fun visitTypeOperator(expression: IrTypeOperatorCall): IrExpression {
-                if (expression.operator != IrTypeOperator.SAM_CONVERSION)
-                    return super.visitTypeOperator(expression)
-                val superType = expression.typeOperand
-                val invokable = expression.argument.transform(this, null)
-                // Running in the class context, so empty scope means this is a field/anonymous initializer.
-                val scopeOwnerSymbol = currentScope?.scope?.scopeOwnerSymbol ?: irClass.symbol
-                return context.createIrBuilder(scopeOwnerSymbol).irBlock(invokable, null, superType) {
-                    // Not an exhaustive check, but enough to cover the most common cases.
-                    if (invokable is IrFunctionReference) {
-                        // Runnable(::function)
-                        +createFunctionProxyInstance(superType, invokable)
-                    } else if (invokable is IrBlock && invokable.statements.last() is IrFunctionReference) {
-                        // Runnable { lambda }
-                        for (statement in invokable.statements.dropLast(1))
-                            +statement
-                        +createFunctionProxyInstance(superType, invokable.statements.last() as IrFunctionReference)
-                    } else {
-                        // Fall back to materializing an invokable object.
-                        +createObjectProxyInstance(superType, invokable, expression)
-                    }
-                }
+class SingleAbstractMethodLowering(val context: JvmBackendContext) : FileLoweringPass, IrElementTransformerVoidWithContext() {
+    // SAM wrappers are cached, either in the file class (if it exists), or in a top-level enclosing class.
+    // In the latter case, the names of SAM wrappers depend on the order of classes in the file. For example:
+    //
+    //    class A {
+    //      fun f(run: () -> Unit) = Runnable(run)
+    //    }
+    //
+    //    class B {
+    //      fun g(run: () -> Unit) = Runnable(run)
+    //      fun h(p: (String) -> Boolean) = Predicate(p)
+    //    }
+    //
+    // This code creates two SAM wrappers, `A$sam$java_lang_Runnable$0`, which is used in both
+    // `A.f` and `B.g`, as well as `B$sam$java_util_function_Predicate$0`, which is used in `B.h`.
+    //
+    // Additionally, we need to cache SAM wrappers inside inline functions separately from those
+    // outside of inline functions. Outside of inline functions we generate package private wrappers
+    // with name prefix "sam$". In the scope of an inline function we generate public wrappers with
+    // name prefix "sam$i$".
+    //
+    // Coming from the frontend, every SAM interface is associated with exactly one function type
+    // (see SamType.getKotlinFunctionType). This is why we can cache implementations just based on
+    // the superType.
+    private val cachedImplementations = mutableMapOf<IrType, IrClass>()
+    private val inlineCachedImplementations = mutableMapOf<IrType, IrClass>()
+    private var enclosingClass: IrClass? = null
+
+    override fun lower(irFile: IrFile) {
+        enclosingClass = irFile.declarations.filterIsInstance<IrClass>().find { it.origin == IrDeclarationOrigin.FILE_CLASS }
+        irFile.transformChildrenVoid()
+
+        for (wrapper in cachedImplementations.values + inlineCachedImplementations.values) {
+            val parentClass = wrapper.parent as IrClass
+            parentClass.declarations += wrapper
+        }
+    }
+
+    override fun visitClassNew(declaration: IrClass): IrStatement {
+        enclosingClass = enclosingClass ?: declaration
+        super.visitClassNew(declaration)
+        if (enclosingClass == declaration)
+            enclosingClass = null
+        return declaration
+    }
+
+    override fun visitTypeOperator(expression: IrTypeOperatorCall): IrExpression {
+        if (expression.operator != IrTypeOperator.SAM_CONVERSION)
+            return super.visitTypeOperator(expression)
+        // TODO: there must be exactly one wrapper per Java interface; ideally, if the interface has generic
+        //       parameters, so should the wrapper. Currently, we just erase them and generate something that
+        //       erases to the same result at codegen time.
+        val erasedSuperType = expression.typeOperand.erasedUpperBound.defaultType
+        val superType = if (expression.typeOperand.isNullable()) erasedSuperType.makeNullable() else erasedSuperType
+        val invokable = expression.argument.transform(this, null)
+        context.createIrBuilder(currentScope!!.scope.scopeOwnerSymbol).apply {
+            // Do not generate a wrapper class for null, it has no invoke() anyway.
+            if (invokable.isNullConst())
+                return invokable
+
+            val inInlineFunctionScope = allScopes.any { scope -> (scope.irElement as? IrFunction)?.isInline ?: false }
+            val cache = if (inInlineFunctionScope) inlineCachedImplementations else cachedImplementations
+            val implementation = cache.getOrPut(superType) {
+                createObjectProxy(superType, inInlineFunctionScope)
             }
 
-            // Construct a class that implements the specified SAM interface and contains a bunch of fields
-            // in which the arguments to the constructor are stored:
-            //     class sam$n(private val arg0: T0, ...) { override fun method(...) = <whatever buildOverride returns> }
-            private fun implement(
-                superType: IrType,
-                parameters: List<IrType>,
-                attributeOwner: IrAttributeContainer,
-                buildOverride: IrSimpleFunction.(List<IrField>) -> IrBody
-            ): IrClass {
-                val superClass = superType.classifierOrFail.owner as IrClass
-                // The language documentation prohibits casting lambdas to classes, but if it was allowed,
-                // the `irDelegatingConstructorCall` in the constructor below would need to be modified.
-                assert(superClass.kind == ClassKind.INTERFACE) { "SAM conversion to an abstract class not allowed" }
-
-                val subclass = buildClass {
-                    name = Name.special("<sam adapter for ${superClass.fqNameWhenAvailable}>")
-                    origin = JvmLoweredDeclarationOrigin.GENERATED_SAM_IMPLEMENTATION
-                }.apply {
-                    createImplicitParameterDeclarationWithWrappedDescriptor()
-                    parent = irClass
-                    // TODO convert all type parameters to upper bounds? See the kt11696 test.
-                    superTypes += superType
-                }.copyAttributes(attributeOwner)
-
-                val fields = parameters.mapIndexed { i, fieldType ->
-                    subclass.addField {
-                        name = Name.identifier("arg$i")
-                        type = fieldType
-                        origin = subclass.origin
-                        visibility = Visibilities.PRIVATE
-                    }
-                }
-
-                subclass.addConstructor {
-                    origin = subclass.origin
-                    isPrimary = true
-                }.apply {
-                    for (field in fields) {
-                        addValueParameter {
-                            name = field.name
-                            type = field.type
-                            origin = subclass.origin
-                        }
-                    }
-                    body = context.createIrBuilder(symbol).irBlockBody(startOffset, endOffset) {
-                        +irDelegatingConstructorCall(context.irBuiltIns.anyClass.owner.constructors.single())
-                        for ((field, parameter) in fields.zip(valueParameters))
-                            +irSetField(irGet(subclass.thisReceiver!!), field, irGet(parameter))
-                        +IrInstanceInitializerCallImpl(startOffset, endOffset, subclass.symbol, context.irBuiltIns.unitType)
-                    }
-                }
-
-                val superMethod = superClass.functions.single { it.modality == Modality.ABSTRACT }
-                subclass.addFunction {
-                    name = superMethod.name
-                    returnType = superMethod.returnType
-                    visibility = superMethod.visibility
-                    origin = subclass.origin
-                }.apply {
-                    overriddenSymbols.add(superMethod.symbol)
-                    dispatchReceiverParameter = subclass.thisReceiver!!.copyTo(this)
-                    superMethod.valueParameters.mapTo(valueParameters) { it.copyTo(this) }
-                    body = buildOverride(fields)
-                }
-
-                return subclass
-            }
-
-            // Construct a class that wraps an invokable object into an implementation of an interface:
-            //     class sam$n(private val invokable: F) : Interface { override fun method(...) = invokable(...) }
-            private fun createObjectProxy(superType: IrType, invokableType: IrType, attributeOwner: IrAttributeContainer): IrClass =
-                implement(superType, listOf(invokableType), attributeOwner) { fields ->
-                    context.createIrBuilder(symbol).irBlockBody(startOffset, endOffset) {
-                        val invokableClass = invokableType.classifierOrFail.owner as IrClass
-                        +irReturn(irCall(invokableClass.functions.single { it.name == OperatorNameConventions.INVOKE }).apply {
-                            dispatchReceiver = irGetField(irGet(dispatchReceiverParameter!!), fields[0])
-                            valueParameters.forEachIndexed { i, parameter -> putValueArgument(i, irGet(parameter)) }
-                        })
-                    }
-                }
-
-            private fun IrBlockBuilder.createObjectProxyInstance(
-                superType: IrType, invokable: IrExpression, attributeOwner: IrAttributeContainer
-            ): IrExpression {
-                // Do not generate a wrapper class for null, it has no invoke() anyway.
-                if (invokable.isNullConst())
-                    return invokable
-                val implementation = cachedImplementations.getOrPut(superType to invokable.type) {
-                    createObjectProxy(superType, invokable.type, attributeOwner)
-                }
-                return if (superType.isNullable() && invokable.type.isNullable()) {
+            return if (superType.isNullable() && invokable.type.isNullable()) {
+                irBlock(invokable, null, superType) {
                     val invokableVariable = irTemporary(invokable)
-                    val instance = irCall(implementation.constructors.single()).apply { putValueArgument(0, irGet(invokableVariable)) }
-                    irIfNull(superType, irGet(invokableVariable), irNull(), instance)
-                } else {
-                    irCall(implementation.constructors.single()).apply { putValueArgument(0, invokable) }
+                    val instance = irCall(implementation.constructors.single()).apply {
+                        putValueArgument(0, irGet(invokableVariable))
+                    }
+                    +irIfNull(superType, irGet(invokableVariable), irNull(), instance)
                 }
+            } else if (invokable !is IrGetValue) {
+                // Hack for the JVM inliner: since the SAM wrappers might be regenerated, avoid putting complex logic
+                // between the creation of the wrapper and the call of its `<init>`. `MethodInliner` tends to break
+                // otherwise, e.g. if the argument constructs an anonymous object, resulting in new-new-<init>-<init>.
+                // (See KT-21781 for a similar problem with anonymous object constructor arguments.)
+                irBlock(invokable, null, superType) {
+                    val invokableVariable = irTemporary(invokable)
+                    +irCall(implementation.constructors.single()).apply { putValueArgument(0, irGet(invokableVariable)) }
+                }
+            } else {
+                irCall(implementation.constructors.single()).apply { putValueArgument(0, invokable) }
+            }
+        }
+    }
+
+    // Construct a class that wraps an invokable object into an implementation of an interface:
+    //     class sam$n(private val invokable: F) : Interface { override fun method(...) = invokable(...) }
+    private fun createObjectProxy(superType: IrType, generatePublicWrapper: Boolean): IrClass {
+        val superClass = superType.classifierOrFail.owner as IrClass
+        // The language documentation prohibits casting lambdas to classes, but if it was allowed,
+        // the `irDelegatingConstructorCall` in the constructor below would need to be modified.
+        assert(superClass.kind == ClassKind.INTERFACE) { "SAM conversion to an abstract class not allowed" }
+
+        val superFqName = superClass.fqNameWhenAvailable!!.asString().replace('.', '_')
+        val inlinePrefix = if (generatePublicWrapper) "\$i" else ""
+        val wrapperName = Name.identifier("sam$inlinePrefix\$$superFqName$SAM_WRAPPER_SUFFIX")
+        val superMethod = superClass.functions.single { it.modality == Modality.ABSTRACT }
+        // TODO: have psi2ir cast the argument to the correct function type. Also see the TODO
+        //       about type parameters in `visitTypeOperator`.
+        val wrappedFunctionClass = context.ir.symbols.functionN(superMethod.valueParameters.size).owner
+        val wrappedFunctionType = wrappedFunctionClass.defaultType
+
+        val wrapperVisibility = if (generatePublicWrapper) Visibilities.PUBLIC else JavaVisibilities.PACKAGE_VISIBILITY
+        val subclass = buildClass {
+            name = wrapperName
+            origin = JvmLoweredDeclarationOrigin.GENERATED_SAM_IMPLEMENTATION
+            visibility = wrapperVisibility
+        }.apply {
+            createImplicitParameterDeclarationWithWrappedDescriptor()
+            superTypes += superType
+            parent = enclosingClass!!
+        }
+
+        val field = subclass.addField {
+            name = Name.identifier(FUNCTION_FIELD_NAME)
+            type = wrappedFunctionType
+            origin = subclass.origin
+            visibility = Visibilities.PRIVATE
+        }
+
+        subclass.addConstructor {
+            origin = subclass.origin
+            isPrimary = true
+            visibility = wrapperVisibility
+        }.apply {
+            val parameter = addValueParameter {
+                name = field.name
+                type = field.type
+                origin = subclass.origin
             }
 
-            // This lowering is located after LocalDeclarationsLowering. On the one hand, this allows us to cache
-            // object-wrapping classes without checking if the types are local declarations or not. On the other hand,
-            // this means we need to manually create fields for all bound arguments when wrapping callable references.
-            private val IrFunctionReference.arguments: List<IrExpression?>
-                get() = listOf(dispatchReceiver).filter { symbol.owner.dispatchReceiverParameter != null } +
-                        listOf(extensionReceiver).filter { symbol.owner.extensionReceiverParameter != null } +
-                        (0 until valueArgumentsCount).map(::getValueArgument)
-
-            // Construct a class that forwards method calls to an existing function/method:
-            //     class sam$n(private val receiver: R) : Interface { override fun method(...) = receiver.target(...) }
-            //
-            // Unlike the above variant, this avoids materializing an invokable KFunction representing
-            // the target in CallableReferenceLowering, thus producing one less class. This is actually very
-            // common, as `Interface { something }` is a local function + a SAM-conversion of a reference
-            // to it into an implementation.
-            private fun createFunctionProxy(superType: IrType, reference: IrFunctionReference): IrClass =
-                implement(superType, reference.arguments.mapNotNull { it?.type }, reference) { fields ->
-                    context.createIrBuilder(symbol).irBlockBody(startOffset, endOffset) {
-                        +irReturn(irCall(reference.symbol).apply {
-                            var boundOffset = 0
-                            var offset = 0
-                            val arguments = reference.arguments.map {
-                                if (it != null)
-                                    irGetField(irGet(dispatchReceiverParameter!!), fields[boundOffset++])
-                                else
-                                    irGet(valueParameters[offset++])
-                            }.toMutableList()
-                            if (reference.symbol.owner.dispatchReceiverParameter != null) {
-                                dispatchReceiver = arguments.removeAt(0)
-                            }
-                            if (reference.symbol.owner.extensionReceiverParameter != null) {
-                                extensionReceiver = arguments.removeAt(0)
-                            }
-                            arguments.forEachIndexed(::putValueArgument)
-                        })
-                    }
-                }
-
-            private fun IrBlockBuilder.createFunctionProxyInstance(superType: IrType, reference: IrFunctionReference): IrExpression {
-                val implementation = createFunctionProxy(superType, reference)
-                if (reference.origin == IrStatementOrigin.ANONYMOUS_FUNCTION || reference.origin == IrStatementOrigin.LAMBDA) {
-                    val target = reference.symbol.owner
-                    implementation.functions.single().apply {
-                        annotations.addAll(target.annotations)
-                        valueParameters.forEachIndexed { i, p ->
-                            p.annotations.addAll(target.valueParameters[i].annotations)
-                        }
-                    }
-                }
-                localImplementations += implementation
-                return irCall(implementation.constructors.single()).apply {
-                    reference.arguments.filterNotNull().forEachIndexed(::putValueArgument)
-                }
+            body = context.createIrBuilder(symbol).irBlockBody(startOffset, endOffset) {
+                +irDelegatingConstructorCall(context.irBuiltIns.anyClass.owner.constructors.single())
+                +irSetField(irGet(subclass.thisReceiver!!), field, irGet(parameter))
+                +IrInstanceInitializerCallImpl(startOffset, endOffset, subclass.symbol, context.irBuiltIns.unitType)
             }
-        })
-        irClass.declarations += cachedImplementations.values
-        irClass.declarations += localImplementations
+        }
+
+        subclass.addFunction {
+            name = superMethod.name
+            returnType = superMethod.returnType
+            visibility = superMethod.visibility
+            origin = subclass.origin
+        }.apply {
+            overriddenSymbols += superMethod.symbol
+            dispatchReceiverParameter = subclass.thisReceiver!!.copyTo(this)
+            superMethod.valueParameters.mapTo(valueParameters) { it.copyTo(this) }
+            body = context.createIrBuilder(symbol).run {
+                irExprBody(irCall(wrappedFunctionClass.functions.single { it.name == OperatorNameConventions.INVOKE }).apply {
+                    dispatchReceiver = irGetField(irGet(dispatchReceiverParameter!!), field)
+                    valueParameters.forEachIndexed { i, parameter -> putValueArgument(i, irGet(parameter)) }
+                })
+            }
+        }
+
+        return subclass
     }
 }

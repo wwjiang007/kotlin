@@ -103,6 +103,19 @@ class KJvmReplCompilerImpl(val hostConfiguration: ScriptingHostConfiguration) : 
                 messageCollector
             )
 
+            val firstFailure = sourceDependencies.firstOrNull { it.sourceDependencies is ResultWithDiagnostics.Failure }
+                ?.let { it.sourceDependencies as ResultWithDiagnostics.Failure }
+
+            if (firstFailure != null)
+                return firstFailure
+
+            if (history.isEmpty()) {
+                val updatedConfiguration = ScriptDependenciesProvider.getInstance(context.environment.project)
+                    ?.getScriptConfiguration(snippetKtFile)?.configuration
+                    ?: context.baseScriptCompilationConfiguration
+                registerPackageFragmetProvidersIfNeeded(updatedConfiguration, context.environment)
+            }
+
             val analysisResult =
                 compilationState.analyzerEngine.analyzeReplLineWithImportedScripts(snippetKtFile, sourceFiles.drop(1), codeLine)
             AnalyzerWithCompilerReport.reportDiagnostics(analysisResult.diagnostics, errorHolder)
@@ -140,7 +153,7 @@ class KJvmReplCompilerImpl(val hostConfiguration: ScriptingHostConfiguration) : 
             KotlinCodegenFacade.generatePackage(
                 generationState,
                 snippetKtFile.script!!.containingKtFile.packageFqName,
-                setOf(snippetKtFile.script!!.containingKtFile),
+                sourceFiles,
                 CompilationErrorHandler.THROW_EXCEPTION
             )
 
@@ -154,11 +167,11 @@ class KJvmReplCompilerImpl(val hostConfiguration: ScriptingHostConfiguration) : 
                     sourceFiles.first(),
                     sourceDependencies
                 ) { ktFile ->
-                    dependenciesProvider?.getScriptConfigurationResult(ktFile)?.valueOrNull()?.configuration
+                    dependenciesProvider?.getScriptConfiguration(ktFile)?.configuration
                         ?: context.baseScriptCompilationConfiguration
                 }
 
-            ResultWithDiagnostics.Success(compiledScript, messageCollector.diagnostics)
+            compiledScript.asSuccess(messageCollector.diagnostics)
         }
 }
 

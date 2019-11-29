@@ -36,6 +36,9 @@ import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.completion.smart.SmartCompletion
 import org.jetbrains.kotlin.idea.completion.smart.SmartCompletionSession
+import org.jetbrains.kotlin.idea.statistics.CompletionFUSCollector.completionStatsData
+import org.jetbrains.kotlin.idea.statistics.CompletionTypeStats
+import org.jetbrains.kotlin.idea.statistics.FileTypeStats
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.*
@@ -167,9 +170,9 @@ class KotlinCompletionContributor : CompletionContributor() {
     private fun isInClassHeader(tokenBefore: PsiElement?): Boolean {
         val classOrObject = tokenBefore?.parents?.firstIsInstanceOrNull<KtClassOrObject>() ?: return false
         val name = classOrObject.nameIdentifier ?: return false
-        val body = classOrObject.getBody() ?: return false
+        val headerEnd = classOrObject.body?.startOffset ?: classOrObject.endOffset
         val offset = tokenBefore.startOffset
-        return name.endOffset <= offset && offset <= body.startOffset
+        return name.endOffset <= offset && offset <= headerEnd
     }
 
     private fun specialLambdaSignatureDummyIdentifier(tokenBefore: PsiElement?): String? {
@@ -240,20 +243,22 @@ class KotlinCompletionContributor : CompletionContributor() {
         val toFromOriginalFileMapper = ToFromOriginalFileMapper.create(parameters)
 
         if (position.node.elementType == KtTokens.LONG_TEMPLATE_ENTRY_START) {
-            val expression = (position.parent as KtBlockStringTemplateEntry).expression
+            val expression = (position.parent as? KtBlockStringTemplateEntry)?.expression
             if (expression is KtDotQualifiedExpression) {
-                val correctedPosition = (expression.selectorExpression as KtNameReferenceExpression).firstChild
-                // Workaround for KT-16848
-                // ex:
-                // expression: some.IntellijIdeaRulezzz
-                // correctedOffset: ^
-                // expression: some.funcIntellijIdeaRulezzz
-                // correctedOffset      ^
-                val correctedOffset = correctedPosition.endOffset - CompletionUtilCore.DUMMY_IDENTIFIER_TRIMMED.length
-                val correctedParameters = parameters.withPosition(correctedPosition, correctedOffset)
-                doComplete(correctedParameters, toFromOriginalFileMapper, result,
-                           lookupElementPostProcessor = { wrapLookupElementForStringTemplateAfterDotCompletion(it) })
-                return
+                val correctedPosition = (expression.selectorExpression as? KtNameReferenceExpression)?.firstChild
+                if (correctedPosition != null) {
+                    // Workaround for KT-16848
+                    // ex:
+                    // expression: some.IntellijIdeaRulezzz
+                    // correctedOffset: ^
+                    // expression: some.funcIntellijIdeaRulezzz
+                    // correctedOffset      ^
+                    val correctedOffset = correctedPosition.endOffset - CompletionUtilCore.DUMMY_IDENTIFIER_TRIMMED.length
+                    val correctedParameters = parameters.withPosition(correctedPosition, correctedOffset)
+                    doComplete(correctedParameters, toFromOriginalFileMapper, result,
+                               lookupElementPostProcessor = { wrapLookupElementForStringTemplateAfterDotCompletion(it) })
+                    return
+                }
             }
         }
 
@@ -266,6 +271,20 @@ class KotlinCompletionContributor : CompletionContributor() {
             result: CompletionResultSet,
             lookupElementPostProcessor: ((LookupElement) -> LookupElement)? = null
     ) {
+        val name = parameters.originalFile.virtualFile?.name ?: "default.kts"
+        completionStatsData = completionStatsData?.copy(
+            completionType = when (parameters.completionType) {
+                CompletionType.BASIC -> CompletionTypeStats.BASIC
+                CompletionType.CLASS_NAME -> CompletionTypeStats.BASIC //there is no class name anymore actually
+                CompletionType.SMART -> CompletionTypeStats.SMART
+            },
+            fileType = when {
+                name.endsWith(".kt") -> FileTypeStats.KT
+                name.endsWith(".gradle.kts") -> FileTypeStats.GRADLEKTS
+                else -> FileTypeStats.KTS
+            },
+            invocationCount = parameters.invocationCount
+        )
         val position = parameters.position
         if (position.getNonStrictParentOfType<PsiComment>() != null) {
             // don't stop here, allow other contributors to run

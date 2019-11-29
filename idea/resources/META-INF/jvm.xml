@@ -1,9 +1,4 @@
 <idea-plugin>
-    <extensionPoints>
-        <extensionPoint qualifiedName="org.jetbrains.kotlin.platformGradleDetector"
-                        interface="org.jetbrains.kotlin.idea.inspections.gradle.KotlinPlatformGradleDetector"/>
-    </extensionPoints>
-
     <application-components>
         <component>
             <implementation-class>org.jetbrains.kotlin.idea.JvmPluginStartupComponent</implementation-class>
@@ -16,9 +11,6 @@
         </component>
         <component>
             <implementation-class>org.jetbrains.kotlin.idea.configuration.ui.KotlinConfigurationCheckerComponent</implementation-class>
-        </component>
-        <component>
-            <implementation-class>org.jetbrains.kotlin.idea.scratch.ui.ScratchFileHook</implementation-class>
         </component>
         <component>
             <implementation-class>org.jetbrains.kotlin.idea.scratch.ScratchFileModuleInfoProvider</implementation-class>
@@ -63,17 +55,18 @@
         </action>
 
         <group id="Kotlin.XDebugger.Actions">
-            <action id="Kotlin.XDebugger.ToggleKotlinVariableView"
-                    class="org.jetbrains.kotlin.idea.debugger.ToggleKotlinVariablesView"
-                    icon="/org/jetbrains/kotlin/idea/icons/kotlin.png"
-                    text="Show Kotlin variables only"
-            />
+<!--            TODO(design)-->
+            <action id="Kotlin.XDebugger.CoroutinesDump"
+                class="org.jetbrains.kotlin.idea.debugger.coroutines.CoroutineDumpAction"
+            text="Get Coroutines Dump"
+            icon="/org/jetbrains/kotlin/idea/icons/kotlin.png"/>
         </group>
 
-        <group id="Kotlin.XDebugger.Watches.Tree.Toolbar">
-            <reference ref="Kotlin.XDebugger.ToggleKotlinVariableView"/>
-            <add-to-group group-id="XDebugger.Watches.Tree.Toolbar" relative-to-action="XDebugger.SwitchWatchesInVariables" anchor="after"/>
-        </group>
+        <action id="Kotlin.XDebugger.ToggleKotlinVariableView"
+                class="org.jetbrains.kotlin.idea.debugger.ToggleKotlinVariablesView"
+                text="Show Kotlin Variables Only">
+            <add-to-group group-id="XDebugger.Settings" relative-to-action="XDebugger.Inline" anchor="after"/>
+        </action>
 
         <action id="InspectBreakpointApplicability" class="org.jetbrains.kotlin.idea.debugger.breakpoints.InspectBreakpointApplicabilityAction"
                 text="Inspect Breakpoint Applicability" internal="true">
@@ -98,7 +91,7 @@
         <applicationService serviceImplementation="org.jetbrains.kotlin.idea.debugger.ToggleKotlinVariablesState"/>
 
         <debugger.asyncStackTraceProvider implementation="org.jetbrains.kotlin.idea.debugger.KotlinCoroutinesAsyncStackTraceProvider"/>
-        <debugger.jvmSmartStepIntoHandler implementation="org.jetbrains.kotlin.idea.debugger.stepping.KotlinSmartStepIntoHandler"/>
+        <debugger.jvmSmartStepIntoHandler implementation="org.jetbrains.kotlin.idea.debugger.stepping.smartStepInto.KotlinSmartStepIntoHandler"/>
         <debugger.positionManagerFactory implementation="org.jetbrains.kotlin.idea.debugger.KotlinPositionManagerFactory"/>
         <debugger.codeFragmentFactory implementation="org.jetbrains.kotlin.idea.debugger.evaluate.KotlinCodeFragmentFactory"/>
         <debuggerEditorTextProvider language="kotlin" implementationClass="org.jetbrains.kotlin.idea.debugger.KotlinEditorTextProvider"/>
@@ -118,6 +111,7 @@
         <debugger.javaBreakpointHandlerFactory implementation="org.jetbrains.kotlin.idea.debugger.breakpoints.KotlinFunctionBreakpointHandlerFactory"/>
         <debugger.jvmSteppingCommandProvider implementation="org.jetbrains.kotlin.idea.debugger.stepping.KotlinSteppingCommandProvider"/>
         <debugger.simplePropertyGetterProvider implementation="org.jetbrains.kotlin.idea.debugger.stepping.KotlinSimpleGetterProvider"/>
+        <runConfigurationExtension implementation="org.jetbrains.kotlin.idea.debugger.coroutines.CoroutinesDebugConfigurationExtension"/>
 
         <framework.type implementation="org.jetbrains.kotlin.idea.framework.JavaFrameworkType"/>
         <projectTemplatesFactory implementation="org.jetbrains.kotlin.idea.framework.KotlinTemplatesFactory" />
@@ -125,6 +119,7 @@
         <library.presentationProvider implementation="org.jetbrains.kotlin.idea.framework.JavaRuntimePresentationProvider"/>
 
         <configurationType implementation="org.jetbrains.kotlin.idea.run.KotlinRunConfigurationType"/>
+        <configurationType implementation="org.jetbrains.kotlin.idea.run.KotlinJUnitConfigurationType"/>
         <configurationType implementation="org.jetbrains.kotlin.idea.run.script.standalone.KotlinStandaloneScriptRunConfigurationType"/>
         <runConfigurationProducer implementation="org.jetbrains.kotlin.idea.run.KotlinRunConfigurationProducer"/>
         <runConfigurationProducer implementation="org.jetbrains.kotlin.idea.run.script.standalone.KotlinStandaloneScriptRunConfigurationProducer"/>
@@ -195,6 +190,10 @@
                    description="Enable bytecode instrumentation for Kotlin classes"
                    defaultValue="false"
                    restartRequired="false"/>
+      <registryKey key="kotlin.debugger.coroutines"
+                   description="Enable debugging for coroutines in Kotlin/JVM"
+                   defaultValue="false"
+                   restartRequired="false"/>
     </extensions>
 
     <extensions defaultExtensionNs="org.jetbrains.uast">
@@ -206,9 +205,11 @@
         <storageComponentContainerContributor implementation="org.jetbrains.kotlin.samWithReceiver.ide.IdeSamWithReceiverComponentContributor"/>
 
         <declarationAttributeAltererExtension implementation="org.jetbrains.kotlin.allopen.ide.IdeAllOpenDeclarationAttributeAltererExtension"/>
+        <ultraLightClassModifierExtension implementation="org.jetbrains.kotlin.allopen.ide.AllOpenUltraLightClassModifierExtension"/>
 
         <storageComponentContainerContributor implementation="org.jetbrains.kotlin.noarg.ide.IdeNoArgComponentContainerContributor"/>
-        <expressionCodegenExtension implementation="org.jetbrains.kotlin.noarg.NoArgExpressionCodegenExtension"/>
+        <expressionCodegenExtension implementation="org.jetbrains.kotlin.noarg.ide.IdeNoArgExpressionCodegenExtension"/>
+        <ultraLightClassModifierExtension implementation="org.jetbrains.kotlin.noarg.ide.NoArgUltraLightClassModifierExtension"/>
         <defaultErrorMessages implementation="org.jetbrains.kotlin.noarg.diagnostic.DefaultErrorMessagesNoArg"/>
 
         <completionExtension implementation="org.jetbrains.kotlin.idea.properties.PropertyKeyCompletion"/>

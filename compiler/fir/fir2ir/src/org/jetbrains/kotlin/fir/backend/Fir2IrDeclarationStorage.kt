@@ -5,22 +5,27 @@
 
 package org.jetbrains.kotlin.fir.backend
 
-import org.jetbrains.kotlin.backend.common.descriptors.*
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.Visibilities
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.declarations.impl.FirDefaultPropertyGetter
+import org.jetbrains.kotlin.fir.declarations.impl.FirDefaultPropertySetter
 import org.jetbrains.kotlin.fir.descriptors.FirModuleDescriptor
 import org.jetbrains.kotlin.fir.descriptors.FirPackageFragmentDescriptor
-import org.jetbrains.kotlin.fir.expressions.FirVariable
+import org.jetbrains.kotlin.fir.psi
 import org.jetbrains.kotlin.fir.render
-import org.jetbrains.kotlin.fir.resolve.FirSymbolProvider
+import org.jetbrains.kotlin.fir.resolve.firProvider
+import org.jetbrains.kotlin.fir.resolve.firSymbolProvider
 import org.jetbrains.kotlin.fir.resolve.getOrPut
-import org.jetbrains.kotlin.fir.service
-import org.jetbrains.kotlin.fir.symbols.impl.*
+import org.jetbrains.kotlin.fir.symbols.impl.FirClassSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirFunctionSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirTypeParameterSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirVariableSymbol
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.*
+import org.jetbrains.kotlin.ir.descriptors.*
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.symbols.*
 import org.jetbrains.kotlin.ir.types.IrType
@@ -29,21 +34,27 @@ import org.jetbrains.kotlin.ir.util.SymbolTable
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtFunctionLiteral
+import org.jetbrains.kotlin.psi.psiUtil.endOffset
+import org.jetbrains.kotlin.psi.psiUtil.startOffsetSkippingComments
 
 class Fir2IrDeclarationStorage(
     private val session: FirSession,
     private val irSymbolTable: SymbolTable,
     private val moduleDescriptor: FirModuleDescriptor
 ) {
-    private val firSymbolProvider = session.service<FirSymbolProvider>()
+    private val firSymbolProvider = session.firSymbolProvider
+
+    private val firProvider = session.firProvider
 
     private val fragmentCache = mutableMapOf<FqName, IrExternalPackageFragment>()
+
+    private val fileCache = mutableMapOf<FirFile, IrFile>()
 
     private val classCache = mutableMapOf<FirRegularClass, IrClass>()
 
     private val typeParameterCache = mutableMapOf<FirTypeParameter, IrTypeParameter>()
 
-    private val functionCache = mutableMapOf<FirNamedFunction, IrSimpleFunction>()
+    private val functionCache = mutableMapOf<FirSimpleFunction, IrSimpleFunction>()
 
     private val constructorCache = mutableMapOf<FirConstructor, IrConstructor>()
 
@@ -52,6 +63,12 @@ class Fir2IrDeclarationStorage(
     private val fieldCache = mutableMapOf<FirField, IrField>()
 
     private val localStorage = Fir2IrLocalStorage()
+
+    private val unitType = session.builtinTypes.unitType.toIrType(session, this)
+
+    fun registerFile(firFile: FirFile, irFile: IrFile) {
+        fileCache[firFile] = irFile
+    }
 
     fun enterScope(descriptor: DeclarationDescriptor) {
         irSymbolTable.enterScope(descriptor)
@@ -97,7 +114,7 @@ class Fir2IrDeclarationStorage(
         leaveScope(descriptor)
     }
 
-    private fun IrClass.declareSupertypesAndTypeParameters(klass: FirClass): IrClass {
+    private fun IrClass.declareSupertypesAndTypeParameters(klass: FirClass<*>): IrClass {
         for (superTypeRef in klass.superTypeRefs) {
             superTypes += superTypeRef.toIrType(session, this@Fir2IrDeclarationStorage)
         }
@@ -111,22 +128,33 @@ class Fir2IrDeclarationStorage(
         return this
     }
 
-    fun getIrClass(regularClass: FirRegularClass, setParent: Boolean = true): IrClass {
+    fun getIrClass(klass: FirClass<*>, setParent: Boolean = true): IrClass {
+        val regularClass = klass as? FirRegularClass
+
         fun create(): IrClass {
             val descriptor = WrappedClassDescriptor()
             val origin = IrDeclarationOrigin.DEFINED
-            val modality = regularClass.modality!!
-            return regularClass.convertWithOffsets { startOffset, endOffset ->
+            val modality = regularClass?.modality ?: Modality.FINAL
+            return klass.convertWithOffsets { startOffset, endOffset ->
                 irSymbolTable.declareClass(startOffset, endOffset, origin, descriptor, modality) { symbol ->
                     IrClassImpl(
-                        startOffset, endOffset, origin, symbol,
-                        regularClass.name, regularClass.classKind,
-                        regularClass.visibility, modality,
-                        regularClass.isCompanion, regularClass.isInner,
-                        regularClass.isData, false, regularClass.isInline
+                        startOffset,
+                        endOffset,
+                        origin,
+                        symbol,
+                        regularClass?.name ?: Name.special("<anonymous>"),
+                        klass.classKind,
+                        regularClass?.visibility ?: Visibilities.LOCAL,
+                        modality,
+                        isCompanion = regularClass?.isCompanion == true,
+                        isInner = regularClass?.isInner == true,
+                        isData = regularClass?.isData == true,
+                        isExternal = regularClass?.isExternal == true,
+                        isInline = regularClass?.isInline == true,
+                        isExpect = regularClass?.isExpect == true
                     ).apply {
                         descriptor.bind(this)
-                        if (setParent) {
+                        if (setParent && regularClass != null) {
                             val classId = regularClass.classId
                             val parentId = classId.outerClassId
                             if (parentId != null) {
@@ -146,16 +174,17 @@ class Fir2IrDeclarationStorage(
             }
         }
 
-        if (regularClass.visibility == Visibilities.LOCAL) {
-            val cached = localStorage.getLocalClass(regularClass)
+        if (regularClass?.visibility == Visibilities.LOCAL || klass is FirAnonymousObject) {
+            val cached = localStorage.getLocalClass(klass)
             if (cached != null) return cached
             val created = create()
-            localStorage.putLocalClass(regularClass, created)
-            created.declareSupertypesAndTypeParameters(regularClass)
+            localStorage.putLocalClass(klass, created)
+            created.declareSupertypesAndTypeParameters(klass)
             return created
         }
-        return classCache.getOrPut(regularClass, { create() }) {
-            it.declareSupertypesAndTypeParameters(regularClass)
+        // NB: klass can be either FirRegularClass or FirAnonymousObject
+        return classCache.getOrPut(klass as FirRegularClass, { create() }) {
+            it.declareSupertypesAndTypeParameters(klass)
         }
     }
 
@@ -169,7 +198,7 @@ class Fir2IrDeclarationStorage(
                     startOffset, endOffset, origin, symbol,
                     Name.special("<no name provided>"), anonymousObject.classKind,
                     Visibilities.LOCAL, modality,
-                    isCompanion = false, isInner = false, isData = false, isExternal = false, isInline = false
+                    isCompanion = false, isInner = false, isData = false, isExternal = false, isInline = false, isExpect = false
                 ).apply {
                     descriptor.bind(this)
                     declareThisReceiver()
@@ -179,21 +208,27 @@ class Fir2IrDeclarationStorage(
     }
 
     fun getIrTypeParameter(typeParameter: FirTypeParameter, index: Int = 0): IrTypeParameter {
-        return typeParameterCache.getOrPut(typeParameter) {
+        return typeParameterCache[typeParameter] ?: typeParameter.run {
             val descriptor = WrappedTypeParameterDescriptor()
             val origin = IrDeclarationOrigin.DEFINED
-            typeParameter.convertWithOffsets { startOffset, endOffset ->
-                irSymbolTable.declareGlobalTypeParameter(startOffset, endOffset, origin, descriptor) { symbol ->
-                    IrTypeParameterImpl(
-                        startOffset, endOffset, origin, symbol,
-                        typeParameter.name, index,
-                        typeParameter.isReified,
-                        typeParameter.variance
-                    ).apply {
-                        descriptor.bind(this)
+            val irTypeParameter =
+                convertWithOffsets { startOffset, endOffset ->
+                    irSymbolTable.declareGlobalTypeParameter(startOffset, endOffset, origin, descriptor) { symbol ->
+                        IrTypeParameterImpl(
+                            startOffset, endOffset, origin, symbol,
+                            name, index,
+                            isReified,
+                            variance
+                        ).apply {
+                            descriptor.bind(this)
+                        }
                     }
                 }
-            }
+
+            // Cache the type parameter BEFORE processing its bounds/supertypes, to properly handle recursive type bounds.
+            typeParameterCache[typeParameter] = irTypeParameter
+            bounds.mapTo(irTypeParameter.superTypes) { it.toIrType(session, this@Fir2IrDeclarationStorage) }
+            irTypeParameter
         }
     }
 
@@ -210,8 +245,13 @@ class Fir2IrDeclarationStorage(
                 null
             }
         } else {
-            val packageFqName = callableId.packageName
-            getIrExternalPackageFragment(packageFqName)
+            val containerFile = firProvider.getFirCallableContainerFile(firBasedSymbol)
+            if (containerFile != null) {
+                fileCache[containerFile]
+            } else {
+                val packageFqName = callableId.packageName
+                getIrExternalPackageFragment(packageFqName)
+            }
         }
     }
 
@@ -226,14 +266,37 @@ class Fir2IrDeclarationStorage(
         }
     }
 
-    fun <T : IrFunction> T.declareParameters(function: FirFunction, containingClass: IrClass?) {
+    private fun <T : IrFunction> T.declareDefaultSetterParameter(type: IrType): T {
         val parent = this
-        for ((index, valueParameter) in function.valueParameters.withIndex()) {
-            valueParameters += createAndSaveIrParameter(valueParameter, index).apply { this.parent = parent }
+        valueParameters += irSymbolTable.declareValueParameter(
+            startOffset, endOffset, origin, WrappedValueParameterDescriptor(), type
+        ) { symbol ->
+            IrValueParameterImpl(
+                startOffset, endOffset, IrDeclarationOrigin.DEFINED, symbol,
+                Name.special("<set-?>"), 0, type,
+                varargElementType = null,
+                isCrossinline = false, isNoinline = false
+            ).apply { this.parent = parent }
+        }
+        return this
+    }
+
+    private fun <T : IrFunction> T.declareParameters(function: FirFunction<*>?, containingClass: IrClass?, isStatic: Boolean) {
+        val parent = this
+        if (function is FirDefaultPropertySetter) {
+            val type = function.valueParameters.first().returnTypeRef.toIrType(session, this@Fir2IrDeclarationStorage)
+            declareDefaultSetterParameter(type)
+        } else if (function != null) {
+            for ((index, valueParameter) in function.valueParameters.withIndex()) {
+                valueParameters += createAndSaveIrParameter(valueParameter, index).apply { this.parent = parent }
+            }
         }
         if (function !is FirConstructor) {
             val thisOrigin = IrDeclarationOrigin.DEFINED
-            if (function is FirNamedFunction) {
+            if (function is FirSimpleFunction) {
+                for ((index, typeParameter) in function.typeParameters.withIndex()) {
+                    typeParameters += getIrTypeParameter(typeParameter, index).apply { this.parent = parent }
+                }
                 val receiverTypeRef = function.receiverTypeRef
                 if (receiverTypeRef != null) {
                     extensionReceiverParameter = receiverTypeRef.convertWithOffsets { startOffset, endOffset ->
@@ -255,7 +318,7 @@ class Fir2IrDeclarationStorage(
                     }
                 }
             }
-            if (containingClass != null && (function as? FirNamedFunction)?.isStatic != true) {
+            if (containingClass != null && !isStatic) {
                 val thisType = containingClass.thisReceiver!!.type
                 dispatchReceiverParameter = irSymbolTable.declareValueParameter(
                     startOffset, endOffset, thisOrigin, WrappedReceiverParameterDescriptor(),
@@ -272,21 +335,22 @@ class Fir2IrDeclarationStorage(
     }
 
     private fun <T : IrFunction> T.bindAndDeclareParameters(
-        function: FirFunction,
+        function: FirFunction<*>?,
         descriptor: WrappedCallableDescriptor<T>,
         irParent: IrDeclarationParent?,
+        isStatic: Boolean,
         shouldLeaveScope: Boolean
     ): T {
         descriptor.bind(this)
         enterScope(descriptor)
-        declareParameters(function, containingClass = irParent as? IrClass)
+        declareParameters(function, containingClass = irParent as? IrClass, isStatic = isStatic)
         if (shouldLeaveScope) {
             leaveScope(descriptor)
         }
         return this
     }
 
-    private fun <T : IrFunction> T.enterLocalScope(function: FirFunction): T {
+    fun <T : IrFunction> T.enterLocalScope(function: FirFunction<*>): T {
         enterScope(descriptor)
         for ((firParameter, irParameter) in function.valueParameters.zip(valueParameters)) {
             irSymbolTable.introduceValueParameter(irParameter)
@@ -296,7 +360,7 @@ class Fir2IrDeclarationStorage(
     }
 
     fun getIrFunction(
-        function: FirNamedFunction,
+        function: FirSimpleFunction,
         irParent: IrDeclarationParent? = null,
         shouldLeaveScope: Boolean = false,
         origin: IrDeclarationOrigin = IrDeclarationOrigin.DEFINED
@@ -305,16 +369,24 @@ class Fir2IrDeclarationStorage(
             val containerSource = function.containerSource
             val descriptor = containerSource?.let { WrappedFunctionDescriptorWithContainerSource(it) } ?: WrappedSimpleFunctionDescriptor()
             return function.convertWithOffsets { startOffset, endOffset ->
-                irSymbolTable.declareSimpleFunction(startOffset, endOffset, origin, descriptor) { symbol ->
+                enterScope(descriptor)
+                val result = irSymbolTable.declareSimpleFunction(startOffset, endOffset, origin, descriptor) { symbol ->
                     IrFunctionImpl(
                         startOffset, endOffset, origin, symbol,
                         function.name, function.visibility, function.modality!!,
                         function.returnTypeRef.toIrType(session, this),
-                        function.isInline, function.isExternal,
-                        function.isTailRec, function.isSuspend
+                        isInline = function.isInline,
+                        isExternal = function.isExternal,
+                        isTailrec = function.isTailRec,
+                        isSuspend = function.isSuspend,
+                        isExpect = function.isExpect,
+                        isFakeOverride = origin == IrDeclarationOrigin.FAKE_OVERRIDE,
+                        isOperator = function.isOperator
                     )
                 }
-            }.bindAndDeclareParameters(function, descriptor, irParent, shouldLeaveScope)
+                leaveScope(descriptor)
+                result
+            }.bindAndDeclareParameters(function, descriptor, irParent, isStatic = function.isStatic, shouldLeaveScope = shouldLeaveScope)
         }
 
         if (function.visibility == Visibilities.LOCAL) {
@@ -348,10 +420,13 @@ class Fir2IrDeclarationStorage(
                     function.returnTypeRef.toIrType(session, this),
                     isInline = false, isExternal = false, isTailrec = false,
                     // TODO: suspend lambda
-                    isSuspend = false
+                    isSuspend = false,
+                    isExpect = false,
+                    isFakeOverride = false,
+                    isOperator = false
                 )
             }.bindAndDeclareParameters(
-                function, descriptor, irParent = null, shouldLeaveScope = false
+                function, descriptor, irParent = null, isStatic = false, shouldLeaveScope = false
             )
         }
     }
@@ -361,45 +436,121 @@ class Fir2IrDeclarationStorage(
         irParent: IrDeclarationParent? = null,
         shouldLeaveScope: Boolean = false
     ): IrConstructor {
-        return constructorCache.getOrPut(constructor) {
-            val descriptor = WrappedClassConstructorDescriptor()
-            val origin = IrDeclarationOrigin.DEFINED
-            val isPrimary = constructor.isPrimary
-            return constructor.convertWithOffsets { startOffset, endOffset ->
-                irSymbolTable.declareConstructor(startOffset, endOffset, origin, descriptor) { symbol ->
-                    IrConstructorImpl(
-                        startOffset, endOffset, origin, symbol,
-                        constructor.name, constructor.visibility,
-                        constructor.returnTypeRef.toIrType(session, this),
-                        isInline = false, isExternal = false, isPrimary = isPrimary
-                    ).bindAndDeclareParameters(constructor, descriptor, irParent, shouldLeaveScope)
-                }
-            }
+        val cached = constructorCache[constructor]
+        if (cached != null) {
+            return if (shouldLeaveScope) cached else cached.enterLocalScope(constructor)
+        }
 
+        val descriptor = WrappedClassConstructorDescriptor()
+        val origin = IrDeclarationOrigin.DEFINED
+        val isPrimary = constructor.isPrimary
+        val created = constructor.convertWithOffsets { startOffset, endOffset ->
+            irSymbolTable.declareConstructor(startOffset, endOffset, origin, descriptor) { symbol ->
+                IrConstructorImpl(
+                    startOffset, endOffset, origin, symbol,
+                    constructor.name, constructor.visibility,
+                    constructor.returnTypeRef.toIrType(session, this),
+                    isInline = false, isExternal = false, isPrimary = isPrimary, isExpect = false
+                ).bindAndDeclareParameters(constructor, descriptor, irParent, isStatic = true, shouldLeaveScope = shouldLeaveScope)
+            }
+        }
+        constructorCache[constructor] = created
+        return created
+    }
+
+    private fun createIrPropertyAccessor(
+        propertyAccessor: FirPropertyAccessor?,
+        correspondingProperty: IrProperty,
+        propertyType: IrType,
+        irParent: IrDeclarationParent?,
+        isSetter: Boolean,
+        origin: IrDeclarationOrigin,
+        startOffset: Int,
+        endOffset: Int
+    ): IrSimpleFunction {
+        val descriptor = WrappedSimpleFunctionDescriptor()
+        val prefix = if (isSetter) "set" else "get"
+        return irSymbolTable.declareSimpleFunction(
+            propertyAccessor?.psi?.startOffsetSkippingComments ?: startOffset,
+            propertyAccessor?.psi?.endOffset ?: endOffset,
+            origin, descriptor
+        ) { symbol ->
+            val accessorReturnType = if (isSetter) unitType else propertyType
+            IrFunctionImpl(
+                startOffset, endOffset, origin, symbol,
+                Name.special("<$prefix-${correspondingProperty.name}>"),
+                propertyAccessor?.visibility ?: correspondingProperty.visibility,
+                correspondingProperty.modality, accessorReturnType,
+                isInline = false, isExternal = false, isTailrec = false, isSuspend = false, isExpect = false,
+                isFakeOverride = origin == IrDeclarationOrigin.FAKE_OVERRIDE,
+                isOperator = false
+            ).apply {
+                if (propertyAccessor == null && isSetter) {
+                    declareDefaultSetterParameter(propertyType)
+                }
+            }.bindAndDeclareParameters(
+                propertyAccessor, descriptor, irParent, isStatic = irParent !is IrClass, shouldLeaveScope = true
+            ).apply {
+                if (irParent != null) {
+                    parent = irParent
+                }
+                correspondingPropertySymbol = correspondingProperty.symbol
+            }
         }
     }
 
-    fun getIrProperty(property: FirProperty): IrProperty {
+    fun getIrProperty(
+        property: FirProperty,
+        irParent: IrDeclarationParent? = null,
+        origin: IrDeclarationOrigin = IrDeclarationOrigin.DEFINED
+    ): IrProperty {
         return propertyCache.getOrPut(property) {
             val containerSource = property.containerSource
             val descriptor = containerSource?.let { WrappedPropertyDescriptorWithContainerSource(it) } ?: WrappedPropertyDescriptor()
-            val origin = IrDeclarationOrigin.DEFINED
             property.convertWithOffsets { startOffset, endOffset ->
-                irSymbolTable.declareProperty(
+                enterScope(descriptor)
+                val result = irSymbolTable.declareProperty(
                     startOffset, endOffset,
                     origin, descriptor, property.delegate != null
                 ) { symbol ->
                     IrPropertyImpl(
                         startOffset, endOffset, origin, symbol,
                         property.name, property.visibility, property.modality!!,
-                        property.isVar, property.isConst, property.isLateInit,
-                        property.delegate != null,
+                        isVar = property.isVar,
+                        isConst = property.isConst,
+                        isLateinit = property.isLateInit,
+                        isDelegated = property.delegate != null,
                         // TODO
-                        isExternal = false
+                        isExternal = false,
+                        isExpect = property.isExpect,
+                        isFakeOverride = origin == IrDeclarationOrigin.FAKE_OVERRIDE
                     ).apply {
                         descriptor.bind(this)
+                        val type = property.returnTypeRef.toIrType(session, this@Fir2IrDeclarationStorage)
+                        getter = createIrPropertyAccessor(
+                            property.getter, this, type, irParent, false,
+                            when {
+                                property.delegate != null -> IrDeclarationOrigin.DELEGATED_PROPERTY_ACCESSOR
+                                property.getter is FirDefaultPropertyGetter -> IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR
+                                else -> origin
+                            },
+                            startOffset, endOffset
+                        )
+                        if (property.isVar) {
+                            setter = createIrPropertyAccessor(
+                                property.setter, this, type, irParent, true,
+                                when {
+                                    property.delegate != null -> IrDeclarationOrigin.DELEGATED_PROPERTY_ACCESSOR
+                                    property.setter is FirDefaultPropertySetter -> IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR
+                                    else -> origin
+                                },
+                                startOffset, endOffset
+                            )
+                        }
                     }
                 }
+                leaveScope(descriptor)
+                result
             }
         }
     }
@@ -419,7 +570,8 @@ class Fir2IrDeclarationStorage(
                         field.name, type, field.visibility,
                         isFinal = field.modality == Modality.FINAL,
                         isExternal = false,
-                        isStatic = field.isStatic
+                        isStatic = field.isStatic,
+                        isFakeOverride = false
                     ).apply {
                         descriptor.bind(this)
                     }
@@ -475,9 +627,12 @@ class Fir2IrDeclarationStorage(
 
     fun createAndSaveIrVariable(variable: FirVariable<*>): IrVariable {
         val type = variable.returnTypeRef.toIrType(session, this)
+        // Some temporary variables are produced in RawFirBuilder, but we consistently use special names for them.
+        val origin =
+            if (variable.name.isSpecial) IrDeclarationOrigin.IR_TEMPORARY_VARIABLE else IrDeclarationOrigin.DEFINED
         val irVariable = variable.convertWithOffsets { startOffset, endOffset ->
             declareIrVariable(
-                startOffset, endOffset, IrDeclarationOrigin.DEFINED,
+                startOffset, endOffset, origin,
                 variable.name, type, variable.isVar, isConst = false, isLateinit = false
             )
         }
@@ -490,10 +645,12 @@ class Fir2IrDeclarationStorage(
             base.startOffset, base.endOffset, IrDeclarationOrigin.IR_TEMPORARY_VARIABLE,
             Name.identifier(getNameForTemporary(nameHint)), base.type,
             isVar = false, isConst = false, isLateinit = false
-        )
+        ).apply {
+            initializer = base
+        }
     }
 
-    fun getIrClassSymbol(firClassSymbol: FirClassSymbol): IrClassSymbol {
+    fun getIrClassSymbol(firClassSymbol: FirClassSymbol<*>): IrClassSymbol {
         val irClass = getIrClass(firClassSymbol.fir)
         return irSymbolTable.referenceClass(irClass.descriptor)
     }
@@ -507,7 +664,7 @@ class Fir2IrDeclarationStorage(
         val firDeclaration = firFunctionSymbol.fir
         val irParent = (firDeclaration as? FirCallableMemberDeclaration<*>)?.let { findIrParent(it) }
         return when (firDeclaration) {
-            is FirNamedFunction -> {
+            is FirSimpleFunction -> {
                 val irDeclaration = getIrFunction(firDeclaration, irParent, shouldLeaveScope = true).apply {
                     setAndModifyParent(irParent)
                 }
@@ -526,8 +683,9 @@ class Fir2IrDeclarationStorage(
     fun getIrPropertyOrFieldSymbol(firVariableSymbol: FirVariableSymbol<*>): IrSymbol {
         return when (val fir = firVariableSymbol.fir) {
             is FirProperty -> {
-                val irProperty = getIrProperty(fir).apply {
-                    setAndModifyParent(findIrParent(fir))
+                val irParent = findIrParent(fir)
+                val irProperty = getIrProperty(fir, irParent).apply {
+                    setAndModifyParent(irParent)
                 }
                 irSymbolTable.referenceProperty(irProperty.descriptor)
             }

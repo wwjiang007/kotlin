@@ -25,7 +25,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiReference
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
-import com.intellij.xdebugger.impl.XDebugSessionImpl
+import com.intellij.xdebugger.impl.XDebuggerManagerImpl
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.idea.debugger.DebuggerClassNameProvider.Companion.getRelevantElement
@@ -71,11 +71,15 @@ class InlineCallableUsagesSearcher(private val myDebugProcess: DebugProcess) {
                         myDebugProcess.project)
             }
             else {
-                ProgressManager.getInstance().runProcess(task, EmptyProgressIndicator())
+                try {
+                    ProgressManager.getInstance().runProcess(task, EmptyProgressIndicator())
+                } catch (e: InterruptedException) {
+                    isSuccess = false;
+                }
             }
 
             if (!isSuccess) {
-                XDebugSessionImpl.NOTIFICATION_GROUP.createNotification(
+                XDebuggerManagerImpl.NOTIFICATION_GROUP.createNotification(
                         "Debugger can skip some executions of $declarationName because the computation of class names was interrupted",
                         MessageType.WARNING
                 ).notify(myDebugProcess.project)

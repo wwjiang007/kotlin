@@ -7,7 +7,6 @@ package org.jetbrains.kotlin.codegen.inline
 
 import org.jetbrains.kotlin.codegen.*
 import org.jetbrains.kotlin.codegen.coroutines.continuationAsmType
-import org.jetbrains.kotlin.codegen.coroutines.getOrCreateJvmSuspendFunctionView
 import org.jetbrains.kotlin.codegen.inline.FieldRemapper.Companion.foldName
 import org.jetbrains.kotlin.codegen.inline.coroutines.*
 import org.jetbrains.kotlin.codegen.intrinsics.IntrinsicMethods
@@ -52,7 +51,6 @@ class MethodInliner(
     private val inlineOnlySmapSkipper: InlineOnlySmapSkipper?, //non null only for root
     private val shouldPreprocessApiVersionCalls: Boolean = false
 ) {
-    private val typeMapper = inliningContext.state.typeMapper
     private val languageVersionSettings = inliningContext.state.languageVersionSettings
     private val invokeCalls = ArrayList<InvokeCall>()
     //keeps order
@@ -236,17 +234,17 @@ class MethodInliner(
                     // we should create additional parameter for continuation.
                     var coroutineDesc = desc
                     val actualInvokeDescriptor: FunctionDescriptor
-                    if (info.invokeMethodDescriptor.isSuspend) {
-                        val coroutineInvokeMethodDescriptor = getOrCreateJvmSuspendFunctionView(
-                            info.invokeMethodDescriptor,
-                            inliningContext.state
-                        )
-                        actualInvokeDescriptor = coroutineInvokeMethodDescriptor
-                        val coroutineInvokeDesc = typeMapper.mapAsmMethod(coroutineInvokeMethodDescriptor).descriptor
+                    if (info.isSuspend) {
+                        actualInvokeDescriptor = (info as ExpressionLambda).getInlineSuspendLambdaViewDescriptor()
+                        val parametersSize = actualInvokeDescriptor.valueParameters.size +
+                                (if (actualInvokeDescriptor.extensionReceiverParameter != null) 1 else 0)
                         // And here we expect invoke(...Ljava/lang/Object;) be replaced with invoke(...Lkotlin/coroutines/Continuation;)
                         // if this does not happen, insert fake continuation, since we could not have one yet.
                         val argumentTypes = Type.getArgumentTypes(desc)
-                        if (Type.getArgumentTypes(coroutineInvokeDesc).size != argumentTypes.size) {
+                        if (argumentTypes.size != parametersSize &&
+                            // But do not add it in IR. In IR we already have lowered lambdas with additional parameter, while in Old BE we don't.
+                            !inliningContext.root.state.isIrBackend
+                        ) {
                             addFakeContinuationMarker(this)
                             coroutineDesc = Type.getMethodDescriptor(Type.getReturnType(desc), *argumentTypes, AsmTypes.OBJECT_TYPE)
                         }
@@ -261,11 +259,12 @@ class MethodInliner(
                     val invokeParameters = erasedInvokeFunction.valueParameters
 
                     val valueParamShift = max(nextLocalIndex, markerShift)//NB: don't inline cause it changes
+                    val parameterTypesFromDesc = info.invokeMethod.argumentTypes
                     putStackValuesIntoLocalsForLambdaOnInvoke(
-                        listOf(*info.invokeMethod.argumentTypes), valueParameters, invokeParameters, valueParamShift, this, coroutineDesc
+                        listOf(*parameterTypesFromDesc), valueParameters, invokeParameters, valueParamShift, this, coroutineDesc
                     )
 
-                    if (info.invokeMethodDescriptor.valueParameters.isEmpty()) {
+                    if (parameterTypesFromDesc.isEmpty()) {
                         // There won't be no parameters processing and line call can be left without actual instructions.
                         // Note: if function is called on the line with other instructions like 1 + foo(), 'nop' will still be generated.
                         visitInsn(Opcodes.NOP)
@@ -303,10 +302,9 @@ class MethodInliner(
                     result.mergeWithNotChangeInfo(lambdaResult)
                     result.reifiedTypeParametersUsages.mergeAll(lambdaResult.reifiedTypeParametersUsages)
 
-                    val bridge = typeMapper.mapAsmMethod(erasedInvokeFunction)
                     StackValue
                         .onStack(info.invokeMethod.returnType, info.invokeMethodDescriptor.returnType)
-                        .put(bridge.returnType, erasedInvokeFunction.returnType, this)
+                        .put(OBJECT_TYPE, erasedInvokeFunction.returnType, this)
                     setLambdaInlining(false)
                     addInlineMarker(this, false)
                     childSourceMapper.endMapping()
@@ -415,9 +413,19 @@ class MethodInliner(
 
         val capturedParamsSize = parameters.capturedParametersSizeOnStack
         val realParametersSize = parameters.realParametersSizeOnStack
+        val reorderIrLambdaParameters = inliningContext.isInliningLambda &&
+                inliningContext.parent?.isInliningLambda == false &&
+                inliningContext.lambdaInfo is IrExpressionLambda
+        val newArgumentList = if (reorderIrLambdaParameters) {
+            // In IR lambdas, captured variables come before real parameters, but after the extension receiver.
+            // Move them to the end of the descriptor instead.
+            Type.getArgumentTypes(inliningContext.lambdaInfo!!.invokeMethod.descriptor) + parameters.capturedTypes
+        } else {
+            Type.getArgumentTypes(node.desc) + parameters.capturedTypes
+        }
         val transformedNode = MethodNode(
             Opcodes.API_VERSION, node.access, node.name,
-            Type.getMethodDescriptor(Type.getReturnType(node.desc), *(Type.getArgumentTypes(node.desc) + parameters.capturedTypes)),
+            Type.getMethodDescriptor(Type.getReturnType(node.desc), *newArgumentList),
             node.signature, node.exceptions?.toTypedArray()
         )
 
@@ -428,19 +436,21 @@ class MethodInliner(
 
             private fun getNewIndex(`var`: Int): Int {
                 val lambdaInfo = inliningContext.lambdaInfo
-                if (inliningContext.isInliningLambda && lambdaInfo is IrExpressionLambda) {
-                    if (`var` < parameters.argsSizeOnStack) {
-                        val capturedParamsStartIndex =
-                            if (lambdaInfo.isExtensionLambda) lambdaInfo.invokeMethod.argumentTypes[0].size else 0 //shift by extension
-                        val capturedParamsEndIndex = capturedParamsSize + capturedParamsStartIndex - 1
-                        if (`var` in capturedParamsStartIndex..capturedParamsEndIndex) {
-                            return `var` + realParametersSize - capturedParamsStartIndex //subtract extension
-                        } else if (`var` >= capturedParamsStartIndex) {
-                            return `var` - capturedParamsSize
-                        }
+                if (reorderIrLambdaParameters && lambdaInfo is IrExpressionLambda) {
+                    val extensionSize = if (lambdaInfo.isExtensionLambda) lambdaInfo.invokeMethod.argumentTypes[0].size else 0
+                    return when {
+                        //                v-- extensionSize     v-- argsSizeOnStack
+                        // |- extension -|- captured -|- real -|- locals -|    old descriptor
+                        // |- extension -|- real -|- captured -|- locals -|    new descriptor
+                        //                         ^-- realParametersSize
+                        `var` >= parameters.argsSizeOnStack -> `var`
+                        `var` >= extensionSize + capturedParamsSize -> `var` - capturedParamsSize
+                        `var` >= extensionSize -> `var` + realParametersSize - extensionSize
+                        else -> `var`
                     }
-                    return `var`
                 }
+                // |- extension -|- real -|- locals -|               old descriptor
+                // |- extension -|- real -|- captured -|- locals -|  new descriptor
                 return `var` + if (`var` < realParametersSize) 0 else capturedParamsSize
             }
 
@@ -690,7 +700,7 @@ class MethodInliner(
     //   3) it is passed to invoke of lambda
     private fun replaceContinuationAccessesWithFakeContinuationsIfNeeded(processingNode: MethodNode) {
         val lambdaInfo = inliningContext.lambdaInfo ?: return
-        if (!lambdaInfo.invokeMethodDescriptor.isSuspend) return
+        if (!lambdaInfo.isSuspend) return
         val sources = analyzeMethodNodeBeforeInline(processingNode)
         val cfg = ControlFlowGraph.build(processingNode)
         val aload0s = processingNode.instructions.asSequence().filter { it.opcode == Opcodes.ALOAD && it.safeAs<VarInsnNode>()?.`var` == 0 }
@@ -903,7 +913,7 @@ class MethodInliner(
 
             var cur: AbstractInsnNode? = node.instructions.first
             while (cur != null) {
-                if (cur is VarInsnNode && cur.opcode == Opcodes.ALOAD && map.contains(cur.`var`)) {
+                if (cur is VarInsnNode && cur.opcode in Opcodes.ILOAD..Opcodes.ALOAD && map.contains(cur.`var`)) {
                     val varIndex = cur.`var`
                     val capturedParamDesc = map[varIndex]!!
 

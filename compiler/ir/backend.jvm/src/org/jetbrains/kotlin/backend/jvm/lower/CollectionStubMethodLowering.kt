@@ -6,7 +6,6 @@
 package org.jetbrains.kotlin.backend.jvm.lower
 
 import org.jetbrains.kotlin.backend.common.ClassLoweringPass
-import org.jetbrains.kotlin.backend.common.descriptors.WrappedValueParameterDescriptor
 import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
 import org.jetbrains.kotlin.backend.common.lower.irThrow
 import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
@@ -17,14 +16,17 @@ import org.jetbrains.kotlin.ir.builders.declarations.buildFun
 import org.jetbrains.kotlin.ir.builders.irBlockBody
 import org.jetbrains.kotlin.ir.builders.irCall
 import org.jetbrains.kotlin.ir.builders.irString
-import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.declarations.IrClass
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
+import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
+import org.jetbrains.kotlin.ir.declarations.IrValueParameter
 import org.jetbrains.kotlin.ir.declarations.impl.IrValueParameterImpl
+import org.jetbrains.kotlin.ir.descriptors.WrappedValueParameterDescriptor
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
 import org.jetbrains.kotlin.ir.symbols.impl.IrValueParameterSymbolImpl
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
-import org.jetbrains.kotlin.name.FqName
 
 internal val collectionStubMethodLowering = makeIrFilePhase(
     ::CollectionStubMethodLowering,
@@ -33,10 +35,7 @@ internal val collectionStubMethodLowering = makeIrFilePhase(
 )
 
 private class CollectionStubMethodLowering(val context: JvmBackendContext) : ClassLoweringPass {
-
-    private val state = context.state
-
-    private val typeMapper = state.typeMapper
+    private val methodSignatureMapper = context.methodSignatureMapper
 
     override fun lower(irClass: IrClass) {
         if (irClass.isInterface) {
@@ -65,10 +64,11 @@ private class CollectionStubMethodLowering(val context: JvmBackendContext) : Cla
         }
     }
 
-    //TODO: replace with new typeMapper using no descriptor
-    private fun IrSimpleFunction.toSignature() = typeMapper.mapAsmMethod(this.descriptor).toString()
+    private fun IrSimpleFunction.toSignature(): String = methodSignatureMapper.mapAsmMethod(this).toString()
 
-    private fun createStubMethod(function: IrSimpleFunction, irClass: IrClass, substitutionMap: Map<IrTypeParameterSymbol, IrType>): IrSimpleFunction {
+    private fun createStubMethod(
+        function: IrSimpleFunction, irClass: IrClass, substitutionMap: Map<IrTypeParameterSymbol, IrType>
+    ): IrSimpleFunction {
         return buildFun {
             name = function.name
             returnType = function.returnType.substitute(substitutionMap)
@@ -85,12 +85,11 @@ private class CollectionStubMethodLowering(val context: JvmBackendContext) : Cla
             for (parameter in function.valueParameters) {
                 valueParameters.add(parameter.copyWithSubstitution(this, substitutionMap))
             }
-            val exception = context.getTopLevelClass(FqName("java.lang.UnsupportedOperationException"))
             // Function body consist only of throwing UnsupportedOperationException statement
             body = context.createIrBuilder(function.symbol).irBlockBody {
                 +irThrow(
                     irCall(
-                        exception.owner.constructors.single {
+                        this@CollectionStubMethodLowering.context.ir.symbols.unsupportedOperationExceptionClass.owner.constructors.single {
                             it.valueParameters.size == 1 && it.valueParameters.single().type.isNullableString()
                         }
                     ).apply {
