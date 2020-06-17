@@ -287,6 +287,9 @@ include ":benchmarks",
         ":kotlin-serialization-unshaded",
         ":wasm:wasm.ir"
 
+include ":kotlinx-atomicfu-compiler-plugin",
+        ":kotlinx-atomicfu-runtime",
+        ":atomicfu"
 
 include ":compiler:fir",
         ":compiler:fir:cones",
