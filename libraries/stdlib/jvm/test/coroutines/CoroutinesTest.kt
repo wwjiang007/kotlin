@@ -1,15 +1,12 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
-
-@file:Suppress("ObsoleteExperimentalCoroutines")
 
 package test.coroutines
 
 import java.util.concurrent.Semaphore
 import kotlin.coroutines.*
-import kotlin.coroutines.experimental.startCoroutine
 import kotlin.test.*
 
 /**
@@ -42,11 +39,17 @@ class DispatcherSwitcher(
     private val contextDispatcher: TestDispatcher,
     private val resumeDispatcher: TestDispatcher
 ) {
-    suspend fun run(): Int = suspendCoroutine { cont ->
-        contextDispatcher.assertThread()
-        resumeDispatcher.executor.execute {
-            resumeDispatcher.assertThread()
-            cont.resume(42)
+    suspend fun run(): Int {
+        val sideEffect: Int
+        val runResult = suspendCoroutine<Int> { cont ->
+            contextDispatcher.assertThread()
+            resumeDispatcher.executor.execute {
+                resumeDispatcher.assertThread()
+                cont.resume(42)
+            }
+            sideEffect = 21
         }
+        assertEquals(21, sideEffect)
+        return runResult
     }
 }

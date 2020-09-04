@@ -1,7 +1,8 @@
-// !USE_EXPERIMENTAL: kotlin.Experimental
+// FIR_IDENTICAL
+// !USE_EXPERIMENTAL: kotlin.RequiresOptIn
 // !DIAGNOSTICS: -UNUSED_PARAMETER
 
-@file:UseExperimental(ExperimentalTypeInference::class)
+@file:OptIn(ExperimentalTypeInference::class)
 
 import kotlin.experimental.ExperimentalTypeInference
 

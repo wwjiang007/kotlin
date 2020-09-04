@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -10,62 +10,62 @@ import org.jetbrains.kotlin.backend.common.ir.copyTypeParameters
 import org.jetbrains.kotlin.backend.common.ir.copyTypeParametersFrom
 import org.jetbrains.kotlin.backend.common.ir.createDispatchReceiverParameter
 import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
+import org.jetbrains.kotlin.backend.jvm.ir.isStaticInlineClassReplacement
 import org.jetbrains.kotlin.backend.jvm.lower.inlineclasses.InlineClassAbi.mangledNameFor
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
+import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.builders.declarations.addValueParameter
 import org.jetbrains.kotlin.ir.builders.declarations.buildFun
-import org.jetbrains.kotlin.ir.builders.declarations.buildFunWithDescriptorForInlining
+import org.jetbrains.kotlin.ir.builders.declarations.buildProperty
 import org.jetbrains.kotlin.ir.declarations.*
-import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
-import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
-import org.jetbrains.kotlin.ir.symbols.IrValueParameterSymbol
+import org.jetbrains.kotlin.ir.symbols.IrPropertySymbol
 import org.jetbrains.kotlin.ir.types.impl.IrSimpleTypeImpl
 import org.jetbrains.kotlin.ir.types.impl.IrStarProjectionImpl
-import org.jetbrains.kotlin.ir.util.constructedClass
-import org.jetbrains.kotlin.ir.util.defaultType
-import org.jetbrains.kotlin.ir.util.explicitParameters
+import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.InlineClassDescriptorResolver
 import org.jetbrains.kotlin.storage.LockBasedStorageManager
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
-class IrReplacementFunction(
-    val function: IrFunction,
-    val valueParameterMap: Map<IrValueParameterSymbol, IrValueParameter>
-)
-
 /**
  * Keeps track of replacement functions and inline class box/unbox functions.
  */
-class MemoizedInlineClassReplacements {
+class MemoizedInlineClassReplacements(private val mangleReturnTypes: Boolean, private val irFactory: IrFactory) {
     private val storageManager = LockBasedStorageManager("inline-class-replacements")
+    private val propertyMap = mutableMapOf<IrPropertySymbol, IrProperty>()
 
     /**
      * Get a replacement for a function or a constructor.
      */
-    val getReplacementFunction: (IrFunction) -> IrReplacementFunction? =
+    val getReplacementFunction: (IrFunction) -> IrSimpleFunction? =
         storageManager.createMemoizedFunctionWithNullableValues {
             when {
-                !it.hasMangledParameters ||
-                        it.isSyntheticInlineClassMember ||
-                        it.origin == IrDeclarationOrigin.LOCAL_FUNCTION_FOR_LAMBDA ||
-                        it.origin == IrDeclarationOrigin.DELEGATED_PROPERTY_ACCESSOR -> null
-                it.hasMethodReplacement -> createMethodReplacement(it)
-                it.hasStaticReplacement -> createStaticReplacement(it)
-                else -> null
+                // Don't mangle anonymous or synthetic functions
+                it.origin == IrDeclarationOrigin.LOCAL_FUNCTION_FOR_LAMBDA ||
+                        (it.origin == IrDeclarationOrigin.DELEGATED_PROPERTY_ACCESSOR && it.visibility == DescriptorVisibilities.LOCAL) ||
+                        it.isStaticInlineClassReplacement ||
+                        it.origin.isSynthetic -> null
+
+                it.isInlineClassFieldGetter ->
+                    if (it.hasMangledReturnType)
+                        createMethodReplacement(it)
+                    else
+                        null
+
+                // Mangle all functions in the body of an inline class
+                it.parent.safeAs<IrClass>()?.isInline == true ->
+                    createStaticReplacement(it)
+
+                // Otherwise, mangle functions with mangled parameters, ignoring constructors
+                it is IrSimpleFunction && (it.hasMangledParameters || mangleReturnTypes && it.hasMangledReturnType) ->
+                    if (it.dispatchReceiverParameter != null) createMethodReplacement(it) else createStaticReplacement(it)
+
+                else ->
+                    null
             }
         }
-
-    private val IrFunction.hasStaticReplacement: Boolean
-        get() = origin != IrDeclarationOrigin.FAKE_OVERRIDE &&
-                (this is IrSimpleFunction || this is IrConstructor && constructedClass.isInline)
-
-    private val IrFunction.hasMethodReplacement: Boolean
-        get() = dispatchReceiverParameter != null && this is IrSimpleFunction && (parent as? IrClass)?.isInline != true
-
-    private val IrFunction.isSyntheticInlineClassMember: Boolean
-        get() = origin == JvmLoweredDeclarationOrigin.SYNTHETIC_INLINE_CLASS_MEMBER || isInlineClassFieldGetter
 
     /**
      * Get the box function for an inline class. Concretely, this is a synthetic
@@ -75,7 +75,7 @@ class MemoizedInlineClassReplacements {
     val getBoxFunction: (IrClass) -> IrSimpleFunction =
         storageManager.createMemoizedFunction { irClass ->
             require(irClass.isInline)
-            buildFun {
+            irFactory.buildFun {
                 name = Name.identifier(KotlinTypeMapper.BOX_JVM_METHOD_NAME)
                 origin = JvmLoweredDeclarationOrigin.SYNTHETIC_INLINE_CLASS_MEMBER
                 returnType = irClass.defaultType
@@ -96,7 +96,7 @@ class MemoizedInlineClassReplacements {
     val getUnboxFunction: (IrClass) -> IrSimpleFunction =
         storageManager.createMemoizedFunction { irClass ->
             require(irClass.isInline)
-            buildFun {
+            irFactory.buildFun {
                 name = Name.identifier(KotlinTypeMapper.UNBOX_JVM_METHOD_NAME)
                 origin = JvmLoweredDeclarationOrigin.SYNTHETIC_INLINE_CLASS_MEMBER
                 returnType = InlineClassAbi.getUnderlyingType(irClass)
@@ -110,7 +110,7 @@ class MemoizedInlineClassReplacements {
     fun getSpecializedEqualsMethod(irClass: IrClass, irBuiltIns: IrBuiltIns): IrSimpleFunction {
         require(irClass.isInline)
         return specializedEqualsCache.computeIfAbsent(irClass) {
-            buildFun {
+            irFactory.buildFun {
                 name = InlineClassDescriptorResolver.SPECIALIZED_EQUALS_NAME
                 // TODO: Revisit this once we allow user defined equals methods in inline classes.
                 origin = JvmLoweredDeclarationOrigin.INLINE_CLASS_GENERATED_IMPL_METHOD
@@ -132,73 +132,112 @@ class MemoizedInlineClassReplacements {
         }
     }
 
-    private fun createMethodReplacement(function: IrFunction): IrReplacementFunction? {
-        require(function.dispatchReceiverParameter != null && function is IrSimpleFunction)
-        val overrides = function.overriddenSymbols.mapNotNull {
-            getReplacementFunction(it.owner)?.function?.symbol as? IrSimpleFunctionSymbol
-        }
-        if (function.origin == IrDeclarationOrigin.FAKE_OVERRIDE && overrides.isEmpty())
-            return null
-
-        val parameterMap = mutableMapOf<IrValueParameterSymbol, IrValueParameter>()
-        val replacement = buildReplacement(function) {
-            annotations += function.annotations
-            metadata = function.metadata
-            overriddenSymbols.addAll(overrides)
-
+    private fun createMethodReplacement(function: IrFunction): IrSimpleFunction =
+        buildReplacement(function, function.origin) {
+            require(function.dispatchReceiverParameter != null && function is IrSimpleFunction)
+            val newValueParameters = ArrayList<IrValueParameter>()
             for ((index, parameter) in function.explicitParameters.withIndex()) {
                 val name = if (parameter == function.extensionReceiverParameter) Name.identifier("\$receiver") else parameter.name
                 val newParameter: IrValueParameter
                 if (parameter == function.dispatchReceiverParameter) {
-                    newParameter = parameter.copyTo(this, index = -1, name = name)
+                    newParameter = parameter.copyTo(this, index = -1, name = name, defaultValue = null)
                     dispatchReceiverParameter = newParameter
                 } else {
-                    newParameter = parameter.copyTo(this, index = index - 1, name = name)
-                    valueParameters.add(newParameter)
+                    newParameter = parameter.copyTo(this, index = index - 1, name = name, defaultValue = null)
+                    newValueParameters += newParameter
                 }
-                parameterMap[parameter.symbol] = newParameter
+                // Assuming that constructors and non-override functions are always replaced with the unboxed
+                // equivalent, deep-copying the value here is unnecessary. See `JvmInlineClassLowering`.
+                newParameter.defaultValue = parameter.defaultValue?.patchDeclarationParents(this)
             }
+            valueParameters = newValueParameters
         }
-        return IrReplacementFunction(replacement, parameterMap)
-    }
 
-    private fun createStaticReplacement(function: IrFunction): IrReplacementFunction {
-        val parameterMap = mutableMapOf<IrValueParameterSymbol, IrValueParameter>()
-        val replacement = buildReplacement(function) {
-            if (function !is IrSimpleFunction || function.overriddenSymbols.isEmpty())
-                metadata = function.metadata
-
+    private fun createStaticReplacement(function: IrFunction): IrSimpleFunction =
+        buildReplacement(function, JvmLoweredDeclarationOrigin.STATIC_INLINE_CLASS_REPLACEMENT, noFakeOverride = true) {
+            val newValueParameters = ArrayList<IrValueParameter>()
             for ((index, parameter) in function.explicitParameters.withIndex()) {
-                val name = when (parameter) {
-                    function.dispatchReceiverParameter -> Name.identifier("\$this")
-                    function.extensionReceiverParameter -> Name.identifier("\$receiver")
-                    else -> parameter.name
+                newValueParameters += when (parameter) {
+                    // FAKE_OVERRIDEs have broken dispatch receivers
+                    function.dispatchReceiverParameter ->
+                        function.parentAsClass.thisReceiver!!.copyTo(
+                            this, index = index, name = Name.identifier("arg$index"),
+                            type = function.parentAsClass.defaultType, origin = IrDeclarationOrigin.MOVED_DISPATCH_RECEIVER
+                        )
+                    function.extensionReceiverParameter ->
+                        parameter.copyTo(
+                            this, index = index, name = Name.identifier("\$this\$${function.name}"),
+                            origin = IrDeclarationOrigin.MOVED_EXTENSION_RECEIVER
+                        )
+                    else ->
+                        parameter.copyTo(this, index = index, defaultValue = null).also {
+                            // See comment next to a similar line above.
+                            it.defaultValue = parameter.defaultValue?.patchDeclarationParents(this)
+                        }
                 }
+            }
+            valueParameters = newValueParameters
+        }
 
-                val newParameter = parameter.copyTo(this, index = index, name = name)
-                valueParameters.add(newParameter)
-                parameterMap[parameter.symbol] = newParameter
+    private fun buildReplacement(
+        function: IrFunction,
+        replacementOrigin: IrDeclarationOrigin,
+        noFakeOverride: Boolean = false,
+        body: IrFunction.() -> Unit
+    ): IrSimpleFunction = irFactory.buildFun {
+        updateFrom(function)
+        if (function is IrConstructor) {
+            // The [updateFrom] call will set the modality to FINAL for constructors, while the JVM backend would use OPEN here.
+            modality = Modality.OPEN
+        }
+        origin = when {
+            function.origin == IrDeclarationOrigin.GENERATED_INLINE_CLASS_MEMBER ->
+                JvmLoweredDeclarationOrigin.INLINE_CLASS_GENERATED_IMPL_METHOD
+            function is IrConstructor && function.constructedClass.isInline ->
+                JvmLoweredDeclarationOrigin.STATIC_INLINE_CLASS_CONSTRUCTOR
+            else ->
+                replacementOrigin
+        }
+        if (noFakeOverride) {
+            isFakeOverride = false
+        }
+        name = mangledNameFor(function, mangleReturnTypes)
+        returnType = function.returnType
+    }.apply {
+        parent = function.parent
+        annotations += function.annotations
+        copyTypeParameters(function.allTypeParameters)
+        if (function.metadata != null) {
+            metadata = function.metadata
+            function.metadata = null
+        }
+        copyAttributes(function as? IrAttributeContainer)
+
+        if (function is IrSimpleFunction) {
+            val propertySymbol = function.correspondingPropertySymbol
+            if (propertySymbol != null) {
+                val property = propertyMap.getOrPut(propertySymbol) {
+                    irFactory.buildProperty() {
+                        name = propertySymbol.owner.name
+                        updateFrom(propertySymbol.owner)
+                    }.apply {
+                        parent = propertySymbol.owner.parent
+                        copyAttributes(propertySymbol.owner)
+                    }
+                }
+                correspondingPropertySymbol = property.symbol
+                when (function) {
+                    propertySymbol.owner.getter -> property.getter = this
+                    propertySymbol.owner.setter -> property.setter = this
+                    else -> error("Orphaned property getter/setter: ${function.render()}")
+                }
+            }
+
+            overriddenSymbols = function.overriddenSymbols.map {
+                getReplacementFunction(it.owner)?.symbol ?: it
             }
         }
-        return IrReplacementFunction(replacement, parameterMap)
+
+        body()
     }
-
-    private fun buildReplacement(function: IrFunction, body: IrFunctionImpl.() -> Unit) =
-        buildFunWithDescriptorForInlining(function.descriptor) {
-            updateFrom(function)
-            if (function.origin == IrDeclarationOrigin.GENERATED_INLINE_CLASS_MEMBER) {
-                origin = JvmLoweredDeclarationOrigin.INLINE_CLASS_GENERATED_IMPL_METHOD
-            }
-            name = mangledNameFor(function)
-            returnType = function.returnType
-        }.apply {
-            parent = function.parent
-            if (function is IrConstructor) {
-                copyTypeParameters(function.constructedClass.typeParameters + function.typeParameters)
-            } else {
-                copyTypeParametersFrom(function)
-                correspondingPropertySymbol = function.safeAs<IrSimpleFunction>()?.correspondingPropertySymbol
-            }
-            body()
-        }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -25,7 +25,7 @@ public class ReferenceResolveTestGenerated extends AbstractReferenceResolveTest 
     }
 
     public void testAllFilesPresentInReferences() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/resolve/references"), Pattern.compile("^([^.]+)\\.kt$"), true);
+        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/resolve/references"), Pattern.compile("^([^.]+)\\.kt$"), null, true);
     }
 
     @TestMetadata("AnnotationForClass.kt")
@@ -308,6 +308,21 @@ public class ReferenceResolveTestGenerated extends AbstractReferenceResolveTest 
         runTest("idea/testData/resolve/references/ResolvePackageInProperty.kt");
     }
 
+    @TestMetadata("ResolvePackageInTheEndInProperty.kt")
+    public void testResolvePackageInTheEndInProperty() throws Exception {
+        runTest("idea/testData/resolve/references/ResolvePackageInTheEndInProperty.kt");
+    }
+
+    @TestMetadata("ResolvePackageInTheMiddleInProperty.kt")
+    public void testResolvePackageInTheMiddleInProperty() throws Exception {
+        runTest("idea/testData/resolve/references/ResolvePackageInTheMiddleInProperty.kt");
+    }
+
+    @TestMetadata("ResolvePackageInTheTypeNameInProperty.kt")
+    public void testResolvePackageInTheTypeNameInProperty() throws Exception {
+        runTest("idea/testData/resolve/references/ResolvePackageInTheTypeNameInProperty.kt");
+    }
+
     @TestMetadata("SamAdapter.kt")
     public void testSamAdapter() throws Exception {
         runTest("idea/testData/resolve/references/SamAdapter.kt");
@@ -403,6 +418,52 @@ public class ReferenceResolveTestGenerated extends AbstractReferenceResolveTest 
         runTest("idea/testData/resolve/references/WrongNumberOfTypeArgumentsInSupertype.kt");
     }
 
+    @TestMetadata("idea/testData/resolve/references/arrayAccess")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class ArrayAccess extends AbstractReferenceResolveTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInArrayAccess() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/resolve/references/arrayAccess"), Pattern.compile("^([^.]+)\\.kt$"), null, true);
+        }
+
+        @TestMetadata("get.kt")
+        public void testGet() throws Exception {
+            runTest("idea/testData/resolve/references/arrayAccess/get.kt");
+        }
+
+        @TestMetadata("set.kt")
+        public void testSet() throws Exception {
+            runTest("idea/testData/resolve/references/arrayAccess/set.kt");
+        }
+    }
+
+    @TestMetadata("idea/testData/resolve/references/constructorDelegatingReference")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class ConstructorDelegatingReference extends AbstractReferenceResolveTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInConstructorDelegatingReference() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/resolve/references/constructorDelegatingReference"), Pattern.compile("^([^.]+)\\.kt$"), null, true);
+        }
+
+        @TestMetadata("toPrimary.kt")
+        public void testToPrimary() throws Exception {
+            runTest("idea/testData/resolve/references/constructorDelegatingReference/toPrimary.kt");
+        }
+
+        @TestMetadata("toSecondary.kt")
+        public void testToSecondary() throws Exception {
+            runTest("idea/testData/resolve/references/constructorDelegatingReference/toSecondary.kt");
+        }
+    }
+
     @TestMetadata("idea/testData/resolve/references/delegatedPropertyAccessors")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -412,7 +473,7 @@ public class ReferenceResolveTestGenerated extends AbstractReferenceResolveTest 
         }
 
         public void testAllFilesPresentInDelegatedPropertyAccessors() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/resolve/references/delegatedPropertyAccessors"), Pattern.compile("^([^.]+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/resolve/references/delegatedPropertyAccessors"), Pattern.compile("^([^.]+)\\.kt$"), null, true);
         }
 
         @TestMetadata("unresolved.kt")
@@ -429,7 +490,7 @@ public class ReferenceResolveTestGenerated extends AbstractReferenceResolveTest 
             }
 
             public void testAllFilesPresentInInSource() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/resolve/references/delegatedPropertyAccessors/inSource"), Pattern.compile("^([^.]+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/resolve/references/delegatedPropertyAccessors/inSource"), Pattern.compile("^([^.]+)\\.kt$"), null, true);
             }
 
             @TestMetadata("getExtension.kt")
@@ -462,7 +523,7 @@ public class ReferenceResolveTestGenerated extends AbstractReferenceResolveTest 
             }
 
             public void testAllFilesPresentInInStandardLibrary() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/resolve/references/delegatedPropertyAccessors/inStandardLibrary"), Pattern.compile("^([^.]+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/resolve/references/delegatedPropertyAccessors/inStandardLibrary"), Pattern.compile("^([^.]+)\\.kt$"), null, true);
             }
 
             @TestMetadata("lazy.kt")
@@ -486,7 +547,7 @@ public class ReferenceResolveTestGenerated extends AbstractReferenceResolveTest 
         }
 
         public void testAllFilesPresentInForLoopIn() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/resolve/references/forLoopIn"), Pattern.compile("^([^.]+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/resolve/references/forLoopIn"), Pattern.compile("^([^.]+)\\.kt$"), null, true);
         }
 
         @TestMetadata("unresolvedIterator.kt")
@@ -503,7 +564,7 @@ public class ReferenceResolveTestGenerated extends AbstractReferenceResolveTest 
             }
 
             public void testAllFilesPresentInInBuiltIns() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/resolve/references/forLoopIn/inBuiltIns"), Pattern.compile("^([^.]+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/resolve/references/forLoopIn/inBuiltIns"), Pattern.compile("^([^.]+)\\.kt$"), null, true);
             }
 
             @TestMetadata("extension.kt")
@@ -526,7 +587,7 @@ public class ReferenceResolveTestGenerated extends AbstractReferenceResolveTest 
             }
 
             public void testAllFilesPresentInInLibrary() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/resolve/references/forLoopIn/inLibrary"), Pattern.compile("^([^.]+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/resolve/references/forLoopIn/inLibrary"), Pattern.compile("^([^.]+)\\.kt$"), null, true);
             }
 
             @TestMetadata("extension.kt")
@@ -549,7 +610,7 @@ public class ReferenceResolveTestGenerated extends AbstractReferenceResolveTest 
             }
 
             public void testAllFilesPresentInInSource() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/resolve/references/forLoopIn/inSource"), Pattern.compile("^([^.]+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/resolve/references/forLoopIn/inSource"), Pattern.compile("^([^.]+)\\.kt$"), null, true);
             }
 
             @TestMetadata("allMembers.kt")
@@ -573,7 +634,7 @@ public class ReferenceResolveTestGenerated extends AbstractReferenceResolveTest 
         }
 
         public void testAllFilesPresentInInvoke() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/resolve/references/invoke"), Pattern.compile("^([^.]+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/resolve/references/invoke"), Pattern.compile("^([^.]+)\\.kt$"), null, true);
         }
 
         @TestMetadata("lambdaAndParens.kt")
@@ -581,9 +642,19 @@ public class ReferenceResolveTestGenerated extends AbstractReferenceResolveTest 
             runTest("idea/testData/resolve/references/invoke/lambdaAndParens.kt");
         }
 
+        @TestMetadata("lambdaAndParensIncorrectVararg.kt")
+        public void testLambdaAndParensIncorrectVararg() throws Exception {
+            runTest("idea/testData/resolve/references/invoke/lambdaAndParensIncorrectVararg.kt");
+        }
+
         @TestMetadata("lambdaNoPar.kt")
         public void testLambdaNoPar() throws Exception {
             runTest("idea/testData/resolve/references/invoke/lambdaNoPar.kt");
+        }
+
+        @TestMetadata("lambdaNoParIncorrectVararg.kt")
+        public void testLambdaNoParIncorrectVararg() throws Exception {
+            runTest("idea/testData/resolve/references/invoke/lambdaNoParIncorrectVararg.kt");
         }
 
         @TestMetadata("lambdaNoParLabel.kt")
@@ -591,9 +662,19 @@ public class ReferenceResolveTestGenerated extends AbstractReferenceResolveTest 
             runTest("idea/testData/resolve/references/invoke/lambdaNoParLabel.kt");
         }
 
+        @TestMetadata("lambdaNoParLabelIncorrectVararg.kt")
+        public void testLambdaNoParLabelIncorrectVararg() throws Exception {
+            runTest("idea/testData/resolve/references/invoke/lambdaNoParLabelIncorrectVararg.kt");
+        }
+
         @TestMetadata("lambdaNoParRCurly.kt")
         public void testLambdaNoParRCurly() throws Exception {
             runTest("idea/testData/resolve/references/invoke/lambdaNoParRCurly.kt");
+        }
+
+        @TestMetadata("lambdaNoParRCurlyIncorrectVararg.kt")
+        public void testLambdaNoParRCurlyIncorrectVararg() throws Exception {
+            runTest("idea/testData/resolve/references/invoke/lambdaNoParRCurlyIncorrectVararg.kt");
         }
 
         @TestMetadata("noParams.kt")
@@ -609,6 +690,11 @@ public class ReferenceResolveTestGenerated extends AbstractReferenceResolveTest 
         @TestMetadata("nonemptyLambdaRPar.kt")
         public void testNonemptyLambdaRPar() throws Exception {
             runTest("idea/testData/resolve/references/invoke/nonemptyLambdaRPar.kt");
+        }
+
+        @TestMetadata("nonemptyLambdaRParIncorrectVararg.kt")
+        public void testNonemptyLambdaRParIncorrectVararg() throws Exception {
+            runTest("idea/testData/resolve/references/invoke/nonemptyLambdaRParIncorrectVararg.kt");
         }
 
         @TestMetadata("oneParam.kt")

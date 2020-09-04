@@ -5,23 +5,23 @@
 
 package org.jetbrains.kotlin.ir.util
 
-import org.jetbrains.kotlin.descriptors.Visibilities
-import org.jetbrains.kotlin.ir.IrElement
-import org.jetbrains.kotlin.ir.SourceManager
-import org.jetbrains.kotlin.ir.SourceRangeInfo
-import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
+import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
+import org.jetbrains.kotlin.incremental.components.NoLookupLocation
+import org.jetbrains.kotlin.ir.*
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
+import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
+import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
+import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import java.io.File
 
 val IrConstructor.constructedClass get() = this.parent as IrClass
-
-val <T : IrDeclaration> T.original get() = this
 
 val IrDeclarationParent.fqNameForIrSerialization: FqName
     get() = when (this) {
@@ -30,13 +30,22 @@ val IrDeclarationParent.fqNameForIrSerialization: FqName
         else -> error(this)
     }
 
-@Deprecated(
-    "Use fqNameForIrSerialization instead.",
-    ReplaceWith("fqNameForIrSerialization", "org.jetbrains.kotlin.ir.util.fqNameForIrSerialization"),
-    DeprecationLevel.ERROR
-)
-val IrDeclarationParent.fqNameSafe: FqName
-    get() = fqNameForIrSerialization
+/**
+ * Skips synthetic FILE_CLASS to make top-level functions look as in kotlin source
+ */
+val IrDeclarationParent.kotlinFqName: FqName
+    get() = when (this) {
+        is IrPackageFragment -> this.fqName
+        is IrClass -> {
+            if (isFileClass) {
+                parent.kotlinFqName
+            } else {
+                parent.kotlinFqName.child(nameForIrSerialization)
+            }
+        }
+        is IrDeclaration -> this.parent.kotlinFqName.child(nameForIrSerialization)
+        else -> error(this)
+    }
 
 val IrClass.classId: ClassId?
     get() = when (val parent = this.parent) {
@@ -51,13 +60,6 @@ val IrDeclaration.nameForIrSerialization: Name
         is IrConstructor -> SPECIAL_INIT_NAME
         else -> error(this)
     }
-@Deprecated(
-    "Use nameForIrSerialization instead.",
-    ReplaceWith("nameForIrSerialization", "org.jetbrains.kotlin.ir.util.nameForIrSerialization"),
-    DeprecationLevel.ERROR
-)
-val IrDeclaration.name: Name
-    get() = nameForIrSerialization
 
 private val SPECIAL_INIT_NAME = Name.special("<init>")
 
@@ -65,7 +67,7 @@ val IrValueParameter.isVararg get() = this.varargElementType != null
 
 val IrFunction.isSuspend get() = this is IrSimpleFunction && this.isSuspend
 
-val IrFunction.isReal get() = this.origin != IrDeclarationOrigin.FAKE_OVERRIDE
+val IrFunction.isReal get() = !(this is IrSimpleFunction && isFakeOverride)
 
 fun IrSimpleFunction.overrides(other: IrSimpleFunction): Boolean {
     if (this == other) return true
@@ -115,17 +117,6 @@ val IrDeclaration.isPropertyField get() =
 val IrDeclaration.isTopLevelDeclaration get() =
     parent !is IrDeclaration && !this.isPropertyAccessor && !this.isPropertyField
 
-fun IrDeclaration.findTopLevelDeclaration(): IrDeclaration = when {
-    this.isTopLevelDeclaration ->
-        this
-    this.isPropertyAccessor ->
-        (this as IrSimpleFunction).correspondingPropertySymbol!!.owner.findTopLevelDeclaration()
-    this.isPropertyField ->
-        (this as IrField).correspondingPropertySymbol!!.owner.findTopLevelDeclaration()
-    else ->
-        (this.parent as IrDeclaration).findTopLevelDeclaration()
-}
-
 val IrDeclaration.isAnonymousObject get() = this is IrClass && name == SpecialNames.NO_NAME_PROVIDED
 
 val IrDeclaration.isLocal: Boolean
@@ -135,7 +126,7 @@ val IrDeclaration.isLocal: Boolean
             require(current is IrDeclaration)
 
             if (current is IrDeclarationWithVisibility) {
-                if (current.visibility == Visibilities.LOCAL) return true
+                if (current.visibility == DescriptorVisibilities.LOCAL) return true
             }
 
             if (current.isAnonymousObject) return true
@@ -146,6 +137,7 @@ val IrDeclaration.isLocal: Boolean
         return false
     }
 
+@ObsoleteDescriptorBasedAPI
 val IrDeclaration.module get() = this.descriptor.module
 
 const val SYNTHETIC_OFFSET = -2
@@ -173,18 +165,16 @@ val SourceManager.FileEntry.lineStartOffsets
         if (it.exists() && it.isFile) it.lineStartOffsets else IntArray(0)
     }
 
-class NaiveSourceBasedFileEntryImpl(override val name: String, val lineStartOffsets: IntArray = IntArray(0)) : SourceManager.FileEntry {
-
-    //-------------------------------------------------------------------------//
-
+class NaiveSourceBasedFileEntryImpl(
+    override val name: String,
+    private val lineStartOffsets: IntArray = intArrayOf()
+) : SourceManager.FileEntry {
     override fun getLineNumber(offset: Int): Int {
         assert(offset != UNDEFINED_OFFSET)
         if (offset == SYNTHETIC_OFFSET) return 0
         val index = lineStartOffsets.binarySearch(offset)
         return if (index >= 0) index else -index - 2
     }
-
-    //-------------------------------------------------------------------------//
 
     override fun getColumnNumber(offset: Int): Int {
         assert(offset != UNDEFINED_OFFSET)
@@ -193,15 +183,39 @@ class NaiveSourceBasedFileEntryImpl(override val name: String, val lineStartOffs
         return offset - lineStartOffsets[lineNumber]
     }
 
-    //-------------------------------------------------------------------------//
-
     override val maxOffset: Int
-        //get() = TODO("not implemented")
         get() = UNDEFINED_OFFSET
 
     override fun getSourceRangeInfo(beginOffset: Int, endOffset: Int): SourceRangeInfo {
-        //TODO("not implemented")
         return SourceRangeInfo(name, beginOffset, -1, -1, endOffset, -1, -1)
-
     }
 }
+
+private fun IrClass.getPropertyDeclaration(name: String): IrProperty? {
+    val properties = declarations.filterIsInstance<IrProperty>().filter { it.name.asString() == name }
+    if (properties.size > 1) {
+        error(
+            "More than one property with name $name in class $fqNameWhenAvailable:\n" +
+                    properties.joinToString("\n", transform = IrProperty::render)
+        )
+    }
+    return properties.firstOrNull()
+}
+
+private fun IrClass.getSimpleFunction(name: String): IrSimpleFunctionSymbol? =
+    findDeclaration<IrSimpleFunction> { it.name.asString() == name }?.symbol
+
+fun IrClass.getPropertyGetter(name: String): IrSimpleFunctionSymbol? =
+    getPropertyDeclaration(name)?.getter?.symbol
+        ?: getSimpleFunction("<get-$name>").also { assert(it?.owner?.correspondingPropertySymbol?.owner?.name?.asString() == name) }
+
+fun IrClass.getPropertySetter(name: String): IrSimpleFunctionSymbol? =
+    getPropertyDeclaration(name)?.setter?.symbol
+        ?: getSimpleFunction("<set-$name>").also { assert(it?.owner?.correspondingPropertySymbol?.owner?.name?.asString() == name) }
+
+fun IrClassSymbol.getSimpleFunction(name: String): IrSimpleFunctionSymbol? = owner.getSimpleFunction(name)
+fun IrClassSymbol.getPropertyGetter(name: String): IrSimpleFunctionSymbol? = owner.getPropertyGetter(name)
+fun IrClassSymbol.getPropertySetter(name: String): IrSimpleFunctionSymbol? = owner.getPropertySetter(name)
+
+inline fun MemberScope.findFirstFunction(name: String, predicate: (CallableMemberDescriptor) -> Boolean) =
+    getContributedFunctions(Name.identifier(name), NoLookupLocation.FROM_BACKEND).first(predicate)

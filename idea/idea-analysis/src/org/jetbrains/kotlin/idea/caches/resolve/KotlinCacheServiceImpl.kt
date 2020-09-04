@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.idea.caches.resolve
 
+import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.projectRoots.Sdk
@@ -34,7 +35,7 @@ import org.jetbrains.kotlin.analyzer.ResolverForProject.Companion.resolverForMod
 import org.jetbrains.kotlin.analyzer.ResolverForProject.Companion.resolverForScriptDependenciesName
 import org.jetbrains.kotlin.analyzer.ResolverForProject.Companion.resolverForSdkName
 import org.jetbrains.kotlin.analyzer.ResolverForProject.Companion.resolverForSpecialInfoName
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.caches.resolve.KotlinCacheService
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.context.GlobalContext
@@ -43,7 +44,6 @@ import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
 import org.jetbrains.kotlin.idea.caches.project.*
 import org.jetbrains.kotlin.idea.caches.project.IdeaModuleInfo
 import org.jetbrains.kotlin.idea.caches.resolve.util.contextWithCompositeExceptionTracker
-import org.jetbrains.kotlin.idea.caches.trackers.KotlinCodeBlockModificationListener
 import org.jetbrains.kotlin.idea.caches.trackers.outOfBlockModificationCount
 import org.jetbrains.kotlin.idea.compiler.IDELanguageSettingsProvider
 import org.jetbrains.kotlin.idea.core.script.ScriptDependenciesModificationTracker
@@ -59,6 +59,7 @@ import org.jetbrains.kotlin.psi.psiUtil.contains
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.diagnostics.KotlinSuppressCache
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
+import org.jetbrains.kotlin.utils.KotlinExceptionWithAttachments
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 import org.jetbrains.kotlin.utils.addToStdlib.sumByLong
 
@@ -120,9 +121,15 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
 
     private fun getFilesForElements(elements: List<KtElement>): List<KtFile> {
         return elements.map {
-            // in theory `containingKtFile` is `@NotNull` but in practice EA-114080
-            @Suppress("USELESS_ELVIS")
-            it.containingKtFile ?: throw IllegalStateException("containingKtFile was null for $it of ${it.javaClass}")
+            try {
+                // in theory `containingKtFile` is `@NotNull` but in practice EA-114080
+                @Suppress("USELESS_ELVIS")
+                it.containingKtFile ?: throw IllegalStateException("containingKtFile was null for $it of ${it.javaClass}")
+            } catch (e: Exception) {
+                if (e is ControlFlowException) throw e
+                throw KotlinExceptionWithAttachments("Couldn't get containingKtFile for ktElement", e)
+                    .withAttachment("element.kt", it.text)
+            }
         }
     }
 
@@ -219,14 +226,14 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
     }
 
     private fun IdeaModuleInfo.platformSettings(targetPlatform: TargetPlatform) = PlatformAnalysisSettings.create(
-        project, targetPlatform, sdk,
-        supportsAdditionalBuiltInsMembers(project),
+        this@KotlinCacheServiceImpl.project, targetPlatform, sdk,
+        supportsAdditionalBuiltInsMembers(this@KotlinCacheServiceImpl.project),
         isReleaseCoroutines()
     )
 
     private fun IdeaModuleInfo.isReleaseCoroutines(): Boolean {
         return IDELanguageSettingsProvider
-            .getLanguageVersionSettings(this, project)
+            .getLanguageVersionSettings(this, this@KotlinCacheServiceImpl.project)
             .supportsFeature(LanguageFeature.ReleaseCoroutines)
     }
 
@@ -247,13 +254,9 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
         val settings = specialModuleInfo.platformSettings(specialModuleInfo.platform ?: targetPlatform)
 
         // Dummy files created e.g. by J2K do not receive events.
-        val dependenciesForSyntheticFileCache = if (files.all { it.originalFile != it }) {
-            emptyList()
-        } else {
-            listOf(ModificationTracker {
-                files.sumByLong { it.modificationStamp }
-            })
-        }
+        val dependencyTrackerForSyntheticFileCache = if (files.all { it.originalFile != it }) {
+            ModificationTracker { files.sumByLong { it.outOfBlockModificationCount } }
+        } else ModificationTracker { files.sumByLong { it.modificationStamp } }
 
         val resolverDebugName =
             "$resolverForSpecialInfoName $specialModuleInfo for files ${files.joinToString { it.name }} for platform $targetPlatform"
@@ -274,7 +277,7 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
                 syntheticFiles = files,
                 reuseDataFrom = reuseDataFrom,
                 moduleFilter = moduleFilter,
-                dependencies = dependenciesForSyntheticFileCache,
+                dependencies = listOf(dependencyTrackerForSyntheticFileCache),
                 invalidateOnOOCB = true,
                 allModules = allModules
             )
@@ -515,7 +518,7 @@ class KotlinCacheServiceImpl(val project: Project) : KotlinCacheService {
     }
 
     private companion object {
-        private val SUPPRESS_ANNOTATION_SHORT_NAME = KotlinBuiltIns.FQ_NAMES.suppress.shortName().identifier
+        private val SUPPRESS_ANNOTATION_SHORT_NAME = StandardNames.FqNames.suppress.shortName().identifier
     }
 }
 

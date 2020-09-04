@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -43,14 +43,6 @@ public inline fun <@kotlin.internal.OnlyInputTypes T> MutableCollection<out T>.r
 @kotlin.internal.InlineOnly
 public inline fun <@kotlin.internal.OnlyInputTypes T> MutableCollection<out T>.retainAll(elements: Collection<T>): Boolean =
     @Suppress("UNCHECKED_CAST") (this as MutableCollection<T>).retainAll(elements)
-
-/**
- * Removes the element at the specified [index] from this list.
- * In Kotlin one should use the [MutableList.removeAt] function instead.
- */
-@Deprecated("Use removeAt(index) instead.", ReplaceWith("removeAt(index)"), level = DeprecationLevel.ERROR)
-@kotlin.internal.InlineOnly
-public inline fun <T> MutableList<T>.remove(index: Int): T = removeAt(index)
 
 /**
  * Adds the specified [element] to this mutable collection.
@@ -150,71 +142,6 @@ public fun <T> MutableCollection<in T>.addAll(elements: Array<out T>): Boolean {
 }
 
 /**
- * Removes all elements from this [MutableIterable] that match the given [predicate].
- *
- * @return `true` if any element was removed from this collection, or `false` when no elements were removed and collection was not modified.
- */
-public fun <T> MutableIterable<T>.removeAll(predicate: (T) -> Boolean): Boolean = filterInPlace(predicate, true)
-
-/**
- * Retains only elements of this [MutableIterable] that match the given [predicate].
- *
- * @return `true` if any element was removed from this collection, or `false` when all elements were retained and collection was not modified.
- */
-public fun <T> MutableIterable<T>.retainAll(predicate: (T) -> Boolean): Boolean = filterInPlace(predicate, false)
-
-private fun <T> MutableIterable<T>.filterInPlace(predicate: (T) -> Boolean, predicateResultToRemove: Boolean): Boolean {
-    var result = false
-    with(iterator()) {
-        while (hasNext())
-            if (predicate(next()) == predicateResultToRemove) {
-                remove()
-                result = true
-            }
-    }
-    return result
-}
-
-/**
- * Removes all elements from this [MutableList] that match the given [predicate].
- *
- * @return `true` if any element was removed from this collection, or `false` when no elements were removed and collection was not modified.
- */
-public fun <T> MutableList<T>.removeAll(predicate: (T) -> Boolean): Boolean = filterInPlace(predicate, true)
-
-/**
- * Retains only elements of this [MutableList] that match the given [predicate].
- *
- * @return `true` if any element was removed from this collection, or `false` when all elements were retained and collection was not modified.
- */
-public fun <T> MutableList<T>.retainAll(predicate: (T) -> Boolean): Boolean = filterInPlace(predicate, false)
-
-private fun <T> MutableList<T>.filterInPlace(predicate: (T) -> Boolean, predicateResultToRemove: Boolean): Boolean {
-    if (this !is RandomAccess)
-        return (this as MutableIterable<T>).filterInPlace(predicate, predicateResultToRemove)
-
-    var writeIndex: Int = 0
-    for (readIndex in 0..lastIndex) {
-        val element = this[readIndex]
-        if (predicate(element) == predicateResultToRemove)
-            continue
-
-        if (writeIndex != readIndex)
-            this[writeIndex] = element
-
-        writeIndex++
-    }
-    if (writeIndex < size) {
-        for (removeIndex in lastIndex downTo writeIndex)
-            removeAt(removeIndex)
-
-        return true
-    } else {
-        return false
-    }
-}
-
-/**
  * Removes all elements from this [MutableCollection] that are also contained in the given [elements] collection.
  */
 public fun <T> MutableCollection<in T>.removeAll(elements: Iterable<T>): Boolean {
@@ -270,25 +197,105 @@ private fun MutableCollection<*>.retainNothing(): Boolean {
     return result
 }
 
+
 /**
- * Randomly shuffles elements in this mutable list using the specified [random] instance as the source of randomness.
+ * Removes all elements from this [MutableIterable] that match the given [predicate].
  *
- * See: https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle#The_modern_algorithm
+ * @return `true` if any element was removed from this collection, or `false` when no elements were removed and collection was not modified.
  */
-@SinceKotlin("1.3")
-public fun <T> MutableList<T>.shuffle(random: Random): Unit {
-    for (i in lastIndex downTo 1) {
-        val j = random.nextInt(i + 1)
-        val copy = this[i]
-        this[i] = this[j]
-        this[j] = copy
+public fun <T> MutableIterable<T>.removeAll(predicate: (T) -> Boolean): Boolean = filterInPlace(predicate, true)
+
+/**
+ * Retains only elements of this [MutableIterable] that match the given [predicate].
+ *
+ * @return `true` if any element was removed from this collection, or `false` when all elements were retained and collection was not modified.
+ */
+public fun <T> MutableIterable<T>.retainAll(predicate: (T) -> Boolean): Boolean = filterInPlace(predicate, false)
+
+private fun <T> MutableIterable<T>.filterInPlace(predicate: (T) -> Boolean, predicateResultToRemove: Boolean): Boolean {
+    var result = false
+    with(iterator()) {
+        while (hasNext())
+            if (predicate(next()) == predicateResultToRemove) {
+                remove()
+                result = true
+            }
     }
+    return result
 }
 
-/**
- * Returns a new list with the elements of this list randomly shuffled
- * using the specified [random] instance as the source of randomness.
- */
-@SinceKotlin("1.3")
-public fun <T> Iterable<T>.shuffled(random: Random): List<T> = toMutableList().apply { shuffle(random) }
 
+/**
+ * Removes the element at the specified [index] from this list.
+ * In Kotlin one should use the [MutableList.removeAt] function instead.
+ */
+@Deprecated("Use removeAt(index) instead.", ReplaceWith("removeAt(index)"), level = DeprecationLevel.ERROR)
+@kotlin.internal.InlineOnly
+public inline fun <T> MutableList<T>.remove(index: Int): T = removeAt(index)
+
+/**
+ * Removes the first element from this mutable list and returns that removed element, or throws [NoSuchElementException] if this list is empty.
+ */
+@SinceKotlin("1.4")
+@WasExperimental(ExperimentalStdlibApi::class)
+public fun <T> MutableList<T>.removeFirst(): T = if (isEmpty()) throw NoSuchElementException("List is empty.") else removeAt(0)
+
+/**
+ * Removes the first element from this mutable list and returns that removed element, or returns `null` if this list is empty.
+ */
+@SinceKotlin("1.4")
+@WasExperimental(ExperimentalStdlibApi::class)
+public fun <T> MutableList<T>.removeFirstOrNull(): T? = if (isEmpty()) null else removeAt(0)
+
+/**
+ * Removes the last element from this mutable list and returns that removed element, or throws [NoSuchElementException] if this list is empty.
+ */
+@SinceKotlin("1.4")
+@WasExperimental(ExperimentalStdlibApi::class)
+public fun <T> MutableList<T>.removeLast(): T = if (isEmpty()) throw NoSuchElementException("List is empty.") else removeAt(lastIndex)
+
+/**
+ * Removes the last element from this mutable list and returns that removed element, or returns `null` if this list is empty.
+ */
+@SinceKotlin("1.4")
+@WasExperimental(ExperimentalStdlibApi::class)
+public fun <T> MutableList<T>.removeLastOrNull(): T? = if (isEmpty()) null else removeAt(lastIndex)
+
+/**
+ * Removes all elements from this [MutableList] that match the given [predicate].
+ *
+ * @return `true` if any element was removed from this collection, or `false` when no elements were removed and collection was not modified.
+ */
+public fun <T> MutableList<T>.removeAll(predicate: (T) -> Boolean): Boolean = filterInPlace(predicate, true)
+
+/**
+ * Retains only elements of this [MutableList] that match the given [predicate].
+ *
+ * @return `true` if any element was removed from this collection, or `false` when all elements were retained and collection was not modified.
+ */
+public fun <T> MutableList<T>.retainAll(predicate: (T) -> Boolean): Boolean = filterInPlace(predicate, false)
+
+private fun <T> MutableList<T>.filterInPlace(predicate: (T) -> Boolean, predicateResultToRemove: Boolean): Boolean {
+    if (this !is RandomAccess)
+        return (this as MutableIterable<T>).filterInPlace(predicate, predicateResultToRemove)
+
+    var writeIndex: Int = 0
+    for (readIndex in 0..lastIndex) {
+        val element = this[readIndex]
+        if (predicate(element) == predicateResultToRemove)
+            continue
+
+        if (writeIndex != readIndex)
+            this[writeIndex] = element
+
+        writeIndex++
+    }
+    if (writeIndex < size) {
+        for (removeIndex in lastIndex downTo writeIndex)
+            removeAt(removeIndex)
+
+        return true
+    } else {
+        return false
+    }
+}

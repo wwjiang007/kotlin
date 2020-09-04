@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.refactoring.cutPaste
@@ -24,6 +13,7 @@ import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiManager
 import com.intellij.refactoring.RefactoringBundle
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.unsafeResolveToDescriptor
 import org.jetbrains.kotlin.idea.codeInsight.shorten.runRefactoringAndKeepDelayedRequests
 import org.jetbrains.kotlin.idea.core.util.range
@@ -39,12 +29,12 @@ import org.jetbrains.kotlin.psi.psiUtil.findDescendantOfType
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 
 class MoveDeclarationsProcessor(
-        val project: Project,
-        private val sourceContainer: KtDeclarationContainer,
-        private val targetPsiFile: KtFile,
-        val pastedDeclarations: List<KtNamedDeclaration>,
-        private val imports: List<String>,
-        private val sourceDeclarationsText: List<String>
+    val project: Project,
+    private val sourceContainer: KtDeclarationContainer,
+    private val targetPsiFile: KtFile,
+    val pastedDeclarations: List<KtNamedDeclaration>,
+    private val imports: List<String>,
+    private val sourceDeclarationsText: List<String>
 ) {
     companion object {
         fun build(editor: Editor, cookie: MoveDeclarationsEditorCookie): MoveDeclarationsProcessor? {
@@ -98,13 +88,13 @@ class MoveDeclarationsProcessor(
     fun performRefactoring() {
         psiDocumentManager.commitAllDocuments()
 
-        val commandName = "Usage update"
+        val commandName = KotlinBundle.message("action.usage.update.text")
         val commandGroupId = Any() // we need to group both commands for undo
 
         // temporary revert imports to the state before they have been changed
         val importsSubstitution = if (sourcePsiFile.importDirectives.size != imports.size) {
-            val startOffset = sourcePsiFile.importDirectives.map { it.startOffset }.min() ?: 0
-            val endOffset = sourcePsiFile.importDirectives.map { it.endOffset }.min() ?: 0
+            val startOffset = sourcePsiFile.importDirectives.minOfOrNull { it.startOffset } ?: 0
+            val endOffset = sourcePsiFile.importDirectives.minOfOrNull { it.endOffset } ?: 0
             val importsDeclarationsText = sourceDocument.getText(TextRange(startOffset, endOffset))
 
             val tempImportsText = imports.joinToString(separator = "\n")

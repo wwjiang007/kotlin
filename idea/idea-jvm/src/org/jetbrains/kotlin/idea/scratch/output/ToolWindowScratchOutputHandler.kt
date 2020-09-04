@@ -149,7 +149,7 @@ private class ToolWindowScratchOutputHandler(private val parentDisposable: Dispo
                 toolWindow.show(null)
             }
 
-            toolWindow.icon = ExecutionUtil.getLiveIndicator(ScratchFileType.INSTANCE.icon)
+            toolWindow.setIcon(ExecutionUtil.getLiveIndicator(ScratchFileType.INSTANCE.icon))
         }
     }
 
@@ -168,7 +168,7 @@ private class ToolWindowScratchOutputHandler(private val parentDisposable: Dispo
                 toolWindow.hide(null)
             }
 
-            toolWindow.icon = ScratchFileType.INSTANCE.icon
+            toolWindow.setIcon(ScratchFileType.INSTANCE.icon ?: error("Text icon is expected to be present"))
         }
     }
 
@@ -187,7 +187,8 @@ private class ToolWindowScratchOutputHandler(private val parentDisposable: Dispo
         val project = file.project
         val toolWindowManager = ToolWindowManager.getInstance(project)
         toolWindowManager.registerToolWindow(ScratchToolWindowFactory.ID, true, ToolWindowAnchor.BOTTOM)
-        val window = toolWindowManager.getToolWindow(ScratchToolWindowFactory.ID)
+        val window =
+            toolWindowManager.getToolWindow(ScratchToolWindowFactory.ID) ?: error("ScratchToolWindowFactory.ID should be registered")
         ScratchToolWindowFactory().createToolWindowContent(project, window)
 
         Disposer.register(parentDisposable, Disposable {
@@ -208,8 +209,8 @@ private class ScratchToolWindowFactory : ToolWindowFactory {
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val consoleView = ConsoleViewImpl(project, true)
-        toolWindow.isToHideOnEmptyContent = true
-        toolWindow.icon = ScratchFileType.INSTANCE.icon
+        toolWindow.setToHideOnEmptyContent(true)
+        toolWindow.setIcon(ScratchFileType.INSTANCE.icon ?: error("Text icon should be present"))
         toolWindow.hide(null)
 
         val contentManager = toolWindow.contentManager

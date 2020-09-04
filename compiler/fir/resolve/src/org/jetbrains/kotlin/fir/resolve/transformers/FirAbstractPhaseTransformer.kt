@@ -6,11 +6,10 @@
 package org.jetbrains.kotlin.fir.resolve.transformers
 
 import org.jetbrains.kotlin.fir.FirSession
-import org.jetbrains.kotlin.fir.FirSymbolOwner
 import org.jetbrains.kotlin.fir.declarations.FirDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
-import org.jetbrains.kotlin.fir.symbols.AbstractFirBasedSymbol
+import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.fir.visitors.CompositeTransformResult
 import org.jetbrains.kotlin.fir.visitors.FirDefaultTransformer
 
@@ -26,24 +25,33 @@ abstract class FirAbstractPhaseTransformer<D>(
         }
     }
 
-    open val <D> AbstractFirBasedSymbol<D>.phasedFir: D where D : FirDeclaration, D : FirSymbolOwner<D>
-        get() {
-            val requiredPhase = transformerPhase.prev
-            return phasedFir(session, requiredPhase)
-        }
+    override fun transformFile(file: FirFile, data: D): CompositeTransformResult<FirFile> {
+        checkSessionConsistency(file)
+        file.replaceResolvePhase(transformerPhase)
+
+        @Suppress("UNCHECKED_CAST")
+        return super.transformFile(file, data) as CompositeTransformResult<FirFile>
+    }
 
     override fun transformDeclaration(declaration: FirDeclaration, data: D): CompositeTransformResult<FirDeclaration> {
         declaration.replaceResolvePhase(transformerPhase)
 
         return super.transformDeclaration(declaration, data)
     }
+
+    protected fun checkSessionConsistency(file: FirFile) {
+        assert(session === file.session) {
+            "File ${file.name} and transformer ${this::class} have inconsistent sessions"
+        }
+    }
 }
 
 fun FirFile.runResolve(toPhase: FirResolvePhase, fromPhase: FirResolvePhase = FirResolvePhase.RAW_FIR) {
+    val scopeSession = ScopeSession()
     var currentPhase = fromPhase
     while (currentPhase < toPhase) {
         currentPhase = currentPhase.next
-        val phaseTransformer = currentPhase.createTransformerByPhase()
-        transform<FirFile, Nothing?>(phaseTransformer, null)
+        val phaseProcessor = currentPhase.createTransformerBasedProcessorByPhase(session, scopeSession)
+        phaseProcessor.processFile(this)
     }
 }

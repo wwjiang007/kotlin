@@ -35,12 +35,12 @@ fun box(): String {
     result = ""
     invokeOrder = ""
     result = inlineFun(init = { invokeOrder += "init"; "I" }(),
-                       constraints = *arrayOf({ invokeOrder += "constraints";A("C") }()),
+                       constraints = *arrayOf({ invokeOrder += " constraints";A("C") }()),
                        receiver = { invokeOrder += " receiver"; "R" }()
     )
     if (result != "C, R, I") return "fail 3: $result"
-    //Change test after KT-17691 FIX
-    if (invokeOrder != "init receiverconstraints") return "fail 4: $invokeOrder"
+    // Change test after e3fe1bcf7c3 has been dealt with.
+    if (invokeOrder != "init receiver constraints") return "fail 4: $invokeOrder"
 
     result = ""
     invokeOrder = ""

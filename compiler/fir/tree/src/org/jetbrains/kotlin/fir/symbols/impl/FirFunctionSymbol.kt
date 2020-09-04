@@ -1,12 +1,14 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.symbols.impl
 
 import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.symbols.AccessorSymbol
 import org.jetbrains.kotlin.fir.symbols.CallableId
+import org.jetbrains.kotlin.fir.symbols.PossiblyFirFakeOverrideSymbol
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
@@ -22,20 +24,21 @@ sealed class FirFunctionSymbol<D : FirFunction<D>>(
 
 open class FirNamedFunctionSymbol(
     callableId: CallableId,
-    val isFakeOverride: Boolean = false,
+    override val isFakeOverride: Boolean = false,
     // Actual for fake override only
-    override val overriddenSymbol: FirNamedFunctionSymbol? = null
-) : FirFunctionSymbol<FirSimpleFunction>(callableId)
+    override val overriddenSymbol: FirNamedFunctionSymbol? = null,
+    override val isIntersectionOverride: Boolean = false,
+) : FirFunctionSymbol<FirSimpleFunction>(callableId), PossiblyFirFakeOverrideSymbol<FirSimpleFunction, FirNamedFunctionSymbol>
 
 class FirConstructorSymbol(
     callableId: CallableId,
     override val overriddenSymbol: FirConstructorSymbol? = null
 ) : FirFunctionSymbol<FirConstructor>(callableId)
 
-class FirAccessorSymbol(
+open class FirAccessorSymbol(
     callableId: CallableId,
-    val accessorId: CallableId
-) : FirFunctionSymbol<FirSimpleFunction>(callableId)
+    override val accessorId: CallableId
+) : FirPropertySymbol(callableId), AccessorSymbol
 
 // ------------------------ unnamed ------------------------
 

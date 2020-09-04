@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2000-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -11,6 +11,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElementVisitor
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.actions.generate.KotlinGenerateEqualsAndHashcodeAction
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
@@ -34,10 +35,12 @@ class ArrayInDataClassInspection : AbstractKotlinInspection() {
                 if (!parameter.hasValOrVar()) continue
                 val type = context.get(BindingContext.TYPE, parameter.typeReference) ?: continue
                 if (KotlinBuiltIns.isArray(type) || KotlinBuiltIns.isPrimitiveArray(type)) {
-                    holder.registerProblem(parameter,
-                                           "Array property in data class: it's recommended to override equals() / hashCode()",
-                                           ProblemHighlightType.GENERIC_ERROR_OR_WARNING,
-                                           GenerateEqualsAndHashcodeFix())
+                    holder.registerProblem(
+                        parameter,
+                        KotlinBundle.message("array.property.in.data.class.it.s.recommended.to.override.equals.hashcode"),
+                        ProblemHighlightType.GENERIC_ERROR_OR_WARNING,
+                        GenerateEqualsAndHashcodeFix()
+                    )
                 }
             }
         }
@@ -63,7 +66,7 @@ class ArrayInDataClassInspection : AbstractKotlinInspection() {
     }
 
     class GenerateEqualsAndHashcodeFix : LocalQuickFix {
-        override fun getName() = "Generate equals() and hashCode()"
+        override fun getName() = KotlinBundle.message("generate.equals.and.hashcode.fix.text")
 
         override fun getFamilyName() = name
 

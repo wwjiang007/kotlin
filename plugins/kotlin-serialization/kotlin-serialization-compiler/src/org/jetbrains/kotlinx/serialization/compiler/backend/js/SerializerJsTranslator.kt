@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlinx.serialization.compiler.backend.js
@@ -34,7 +23,6 @@ import org.jetbrains.kotlin.js.translate.utils.TranslationUtils
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtPureClassOrObject
 import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassNotAny
-import org.jetbrains.kotlin.types.typeUtil.builtIns
 import org.jetbrains.kotlinx.serialization.compiler.backend.common.SerializerCodegen
 import org.jetbrains.kotlinx.serialization.compiler.backend.common.getSerialTypeInfo
 import org.jetbrains.kotlinx.serialization.compiler.resolve.*
@@ -83,7 +71,7 @@ open class SerializerJsTranslator(
         val serialDescImplConstructor = baseSerialDescImplClass.unsubstitutedPrimaryConstructor!!
         return JsNew(
             context.getInnerReference(serialDescImplConstructor),
-            listOf(JsStringLiteral(serialName), if (isGeneratedSerializer) correctThis else JsNullLiteral())
+            listOf(JsStringLiteral(serialName), if (isGeneratedSerializer) correctThis else JsNullLiteral(), JsIntLiteral(serializableProperties.size))
         )
     }
 
@@ -122,6 +110,13 @@ open class SerializerJsTranslator(
         +JsReturn(JsArrayLiteral(allSerializers))
     }
 
+    override fun generateTypeParamsSerializersGetter(function: FunctionDescriptor) = generateFunction(function) { _, _ ->
+        val typeParams = serializableDescriptor.declaredTypeParameters.mapIndexed { idx, _ ->
+            JsNameRef(context.scope().declareName("$typeArgPrefix$idx"), JsThisRef())
+        }
+        +JsReturn(JsArrayLiteral(typeParams))
+    }
+
     override fun generateSerializableClassProperty(property: PropertyDescriptor) {
         val propDesc = generatedSerialDescPropertyDescriptor ?: return
         val propTranslator = DefaultPropertyTranslator(
@@ -158,7 +153,7 @@ open class SerializerJsTranslator(
         val encoderClass = serializerDescriptor.getClassFromSerializationPackage(SerialEntityNames.ENCODER_CLASS)
         val kOutputClass = serializerDescriptor.getClassFromSerializationPackage(SerialEntityNames.STRUCTURE_ENCODER_CLASS)
         val wBeginFunc = ctx.getNameForDescriptor(
-            encoderClass.getFuncDesc(CallingConventions.begin).single { it.valueParameters.size == 2 })
+            encoderClass.getFuncDesc(CallingConventions.begin).single { it.valueParameters.size == 1 })
         val serialClassDescRef = JsNameRef(context.getNameForDescriptor(anySerialDescProperty!!), JsThisRef())
 
         val serializableSource = ((serializableDescriptor.findPsi() as? KtPureClassOrObject)
@@ -167,13 +162,9 @@ open class SerializerJsTranslator(
             context.buildInitializersRemapping(serializableSource, serializableDescriptor.getSuperClassNotAny())
 
         // output.writeBegin(desc, [])
-        val typeParams = serializableDescriptor.declaredTypeParameters.mapIndexed { idx, _ ->
-            JsNameRef(context.scope().declareName("$typeArgPrefix$idx"), JsThisRef())
-        }
         val call = JsInvocation(
             JsNameRef(wBeginFunc, JsNameRef(jsFun.parameters[0].name)),
-            serialClassDescRef,
-            JsArrayLiteral(typeParams)
+            serialClassDescRef
         )
         val objRef = JsNameRef(jsFun.parameters[1].name)
         // output = output.writeBegin...
@@ -244,8 +235,7 @@ open class SerializerJsTranslator(
 
         // var index = -1, readAll = false
         val indexVar = JsNameRef(jsFun.scope.declareFreshName("index"))
-        val readAllVar = JsNameRef(jsFun.scope.declareFreshName("readAll"))
-        +JsVars(JsVars.JsVar(indexVar.name), JsVars.JsVar(readAllVar.name, JsBooleanLiteral(false)))
+        +JsVars(JsVars.JsVar(indexVar.name))
 
         // calculating bit mask vars
         val blocksCnt = serializableProperties.bitMaskSlotCount()
@@ -260,14 +250,11 @@ open class SerializerJsTranslator(
         +JsVars(localProps.map { JsVars.JsVar(it.name) }, true)
 
         //input = input.readBegin(...)
-        val typeParams = serializableDescriptor.declaredTypeParameters.mapIndexed { idx, _ ->
-            JsNameRef(context.scope().declareName("$typeArgPrefix$idx"), JsThisRef())
-        }
         val inputVar = JsNameRef(jsFun.scope.declareFreshName("input"))
-        val readBeginF = decoderClass.getFuncDesc(CallingConventions.begin).single()
+        val readBeginF = decoderClass.getFuncDesc(CallingConventions.begin).single { it.valueParameters.size == 1 }
         val readBeginCall = JsInvocation(
             JsNameRef(context.getNameForDescriptor(readBeginF), JsNameRef(jsFun.parameters[0].name)),
-            serialClassDescRef, JsArrayLiteral(typeParams)
+            serialClassDescRef
         )
         +JsVars(JsVars.JsVar(inputVar.name, readBeginCall))
 
@@ -283,14 +270,7 @@ open class SerializerJsTranslator(
             ).makeStmt()
             // switch(index)
             jsSwitch(indexVar) {
-                // -2: readAll = true
-                case(JsIntLiteral(-2)) {
-                    +JsAstUtils.assignment(
-                        readAllVar,
-                        JsBooleanLiteral(true)
-                    ).makeStmt()
-                }
-                // all properties
+//                 all properties
                 for ((i, property) in serializableProperties.withIndex()) {
                     case(JsIntLiteral(i)) {
                         // input.readXxxElementValue
@@ -312,30 +292,16 @@ open class SerializerJsTranslator(
                             )
                             JsInvocation(JsNameRef(readFunc, inputVar), readArgs)
                         } else {
-                            val notSeenTest = propNotSeenTest(bitMasks[bitMaskOff(i)], i)
                             val readFunc =
                                 inputClass.getFuncDesc("${CallingConventions.decode}${sti.elementMethodPrefix}Serializable${CallingConventions.elementPostfix}")
-                                    .single()
+                                    .single { it.valueParameters.size == 4 }
                                     .let { context.getNameForDescriptor(it) }
-                            val updateFunc =
-                                inputClass.getFuncDesc("${CallingConventions.update}${sti.elementMethodPrefix}Serializable${CallingConventions.elementPostfix}")
-                                    .single()
-                                    .let { context.getNameForDescriptor(it) }
-                            JsConditional(
-                                notSeenTest,
-                                JsInvocation(
-                                    JsNameRef(readFunc, inputVar),
-                                    serialClassDescRef,
-                                    JsIntLiteral(i),
-                                    innerSerial
-                                ),
-                                JsInvocation(
-                                    JsNameRef(updateFunc, inputVar),
-                                    serialClassDescRef,
-                                    JsIntLiteral(i),
-                                    innerSerial,
-                                    localProps[i]
-                                )
+                            JsInvocation(
+                                JsNameRef(readFunc, inputVar),
+                                serialClassDescRef,
+                                JsIntLiteral(i),
+                                innerSerial,
+                                localProps[i]
                             )
                         }
                         // localPropI = ...
@@ -343,13 +309,6 @@ open class SerializerJsTranslator(
                             localProps[i],
                             call
                         ).makeStmt()
-                        // need explicit unit instance
-                        if (sti.unit) {
-                            +JsAstUtils.assignment(
-                                localProps[i],
-                                context.getQualifiedReference(property.type.builtIns.unit)
-                            ).makeStmt()
-                        }
                         // char unboxing crutch
                         if (KotlinBuiltIns.isCharOrNullableChar(property.type)) {
                             val coerceTo = TranslationUtils.getReturnTypeForCoercion(property.descriptor)
@@ -366,8 +325,7 @@ open class SerializerJsTranslator(
                             bitMasks[bitMaskOff(i)],
                             JsIntLiteral(bitPos)
                         ).makeStmt()
-                        // if (!readAll) break
-                        +JsIf(JsAstUtils.not(readAllVar), JsBreak())
+                        +JsBreak()
                     }
                 }
                 // case -1: break loop
@@ -403,7 +361,6 @@ open class SerializerJsTranslator(
 
     companion object {
         fun translate(
-            declaration: KtPureClassOrObject,
             descriptor: ClassDescriptor,
             translator: DeclarationBodyVisitor,
             context: TranslationContext

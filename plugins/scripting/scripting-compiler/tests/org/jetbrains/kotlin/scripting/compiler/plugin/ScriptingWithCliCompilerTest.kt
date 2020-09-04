@@ -5,8 +5,8 @@
 
 package org.jetbrains.kotlin.scripting.compiler.plugin
 
-import junit.framework.Assert
 import org.jetbrains.kotlin.cli.common.environment.setIdeaIoUseFallback
+import org.junit.Assert
 import org.junit.Test
 import java.io.File
 
@@ -43,6 +43,44 @@ class ScriptingWithCliCompilerTest {
         runWithKotlinc(
             "$TEST_DATA_DIR/integration/withDependencyOnCompileClassPath.kts", listOf("Hello from standard kts!"),
             classpath = getMainKtsClassPath()
+        )
+    }
+
+    @Test
+    fun testExpression() {
+        runWithK2JVMCompiler(
+            arrayOf(
+                "-expression",
+                "val x = 7; println(x * 6); for (arg in args) println(arg)",
+                "--",
+                "hi",
+                "there"
+            ),
+            listOf("42", "hi", "there")
+        )
+    }
+
+    @Test
+    fun testExpressionWithComma() {
+        runWithK2JVMCompiler(
+            arrayOf(
+                "-expression",
+                "listOf(1,2)"
+            ),
+            listOf("\\[1, 2\\]")
+        )
+    }
+
+    @Test
+    fun testJdkModules() {
+        // actually tests anything on JDKs 9+, on pre-9 it always works because JDK is not modularized anyway
+        runWithKotlinc(
+            arrayOf(
+                "-Xadd-modules=java.sql",
+                "-expression",
+                "println(javax.sql.DataSource::class.java)"
+            ),
+            listOf("interface javax.sql.DataSource")
         )
     }
 

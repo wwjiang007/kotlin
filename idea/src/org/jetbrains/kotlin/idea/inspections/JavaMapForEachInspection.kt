@@ -9,6 +9,7 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.TextRange
 import org.jetbrains.kotlin.builtins.DefaultBuiltIns
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.core.getLastLambdaExpression
 import org.jetbrains.kotlin.idea.inspections.collections.isMap
@@ -30,9 +31,11 @@ class JavaMapForEachInspection : AbstractApplicabilityBasedInspection<KtDotQuali
         val callExpression = element.callExpression ?: return false
         val calleeExpression = callExpression.calleeExpression ?: return false
         if (calleeExpression.text != "forEach") return false
+        if (callExpression.valueArguments.size != 1) return false
 
         val lambda = callExpression.lambda() ?: return false
-        if (lambda.valueParameters.size != 2) return false
+        val lambdaParameters = lambda.valueParameters
+        if (lambdaParameters.size != 2 || lambdaParameters.any { it.destructuringDeclaration != null }) return false
 
         val context = element.analyze(BodyResolveMode.PARTIAL)
         if (!element.receiverExpression.getType(context).isMap(DefaultBuiltIns.Instance)) return false
@@ -42,9 +45,10 @@ class JavaMapForEachInspection : AbstractApplicabilityBasedInspection<KtDotQuali
 
     override fun inspectionHighlightRangeInElement(element: KtDotQualifiedExpression): TextRange? = element.calleeTextRangeInThis()
 
-    override fun inspectionText(element: KtDotQualifiedExpression) = "Java Map.forEach method call should be replaced with Kotlin's forEach"
+    override fun inspectionText(element: KtDotQualifiedExpression) =
+        KotlinBundle.message("java.map.foreach.method.call.should.be.replaced.with.kotlin.s.foreach")
 
-    override val defaultFixText = "Replace with Kotlin's forEach"
+    override val defaultFixText get() = KotlinBundle.message("replace.with.kotlin.s.foreach")
 
     override fun applyTo(element: KtDotQualifiedExpression, project: Project, editor: Editor?) {
         val call = element.callExpression ?: return

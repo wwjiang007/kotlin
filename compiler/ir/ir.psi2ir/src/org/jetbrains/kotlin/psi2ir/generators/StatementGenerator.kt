@@ -73,7 +73,7 @@ class StatementGenerator(
     private fun KtElement.genStmt(): IrStatement =
         try {
             deparenthesize().accept(this@StatementGenerator, null)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             ErrorExpressionGenerator(this@StatementGenerator).generateErrorExpression(this, e)
         }
 
@@ -368,10 +368,11 @@ class StatementGenerator(
     override fun visitSafeQualifiedExpression(expression: KtSafeQualifiedExpression, data: Nothing?): IrStatement =
         expression.selectorExpression!!.accept(this, data)
 
-    private fun isInsideClass(classDescriptor: ClassDescriptor): Boolean {
+    private fun isThisForClassPhysicallyAvailable(classDescriptor: ClassDescriptor): Boolean {
         var scopeDescriptor: DeclarationDescriptor? = scopeOwner
         while (scopeDescriptor != null) {
             if (scopeDescriptor == classDescriptor) return true
+            if (scopeDescriptor is ClassDescriptor && !scopeDescriptor.isInner) return false
             scopeDescriptor = scopeDescriptor.containingDeclaration
         }
         return false
@@ -381,7 +382,7 @@ class StatementGenerator(
         val thisAsReceiverParameter = classDescriptor.thisAsReceiverParameter
         val thisType = kotlinType.toIrType()
 
-        return if (DescriptorUtils.isObject(classDescriptor) && !isInsideClass(classDescriptor)) {
+        return if (DescriptorUtils.isObject(classDescriptor) && !isThisForClassPhysicallyAvailable(classDescriptor)) {
             IrGetObjectValueImpl(
                 startOffset, endOffset,
                 thisType,

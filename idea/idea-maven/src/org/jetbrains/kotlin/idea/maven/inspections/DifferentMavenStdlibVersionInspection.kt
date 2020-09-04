@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.maven.inspections
@@ -29,6 +18,7 @@ import org.jetbrains.idea.maven.dom.model.MavenDomProjectModel
 import org.jetbrains.idea.maven.model.MavenId
 import org.jetbrains.idea.maven.project.MavenProject
 import org.jetbrains.idea.maven.project.MavenProjectsManager
+import org.jetbrains.kotlin.idea.maven.KotlinMavenBundle
 import org.jetbrains.kotlin.idea.maven.PomFile
 import org.jetbrains.kotlin.idea.maven.configuration.KotlinMavenConfigurator
 import org.jetbrains.kotlin.utils.PathUtil
@@ -44,7 +34,8 @@ class DifferentMavenStdlibVersionInspection : DomElementsInspection<MavenDomProj
         val manager = MavenProjectsManager.getInstance(module.project) ?: return
         val project = manager.findProject(module) ?: return
 
-        val stdlibVersion = project.findDependencies(KotlinMavenConfigurator.GROUP_ID, PathUtil.KOTLIN_JAVA_STDLIB_NAME).map { it.version }.distinct()
+        val stdlibVersion =
+            project.findDependencies(KotlinMavenConfigurator.GROUP_ID, PathUtil.KOTLIN_JAVA_STDLIB_NAME).map { it.version }.distinct()
         val pluginVersion = project.findPlugin(KotlinMavenConfigurator.GROUP_ID, KotlinMavenConfigurator.MAVEN_PLUGIN_ID)?.version
 
         if (pluginVersion == null || stdlibVersion.isEmpty() || stdlibVersion.singleOrNull() == pluginVersion) {
@@ -60,7 +51,7 @@ class DifferentMavenStdlibVersionInspection : DomElementsInspection<MavenDomProj
             holder.createProblem(
                 plugin.version,
                 HighlightSeverity.WARNING,
-                "Plugin version (${plugin.version}) is not the same as library version (${stdlibVersion.joinToString(",", "", "")})",
+                KotlinMavenBundle.message("version.different.plugin.library", plugin.version, stdlibVersion.joinToString(",", "", "")),
                 *fixes.toTypedArray()
             )
         }
@@ -75,14 +66,14 @@ class DifferentMavenStdlibVersionInspection : DomElementsInspection<MavenDomProj
                 holder.createProblem(
                     dependency.version,
                     HighlightSeverity.WARNING,
-                    "Plugin version ($pluginVersion) is not the same as library version (${dependency.version})",
+                    KotlinMavenBundle.message("version.different.plugin.library", pluginVersion, dependency.version),
                     *fixes.toTypedArray()
                 )
             }
     }
 
     private fun createFixes(project: MavenProject, versionElement: GenericDomValue<*>, versions: List<String>): List<SetVersionQuickFix> {
-        val bestVersion = versions.maxBy(::MavenVersionComparable)!!
+        val bestVersion = versions.maxByOrNull(::MavenVersionComparable)!!
         if (bestVersion == versionElement.stringValue) {
             return emptyList()
         }
@@ -95,10 +86,12 @@ class DifferentMavenStdlibVersionInspection : DomElementsInspection<MavenDomProj
 
     private class SetVersionQuickFix(val versionElement: GenericDomValue<*>, val newVersion: String, val versionResolved: String?) :
         LocalQuickFix {
-        override fun getName() =
-            if (versionResolved == null) "Change version to $newVersion" else "Change version to $newVersion ($versionResolved)"
+        override fun getName() = when (versionResolved) {
+            null -> KotlinMavenBundle.message("fix.set.version.name", newVersion)
+            else -> KotlinMavenBundle.message("fix.set.version.name1", newVersion, versionResolved)
+        }
 
-        override fun getFamilyName() = "Change version"
+        override fun getFamilyName() = KotlinMavenBundle.message("fix.set.version.family")
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
             versionElement.value = newVersion

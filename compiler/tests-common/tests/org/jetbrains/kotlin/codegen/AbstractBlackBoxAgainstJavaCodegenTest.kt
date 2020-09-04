@@ -21,7 +21,7 @@ import org.jetbrains.kotlin.config.CompilerConfiguration
 import java.io.File
 
 abstract class AbstractBlackBoxAgainstJavaCodegenTest : AbstractBlackBoxCodegenTest() {
-    override fun doMultiFileTest(wholeFile: File, files: MutableList<TestFile>) {
+    override fun doMultiFileTest(wholeFile: File, files: List<TestFile>) {
         javaClassesOutputDirectory = writeJavaFiles(files)!!.let { directory ->
             CodegenTestUtil.compileJava(CodegenTestUtil.findJavaSourcesInDirectory(directory), emptyList(), extractJavacOptions(files))
         }
@@ -35,6 +35,7 @@ abstract class AbstractBlackBoxAgainstJavaCodegenTest : AbstractBlackBoxCodegenT
     }
 
     override fun updateConfiguration(configuration: CompilerConfiguration) {
+        super.updateConfiguration(configuration)
         configuration.addJvmClasspathRoot(javaClassesOutputDirectory)
     }
 }

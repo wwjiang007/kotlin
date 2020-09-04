@@ -1,0 +1,18 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version 'KOTLIN_VERSION'
+}
+group = 'me.user'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+    maven {
+        url 'https://dl.bintray.com/kotlin/kotlin-dev'
+    }
+}
+dependencies {
+    testImplementation 'org.jetbrains.kotlin:kotlin-test-junit'
+}
+compileKotlin {
+    kotlinOptions.jvmTarget = '1.8'
+}

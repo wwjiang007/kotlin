@@ -14,25 +14,25 @@ import org.jetbrains.kotlin.ir.builders.declarations.addFunction
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrClassifierSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
-import org.jetbrains.kotlin.ir.types.IrType
-import org.jetbrains.kotlin.ir.util.ReferenceSymbolTable
+import org.jetbrains.kotlin.ir.util.SymbolTable
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
-import org.jetbrains.kotlin.types.SimpleType
 
 class WasmSymbols(
     context: WasmBackendContext,
-    private val symbolTable: ReferenceSymbolTable
-) : Symbols<WasmBackendContext>(context, symbolTable) {
+    private val symbolTable: SymbolTable
+) : Symbols<WasmBackendContext>(context, context.irBuiltIns, symbolTable) {
 
-    override val ThrowNullPointerException
+    override val throwNullPointerException
         get() = TODO()
-    override val ThrowNoWhenBranchMatchedException
+    override val throwNoWhenBranchMatchedException
         get() = TODO()
-    override val ThrowTypeCastException
+    override val throwTypeCastException
         get() = TODO()
-    override val ThrowUninitializedPropertyAccessException
+    override val throwUninitializedPropertyAccessException
+        get() = TODO()
+    override val throwKotlinNothingValueException: IrSimpleFunctionSymbol
         get() = TODO()
     override val defaultConstructorMarker
         get() = TODO()
@@ -47,7 +47,7 @@ class WasmSymbols(
     override val getContinuation
         get() = TODO()
     override val coroutineContextGetter by lazy {
-        context.excludedDeclarations.addFunction {
+        context.irFactory.addFunction(context.excludedDeclarations) {
             name = Name.identifier("coroutineContextGetter\$Stub")
         }.symbol
     }
@@ -57,6 +57,9 @@ class WasmSymbols(
     override val coroutineGetContext
         get() = TODO()
     override val returnIfSuspended
+        get() = TODO()
+
+    override val functionAdapter: IrClassSymbol
         get() = TODO()
 
     private val wasmInternalPackage = context.module.getPackage(FqName("kotlin.wasm.internal"))

@@ -5,29 +5,29 @@
 
 package org.jetbrains.kotlin.idea.script
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.ServiceManager
-import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.util.text.StringUtilRt
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.kotlin.idea.core.script.IdeScriptReportSink
-import org.jetbrains.kotlin.idea.core.script.ScriptConfigurationManager
-import org.jetbrains.kotlin.idea.core.script.applySuggestedScriptConfiguration
+import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiFile
+import org.jetbrains.kotlin.idea.core.script.*
+import org.jetbrains.kotlin.idea.core.script.configuration.CompositeScriptConfigurationManager
 import org.jetbrains.kotlin.idea.core.script.configuration.DefaultScriptConfigurationManagerExtensions
 import org.jetbrains.kotlin.idea.core.script.configuration.loader.FileContentsDependentConfigurationLoader
 import org.jetbrains.kotlin.idea.core.script.configuration.testingBackgroundExecutor
 import org.jetbrains.kotlin.idea.core.script.configuration.utils.testScriptConfigurationNotification
-import org.jetbrains.kotlin.idea.core.script.hasSuggestedScriptConfiguration
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.psi.KtFile
 
 abstract class AbstractScriptConfigurationLoadingTest : AbstractScriptConfigurationTest() {
-    val ktFile: KtFile get() = myFile as KtFile
-    val virtualFile get() = myFile.virtualFile
-
-    lateinit var scriptConfigurationManager: ScriptConfigurationManager
+    lateinit var scriptConfigurationManager: CompositeScriptConfigurationManager
 
     companion object {
         private var occurredLoadings = 0
         private var currentLoadingScriptConfigurationCallback: (() -> Unit)? = null
+
         @JvmStatic
         @Suppress("unused")
         fun loadingScriptConfigurationCallback() {
@@ -40,7 +40,20 @@ abstract class AbstractScriptConfigurationLoadingTest : AbstractScriptConfigurat
     override fun setUp() {
         super.setUp()
         testScriptConfigurationNotification = true
+        ApplicationManager.getApplication().isScriptChangesNotifierDisabled = false
 
+        scriptConfigurationManager = ServiceManager.getService(project, ScriptConfigurationManager::class.java) as CompositeScriptConfigurationManager
+    }
+
+    override fun tearDown() {
+        super.tearDown()
+        testScriptConfigurationNotification = false
+        ApplicationManager.getApplication().isScriptChangesNotifierDisabled = true
+        occurredLoadings = 0
+        currentLoadingScriptConfigurationCallback = null
+    }
+
+    override fun setUpTestProject() {
         addExtensionPointInTest(
             DefaultScriptConfigurationManagerExtensions.LOADER,
             project,
@@ -49,14 +62,6 @@ abstract class AbstractScriptConfigurationLoadingTest : AbstractScriptConfigurat
         )
 
         configureScriptFile("idea/testData/script/definition/loading/async/")
-        scriptConfigurationManager = ServiceManager.getService(project, ScriptConfigurationManager::class.java)
-    }
-
-    override fun tearDown() {
-        super.tearDown()
-        testScriptConfigurationNotification = false
-        occurredLoadings = 0
-        currentLoadingScriptConfigurationCallback = null
     }
 
     override fun loadScriptConfigurationSynchronously(script: VirtualFile) {
@@ -68,7 +73,7 @@ abstract class AbstractScriptConfigurationLoadingTest : AbstractScriptConfigurat
     }
 
     protected fun assertDoAllBackgroundTaskAndDoWhileLoading(actions: () -> Unit) {
-        assertTrue(doAllBackgroundTasksWith(actions))
+        assertTrue("some script configuration loading tasks should be scheduled", doAllBackgroundTasksWith(actions))
     }
 
     protected fun doAllBackgroundTasksWith(actions: () -> Unit): Boolean {
@@ -80,68 +85,69 @@ abstract class AbstractScriptConfigurationLoadingTest : AbstractScriptConfigurat
         }
     }
 
-    protected fun assertAppliedConfiguration(contents: String) {
-        val secondConfiguration = scriptConfigurationManager.getConfiguration(ktFile)!!
+    protected fun assertNoBackgroundTasks() {
+        assertTrue("script configuration loading tasks should not be scheduled", scriptConfigurationManager.testingBackgroundExecutor.noBackgroundTasks())
+    }
+
+    protected fun assertAppliedConfiguration(contents: String, file: KtFile = myFile as KtFile) {
+        val secondConfiguration = scriptConfigurationManager.getConfiguration(file)!!
         assertEquals(
-            contents,
-            secondConfiguration.defaultImports.single().let {
+            "configuration \"$contents\" should be applied",
+            StringUtilRt.convertLineSeparators(contents),
+            StringUtilRt.convertLineSeparators(secondConfiguration.defaultImports.single().let {
                 check(it.startsWith("x_"))
                 it.removePrefix("x_")
-            }
+            })
         )
     }
 
-    protected fun makeChanges(contents: String) {
+    protected fun makeChanges(contents: String, file: KtFile = myFile as KtFile) {
         changeContents(contents)
 
-        scriptConfigurationManager.updater.ensureUpToDatedConfigurationSuggested(ktFile)
+        scriptConfigurationManager.default.ensureUpToDatedConfigurationSuggested(file)
     }
 
-    protected fun changeContents(contents: String) {
+    protected fun changeContents(contents: String, file: PsiFile = myFile) {
         runWriteAction {
-            val fileDocumentManager = FileDocumentManager.getInstance()
-            fileDocumentManager.reloadFiles(virtualFile)
-            val document = fileDocumentManager.getDocument(virtualFile)!!
-            document.setText(contents)
-            fileDocumentManager.saveDocument(document)
-            psiManager.reloadFromDisk(myFile)
-            myFile = psiManager.findFile(virtualFile)
+            VfsUtil.saveText(file.virtualFile, contents)
+            PsiDocumentManager.getInstance(project).commitAllDocuments()
+            myFile = psiManager.findFile(file.virtualFile)
         }
     }
 
-    protected fun assertReports(expected: String) {
-        val actual = IdeScriptReportSink.getReports(virtualFile).single().message
-        assertEquals(expected, actual)
+    protected fun assertReports(expected: String, file: KtFile = myFile as KtFile) {
+        val actual = IdeScriptReportSink.getReports(file.virtualFile).single().message
+        assertEquals("reports", expected, actual)
     }
 
-    protected fun assertSuggestedConfiguration() {
-        assertTrue(virtualFile.hasSuggestedScriptConfiguration(project))
+    protected fun assertSuggestedConfiguration(file: KtFile = myFile as KtFile) {
+        assertTrue("new configuration should be suggested", file.virtualFile.hasSuggestedScriptConfiguration(project))
     }
 
-    protected fun assertAndApplySuggestedConfiguration() {
-        assertTrue(virtualFile.applySuggestedScriptConfiguration(project))
+    protected fun assertAndApplySuggestedConfiguration(file: KtFile = myFile as KtFile) {
+        assertTrue("new configuration should be suggested", file.virtualFile.applySuggestedScriptConfiguration(project))
     }
 
-    protected fun assertNoSuggestedConfiguration() {
-        assertFalse(virtualFile.applySuggestedScriptConfiguration(project))
+    protected fun assertNoSuggestedConfiguration(file: KtFile = myFile as KtFile) {
+        assertFalse("new configuration should not be suggested", file.virtualFile.applySuggestedScriptConfiguration(project))
     }
 
     protected fun assertNoLoading() {
-        assertEquals(0, occurredLoadings)
+        assertEquals("loading should not be occurred", 0, occurredLoadings)
         occurredLoadings = 0
     }
 
     protected fun assertSingleLoading() {
-        assertEquals(1, occurredLoadings)
+        assertEquals("exactly single loading should occur", 1, occurredLoadings)
         occurredLoadings = 0
     }
 
-    protected fun assertAndLoadInitialConfiguration() {
-        assertNull(scriptConfigurationManager.getConfiguration(ktFile))
+    protected open fun assertAndLoadInitialConfiguration(file: KtFile = myFile as KtFile) {
+        assertNull(scriptConfigurationManager.getConfiguration(file))
         assertAndDoAllBackgroundTasks()
         assertSingleLoading()
-        assertAppliedConfiguration("initial")
+        assertAppliedConfiguration(file.text, file)
 
-        checkHighlighting()
+        checkHighlighting(file)
     }
 }

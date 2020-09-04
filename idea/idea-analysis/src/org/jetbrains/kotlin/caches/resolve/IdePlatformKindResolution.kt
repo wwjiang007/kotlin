@@ -40,7 +40,7 @@ import org.jetbrains.kotlin.storage.StorageManager
 interface IdePlatformKindResolution {
     val kind: IdePlatformKind<*>
 
-    fun getKeyForBuiltIns(moduleInfo: ModuleInfo): BuiltInsCacheKey
+    fun getKeyForBuiltIns(moduleInfo: ModuleInfo, sdkInfo: SdkInfo?): BuiltInsCacheKey
     fun createBuiltIns(moduleInfo: ModuleInfo, projectContext: ProjectContext, sdkDependency: SdkInfo?): KotlinBuiltIns
 
     fun createResolverForModuleFactory(
@@ -51,7 +51,7 @@ interface IdePlatformKindResolution {
 
     fun isLibraryFileForPlatform(virtualFile: VirtualFile): Boolean
 
-    fun createPlatformSpecificPackageFragmentProvider(
+    fun createKlibPackageFragmentProvider(
         moduleInfo: ModuleInfo,
         storageManager: StorageManager,
         languageVersionSettings: LanguageVersionSettings,
@@ -60,9 +60,7 @@ interface IdePlatformKindResolution {
 
     val libraryKind: PersistentLibraryKind<*>?
 
-    fun createLibraryInfo(project: Project, library: Library): List<LibraryInfo> {
-        return listOf(LibraryInfo(project, library))
-    }
+    fun createLibraryInfo(project: Project, library: Library): List<LibraryInfo>
 
     companion object : ApplicationExtensionDescriptor<IdePlatformKindResolution>(
         "org.jetbrains.kotlin.idePlatformKindResolution", IdePlatformKindResolution::class.java

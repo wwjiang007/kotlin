@@ -54,18 +54,16 @@ fun ResolvedCall<*>.isValueArgumentReorderingRequired(): Boolean {
 }
 
 fun KtSecondaryConstructor.isConstructorDelegatingToSuper(bindingContext: BindingContext): Boolean {
-    val delegatingResolvedCall = getDelegationCall().getResolvedCall(bindingContext) ?: return false
     val constructorDescriptor = bindingContext.get(BindingContext.CONSTRUCTOR, this) ?: return false
-    val ownerClassDescriptor = constructorDescriptor.containingDeclaration
-    val targetClassDescriptor = delegatingResolvedCall.resultingDescriptor.containingDeclaration
-    return targetClassDescriptor != ownerClassDescriptor
+    val delegatingResolvedCall = getDelegationCall().getResolvedCall(bindingContext)
+    return if (delegatingResolvedCall != null) {
+        val ownerClassDescriptor = constructorDescriptor.containingDeclaration
+        val targetClassDescriptor = delegatingResolvedCall.resultingDescriptor.containingDeclaration
+        targetClassDescriptor != ownerClassDescriptor
+    } else {
+        constructorDescriptor.constructedClass.kind == ClassKind.ENUM_CLASS
+    }
 }
-
-inline fun ClassDescriptor.findFirstFunction(name: String, predicate: (CallableMemberDescriptor) -> Boolean) =
-    unsubstitutedMemberScope.findFirstFunction(name, predicate)
-
-inline fun MemberScope.findFirstFunction(name: String, predicate: (CallableMemberDescriptor) -> Boolean) =
-    getContributedFunctions(Name.identifier(name), NoLookupLocation.FROM_BACKEND).first(predicate)
 
 fun MemberScope.findSingleFunction(name: Name): FunctionDescriptor =
     getContributedFunctions(name, NoLookupLocation.FROM_BACKEND).single()
@@ -78,6 +76,19 @@ val PropertyDescriptor.unwrappedGetMethod: FunctionDescriptor?
 
 val PropertyDescriptor.unwrappedSetMethod: FunctionDescriptor?
     get() = if (this is SyntheticPropertyDescriptor) this.setMethod else setter
+
+// Only works for descriptors of Java fields.
+internal fun PropertyDescriptor.resolveFakeOverride(): PropertyDescriptor {
+    assert(getter == null) { "resolveFakeOverride should only be called for Java fields, got $this"}
+    var current = this
+    while (current.kind == CallableMemberDescriptor.Kind.FAKE_OVERRIDE) {
+        current = current.overriddenDescriptors.singleOrNull {
+            (it.containingDeclaration as ClassDescriptor).kind != ClassKind.INTERFACE
+        } ?: current.overriddenDescriptors.firstOrNull()
+                ?: error("Fake override descriptor of Java field $current should has no overridden descriptors")
+    }
+    return current
+}
 
 val KtPureElement?.pureStartOffsetOrUndefined get() = this?.psiOrParent?.startOffsetSkippingComments ?: UNDEFINED_OFFSET
 val KtPureElement?.pureEndOffsetOrUndefined get() = this?.psiOrParent?.endOffset ?: UNDEFINED_OFFSET

@@ -30,11 +30,15 @@ import org.jetbrains.kotlin.idea.inspections.gradle.findAll
 import org.jetbrains.kotlin.idea.inspections.gradle.findKotlinPluginVersion
 import org.jetbrains.kotlin.idea.platform.IdePlatformKindTooling
 import org.jetbrains.kotlin.idea.roots.migrateNonJvmSourceFolders
+import org.jetbrains.kotlin.idea.roots.populateNonJvmSourceRootTypes
 import org.jetbrains.kotlin.platform.TargetPlatform
 import org.jetbrains.kotlin.platform.impl.JvmIdePlatformKind
+import org.jetbrains.kotlin.platform.impl.NativeIdePlatformKind
 import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
+import org.jetbrains.kotlin.platform.konan.NativePlatforms
 import org.jetbrains.plugins.gradle.model.data.BuildScriptClasspathData
 import org.jetbrains.plugins.gradle.model.data.GradleSourceSetData
+import org.jetbrains.plugins.gradle.util.GradleConstants
 
 class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetData, Void>() {
     override fun getTargetDataKey() = GradleSourceSetData.KEY
@@ -58,6 +62,7 @@ class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetDat
 
             if (platform.platforms.any { it != KotlinPlatform.JVM && it != KotlinPlatform.ANDROID }) {
                 migrateNonJvmSourceFolders(rootModel)
+                populateNonJvmSourceRootTypes(nodeToImport, ideModule)
             }
 
             configureFacet(sourceSetData, kotlinSourceSet, mainModuleData, ideModule, modelsProvider)?.let { facet ->
@@ -102,13 +107,14 @@ class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetDat
 
             val platformKinds = kotlinSourceSet.actualPlatforms.platforms //TODO(auskov): fix calculation of jvm target
                 .map { IdePlatformKindTooling.getTooling(it).kind }
-                .flatMap {
-                    when (it) {
+                .flatMap { platformKind ->
+                    when (platformKind) {
                         is JvmIdePlatformKind -> {
-                            val target = JvmTarget.fromString(moduleData.targetCompatibility ?: "") ?: JvmTarget.DEFAULT
-                            JvmPlatforms.jvmPlatformByTargetVersion(target).componentPlatforms
+                            val jvmTarget = JvmTarget.fromString(moduleData.targetCompatibility ?: "") ?: JvmTarget.DEFAULT
+                            JvmPlatforms.jvmPlatformByTargetVersion(jvmTarget).componentPlatforms
                         }
-                        else -> it.defaultPlatform.componentPlatforms
+                        is NativeIdePlatformKind -> NativePlatforms.nativePlatformByTargetNames(moduleData.konanTargets)
+                        else -> platformKind.defaultPlatform.componentPlatforms
                     }
                 }
                 .distinct()
@@ -119,8 +125,11 @@ class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetDat
             val coroutinesProperty = CoroutineSupport.byCompilerArgument(
                 mainModuleNode.coroutines ?: findKotlinCoroutinesProperty(ideModule.project)
             )
-
-            val kotlinFacet = ideModule.getOrCreateFacet(modelsProvider, false)
+            val compilerArguments = kotlinSourceSet.compilerArguments
+            // Used ID is the same as used in org/jetbrains/kotlin/idea/configuration/KotlinGradleSourceSetDataService.kt:280
+            // because this DataService was separated from KotlinGradleSourceSetDataService for MPP projects only
+            val id = if (compilerArguments?.multiPlatform == true) GradleConstants.SYSTEM_ID.id else null
+            val kotlinFacet = ideModule.getOrCreateFacet(modelsProvider, false, id)
             kotlinFacet.configureFacet(
                 compilerVersion,
                 coroutinesProperty,
@@ -131,7 +140,6 @@ class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetDat
                 kotlinSourceSet.dependsOn
             )
 
-            val compilerArguments = kotlinSourceSet.compilerArguments
             val defaultCompilerArguments = kotlinSourceSet.defaultCompilerArguments
             if (compilerArguments != null) {
                 applyCompilerArgumentsToFacet(
@@ -150,7 +158,7 @@ class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetDat
                 kind = kotlinSourceSet.kotlinModule.kind
 
                 isTestModule = kotlinSourceSet.isTestModule
-                externalSystemTestTasks = ArrayList(kotlinSourceSet.externalSystemTestTasks)
+                externalSystemRunTasks = ArrayList(kotlinSourceSet.externalSystemRunTasks)
 
                 externalProjectId = kotlinSourceSet.gradleModuleId
 
@@ -175,3 +183,12 @@ class KotlinSourceSetDataService : AbstractProjectDataService<GradleSourceSetDat
         }
     }
 }
+
+private const val KOTLIN_NATIVE_TARGETS_PROPERTY = "konanTargets"
+
+var ModuleData.konanTargets: Set<String>
+    get() {
+        val value = getProperty(KOTLIN_NATIVE_TARGETS_PROPERTY) ?: return emptySet()
+        return if (value.isNotEmpty()) value.split(',').toSet() else emptySet()
+    }
+    set(value) = setProperty(KOTLIN_NATIVE_TARGETS_PROPERTY, value.takeIf { it.isNotEmpty() }?.joinToString(","))

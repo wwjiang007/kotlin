@@ -11,6 +11,7 @@ import org.gradle.api.attributes.AttributeContainer
 import org.gradle.api.attributes.HasAttributes
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.FileCollection
+import org.gradle.api.tasks.TaskProvider
 import org.gradle.util.ConfigureUtil
 import org.jetbrains.kotlin.gradle.dsl.KotlinCommonOptions
 import org.jetbrains.kotlin.gradle.dsl.KotlinCompile
@@ -33,6 +34,8 @@ interface KotlinCompilation<out T : KotlinCommonOptions> : Named, HasAttributes,
 
     val allKotlinSourceSets: Set<KotlinSourceSet>
 
+    val defaultSourceSetName: String
+
     val defaultSourceSet: KotlinSourceSet
 
     fun defaultSourceSet(configure: KotlinSourceSet.() -> Unit)
@@ -49,6 +52,8 @@ interface KotlinCompilation<out T : KotlinCommonOptions> : Named, HasAttributes,
     val compileKotlinTaskName: String
 
     val compileKotlinTask: KotlinCompile<T>
+
+    val compileKotlinTaskProvider: TaskProvider<out KotlinCompile<T>>
 
     val kotlinOptions: T
 

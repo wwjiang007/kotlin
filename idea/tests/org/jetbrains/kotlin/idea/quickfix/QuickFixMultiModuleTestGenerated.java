@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -25,7 +25,7 @@ public class QuickFixMultiModuleTestGenerated extends AbstractQuickFixMultiModul
     }
 
     public void testAllFilesPresentInMultiModuleQuickFix() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/multiModuleQuickFix"), Pattern.compile("^([^\\.]+)$"), true);
+        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/multiModuleQuickFix"), Pattern.compile("^([^\\.]+)$"), null, true);
     }
 
     @TestMetadata("idea/testData/multiModuleQuickFix/accessibilityChecker")
@@ -37,7 +37,7 @@ public class QuickFixMultiModuleTestGenerated extends AbstractQuickFixMultiModul
         }
 
         public void testAllFilesPresentInAccessibilityChecker() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/multiModuleQuickFix/accessibilityChecker"), Pattern.compile("^([^\\.]+)$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/multiModuleQuickFix/accessibilityChecker"), Pattern.compile("^([^\\.]+)$"), null, true);
         }
 
         @TestMetadata("classPrimaryConstructor")
@@ -135,7 +135,7 @@ public class QuickFixMultiModuleTestGenerated extends AbstractQuickFixMultiModul
         }
 
         public void testAllFilesPresentInAddMissingActualMembers() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/multiModuleQuickFix/addMissingActualMembers"), Pattern.compile("^([^\\.]+)$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/multiModuleQuickFix/addMissingActualMembers"), Pattern.compile("^([^\\.]+)$"), null, true);
         }
 
         @TestMetadata("classFunction")
@@ -209,6 +209,39 @@ public class QuickFixMultiModuleTestGenerated extends AbstractQuickFixMultiModul
         }
     }
 
+    @TestMetadata("idea/testData/multiModuleQuickFix/addThrowAnnotation")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class AddThrowAnnotation extends AbstractQuickFixMultiModuleTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInAddThrowAnnotation() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/multiModuleQuickFix/addThrowAnnotation"), Pattern.compile("^([^\\.]+)$"), null, true);
+        }
+
+        @TestMetadata("common")
+        public void testCommon() throws Exception {
+            runTest("idea/testData/multiModuleQuickFix/addThrowAnnotation/common/");
+        }
+
+        @TestMetadata("js")
+        public void testJs() throws Exception {
+            runTest("idea/testData/multiModuleQuickFix/addThrowAnnotation/js/");
+        }
+
+        @TestMetadata("jvm")
+        public void testJvm() throws Exception {
+            runTest("idea/testData/multiModuleQuickFix/addThrowAnnotation/jvm/");
+        }
+
+        @TestMetadata("jvmWithoutStdlib")
+        public void testJvmWithoutStdlib() throws Exception {
+            runTest("idea/testData/multiModuleQuickFix/addThrowAnnotation/jvmWithoutStdlib/");
+        }
+    }
+
     @TestMetadata("idea/testData/multiModuleQuickFix/changeModifier")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -218,7 +251,7 @@ public class QuickFixMultiModuleTestGenerated extends AbstractQuickFixMultiModul
         }
 
         public void testAllFilesPresentInChangeModifier() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/multiModuleQuickFix/changeModifier"), Pattern.compile("^([^\\.]+)$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/multiModuleQuickFix/changeModifier"), Pattern.compile("^([^\\.]+)$"), null, true);
         }
 
         @TestMetadata("internal")
@@ -246,7 +279,7 @@ public class QuickFixMultiModuleTestGenerated extends AbstractQuickFixMultiModul
         }
 
         public void testAllFilesPresentInChangeSignature() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/multiModuleQuickFix/changeSignature"), Pattern.compile("^([^\\.]+)$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/multiModuleQuickFix/changeSignature"), Pattern.compile("^([^\\.]+)$"), null, true);
         }
 
         @TestMetadata("expect")
@@ -304,7 +337,7 @@ public class QuickFixMultiModuleTestGenerated extends AbstractQuickFixMultiModul
         }
 
         public void testAllFilesPresentInCreateActual() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/multiModuleQuickFix/createActual"), Pattern.compile("^([^\\.]+)$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/multiModuleQuickFix/createActual"), Pattern.compile("^([^\\.]+)$"), null, true);
         }
 
         @TestMetadata("annotation")
@@ -477,7 +510,7 @@ public class QuickFixMultiModuleTestGenerated extends AbstractQuickFixMultiModul
         }
 
         public void testAllFilesPresentInCreateExpect() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/multiModuleQuickFix/createExpect"), Pattern.compile("^([^\\.]+)$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/multiModuleQuickFix/createExpect"), Pattern.compile("^([^\\.]+)$"), null, true);
         }
 
         @TestMetadata("annotation")
@@ -761,6 +794,49 @@ public class QuickFixMultiModuleTestGenerated extends AbstractQuickFixMultiModul
         }
     }
 
+    @TestMetadata("idea/testData/multiModuleQuickFix/fixNativeThrowsErrors")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class FixNativeThrowsErrors extends AbstractQuickFixMultiModuleTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doTest, this, testDataFilePath);
+        }
+
+        @TestMetadata("addCancellationException1")
+        public void testAddCancellationException1() throws Exception {
+            runTest("idea/testData/multiModuleQuickFix/fixNativeThrowsErrors/addCancellationException1/");
+        }
+
+        @TestMetadata("addCancellationException2")
+        public void testAddCancellationException2() throws Exception {
+            runTest("idea/testData/multiModuleQuickFix/fixNativeThrowsErrors/addCancellationException2/");
+        }
+
+        @TestMetadata("addCancellationException3")
+        public void testAddCancellationException3() throws Exception {
+            runTest("idea/testData/multiModuleQuickFix/fixNativeThrowsErrors/addCancellationException3/");
+        }
+
+        @TestMetadata("addCancellationException4")
+        public void testAddCancellationException4() throws Exception {
+            runTest("idea/testData/multiModuleQuickFix/fixNativeThrowsErrors/addCancellationException4/");
+        }
+
+        public void testAllFilesPresentInFixNativeThrowsErrors() throws Exception {
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/multiModuleQuickFix/fixNativeThrowsErrors"), Pattern.compile("^([^\\.]+)$"), null, true);
+        }
+
+        @TestMetadata("removeEmptyThrows")
+        public void testRemoveEmptyThrows() throws Exception {
+            runTest("idea/testData/multiModuleQuickFix/fixNativeThrowsErrors/removeEmptyThrows/");
+        }
+
+        @TestMetadata("removeThrowsOnIncompatibleOverride")
+        public void testRemoveThrowsOnIncompatibleOverride() throws Exception {
+            runTest("idea/testData/multiModuleQuickFix/fixNativeThrowsErrors/removeThrowsOnIncompatibleOverride/");
+        }
+    }
+
     @TestMetadata("idea/testData/multiModuleQuickFix/makeOverridenMemberOpen")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -775,7 +851,7 @@ public class QuickFixMultiModuleTestGenerated extends AbstractQuickFixMultiModul
         }
 
         public void testAllFilesPresentInMakeOverridenMemberOpen() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/multiModuleQuickFix/makeOverridenMemberOpen"), Pattern.compile("^([^\\.]+)$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/multiModuleQuickFix/makeOverridenMemberOpen"), Pattern.compile("^([^\\.]+)$"), null, true);
         }
 
         @TestMetadata("expect")
@@ -848,7 +924,7 @@ public class QuickFixMultiModuleTestGenerated extends AbstractQuickFixMultiModul
         }
 
         public void testAllFilesPresentInOther() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/multiModuleQuickFix/other"), Pattern.compile("^([^\\.]+)$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/multiModuleQuickFix/other"), Pattern.compile("^([^\\.]+)$"), null, true);
         }
 
         @TestMetadata("convertActualEnumToSealedClass")

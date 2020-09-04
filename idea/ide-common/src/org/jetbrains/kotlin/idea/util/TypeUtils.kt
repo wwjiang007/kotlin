@@ -1,36 +1,42 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 @file:JvmName("TypeUtils")
 
 package org.jetbrains.kotlin.idea.util
 
+import com.intellij.psi.*
 import org.jetbrains.kotlin.builtins.getReturnTypeFromFunctionType
 import org.jetbrains.kotlin.builtins.isBuiltinFunctionalType
-import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMap
+import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMapper
 import org.jetbrains.kotlin.builtins.replaceReturnType
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.Modality
-import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
+import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.impl.ClassDescriptorImpl
+import org.jetbrains.kotlin.descriptors.impl.MutablePackageFragmentDescriptor
+import org.jetbrains.kotlin.idea.FrontendInternals
 import org.jetbrains.kotlin.idea.imports.canBeReferencedViaImport
+import org.jetbrains.kotlin.idea.resolve.ResolutionFacade
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
+import org.jetbrains.kotlin.load.java.components.TypeUsage
+import org.jetbrains.kotlin.load.java.lazy.JavaResolverComponents
+import org.jetbrains.kotlin.load.java.lazy.LazyJavaResolverContext
+import org.jetbrains.kotlin.load.java.lazy.TypeParameterResolver
+import org.jetbrains.kotlin.load.java.lazy.child
+import org.jetbrains.kotlin.load.java.lazy.descriptors.LazyJavaTypeParameterDescriptor
+import org.jetbrains.kotlin.load.java.lazy.types.JavaTypeAttributes
+import org.jetbrains.kotlin.load.java.lazy.types.JavaTypeResolver
+import org.jetbrains.kotlin.load.java.structure.JavaTypeParameter
+import org.jetbrains.kotlin.load.java.structure.impl.JavaTypeImpl
+import org.jetbrains.kotlin.load.java.structure.impl.JavaTypeParameterImpl
+import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope
 import org.jetbrains.kotlin.resolve.scopes.utils.findClassifier
+import org.jetbrains.kotlin.storage.LockBasedStorageManager
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.typeUtil.*
 import org.jetbrains.kotlin.utils.SmartSet
@@ -52,7 +58,7 @@ private fun KotlinType.approximateNonDynamicFlexibleTypes(
     if (isFlexible()) {
         val flexible = asFlexibleType()
         val lowerClass = flexible.lowerBound.constructor.declarationDescriptor as? ClassDescriptor?
-        val isCollection = lowerClass != null && JavaToKotlinClassMap.isMutable(lowerClass)
+        val isCollection = lowerClass != null && JavaToKotlinClassMapper.isMutable(lowerClass)
         // (Mutable)Collection<T>! -> MutableCollection<T>?
         // Foo<(Mutable)Collection<T>!>! -> Foo<Collection<T>>?
         // Foo! -> Foo?
@@ -69,9 +75,8 @@ private fun KotlinType.approximateNonDynamicFlexibleTypes(
 
         approximation = if (nullability() == TypeNullability.NOT_NULL) approximation.makeNullableAsSpecified(false) else approximation
 
-        if (approximation.isMarkedNullable && !flexible.lowerBound.isMarkedNullable && TypeUtils.isTypeParameter(approximation) && TypeUtils.hasNullableSuperType(
-                approximation
-            )
+        if (approximation.isMarkedNullable && !flexible.lowerBound
+                .isMarkedNullable && TypeUtils.isTypeParameter(approximation) && TypeUtils.hasNullableSuperType(approximation)
         ) {
             approximation = approximation.makeNullableAsSpecified(false)
         }
@@ -194,4 +199,63 @@ private fun TypeProjection.fixTypeProjection(
 fun KotlinType.isAbstract(): Boolean {
     val modality = (constructor.declarationDescriptor as? ClassDescriptor)?.modality
     return modality == Modality.ABSTRACT || modality == Modality.SEALED
+}
+
+/**
+ * NOTE: this is a very shaky implementation of [PsiType] to [KotlinType] conversion,
+ * produced types are fakes and are usable only for code generation. Please be careful using this method.
+ */
+@OptIn(FrontendInternals::class)
+fun PsiType.resolveToKotlinType(resolutionFacade: ResolutionFacade): KotlinType {
+    if (this == PsiType.NULL) {
+        return resolutionFacade.moduleDescriptor.builtIns.nullableAnyType
+    }
+
+    val typeParameters = collectTypeParameters()
+    val components = resolutionFacade.getFrontendService(JavaResolverComponents::class.java)
+    val rootContext = LazyJavaResolverContext(components, TypeParameterResolver.EMPTY) { null }
+    val dummyPackageDescriptor = MutablePackageFragmentDescriptor(resolutionFacade.moduleDescriptor, FqName("dummy"))
+    val dummyClassDescriptor = ClassDescriptorImpl(
+        dummyPackageDescriptor,
+        Name.identifier("Dummy"),
+        Modality.FINAL,
+        ClassKind.CLASS,
+        emptyList(),
+        SourceElement.NO_SOURCE,
+        false,
+        LockBasedStorageManager.NO_LOCKS
+    )
+    val typeParameterResolver = object : TypeParameterResolver {
+        override fun resolveTypeParameter(javaTypeParameter: JavaTypeParameter): TypeParameterDescriptor? {
+            val psiTypeParameter = (javaTypeParameter as JavaTypeParameterImpl).psi
+            val index = typeParameters.indexOf(psiTypeParameter)
+            if (index < 0) return null
+            return LazyJavaTypeParameterDescriptor(rootContext.child(this), javaTypeParameter, index, dummyClassDescriptor)
+        }
+    }
+    val typeResolver = JavaTypeResolver(rootContext, typeParameterResolver)
+    val attributes = JavaTypeAttributes(TypeUsage.COMMON)
+    return typeResolver.transformJavaType(JavaTypeImpl.create(this), attributes).approximateFlexibleTypes(preferNotNull = true)
+}
+
+
+private fun PsiType.collectTypeParameters(): List<PsiTypeParameter> {
+    val results = ArrayList<PsiTypeParameter>()
+    accept(
+        object : PsiTypeVisitor<Unit>() {
+            override fun visitArrayType(arrayType: PsiArrayType) {
+                arrayType.componentType.accept(this)
+            }
+
+            override fun visitClassType(classType: PsiClassType) {
+                (classType.resolve() as? PsiTypeParameter)?.let { results += it }
+                classType.parameters.forEach { it.accept(this) }
+            }
+
+            override fun visitWildcardType(wildcardType: PsiWildcardType) {
+                wildcardType.bound?.accept(this)
+            }
+        }
+    )
+    return results
 }

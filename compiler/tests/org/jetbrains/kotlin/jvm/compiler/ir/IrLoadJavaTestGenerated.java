@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -28,7 +28,12 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
         }
 
         public void testAllFilesPresentInCompiledJava() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
+        }
+
+        @TestMetadata("ArrayInGenericArguments.java")
+        public void testArrayInGenericArguments() throws Exception {
+            runTest("compiler/testData/loadJava/compiledJava/ArrayInGenericArguments.java");
         }
 
         @TestMetadata("ArrayTypeVariance.java")
@@ -265,7 +270,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInAnnotations() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/annotations"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/annotations"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("AnnotatedAnnotation.java")
@@ -468,7 +473,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInConstructor() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/constructor"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/constructor"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("ConstructorGenericDeep.java")
@@ -496,7 +501,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInEnum() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/enum"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/enum"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("EnumMembers.java")
@@ -524,7 +529,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInJavaBean() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/javaBean"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/javaBean"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("DifferentGetterAndSetter.java")
@@ -572,7 +577,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInKotlinSignature() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/kotlinSignature"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/kotlinSignature"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("ArrayType.java")
@@ -659,7 +664,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInError() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/kotlinSignature/error"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/kotlinSignature/error"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("WrongProjectionKind.java")
@@ -692,7 +697,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInPropagation() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/kotlinSignature/propagation"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/kotlinSignature/propagation"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("PropagateTypeArgumentNullable.java")
@@ -709,7 +714,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                     }
 
                     public void testAllFilesPresentInParameter() throws Exception {
-                        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/kotlinSignature/propagation/parameter"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/kotlinSignature/propagation/parameter"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
                     }
 
                     @TestMetadata("ChangeProjectionKind1.java")
@@ -862,7 +867,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                     }
 
                     public void testAllFilesPresentInReturn() throws Exception {
-                        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/kotlinSignature/propagation/return"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/kotlinSignature/propagation/return"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
                     }
 
                     @TestMetadata("CantMakeImmutableInSubclass.java")
@@ -1015,7 +1020,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                     }
 
                     public void testAllFilesPresentInTypeParameter() throws Exception {
-                        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/kotlinSignature/propagation/typeParameter"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/kotlinSignature/propagation/typeParameter"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
                     }
 
                     @TestMetadata("InheritNullability.java")
@@ -1065,7 +1070,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInLibrary() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/library"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/library"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("LoadIterable.java")
@@ -1093,7 +1098,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInModality() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/modality"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/modality"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("ModalityOfFakeOverrides.java")
@@ -1111,7 +1116,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInMutability() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/mutability"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/mutability"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("LoadIterable.java")
@@ -1149,7 +1154,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInNotNull() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/notNull"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/notNull"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("NotNullField.java")
@@ -1187,7 +1192,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInProtectedPackage() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/protectedPackage"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/protectedPackage"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("ProtectedPackageConstructor.java")
@@ -1215,7 +1220,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInProtectedStatic() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/protectedStatic"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/protectedStatic"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("ConstructorInProtectedStaticNestedClass.java")
@@ -1233,7 +1238,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInRendering() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/rendering"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/rendering"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("Rendering.java")
@@ -1251,7 +1256,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInSam() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/sam"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/sam"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("Comparator.java")
@@ -1343,7 +1348,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInAdapters() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/sam/adapters"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/sam/adapters"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("AmbiguousAdapters.java")
@@ -1430,7 +1435,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                     }
 
                     public void testAllFilesPresentInInheritance() throws Exception {
-                        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/sam/adapters/inheritance"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/sam/adapters/inheritance"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
                     }
 
                     @TestMetadata("InheritedAdapterAndDeclaration.java")
@@ -1490,7 +1495,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInSignatureAnnotations() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/signatureAnnotations"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/signatureAnnotations"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("StableName.java")
@@ -1508,7 +1513,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInSignaturePropagation() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/signaturePropagation"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/signaturePropagation"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("ArraysInSubtypes.java")
@@ -1566,7 +1571,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInStatic() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/static"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/static"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("DeeplyInnerClass.java")
@@ -1634,7 +1639,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInVararg() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJava/vararg"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJava/vararg"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("VarargInt.java")
@@ -1658,7 +1663,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
         }
 
         public void testAllFilesPresentInCompiledJavaAndKotlin() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJavaAndKotlin"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJavaAndKotlin"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
         }
 
         @TestMetadata("MixedPackage.txt")
@@ -1675,7 +1680,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInMixedPackage() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJavaAndKotlin/MixedPackage"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJavaAndKotlin/MixedPackage"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
             }
         }
     }
@@ -1689,7 +1694,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
         }
 
         public void testAllFilesPresentInCompiledJavaIncludeObjectMethods() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledJavaIncludeObjectMethods"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledJavaIncludeObjectMethods"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
         }
 
         @TestMetadata("ClassWithObjectMethod.java")
@@ -1717,7 +1722,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
         }
 
         public void testAllFilesPresentInCompiledKotlin() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
         }
 
         @TestMetadata("compiler/testData/loadJava/compiledKotlin/annotations")
@@ -1729,7 +1734,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInAnnotations() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("AnnotatedAnnotation.kt")
@@ -1786,7 +1791,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInClassMembers() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations/classMembers"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations/classMembers"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("ClassObjectPropertyField.kt")
@@ -1854,7 +1859,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInClasses() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations/classes"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations/classes"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("AnnotationInClassObject.kt")
@@ -1942,7 +1947,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInPackageMembers() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations/packageMembers"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations/packageMembers"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("DelegatedProperty.kt")
@@ -1995,7 +2000,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInParameters() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations/parameters"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations/parameters"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("Constructor.kt")
@@ -2068,7 +2073,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInPropertiesWithoutBackingFields() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations/propertiesWithoutBackingFields"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations/propertiesWithoutBackingFields"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("Class.kt")
@@ -2121,7 +2126,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInTypes() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations/types"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations/types"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("ClassLiteralArgument.kt")
@@ -2179,7 +2184,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInWithUseSiteTarget() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations/withUseSiteTarget"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/annotations/withUseSiteTarget"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("DelegateTarget.kt")
@@ -2213,7 +2218,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInClass() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/class"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/class"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("Class.kt")
@@ -2294,6 +2299,11 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             @TestMetadata("EnumWithPrimitiveConstructorParameter.kt")
             public void testEnumWithPrimitiveConstructorParameter() throws Exception {
                 runTest("compiler/testData/loadJava/compiledKotlin/class/EnumWithPrimitiveConstructorParameter.kt");
+            }
+
+            @TestMetadata("FunInterface.kt")
+            public void testFunInterface() throws Exception {
+                runTest("compiler/testData/loadJava/compiledKotlin/class/FunInterface.kt");
             }
 
             @TestMetadata("InheritClassSimple.kt")
@@ -2405,7 +2415,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInJavaBean() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/class/javaBean"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/class/javaBean"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("DifferentGetterAndSetter.kt")
@@ -2449,7 +2459,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInClassFun() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/classFun"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/classFun"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("ClassInParamUsedInFun.kt")
@@ -2487,7 +2497,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInClassObject() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/classObject"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/classObject"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("ClassObjectDeclaresVal.kt")
@@ -2565,7 +2575,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInConstructor() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/constructor"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/constructor"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("Constructor0.kt")
@@ -2657,7 +2667,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInVararg() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/constructor/vararg"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/constructor/vararg"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("ConstructorNonLastVararg.kt")
@@ -2681,7 +2691,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInCoroutines() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/coroutines"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/coroutines"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("Basic.kt")
@@ -2699,7 +2709,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInDataClass() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/dataClass"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/dataClass"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("MixedComponents.kt")
@@ -2732,7 +2742,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInEnum() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/enum"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/enum"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("enumVisibility.kt")
@@ -2775,7 +2785,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInFromLoadJava() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("ArrayTypeVariance.kt")
@@ -2962,7 +2972,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInKotlinSignature() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/kotlinSignature"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/kotlinSignature"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("ArrayType.kt")
@@ -3054,7 +3064,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                     }
 
                     public void testAllFilesPresentInError() throws Exception {
-                        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/kotlinSignature/error"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/kotlinSignature/error"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                     }
 
                     @TestMetadata("ConflictingProjectionKind.kt")
@@ -3197,7 +3207,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                     }
 
                     public void testAllFilesPresentInPropagation() throws Exception {
-                        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/kotlinSignature/propagation"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/kotlinSignature/propagation"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                     }
 
                     @TestMetadata("PropagateTypeArgumentNullable.kt")
@@ -3214,7 +3224,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                         }
 
                         public void testAllFilesPresentInParameter() throws Exception {
-                            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/kotlinSignature/propagation/parameter"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/kotlinSignature/propagation/parameter"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                         }
 
                         @TestMetadata("ChangeProjectionKind1.kt")
@@ -3387,7 +3397,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                         }
 
                         public void testAllFilesPresentInReturn() throws Exception {
-                            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/kotlinSignature/propagation/return"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/kotlinSignature/propagation/return"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                         }
 
                         @TestMetadata("CantMakeImmutableInSubclass.kt")
@@ -3540,7 +3550,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                         }
 
                         public void testAllFilesPresentInTypeParameter() throws Exception {
-                            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/kotlinSignature/propagation/typeParameter"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/kotlinSignature/propagation/typeParameter"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                         }
 
                         @TestMetadata("InheritMutability.kt")
@@ -3600,7 +3610,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInLibrary() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/library"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/library"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("LoadIterable.kt")
@@ -3628,7 +3638,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInModality() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/modality"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/modality"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("ModalityOfFakeOverrides.kt")
@@ -3646,7 +3656,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInNotNull() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/notNull"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fromLoadJava/notNull"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("NotNullField.kt")
@@ -3685,7 +3695,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInFun() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fun"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fun"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("Assert.kt")
@@ -3752,7 +3762,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInGenericWithTypeVariables() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fun/genericWithTypeVariables"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fun/genericWithTypeVariables"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("FunGenericParam.kt")
@@ -3815,7 +3825,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInGenericWithoutTypeVariables() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fun/genericWithoutTypeVariables"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fun/genericWithoutTypeVariables"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("FunClassParamNotNull.kt")
@@ -3853,7 +3863,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInNonGeneric() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fun/nonGeneric"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fun/nonGeneric"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("ClassFun.kt")
@@ -3946,7 +3956,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInVararg() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fun/vararg"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/fun/vararg"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("nonLastVararg.kt")
@@ -3975,7 +3985,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInInline() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/inline"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/inline"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("inlineFunction.kt")
@@ -3993,7 +4003,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInMemberOrder() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/memberOrder"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/memberOrder"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("callablesNameClash.kt")
@@ -4036,7 +4046,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInNested() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/nested"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/nested"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("deepInnerGeneric.kt")
@@ -4064,7 +4074,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInPlatformTypes() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/platformTypes"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/platformTypes"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("notnullTypeArgument.kt")
@@ -4087,7 +4097,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInProp() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/prop"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/prop"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("ClassVal.kt")
@@ -4269,7 +4279,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInDefaultAccessors() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/prop/defaultAccessors"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/prop/defaultAccessors"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
                 }
 
                 @TestMetadata("ClassVal.kt")
@@ -4333,7 +4343,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInType() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/type"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/type"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("Any.kt")
@@ -4501,7 +4511,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInTypealias() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/typealias"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/typealias"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("Annotations.kt")
@@ -4534,7 +4544,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInVisibility() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/visibility"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlin/visibility"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("InternalClass.kt")
@@ -4603,7 +4613,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
         }
 
         public void testAllFilesPresentInCompiledKotlinWithStdlib() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlinWithStdlib"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlinWithStdlib"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
         }
 
         @TestMetadata("compiler/testData/loadJava/compiledKotlinWithStdlib/annotations")
@@ -4615,7 +4625,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInAnnotations() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlinWithStdlib/annotations"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlinWithStdlib/annotations"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("ConstValInMultifileClass.kt")
@@ -4643,12 +4653,22 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInContracts() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlinWithStdlib/contracts"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlinWithStdlib/contracts"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("callsEffect.kt")
             public void testCallsEffect() throws Exception {
                 runTest("compiler/testData/loadJava/compiledKotlinWithStdlib/contracts/callsEffect.kt");
+            }
+
+            @TestMetadata("contractWithRefiedGeneric.kt")
+            public void testContractWithRefiedGeneric() throws Exception {
+                runTest("compiler/testData/loadJava/compiledKotlinWithStdlib/contracts/contractWithRefiedGeneric.kt");
+            }
+
+            @TestMetadata("contractsOnMembers.kt")
+            public void testContractsOnMembers() throws Exception {
+                runTest("compiler/testData/loadJava/compiledKotlinWithStdlib/contracts/contractsOnMembers.kt");
             }
 
             @TestMetadata("deeplyNestedExpression.kt")
@@ -4706,7 +4726,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInCoroutines() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlinWithStdlib/coroutines"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlinWithStdlib/coroutines"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("annotatedSuspendFun.kt")
@@ -4724,7 +4744,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInMutability() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlinWithStdlib/mutability"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlinWithStdlib/mutability"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("LoadIterable.kt")
@@ -4757,7 +4777,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInPlatformNames() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/compiledKotlinWithStdlib/platformNames"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/compiledKotlinWithStdlib/platformNames"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("functionName.kt")
@@ -4776,7 +4796,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
         }
 
         public void testAllFilesPresentInJavaAgainstKotlin() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
         }
 
         @TestMetadata("compiler/testData/loadJava/javaAgainstKotlin/samAdapters")
@@ -4788,7 +4808,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInSamAdapters() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/samAdapters"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/samAdapters"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("InheritAmbguousSamAdaptersInKotlin.txt")
@@ -4825,7 +4845,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInInheritAmbguousSamAdaptersInKotlin() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/samAdapters/InheritAmbguousSamAdaptersInKotlin"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/samAdapters/InheritAmbguousSamAdaptersInKotlin"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
                 }
             }
 
@@ -4838,7 +4858,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInInheritSamAdapterInKotlin() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/samAdapters/InheritSamAdapterInKotlin"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/samAdapters/InheritSamAdapterInKotlin"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
                 }
             }
 
@@ -4851,7 +4871,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInOverrideSamAdapterInKotlin() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/samAdapters/OverrideSamAdapterInKotlin"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/samAdapters/OverrideSamAdapterInKotlin"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
                 }
             }
 
@@ -4864,7 +4884,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInSamAdapterForInheritedFromKotlin() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/samAdapters/SamAdapterForInheritedFromKotlin"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/samAdapters/SamAdapterForInheritedFromKotlin"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
                 }
             }
 
@@ -4877,7 +4897,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInSamAdapterForOverriddenFromKotlin() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/samAdapters/SamAdapterForOverriddenFromKotlin"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/samAdapters/SamAdapterForOverriddenFromKotlin"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
                 }
             }
         }
@@ -4891,7 +4911,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInSignaturePropagation() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/signaturePropagation"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/signaturePropagation"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("DeepSubclassingKotlinInJava.txt")
@@ -4928,7 +4948,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInDeepSubclassingKotlinInJava() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/signaturePropagation/DeepSubclassingKotlinInJava"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/signaturePropagation/DeepSubclassingKotlinInJava"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
                 }
             }
 
@@ -4941,7 +4961,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInInheritExtensionAndNot() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/signaturePropagation/InheritExtensionAndNot"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/signaturePropagation/InheritExtensionAndNot"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
                 }
             }
 
@@ -4954,7 +4974,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInInheritExtensionFunction() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/signaturePropagation/InheritExtensionFunction"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/signaturePropagation/InheritExtensionFunction"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
                 }
             }
 
@@ -4967,7 +4987,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInSubclassFromTraitImplementation() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/signaturePropagation/SubclassFromTraitImplementation"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/signaturePropagation/SubclassFromTraitImplementation"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
                 }
             }
 
@@ -4980,7 +5000,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInSubclassingKotlinInJava() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/signaturePropagation/SubclassingKotlinInJava"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/signaturePropagation/SubclassingKotlinInJava"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
                 }
             }
         }
@@ -4994,7 +5014,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
             }
 
             public void testAllFilesPresentInVisibility() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/visibility"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/visibility"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
             }
 
             @TestMetadata("PackageLocal.txt")
@@ -5016,7 +5036,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInPackageLocal() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/visibility/PackageLocal"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/visibility/PackageLocal"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
                 }
             }
 
@@ -5029,7 +5049,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
                 }
 
                 public void testAllFilesPresentInProtectedPackage() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/visibility/ProtectedPackage"), Pattern.compile("^(.+)\\.txt$"), TargetBackend.JVM_IR, true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/javaAgainstKotlin/visibility/ProtectedPackage"), Pattern.compile("^(.+)\\.txt$"), null, TargetBackend.JVM_IR, true);
                 }
             }
         }
@@ -5044,7 +5064,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
         }
 
         public void testAllFilesPresentInKotlinAgainstCompiledJavaWithKotlin() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/kotlinAgainstCompiledJavaWithKotlin"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, false);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/kotlinAgainstCompiledJavaWithKotlin"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, false);
         }
 
         @TestMetadata("InheritJavaField.kt")
@@ -5082,7 +5102,7 @@ public class IrLoadJavaTestGenerated extends AbstractIrLoadJavaTest {
         }
 
         public void testAllFilesPresentInSourceJava() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/loadJava/sourceJava"), Pattern.compile("^(.+)\\.java$"), TargetBackend.JVM_IR, true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/loadJava/sourceJava"), Pattern.compile("^(.+)\\.java$"), null, TargetBackend.JVM_IR, true);
         }
 
         @TestMetadata("ClassExtendsTypeParameter.java")

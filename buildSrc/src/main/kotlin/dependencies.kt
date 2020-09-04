@@ -1,22 +1,40 @@
+/*
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
+ */
+
 @file:Suppress("unused")
 
 // usages in build scripts are not tracked properly
 
-import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.dsl.DependencyHandler
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.FileCollection
-import org.gradle.api.tasks.AbstractCopyTask
 import org.gradle.kotlin.dsl.extra
 import org.gradle.kotlin.dsl.project
 import java.io.File
 
-val Project.isSnapshotIntellij get() = rootProject.extra["versions.intellijSdk"].toString().endsWith("SNAPSHOT")
+private val Project.isEAPIntellij get() = rootProject.extra["versions.intellijSdk"].toString().contains("-EAP-")
+private val Project.isNightlyIntellij get() = rootProject.extra["versions.intellijSdk"].toString().endsWith("SNAPSHOT") && !isEAPIntellij
 
-val Project.intellijRepo get() = "https://www.jetbrains.com/intellij-repository/" + if (isSnapshotIntellij) "snapshots" else "releases"
+val Project.intellijRepo get() =
+    when {
+        isEAPIntellij -> "https://www.jetbrains.com/intellij-repository/snapshots"
+        isNightlyIntellij -> "https://www.jetbrains.com/intellij-repository/nightly"
+        else -> "https://www.jetbrains.com/intellij-repository/releases"
+    }
+
+val Project.internalBootstrapRepo: String? get() =
+    when {
+        bootstrapKotlinRepo?.startsWith("https://buildserver.labs.intellij.net") == true ->
+            bootstrapKotlinRepo!!.replace("artifacts/content/maven", "artifacts/content/internal/repo")
+        else -> "https://teamcity.jetbrains.com/guestAuth/app/rest/builds/buildType:(id:Kotlin_KotlinPublic_Compiler),number:$bootstrapKotlinVersion," +
+                "branch:default:any/artifacts/content/internal/repo/"
+    }
+
 
 fun Project.commonDep(coord: String): String {
     val parts = coord.split(':')
@@ -84,9 +102,11 @@ fun Project.kotlinStdlib(suffix: String? = null, classifier: String? = null): An
         dependencies.project(listOfNotNull(":kotlin-stdlib", suffix).joinToString("-"), classifier)
 }
 
-fun Project.kotlinBuiltins(): Any =
+fun Project.kotlinBuiltins(): Any = kotlinBuiltins(forJvm = false)
+
+fun Project.kotlinBuiltins(forJvm: Boolean): Any =
     if (kotlinBuildProperties.useBootstrapStdlib) "org.jetbrains.kotlin:builtins:$bootstrapKotlinVersion"
-    else dependencies.project(":core:builtins")
+    else dependencies.project(":core:builtins", configuration = "runtimeElementsJvm".takeIf { forJvm })
 
 fun DependencyHandler.projectTests(name: String): ProjectDependency = project(name, configuration = "tests-jar")
 fun DependencyHandler.projectRuntimeJar(name: String): ProjectDependency = project(name, configuration = "runtimeJar")
@@ -128,6 +148,12 @@ fun Project.firstFromJavaHomeThatExists(vararg paths: String, jdkHome: File = Fi
         if (it == null)
             logger.warn("Cannot find file by paths: ${paths.toList()} in $jdkHome")
     }
+
+fun Project.toolsJarApi(): Any =
+    if (kotlinBuildProperties.isInJpsBuildIdeaSync)
+        files(toolsJarFile() ?: error("tools.jar is not found!"))
+    else
+        dependencies.project(":dependencies:tools-jar-api")
 
 fun Project.toolsJar(): FileCollection = files(toolsJarFile() ?: error("tools.jar is not found!"))
 

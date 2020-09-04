@@ -2,55 +2,12 @@ public final class Prop /* Prop*/ {
   private final java.lang.Object someProp;
 
   @null()
-  public  Prop();
+  public  Prop();//  .ctor()
 
 }
 
 final class null /* null*/ {
-  @null()
-  public static final java.lang.Object INSTANCE;
-
-  private  ();
-
-}
-
-public final class Fun /* Fun*/ {
-  @null()
-  public  Fun();
-
-  private final java.lang.Object someFun();
-
-}
-
-final class null /* null*/ {
-  @null()
-  public static final java.lang.Object INSTANCE;
-
-  private  ();
-
-}
-
-public final class ArrayOfAnonymous /* ArrayOfAnonymous*/ {
-  private final java.lang.Object[] a1;
-
-  @null()
-  public  ArrayOfAnonymous();
-
-  @org.jetbrains.annotations.NotNull()
-  public final java.lang.Object[] getA1();
-
-}
-
-final class null /* null*/ {
-  @null()
-  public static final java.lang.Object INSTANCE;
-
-  private static final java.lang.String fy /* constant value text */;
-
-  @org.jetbrains.annotations.NotNull()
-  public final java.lang.String getFy();
-
-  private  ();
+  private  ();//  .ctor()
 
 }
 
@@ -60,56 +17,20 @@ final class C /* C*/ {
   private final kotlin.jvm.functions.Function0<java.lang.Object> initChild;
 
   @null()
-  public  C(int);
+  public  C(int);//  .ctor(int)
 
   @org.jetbrains.annotations.NotNull()
-  public final kotlin.jvm.functions.Function0<java.lang.Object> getInitChild();
+  public final kotlin.jvm.functions.Function0<java.lang.Object> getInitChild();//  getInitChild()
 
-  public final int getY();
+  public final int getY();//  getY()
 
 }
 
 final class null /* null*/ {
-  @null()
-  public static final java.lang.Object INSTANCE;
-
   @org.jetbrains.annotations.NotNull()
-  public java.lang.String toString();
+  public java.lang.String toString();//  toString()
 
-  private  ();
-
-}
-
-public abstract class Super /* Super*/ {
-  @null()
-  public  Super();
-
-  @org.jetbrains.annotations.Nullable()
-  public abstract java.lang.Object getA();
-
-}
-
-public final class Sub /* Sub*/ extends Super {
-  private final java.lang.Object[] a;
-
-  @null()
-  public  Sub();
-
-  @org.jetbrains.annotations.NotNull()
-  public java.lang.Object[] getA();
-
-}
-
-final class null /* null*/ {
-  @null()
-  public static final java.lang.Object INSTANCE;
-
-  private static final java.lang.String fy /* constant value text */;
-
-  @org.jetbrains.annotations.NotNull()
-  public final java.lang.String getFy();
-
-  private  ();
+  private  ();//  .ctor()
 
 }
 
@@ -117,33 +38,27 @@ public final class ValidPublicSupertype /* ValidPublicSupertype*/ {
   private final java.lang.Runnable x;
 
   @null()
-  public  ValidPublicSupertype();
+  public  ValidPublicSupertype();//  .ctor()
 
   @org.jetbrains.annotations.NotNull()
-  public final java.lang.Runnable bar();
+  public final java.lang.Runnable bar();//  bar()
 
   @org.jetbrains.annotations.NotNull()
-  public final java.lang.Runnable getX();
+  public final java.lang.Runnable getX();//  getX()
 
 }
 
 final class null /* null*/ implements java.lang.Runnable {
-  @null()
-  public static final java.lang.Runnable INSTANCE;
+  private  ();//  .ctor()
 
-  private  ();
-
-  public void run();
+  public void run();//  run()
 
 }
 
 final class null /* null*/ implements java.lang.Runnable {
-  @null()
-  public static final java.lang.Runnable INSTANCE;
+  private  ();//  .ctor()
 
-  private  ();
-
-  public void run();
+  public void run();//  run()
 
 }
 
@@ -154,32 +69,26 @@ public final class InvalidPublicSupertype /* InvalidPublicSupertype*/ {
   private final java.lang.Runnable x;
 
   @null()
-  public  InvalidPublicSupertype();
+  public  InvalidPublicSupertype();//  .ctor()
 
   @org.jetbrains.annotations.NotNull()
-  public final java.lang.Runnable bar();
+  public final java.lang.Runnable bar();//  bar()
 
   @org.jetbrains.annotations.NotNull()
-  public final java.lang.Runnable getX();
+  public final java.lang.Runnable getX();//  getX()
 
 }
 
 final class null /* null*/ implements I, java.lang.Runnable {
-  @null()
-  public static final java.lang.Runnable INSTANCE;
+  private  ();//  .ctor()
 
-  private  ();
-
-  public void run();
+  public void run();//  run()
 
 }
 
 final class null /* null*/ implements I, java.lang.Runnable {
-  @null()
-  public static final java.lang.Runnable INSTANCE;
+  private  ();//  .ctor()
 
-  private  ();
-
-  public void run();
+  public void run();//  run()
 
 }

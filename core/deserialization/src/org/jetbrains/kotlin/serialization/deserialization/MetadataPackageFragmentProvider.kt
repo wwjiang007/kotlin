@@ -28,6 +28,7 @@ import org.jetbrains.kotlin.metadata.deserialization.NameResolverImpl
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.sam.SamConversionResolver
 import org.jetbrains.kotlin.resolve.scopes.ChainedMemberScope
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.serialization.deserialization.builtins.BuiltInSerializerProtocol
@@ -43,7 +44,8 @@ class MetadataPackageFragmentProvider(
     notFoundClasses: NotFoundClasses,
     private val metadataPartProvider: MetadataPartProvider,
     contractDeserializer: ContractDeserializer,
-    kotlinTypeChecker: NewKotlinTypeChecker
+    kotlinTypeChecker: NewKotlinTypeChecker,
+    samConversionResolver: SamConversionResolver
 ) : AbstractDeserializedPackageFragmentProvider(storageManager, finder, moduleDescriptor) {
     init {
         components = DeserializationComponents(
@@ -62,7 +64,8 @@ class MetadataPackageFragmentProvider(
             contractDeserializer,
             AdditionalClassPartsProvider.None, PlatformDependentDeclarationFilter.All,
             BuiltInSerializerProtocol.extensionRegistry,
-            kotlinTypeChecker
+            kotlinTypeChecker,
+            samConversionResolver
         )
     }
 
@@ -123,6 +126,7 @@ class MetadataPackageFragment(
             override fun hasClass(name: Name): Boolean = hasTopLevelClass(name)
             override fun definitelyDoesNotContainName(name: Name) = false
             override fun getClassifierNames(): Set<Name>? = null
+            override fun getNonDeclaredClassifierNames(): Set<Name>? = null
         })
 
         return ChainedMemberScope.create("Metadata scope", scopes)

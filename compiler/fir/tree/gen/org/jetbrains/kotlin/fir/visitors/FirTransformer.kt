@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -14,18 +14,20 @@ import org.jetbrains.kotlin.fir.declarations.FirImport
 import org.jetbrains.kotlin.fir.declarations.FirResolvedImport
 import org.jetbrains.kotlin.fir.FirSymbolOwner
 import org.jetbrains.kotlin.fir.expressions.FirResolvable
-import org.jetbrains.kotlin.fir.FirControlFlowGraphOwner
 import org.jetbrains.kotlin.fir.FirTargetElement
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationStatus
 import org.jetbrains.kotlin.fir.declarations.FirResolvedDeclarationStatus
+import org.jetbrains.kotlin.fir.declarations.FirControlFlowGraphOwner
 import org.jetbrains.kotlin.fir.expressions.FirStatement
 import org.jetbrains.kotlin.fir.expressions.FirExpression
 import org.jetbrains.kotlin.fir.declarations.FirDeclaration
+import org.jetbrains.kotlin.fir.declarations.FirAnnotatedDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirAnonymousInitializer
 import org.jetbrains.kotlin.fir.declarations.FirTypedDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirCallableDeclaration
-import org.jetbrains.kotlin.fir.declarations.FirNamedDeclaration
+import org.jetbrains.kotlin.fir.declarations.FirTypeParameterRef
 import org.jetbrains.kotlin.fir.declarations.FirTypeParameter
+import org.jetbrains.kotlin.fir.declarations.FirTypeParameterRefsOwner
 import org.jetbrains.kotlin.fir.declarations.FirTypeParametersOwner
 import org.jetbrains.kotlin.fir.declarations.FirMemberDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirCallableMemberDeclaration
@@ -33,15 +35,13 @@ import org.jetbrains.kotlin.fir.declarations.FirVariable
 import org.jetbrains.kotlin.fir.declarations.FirValueParameter
 import org.jetbrains.kotlin.fir.declarations.FirProperty
 import org.jetbrains.kotlin.fir.declarations.FirField
+import org.jetbrains.kotlin.fir.declarations.FirEnumEntry
 import org.jetbrains.kotlin.fir.declarations.FirClassLikeDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirClass
 import org.jetbrains.kotlin.fir.declarations.FirRegularClass
-import org.jetbrains.kotlin.fir.declarations.FirSealedClass
 import org.jetbrains.kotlin.fir.declarations.FirTypeAlias
-import org.jetbrains.kotlin.fir.declarations.FirEnumEntry
 import org.jetbrains.kotlin.fir.declarations.FirFunction
 import org.jetbrains.kotlin.fir.declarations.FirContractDescriptionOwner
-import org.jetbrains.kotlin.fir.declarations.FirMemberFunction
 import org.jetbrains.kotlin.fir.declarations.FirSimpleFunction
 import org.jetbrains.kotlin.fir.declarations.FirPropertyAccessor
 import org.jetbrains.kotlin.fir.declarations.FirConstructor
@@ -65,33 +65,43 @@ import org.jetbrains.kotlin.fir.expressions.FirConstExpression
 import org.jetbrains.kotlin.fir.types.FirTypeProjection
 import org.jetbrains.kotlin.fir.types.FirStarProjection
 import org.jetbrains.kotlin.fir.types.FirTypeProjectionWithVariance
+import org.jetbrains.kotlin.fir.expressions.FirArgumentList
 import org.jetbrains.kotlin.fir.expressions.FirCall
 import org.jetbrains.kotlin.fir.expressions.FirAnnotationCall
-import org.jetbrains.kotlin.fir.expressions.FirOperatorCall
+import org.jetbrains.kotlin.fir.expressions.FirComparisonExpression
 import org.jetbrains.kotlin.fir.expressions.FirTypeOperatorCall
+import org.jetbrains.kotlin.fir.expressions.FirAssignmentOperatorStatement
+import org.jetbrains.kotlin.fir.expressions.FirEqualityOperatorCall
 import org.jetbrains.kotlin.fir.expressions.FirWhenExpression
 import org.jetbrains.kotlin.fir.expressions.FirWhenBranch
-import org.jetbrains.kotlin.fir.expressions.FirDelegatedConstructorCall
-import org.jetbrains.kotlin.fir.expressions.FirQualifiedAccessWithoutCallee
 import org.jetbrains.kotlin.fir.expressions.FirQualifiedAccess
+import org.jetbrains.kotlin.fir.expressions.FirCheckNotNullCall
+import org.jetbrains.kotlin.fir.expressions.FirElvisExpression
 import org.jetbrains.kotlin.fir.expressions.FirArrayOfCall
-import org.jetbrains.kotlin.fir.expressions.FirArraySetCall
+import org.jetbrains.kotlin.fir.expressions.FirAugmentedArraySetCall
 import org.jetbrains.kotlin.fir.expressions.FirClassReferenceExpression
 import org.jetbrains.kotlin.fir.expressions.FirErrorExpression
 import org.jetbrains.kotlin.fir.declarations.FirErrorFunction
+import org.jetbrains.kotlin.fir.declarations.FirErrorProperty
 import org.jetbrains.kotlin.fir.expressions.FirQualifiedAccessExpression
 import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
+import org.jetbrains.kotlin.fir.expressions.FirDelegatedConstructorCall
 import org.jetbrains.kotlin.fir.expressions.FirComponentCall
 import org.jetbrains.kotlin.fir.expressions.FirCallableReferenceAccess
 import org.jetbrains.kotlin.fir.expressions.FirThisReceiverExpression
 import org.jetbrains.kotlin.fir.expressions.FirExpressionWithSmartcast
+import org.jetbrains.kotlin.fir.expressions.FirSafeCallExpression
+import org.jetbrains.kotlin.fir.expressions.FirCheckedSafeCallSubject
 import org.jetbrains.kotlin.fir.expressions.FirGetClassCall
 import org.jetbrains.kotlin.fir.expressions.FirWrappedExpression
 import org.jetbrains.kotlin.fir.expressions.FirWrappedArgumentExpression
 import org.jetbrains.kotlin.fir.expressions.FirLambdaArgumentExpression
 import org.jetbrains.kotlin.fir.expressions.FirSpreadArgumentExpression
 import org.jetbrains.kotlin.fir.expressions.FirNamedArgumentExpression
+import org.jetbrains.kotlin.fir.expressions.FirVarargArgumentsExpression
 import org.jetbrains.kotlin.fir.expressions.FirResolvedQualifier
+import org.jetbrains.kotlin.fir.expressions.FirErrorResolvedQualifier
+import org.jetbrains.kotlin.fir.expressions.FirResolvedReifiedParameterReference
 import org.jetbrains.kotlin.fir.expressions.FirReturnExpression
 import org.jetbrains.kotlin.fir.expressions.FirStringConcatenationCall
 import org.jetbrains.kotlin.fir.expressions.FirThrowExpression
@@ -109,14 +119,18 @@ import org.jetbrains.kotlin.fir.references.FirBackingFieldReference
 import org.jetbrains.kotlin.fir.references.FirResolvedCallableReference
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.FirErrorTypeRef
-import org.jetbrains.kotlin.fir.types.FirDelegatedTypeRef
 import org.jetbrains.kotlin.fir.types.FirTypeRefWithNullability
 import org.jetbrains.kotlin.fir.types.FirUserTypeRef
 import org.jetbrains.kotlin.fir.types.FirDynamicTypeRef
 import org.jetbrains.kotlin.fir.types.FirFunctionTypeRef
 import org.jetbrains.kotlin.fir.types.FirResolvedFunctionTypeRef
 import org.jetbrains.kotlin.fir.types.FirImplicitTypeRef
+import org.jetbrains.kotlin.fir.types.FirComposedSuperTypeRef
+import org.jetbrains.kotlin.fir.contracts.FirEffectDeclaration
 import org.jetbrains.kotlin.fir.contracts.FirContractDescription
+import org.jetbrains.kotlin.fir.contracts.FirLegacyRawContractDescription
+import org.jetbrains.kotlin.fir.contracts.FirRawContractDescription
+import org.jetbrains.kotlin.fir.contracts.FirResolvedContractDescription
 import org.jetbrains.kotlin.fir.visitors.CompositeTransformResult
 
 /*
@@ -160,10 +174,6 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformElement(resolvable, data)
     }
 
-    open fun transformControlFlowGraphOwner(controlFlowGraphOwner: FirControlFlowGraphOwner, data: D): CompositeTransformResult<FirControlFlowGraphOwner> {
-        return transformElement(controlFlowGraphOwner, data)
-    }
-
     open fun transformTargetElement(targetElement: FirTargetElement, data: D): CompositeTransformResult<FirTargetElement> {
         return transformElement(targetElement, data)
     }
@@ -174,6 +184,10 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
 
     open fun transformResolvedDeclarationStatus(resolvedDeclarationStatus: FirResolvedDeclarationStatus, data: D): CompositeTransformResult<FirDeclarationStatus> {
         return transformElement(resolvedDeclarationStatus, data)
+    }
+
+    open fun transformControlFlowGraphOwner(controlFlowGraphOwner: FirControlFlowGraphOwner, data: D): CompositeTransformResult<FirControlFlowGraphOwner> {
+        return transformElement(controlFlowGraphOwner, data)
     }
 
     open fun transformStatement(statement: FirStatement, data: D): CompositeTransformResult<FirStatement> {
@@ -188,6 +202,10 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformElement(declaration, data)
     }
 
+    open fun transformAnnotatedDeclaration(annotatedDeclaration: FirAnnotatedDeclaration, data: D): CompositeTransformResult<FirDeclaration> {
+        return transformElement(annotatedDeclaration, data)
+    }
+
     open fun transformAnonymousInitializer(anonymousInitializer: FirAnonymousInitializer, data: D): CompositeTransformResult<FirDeclaration> {
         return transformElement(anonymousInitializer, data)
     }
@@ -200,12 +218,16 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformElement(callableDeclaration, data)
     }
 
-    open fun transformNamedDeclaration(namedDeclaration: FirNamedDeclaration, data: D): CompositeTransformResult<FirDeclaration> {
-        return transformElement(namedDeclaration, data)
+    open fun transformTypeParameterRef(typeParameterRef: FirTypeParameterRef, data: D): CompositeTransformResult<FirTypeParameterRef> {
+        return transformElement(typeParameterRef, data)
     }
 
     open fun transformTypeParameter(typeParameter: FirTypeParameter, data: D): CompositeTransformResult<FirDeclaration> {
         return transformElement(typeParameter, data)
+    }
+
+    open fun transformTypeParameterRefsOwner(typeParameterRefsOwner: FirTypeParameterRefsOwner, data: D): CompositeTransformResult<FirTypeParameterRefsOwner> {
+        return transformElement(typeParameterRefsOwner, data)
     }
 
     open fun transformTypeParametersOwner(typeParametersOwner: FirTypeParametersOwner, data: D): CompositeTransformResult<FirTypeParametersOwner> {
@@ -236,6 +258,10 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformElement(field, data)
     }
 
+    open fun transformEnumEntry(enumEntry: FirEnumEntry, data: D): CompositeTransformResult<FirDeclaration> {
+        return transformElement(enumEntry, data)
+    }
+
     open fun <F : FirClassLikeDeclaration<F>> transformClassLikeDeclaration(classLikeDeclaration: FirClassLikeDeclaration<F>, data: D): CompositeTransformResult<FirStatement> {
         return transformElement(classLikeDeclaration, data)
     }
@@ -248,16 +274,8 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformElement(regularClass, data)
     }
 
-    open fun transformSealedClass(sealedClass: FirSealedClass, data: D): CompositeTransformResult<FirStatement> {
-        return transformElement(sealedClass, data)
-    }
-
     open fun transformTypeAlias(typeAlias: FirTypeAlias, data: D): CompositeTransformResult<FirDeclaration> {
         return transformElement(typeAlias, data)
-    }
-
-    open fun transformEnumEntry(enumEntry: FirEnumEntry, data: D): CompositeTransformResult<FirStatement> {
-        return transformElement(enumEntry, data)
     }
 
     open fun <F : FirFunction<F>> transformFunction(function: FirFunction<F>, data: D): CompositeTransformResult<FirStatement> {
@@ -266,10 +284,6 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
 
     open fun transformContractDescriptionOwner(contractDescriptionOwner: FirContractDescriptionOwner, data: D): CompositeTransformResult<FirContractDescriptionOwner> {
         return transformElement(contractDescriptionOwner, data)
-    }
-
-    open fun <F : FirMemberFunction<F>> transformMemberFunction(memberFunction: FirMemberFunction<F>, data: D): CompositeTransformResult<FirDeclaration> {
-        return transformElement(memberFunction, data)
     }
 
     open fun transformSimpleFunction(simpleFunction: FirSimpleFunction, data: D): CompositeTransformResult<FirDeclaration> {
@@ -364,6 +378,10 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformElement(typeProjectionWithVariance, data)
     }
 
+    open fun transformArgumentList(argumentList: FirArgumentList, data: D): CompositeTransformResult<FirArgumentList> {
+        return transformElement(argumentList, data)
+    }
+
     open fun transformCall(call: FirCall, data: D): CompositeTransformResult<FirStatement> {
         return transformElement(call, data)
     }
@@ -372,12 +390,20 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformElement(annotationCall, data)
     }
 
-    open fun transformOperatorCall(operatorCall: FirOperatorCall, data: D): CompositeTransformResult<FirStatement> {
-        return transformElement(operatorCall, data)
+    open fun transformComparisonExpression(comparisonExpression: FirComparisonExpression, data: D): CompositeTransformResult<FirStatement> {
+        return transformElement(comparisonExpression, data)
     }
 
     open fun transformTypeOperatorCall(typeOperatorCall: FirTypeOperatorCall, data: D): CompositeTransformResult<FirStatement> {
         return transformElement(typeOperatorCall, data)
+    }
+
+    open fun transformAssignmentOperatorStatement(assignmentOperatorStatement: FirAssignmentOperatorStatement, data: D): CompositeTransformResult<FirStatement> {
+        return transformElement(assignmentOperatorStatement, data)
+    }
+
+    open fun transformEqualityOperatorCall(equalityOperatorCall: FirEqualityOperatorCall, data: D): CompositeTransformResult<FirStatement> {
+        return transformElement(equalityOperatorCall, data)
     }
 
     open fun transformWhenExpression(whenExpression: FirWhenExpression, data: D): CompositeTransformResult<FirStatement> {
@@ -388,24 +414,24 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformElement(whenBranch, data)
     }
 
-    open fun transformDelegatedConstructorCall(delegatedConstructorCall: FirDelegatedConstructorCall, data: D): CompositeTransformResult<FirStatement> {
-        return transformElement(delegatedConstructorCall, data)
-    }
-
-    open fun transformQualifiedAccessWithoutCallee(qualifiedAccessWithoutCallee: FirQualifiedAccessWithoutCallee, data: D): CompositeTransformResult<FirStatement> {
-        return transformElement(qualifiedAccessWithoutCallee, data)
-    }
-
     open fun transformQualifiedAccess(qualifiedAccess: FirQualifiedAccess, data: D): CompositeTransformResult<FirStatement> {
         return transformElement(qualifiedAccess, data)
+    }
+
+    open fun transformCheckNotNullCall(checkNotNullCall: FirCheckNotNullCall, data: D): CompositeTransformResult<FirStatement> {
+        return transformElement(checkNotNullCall, data)
+    }
+
+    open fun transformElvisExpression(elvisExpression: FirElvisExpression, data: D): CompositeTransformResult<FirStatement> {
+        return transformElement(elvisExpression, data)
     }
 
     open fun transformArrayOfCall(arrayOfCall: FirArrayOfCall, data: D): CompositeTransformResult<FirStatement> {
         return transformElement(arrayOfCall, data)
     }
 
-    open fun transformArraySetCall(arraySetCall: FirArraySetCall, data: D): CompositeTransformResult<FirStatement> {
-        return transformElement(arraySetCall, data)
+    open fun transformAugmentedArraySetCall(augmentedArraySetCall: FirAugmentedArraySetCall, data: D): CompositeTransformResult<FirStatement> {
+        return transformElement(augmentedArraySetCall, data)
     }
 
     open fun transformClassReferenceExpression(classReferenceExpression: FirClassReferenceExpression, data: D): CompositeTransformResult<FirStatement> {
@@ -420,12 +446,20 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformElement(errorFunction, data)
     }
 
+    open fun transformErrorProperty(errorProperty: FirErrorProperty, data: D): CompositeTransformResult<FirStatement> {
+        return transformElement(errorProperty, data)
+    }
+
     open fun transformQualifiedAccessExpression(qualifiedAccessExpression: FirQualifiedAccessExpression, data: D): CompositeTransformResult<FirStatement> {
         return transformElement(qualifiedAccessExpression, data)
     }
 
     open fun transformFunctionCall(functionCall: FirFunctionCall, data: D): CompositeTransformResult<FirStatement> {
         return transformElement(functionCall, data)
+    }
+
+    open fun transformDelegatedConstructorCall(delegatedConstructorCall: FirDelegatedConstructorCall, data: D): CompositeTransformResult<FirStatement> {
+        return transformElement(delegatedConstructorCall, data)
     }
 
     open fun transformComponentCall(componentCall: FirComponentCall, data: D): CompositeTransformResult<FirStatement> {
@@ -442,6 +476,14 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
 
     open fun transformExpressionWithSmartcast(expressionWithSmartcast: FirExpressionWithSmartcast, data: D): CompositeTransformResult<FirStatement> {
         return transformElement(expressionWithSmartcast, data)
+    }
+
+    open fun transformSafeCallExpression(safeCallExpression: FirSafeCallExpression, data: D): CompositeTransformResult<FirStatement> {
+        return transformElement(safeCallExpression, data)
+    }
+
+    open fun transformCheckedSafeCallSubject(checkedSafeCallSubject: FirCheckedSafeCallSubject, data: D): CompositeTransformResult<FirStatement> {
+        return transformElement(checkedSafeCallSubject, data)
     }
 
     open fun transformGetClassCall(getClassCall: FirGetClassCall, data: D): CompositeTransformResult<FirStatement> {
@@ -468,8 +510,20 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformElement(namedArgumentExpression, data)
     }
 
+    open fun transformVarargArgumentsExpression(varargArgumentsExpression: FirVarargArgumentsExpression, data: D): CompositeTransformResult<FirStatement> {
+        return transformElement(varargArgumentsExpression, data)
+    }
+
     open fun transformResolvedQualifier(resolvedQualifier: FirResolvedQualifier, data: D): CompositeTransformResult<FirStatement> {
         return transformElement(resolvedQualifier, data)
+    }
+
+    open fun transformErrorResolvedQualifier(errorResolvedQualifier: FirErrorResolvedQualifier, data: D): CompositeTransformResult<FirStatement> {
+        return transformElement(errorResolvedQualifier, data)
+    }
+
+    open fun transformResolvedReifiedParameterReference(resolvedReifiedParameterReference: FirResolvedReifiedParameterReference, data: D): CompositeTransformResult<FirStatement> {
+        return transformElement(resolvedReifiedParameterReference, data)
     }
 
     open fun transformReturnExpression(returnExpression: FirReturnExpression, data: D): CompositeTransformResult<FirStatement> {
@@ -540,10 +594,6 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformElement(errorTypeRef, data)
     }
 
-    open fun transformDelegatedTypeRef(delegatedTypeRef: FirDelegatedTypeRef, data: D): CompositeTransformResult<FirTypeRef> {
-        return transformElement(delegatedTypeRef, data)
-    }
-
     open fun transformTypeRefWithNullability(typeRefWithNullability: FirTypeRefWithNullability, data: D): CompositeTransformResult<FirTypeRef> {
         return transformElement(typeRefWithNullability, data)
     }
@@ -568,8 +618,28 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformElement(implicitTypeRef, data)
     }
 
+    open fun transformComposedSuperTypeRef(composedSuperTypeRef: FirComposedSuperTypeRef, data: D): CompositeTransformResult<FirTypeRef> {
+        return transformElement(composedSuperTypeRef, data)
+    }
+
+    open fun transformEffectDeclaration(effectDeclaration: FirEffectDeclaration, data: D): CompositeTransformResult<FirEffectDeclaration> {
+        return transformElement(effectDeclaration, data)
+    }
+
     open fun transformContractDescription(contractDescription: FirContractDescription, data: D): CompositeTransformResult<FirContractDescription> {
         return transformElement(contractDescription, data)
+    }
+
+    open fun transformLegacyRawContractDescription(legacyRawContractDescription: FirLegacyRawContractDescription, data: D): CompositeTransformResult<FirContractDescription> {
+        return transformElement(legacyRawContractDescription, data)
+    }
+
+    open fun transformRawContractDescription(rawContractDescription: FirRawContractDescription, data: D): CompositeTransformResult<FirContractDescription> {
+        return transformElement(rawContractDescription, data)
+    }
+
+    open fun transformResolvedContractDescription(resolvedContractDescription: FirResolvedContractDescription, data: D): CompositeTransformResult<FirContractDescription> {
+        return transformElement(resolvedContractDescription, data)
     }
 
     final override fun visitElement(element: FirElement, data: D): CompositeTransformResult<FirElement> {
@@ -608,10 +678,6 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformResolvable(resolvable, data)
     }
 
-    final override fun visitControlFlowGraphOwner(controlFlowGraphOwner: FirControlFlowGraphOwner, data: D): CompositeTransformResult<FirControlFlowGraphOwner> {
-        return transformControlFlowGraphOwner(controlFlowGraphOwner, data)
-    }
-
     final override fun visitTargetElement(targetElement: FirTargetElement, data: D): CompositeTransformResult<FirTargetElement> {
         return transformTargetElement(targetElement, data)
     }
@@ -622,6 +688,10 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
 
     final override fun visitResolvedDeclarationStatus(resolvedDeclarationStatus: FirResolvedDeclarationStatus, data: D): CompositeTransformResult<FirDeclarationStatus> {
         return transformResolvedDeclarationStatus(resolvedDeclarationStatus, data)
+    }
+
+    final override fun visitControlFlowGraphOwner(controlFlowGraphOwner: FirControlFlowGraphOwner, data: D): CompositeTransformResult<FirControlFlowGraphOwner> {
+        return transformControlFlowGraphOwner(controlFlowGraphOwner, data)
     }
 
     final override fun visitStatement(statement: FirStatement, data: D): CompositeTransformResult<FirStatement> {
@@ -636,6 +706,10 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformDeclaration(declaration, data)
     }
 
+    final override fun visitAnnotatedDeclaration(annotatedDeclaration: FirAnnotatedDeclaration, data: D): CompositeTransformResult<FirDeclaration> {
+        return transformAnnotatedDeclaration(annotatedDeclaration, data)
+    }
+
     final override fun visitAnonymousInitializer(anonymousInitializer: FirAnonymousInitializer, data: D): CompositeTransformResult<FirDeclaration> {
         return transformAnonymousInitializer(anonymousInitializer, data)
     }
@@ -648,12 +722,16 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformCallableDeclaration(callableDeclaration, data)
     }
 
-    final override fun visitNamedDeclaration(namedDeclaration: FirNamedDeclaration, data: D): CompositeTransformResult<FirDeclaration> {
-        return transformNamedDeclaration(namedDeclaration, data)
+    final override fun visitTypeParameterRef(typeParameterRef: FirTypeParameterRef, data: D): CompositeTransformResult<FirTypeParameterRef> {
+        return transformTypeParameterRef(typeParameterRef, data)
     }
 
     final override fun visitTypeParameter(typeParameter: FirTypeParameter, data: D): CompositeTransformResult<FirDeclaration> {
         return transformTypeParameter(typeParameter, data)
+    }
+
+    final override fun visitTypeParameterRefsOwner(typeParameterRefsOwner: FirTypeParameterRefsOwner, data: D): CompositeTransformResult<FirTypeParameterRefsOwner> {
+        return transformTypeParameterRefsOwner(typeParameterRefsOwner, data)
     }
 
     final override fun visitTypeParametersOwner(typeParametersOwner: FirTypeParametersOwner, data: D): CompositeTransformResult<FirTypeParametersOwner> {
@@ -684,6 +762,10 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformField(field, data)
     }
 
+    final override fun visitEnumEntry(enumEntry: FirEnumEntry, data: D): CompositeTransformResult<FirDeclaration> {
+        return transformEnumEntry(enumEntry, data)
+    }
+
     final override fun <F : FirClassLikeDeclaration<F>> visitClassLikeDeclaration(classLikeDeclaration: FirClassLikeDeclaration<F>, data: D): CompositeTransformResult<FirStatement> {
         return transformClassLikeDeclaration(classLikeDeclaration, data)
     }
@@ -696,16 +778,8 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformRegularClass(regularClass, data)
     }
 
-    final override fun visitSealedClass(sealedClass: FirSealedClass, data: D): CompositeTransformResult<FirStatement> {
-        return transformSealedClass(sealedClass, data)
-    }
-
     final override fun visitTypeAlias(typeAlias: FirTypeAlias, data: D): CompositeTransformResult<FirDeclaration> {
         return transformTypeAlias(typeAlias, data)
-    }
-
-    final override fun visitEnumEntry(enumEntry: FirEnumEntry, data: D): CompositeTransformResult<FirStatement> {
-        return transformEnumEntry(enumEntry, data)
     }
 
     final override fun <F : FirFunction<F>> visitFunction(function: FirFunction<F>, data: D): CompositeTransformResult<FirStatement> {
@@ -714,10 +788,6 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
 
     final override fun visitContractDescriptionOwner(contractDescriptionOwner: FirContractDescriptionOwner, data: D): CompositeTransformResult<FirContractDescriptionOwner> {
         return transformContractDescriptionOwner(contractDescriptionOwner, data)
-    }
-
-    final override fun <F : FirMemberFunction<F>> visitMemberFunction(memberFunction: FirMemberFunction<F>, data: D): CompositeTransformResult<FirDeclaration> {
-        return transformMemberFunction(memberFunction, data)
     }
 
     final override fun visitSimpleFunction(simpleFunction: FirSimpleFunction, data: D): CompositeTransformResult<FirDeclaration> {
@@ -812,6 +882,10 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformTypeProjectionWithVariance(typeProjectionWithVariance, data)
     }
 
+    final override fun visitArgumentList(argumentList: FirArgumentList, data: D): CompositeTransformResult<FirArgumentList> {
+        return transformArgumentList(argumentList, data)
+    }
+
     final override fun visitCall(call: FirCall, data: D): CompositeTransformResult<FirStatement> {
         return transformCall(call, data)
     }
@@ -820,12 +894,20 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformAnnotationCall(annotationCall, data)
     }
 
-    final override fun visitOperatorCall(operatorCall: FirOperatorCall, data: D): CompositeTransformResult<FirStatement> {
-        return transformOperatorCall(operatorCall, data)
+    final override fun visitComparisonExpression(comparisonExpression: FirComparisonExpression, data: D): CompositeTransformResult<FirStatement> {
+        return transformComparisonExpression(comparisonExpression, data)
     }
 
     final override fun visitTypeOperatorCall(typeOperatorCall: FirTypeOperatorCall, data: D): CompositeTransformResult<FirStatement> {
         return transformTypeOperatorCall(typeOperatorCall, data)
+    }
+
+    final override fun visitAssignmentOperatorStatement(assignmentOperatorStatement: FirAssignmentOperatorStatement, data: D): CompositeTransformResult<FirStatement> {
+        return transformAssignmentOperatorStatement(assignmentOperatorStatement, data)
+    }
+
+    final override fun visitEqualityOperatorCall(equalityOperatorCall: FirEqualityOperatorCall, data: D): CompositeTransformResult<FirStatement> {
+        return transformEqualityOperatorCall(equalityOperatorCall, data)
     }
 
     final override fun visitWhenExpression(whenExpression: FirWhenExpression, data: D): CompositeTransformResult<FirStatement> {
@@ -836,24 +918,24 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformWhenBranch(whenBranch, data)
     }
 
-    final override fun visitDelegatedConstructorCall(delegatedConstructorCall: FirDelegatedConstructorCall, data: D): CompositeTransformResult<FirStatement> {
-        return transformDelegatedConstructorCall(delegatedConstructorCall, data)
-    }
-
-    final override fun visitQualifiedAccessWithoutCallee(qualifiedAccessWithoutCallee: FirQualifiedAccessWithoutCallee, data: D): CompositeTransformResult<FirStatement> {
-        return transformQualifiedAccessWithoutCallee(qualifiedAccessWithoutCallee, data)
-    }
-
     final override fun visitQualifiedAccess(qualifiedAccess: FirQualifiedAccess, data: D): CompositeTransformResult<FirStatement> {
         return transformQualifiedAccess(qualifiedAccess, data)
+    }
+
+    final override fun visitCheckNotNullCall(checkNotNullCall: FirCheckNotNullCall, data: D): CompositeTransformResult<FirStatement> {
+        return transformCheckNotNullCall(checkNotNullCall, data)
+    }
+
+    final override fun visitElvisExpression(elvisExpression: FirElvisExpression, data: D): CompositeTransformResult<FirStatement> {
+        return transformElvisExpression(elvisExpression, data)
     }
 
     final override fun visitArrayOfCall(arrayOfCall: FirArrayOfCall, data: D): CompositeTransformResult<FirStatement> {
         return transformArrayOfCall(arrayOfCall, data)
     }
 
-    final override fun visitArraySetCall(arraySetCall: FirArraySetCall, data: D): CompositeTransformResult<FirStatement> {
-        return transformArraySetCall(arraySetCall, data)
+    final override fun visitAugmentedArraySetCall(augmentedArraySetCall: FirAugmentedArraySetCall, data: D): CompositeTransformResult<FirStatement> {
+        return transformAugmentedArraySetCall(augmentedArraySetCall, data)
     }
 
     final override fun visitClassReferenceExpression(classReferenceExpression: FirClassReferenceExpression, data: D): CompositeTransformResult<FirStatement> {
@@ -868,12 +950,20 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformErrorFunction(errorFunction, data)
     }
 
+    final override fun visitErrorProperty(errorProperty: FirErrorProperty, data: D): CompositeTransformResult<FirStatement> {
+        return transformErrorProperty(errorProperty, data)
+    }
+
     final override fun visitQualifiedAccessExpression(qualifiedAccessExpression: FirQualifiedAccessExpression, data: D): CompositeTransformResult<FirStatement> {
         return transformQualifiedAccessExpression(qualifiedAccessExpression, data)
     }
 
     final override fun visitFunctionCall(functionCall: FirFunctionCall, data: D): CompositeTransformResult<FirStatement> {
         return transformFunctionCall(functionCall, data)
+    }
+
+    final override fun visitDelegatedConstructorCall(delegatedConstructorCall: FirDelegatedConstructorCall, data: D): CompositeTransformResult<FirStatement> {
+        return transformDelegatedConstructorCall(delegatedConstructorCall, data)
     }
 
     final override fun visitComponentCall(componentCall: FirComponentCall, data: D): CompositeTransformResult<FirStatement> {
@@ -890,6 +980,14 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
 
     final override fun visitExpressionWithSmartcast(expressionWithSmartcast: FirExpressionWithSmartcast, data: D): CompositeTransformResult<FirStatement> {
         return transformExpressionWithSmartcast(expressionWithSmartcast, data)
+    }
+
+    final override fun visitSafeCallExpression(safeCallExpression: FirSafeCallExpression, data: D): CompositeTransformResult<FirStatement> {
+        return transformSafeCallExpression(safeCallExpression, data)
+    }
+
+    final override fun visitCheckedSafeCallSubject(checkedSafeCallSubject: FirCheckedSafeCallSubject, data: D): CompositeTransformResult<FirStatement> {
+        return transformCheckedSafeCallSubject(checkedSafeCallSubject, data)
     }
 
     final override fun visitGetClassCall(getClassCall: FirGetClassCall, data: D): CompositeTransformResult<FirStatement> {
@@ -916,8 +1014,20 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformNamedArgumentExpression(namedArgumentExpression, data)
     }
 
+    final override fun visitVarargArgumentsExpression(varargArgumentsExpression: FirVarargArgumentsExpression, data: D): CompositeTransformResult<FirStatement> {
+        return transformVarargArgumentsExpression(varargArgumentsExpression, data)
+    }
+
     final override fun visitResolvedQualifier(resolvedQualifier: FirResolvedQualifier, data: D): CompositeTransformResult<FirStatement> {
         return transformResolvedQualifier(resolvedQualifier, data)
+    }
+
+    final override fun visitErrorResolvedQualifier(errorResolvedQualifier: FirErrorResolvedQualifier, data: D): CompositeTransformResult<FirStatement> {
+        return transformErrorResolvedQualifier(errorResolvedQualifier, data)
+    }
+
+    final override fun visitResolvedReifiedParameterReference(resolvedReifiedParameterReference: FirResolvedReifiedParameterReference, data: D): CompositeTransformResult<FirStatement> {
+        return transformResolvedReifiedParameterReference(resolvedReifiedParameterReference, data)
     }
 
     final override fun visitReturnExpression(returnExpression: FirReturnExpression, data: D): CompositeTransformResult<FirStatement> {
@@ -988,10 +1098,6 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformErrorTypeRef(errorTypeRef, data)
     }
 
-    final override fun visitDelegatedTypeRef(delegatedTypeRef: FirDelegatedTypeRef, data: D): CompositeTransformResult<FirTypeRef> {
-        return transformDelegatedTypeRef(delegatedTypeRef, data)
-    }
-
     final override fun visitTypeRefWithNullability(typeRefWithNullability: FirTypeRefWithNullability, data: D): CompositeTransformResult<FirTypeRef> {
         return transformTypeRefWithNullability(typeRefWithNullability, data)
     }
@@ -1016,8 +1122,28 @@ abstract class FirTransformer<in D> : FirVisitor<CompositeTransformResult<FirEle
         return transformImplicitTypeRef(implicitTypeRef, data)
     }
 
+    final override fun visitComposedSuperTypeRef(composedSuperTypeRef: FirComposedSuperTypeRef, data: D): CompositeTransformResult<FirTypeRef> {
+        return transformComposedSuperTypeRef(composedSuperTypeRef, data)
+    }
+
+    final override fun visitEffectDeclaration(effectDeclaration: FirEffectDeclaration, data: D): CompositeTransformResult<FirEffectDeclaration> {
+        return transformEffectDeclaration(effectDeclaration, data)
+    }
+
     final override fun visitContractDescription(contractDescription: FirContractDescription, data: D): CompositeTransformResult<FirContractDescription> {
         return transformContractDescription(contractDescription, data)
+    }
+
+    final override fun visitLegacyRawContractDescription(legacyRawContractDescription: FirLegacyRawContractDescription, data: D): CompositeTransformResult<FirContractDescription> {
+        return transformLegacyRawContractDescription(legacyRawContractDescription, data)
+    }
+
+    final override fun visitRawContractDescription(rawContractDescription: FirRawContractDescription, data: D): CompositeTransformResult<FirContractDescription> {
+        return transformRawContractDescription(rawContractDescription, data)
+    }
+
+    final override fun visitResolvedContractDescription(resolvedContractDescription: FirResolvedContractDescription, data: D): CompositeTransformResult<FirContractDescription> {
+        return transformResolvedContractDescription(resolvedContractDescription, data)
     }
 
 }

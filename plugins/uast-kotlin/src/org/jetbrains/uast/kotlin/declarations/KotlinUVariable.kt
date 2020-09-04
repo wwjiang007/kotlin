@@ -75,7 +75,7 @@ abstract class AbstractKotlinUVariable(givenParent: UElement?) : KotlinAbstractU
 
     override fun getNameIdentifier(): PsiIdentifier {
         val kotlinOrigin = (psi as? KtLightElement<*, *>)?.kotlinOrigin
-        return UastLightIdentifier(psi, kotlinOrigin as KtNamedDeclaration?)
+        return UastLightIdentifier(psi, kotlinOrigin as? KtDeclaration)
     }
 
     override fun getContainingFile(): PsiFile = unwrapFakeFileForLightClass(psi.containingFile)
@@ -119,8 +119,7 @@ abstract class AbstractKotlinUVariable(givenParent: UElement?) : KotlinAbstractU
     override fun equals(other: Any?) = other is AbstractKotlinUVariable && psi == other.psi
 
     class WrappedUAnnotation(psiAnnotation: PsiAnnotation, override val uastParent: UElement) : UAnnotation, UAnchorOwner,
-        DelegatedMultiResolve,
-        JvmDeclarationUElementPlaceholder {
+        DelegatedMultiResolve {
 
         override val javaPsi: PsiAnnotation = psiAnnotation
         override val psi: PsiAnnotation = javaPsi
@@ -132,8 +131,7 @@ abstract class AbstractKotlinUVariable(givenParent: UElement?) : KotlinAbstractU
 
         override val uastAnchor by lazy { KotlinUIdentifier(javaPsi.nameReferenceElement?.referenceNameElement, null, this) }
 
-        class WrappedUNamedExpression(pair: PsiNameValuePair, override val uastParent: UElement?) : UNamedExpression,
-            JvmDeclarationUElementPlaceholder {
+        class WrappedUNamedExpression(pair: PsiNameValuePair, override val uastParent: UElement?) : UNamedExpression {
             override val name: String? = pair.name
             override val psi = pair
             override val javaPsi: PsiElement? = psi
@@ -199,6 +197,7 @@ open class KotlinUParameter(
     override fun acceptsAnnotationTarget(target: AnnotationUseSiteTarget?): Boolean {
         if (sourcePsi !is KtParameter) return false
         if (isKtConstructorParam == isLightConstructorParam && target == null) return true
+        if (sourcePsi.parent.parent is KtCatchClause && target == null) return true
         when (target) {
             AnnotationUseSiteTarget.CONSTRUCTOR_PARAMETER -> return isLightConstructorParam == true
             AnnotationUseSiteTarget.SETTER_PARAMETER -> return isLightConstructorParam != true
@@ -239,7 +238,7 @@ class KotlinReceiverUParameter(
 }
 
 class KotlinNullabilityUAnnotation(val annotatedElement: PsiElement, override val uastParent: UElement) : UAnnotationEx, UAnchorOwner,
-    DelegatedMultiResolve, JvmDeclarationUElementPlaceholder {
+    DelegatedMultiResolve {
 
     private fun getTargetType(annotatedElement: PsiElement): KotlinType? {
         if (annotatedElement is KtTypeReference) {
@@ -336,7 +335,7 @@ open class KotlinUField(
 
 open class KotlinULocalVariable(
         psi: PsiLocalVariable,
-        override val sourcePsi: KtElement,
+        override val sourcePsi: KtElement?,
         givenParent: UElement?
 ) : AbstractKotlinUVariable(givenParent), ULocalVariableExPlaceHolder, PsiLocalVariable by psi {
 

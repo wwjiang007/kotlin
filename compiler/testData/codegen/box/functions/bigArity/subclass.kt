@@ -1,8 +1,8 @@
 // !LANGUAGE: +FunctionTypesWithBigArity
-// IGNORE_BACKEND_FIR: JVM_IR
 
 // Implementing function interface is prohibited in JavaScript
 // IGNORE_BACKEND: JS_IR, JS
+// IGNORE_BACKEND: JS_IR_ES6
 
 class A(val value: String)
 

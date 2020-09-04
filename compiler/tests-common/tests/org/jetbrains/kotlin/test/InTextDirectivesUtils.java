@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -62,18 +62,23 @@ public final class InTextDirectivesUtils {
         List<String> result = new ArrayList<>();
 
         for (String line : findLinesWithPrefixesRemoved(fileText, prefixes)) {
-            String unquoted = StringUtil.unquoteString(line);
-            if (!unquoted.equals(line)) {
-                result.add(unquoted);
-            }
-            else{
-                String[] variants = line.split(",");
-                for (String variant : variants) {
-                    result.add(variant.trim());
-                }
-            }
+            splitValues(result, line);
         }
 
+        return result;
+    }
+
+    public static List<String> splitValues(List<String> result, String line) {
+        String unquoted = StringUtil.unquoteString(line);
+        if (!unquoted.equals(line)) {
+            result.add(unquoted);
+        }
+        else{
+            String[] variants = line.split(",");
+            for (String variant : variants) {
+                result.add(variant.trim());
+            }
+        }
         return result;
     }
 
@@ -226,12 +231,15 @@ public final class InTextDirectivesUtils {
             return false;
 
         List<String> backends = findLinesWithPrefixesRemoved(textWithDirectives(file), "// TARGET_BACKEND: ");
-        return backends.isEmpty() || backends.contains(targetBackend.name()) || backends.contains(targetBackend.getCompatibleWith().name());
+        return isCompatibleTargetExceptAny(targetBackend, backends);
+    }
+
+    private static boolean isCompatibleTargetExceptAny(TargetBackend targetBackend, List<String> backends) {
+        if (targetBackend == TargetBackend.ANY) return false;
+        return backends.isEmpty() || backends.contains(targetBackend.name()) || isCompatibleTargetExceptAny(targetBackend.getCompatibleWith(), backends);
     }
 
     public static boolean isIgnoredTarget(TargetBackend targetBackend, File file, String ignoreBackendDirectivePrefix) {
-        if (targetBackend == TargetBackend.ANY) return false;
-
         List<String> ignoredBackends = findListWithPrefixes(textWithDirectives(file), ignoreBackendDirectivePrefix);
         return ignoredBackends.contains(targetBackend.name());
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2000-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -9,6 +9,7 @@ import com.intellij.codeInspection.*
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElementVisitor
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
@@ -42,15 +43,20 @@ class SelfAssignmentInspection : AbstractKotlinInspection(), CleanupLocalInspect
                 if (rightCallee.accessors.any { !it.isDefault }) return
             }
 
-            if (left.receiverDeclarationDescriptor(leftResolvedCall, context) !=
-                right.receiverDeclarationDescriptor(rightResolvedCall, context)) {
+            if (left.receiverDeclarationDescriptor(leftResolvedCall, context) != right.receiverDeclarationDescriptor(
+                    rightResolvedCall,
+                    context
+                )
+            ) {
                 return
             }
 
-            holder.registerProblem(right,
-                                   "Variable '${rightCallee.name}' is assigned to itself",
-                                   ProblemHighlightType.GENERIC_ERROR_OR_WARNING,
-                                   RemoveSelfAssignmentFix())
+            holder.registerProblem(
+                right,
+                KotlinBundle.message("variable.0.is.assigned.to.itself", rightCallee.name),
+                ProblemHighlightType.GENERIC_ERROR_OR_WARNING,
+                RemoveSelfAssignmentFix()
+            )
         })
     }
 
@@ -71,13 +77,13 @@ class SelfAssignmentInspection : AbstractKotlinInspection(), CleanupLocalInspect
         if (thisExpression != null) {
             return thisExpression.getResolvedCall(context)?.resultingDescriptor?.containingDeclaration
         }
-        val implicitReceiver = with (resolvedCall) { dispatchReceiver ?: extensionReceiver } as? ImplicitReceiver
+        val implicitReceiver = with(resolvedCall) { dispatchReceiver ?: extensionReceiver } as? ImplicitReceiver
         return implicitReceiver?.declarationDescriptor
     }
 }
 
 private class RemoveSelfAssignmentFix : LocalQuickFix {
-    override fun getName() = "Remove self assignment"
+    override fun getName() = KotlinBundle.message("remove.self.assignment.fix.text")
 
     override fun getFamilyName() = name
 

@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.refactoring.changeSignature.ui
@@ -22,27 +11,27 @@ import com.intellij.refactoring.BaseRefactoringProcessor
 import com.intellij.refactoring.ui.RefactoringDialog
 import com.intellij.ui.EditorTextField
 import com.intellij.util.ui.FormBuilder
-import org.jetbrains.kotlin.descriptors.Visibilities
-import org.jetbrains.kotlin.descriptors.Visibility
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
+import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.idea.KotlinFileType
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.refactoring.changeSignature.*
 import org.jetbrains.kotlin.idea.refactoring.validateElement
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import javax.swing.JCheckBox
-import javax.swing.JComboBox
 import javax.swing.JComponent
 import javax.swing.JLabel
 import kotlin.properties.Delegates
 
 class KotlinChangePropertySignatureDialog(
-        project: Project,
-        private val methodDescriptor: KotlinMethodDescriptor,
-        private val commandName: String?
-): RefactoringDialog(project, true) {
-    private val visibilityCombo = JComboBox(
-            arrayOf(Visibilities.INTERNAL, Visibilities.PRIVATE, Visibilities.PROTECTED, Visibilities.PUBLIC)
+    project: Project,
+    private val methodDescriptor: KotlinMethodDescriptor,
+    private val commandName: String?
+) : RefactoringDialog(project, true) {
+    private val visibilityCombo = ComboBox(
+        arrayOf(DescriptorVisibilities.INTERNAL, DescriptorVisibilities.PRIVATE, DescriptorVisibilities.PROTECTED, DescriptorVisibilities.PUBLIC)
     )
     private val nameField = EditorTextField(methodDescriptor.name)
     private var returnTypeField: EditorTextField by Delegates.notNull()
@@ -53,7 +42,7 @@ class KotlinChangePropertySignatureDialog(
     private var receiverDefaultValueField: EditorTextField? = null
 
     init {
-        title = "Change Signature"
+        title = KotlinBundle.message("title.change.signature")
         init()
     }
 
@@ -73,42 +62,46 @@ class KotlinChangePropertySignatureDialog(
 
         return with(FormBuilder.createFormBuilder()) {
             val baseDeclaration = methodDescriptor.baseDeclaration
-            if (!((baseDeclaration as? KtProperty)?.isLocal ?: false)) {
+            if ((baseDeclaration as? KtProperty)?.isLocal != true) {
                 visibilityCombo.selectedItem = methodDescriptor.visibility
-                addLabeledComponent("&Visibility: ", visibilityCombo)
+                addLabeledComponent(KotlinBundle.message("label.text.visibility"), visibilityCombo)
             }
 
-            addLabeledComponent("&Name: ", nameField)
+            addLabeledComponent(KotlinBundle.message("label.text.name"), nameField)
 
-            val returnTypeCodeFragment = psiFactory.createTypeCodeFragment(methodDescriptor.returnTypeInfo.render(),
-                                                                           baseDeclaration)
+            val returnTypeCodeFragment = psiFactory.createTypeCodeFragment(
+                methodDescriptor.returnTypeInfo.render(),
+                baseDeclaration
+            )
             returnTypeField = EditorTextField(documentManager.getDocument(returnTypeCodeFragment), myProject, KotlinFileType.INSTANCE)
-            addLabeledComponent("&Type: ", returnTypeField)
+            addLabeledComponent(KotlinBundle.message("label.text.type"), returnTypeField)
 
             if (baseDeclaration is KtProperty) {
                 addSeparator()
 
-                val receiverTypeCheckBox = JCheckBox("Extension property: ")
-                receiverTypeCheckBox.setMnemonic('x')
+                val receiverTypeCheckBox = JCheckBox(KotlinBundle.message("checkbox.text.extension.property"))
                 receiverTypeCheckBox.addActionListener { updateReceiverUI() }
                 receiverTypeCheckBox.isSelected = methodDescriptor.receiver != null
                 addComponent(receiverTypeCheckBox)
                 this@KotlinChangePropertySignatureDialog.receiverTypeCheckBox = receiverTypeCheckBox
 
-                val receiverTypeCodeFragment = psiFactory.createTypeCodeFragment(methodDescriptor.receiverTypeInfo.render(),
-                                                                                 methodDescriptor.baseDeclaration)
-                receiverTypeField = EditorTextField(documentManager.getDocument(receiverTypeCodeFragment), myProject, KotlinFileType.INSTANCE)
-                receiverTypeLabel = JLabel("Receiver type: ")
-                receiverTypeLabel.setDisplayedMnemonic('t')
+                val receiverTypeCodeFragment = psiFactory.createTypeCodeFragment(
+                    methodDescriptor.receiverTypeInfo.render(),
+                    methodDescriptor.baseDeclaration
+                )
+                receiverTypeField =
+                    EditorTextField(documentManager.getDocument(receiverTypeCodeFragment), myProject, KotlinFileType.INSTANCE)
+                receiverTypeLabel = JLabel(KotlinBundle.message("label.text.receiver.type"))
                 addLabeledComponent(receiverTypeLabel, receiverTypeField)
 
                 if (methodDescriptor.receiver == null) {
                     val receiverDefaultValueCodeFragment = psiFactory.createExpressionCodeFragment("", methodDescriptor.baseDeclaration)
-                    receiverDefaultValueField = EditorTextField(documentManager.getDocument(receiverDefaultValueCodeFragment),
-                                                                myProject,
-                                                                KotlinFileType.INSTANCE)
-                    receiverDefaultValueLabel = JLabel("Default receiver value: ")
-                    receiverDefaultValueLabel!!.setDisplayedMnemonic('D')
+                    receiverDefaultValueField = EditorTextField(
+                        documentManager.getDocument(receiverDefaultValueCodeFragment),
+                        myProject,
+                        KotlinFileType.INSTANCE
+                    )
+                    receiverDefaultValueLabel = JLabel(KotlinBundle.message("label.text.default.receiver.value"))
                     addLabeledComponent(receiverDefaultValueLabel, receiverDefaultValueField!!)
                 }
 
@@ -127,39 +120,46 @@ class KotlinChangePropertySignatureDialog(
     override fun canRun() {
         val psiFactory = KtPsiFactory(myProject)
 
-        psiFactory.createSimpleName(nameField.text).validateElement("Invalid name")
-        psiFactory.createType(returnTypeField.text).validateElement("Invalid return type")
-        if (receiverTypeCheckBox?.isSelected ?: false) {
-            psiFactory.createType(receiverTypeField.text).validateElement("Invalid receiver type")
+        psiFactory.createSimpleName(nameField.text).validateElement(
+            KotlinBundle.message("error.text.invalid.name"))
+        psiFactory.createType(returnTypeField.text).validateElement(
+            KotlinBundle.message("error.text.invalid.return.type"))
+        if (receiverTypeCheckBox?.isSelected == true) {
+            psiFactory.createType(receiverTypeField.text).validateElement(
+                KotlinBundle.message("error.text.invalid.receiver.type"))
         }
-        getDefaultReceiverValue()?.validateElement("Invalid default receiver value")
+        getDefaultReceiverValue()?.validateElement(KotlinBundle.message("error.text.invalid.default.receiver.value"))
     }
 
     override fun doAction() {
         val originalDescriptor = methodDescriptor.original
 
-        val receiver = if (receiverTypeCheckBox?.isSelected ?: false) {
-            originalDescriptor.receiver ?: KotlinParameterInfo(callableDescriptor = originalDescriptor.baseDescriptor,
-                                                               name = "receiver",
-                                                               defaultValueForCall = getDefaultReceiverValue())
+        val receiver = if (receiverTypeCheckBox?.isSelected == true) {
+            originalDescriptor.receiver ?: KotlinParameterInfo(
+                callableDescriptor = originalDescriptor.baseDescriptor,
+                name = "receiver",
+                defaultValueForCall = getDefaultReceiverValue()
+            )
         } else null
         receiver?.currentTypeInfo = KotlinTypeInfo(false, null, receiverTypeField.text)
-        val changeInfo = KotlinChangeInfo(originalDescriptor,
-                                          nameField.text,
-                                          KotlinTypeInfo(true, null, returnTypeField.text),
-                                          visibilityCombo.selectedItem as Visibility,
-                                          emptyList(),
-                                          receiver,
-                                          originalDescriptor.method)
+        val changeInfo = KotlinChangeInfo(
+            originalDescriptor,
+            nameField.text,
+            KotlinTypeInfo(true, null, returnTypeField.text),
+            visibilityCombo.selectedItem as DescriptorVisibility,
+            emptyList(),
+            receiver,
+            originalDescriptor.method
+        )
 
         invokeRefactoring(KotlinChangeSignatureProcessor(myProject, changeInfo, commandName ?: title))
     }
 
     companion object {
         fun createProcessorForSilentRefactoring(
-                project: Project,
-                commandName: String,
-                descriptor: KotlinMethodDescriptor
+            project: Project,
+            commandName: String,
+            descriptor: KotlinMethodDescriptor
         ): BaseRefactoringProcessor {
             val originalDescriptor = descriptor.original
             val changeInfo = KotlinChangeInfo(methodDescriptor = originalDescriptor, context = originalDescriptor.method)

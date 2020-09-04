@@ -15,7 +15,7 @@ object SetOps : TemplateGroupBase() {
     } builder {
         doc {
             """
-            Returns a mutable set containing all distinct ${f.element.pluralize()} from the given ${f.collection}.
+            Returns a new [MutableSet] containing all distinct ${f.element.pluralize()} from the given ${f.collection}.
 
             The returned set preserves the element iteration order of the original ${f.collection}.
             """
@@ -31,11 +31,8 @@ object SetOps : TemplateGroupBase() {
             """
         }
         body(ArraysOfObjects, ArraysOfPrimitives) {
-            """
-            val set = LinkedHashSet<T>(mapCapacity(size))
-            for (item in this) set.add(item)
-            return set
-            """
+            val capacity = "size" + if (primitive == PrimitiveType.Char) ".coerceAtMost(128)" else ""
+            "return toCollection(LinkedHashSet<T>(mapCapacity($capacity)))"
         }
         body(Sequences) {
             """
@@ -52,7 +49,8 @@ object SetOps : TemplateGroupBase() {
         doc {
             """
                 Returns a ${f.mapResult} containing only distinct ${f.element.pluralize()} from the given ${f.collection}.
-
+                ${if (f.isPrimitiveSpecialization) "" else "\n" +
+                "Among equal ${f.element.pluralize()} of the given ${f.collection}, only the first one will be present in the resulting ${f.mapResult}."}
                 The ${f.element.pluralize()} in the resulting ${f.mapResult} are in the same order as they were in the source ${f.collection}.
                 """
         }
@@ -64,6 +62,7 @@ object SetOps : TemplateGroupBase() {
             returns("Sequence<T>")
             body { "return this.distinctBy { it }" }
         }
+        sample("samples.collections.Collections.Transformations.distinctAndDistinctBy")
     }
 
     val f_distinctBy = fn("distinctBy(selector: (T) -> K)") {
@@ -73,7 +72,8 @@ object SetOps : TemplateGroupBase() {
             """
                 Returns a ${f.mapResult} containing only ${f.element.pluralize()} from the given ${f.collection}
                 having distinct keys returned by the given [selector] function.
-
+                ${if (f.isPrimitiveSpecialization) "" else "\n" +
+                "Among ${f.element.pluralize()} of the given ${f.collection} with equal keys, only the first one will be present in the resulting ${f.mapResult}."}
                 The ${f.element.pluralize()} in the resulting ${f.mapResult} are in the same order as they were in the source ${f.collection}.
                 """
         }
@@ -100,6 +100,8 @@ object SetOps : TemplateGroupBase() {
             sequenceClassification(intermediate, stateful)
             body { """return DistinctSequence(this, selector)""" }
         }
+
+        sample("samples.collections.Collections.Transformations.distinctAndDistinctBy")
     }
 
     val f_union = fn("union(other: Iterable<T>)") {

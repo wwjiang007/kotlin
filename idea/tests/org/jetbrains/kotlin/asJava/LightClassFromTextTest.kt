@@ -43,7 +43,7 @@ class LightClassFromTextTest : KotlinLightCodeInsightFixtureTestCase() {
         val classC = classes[0]
         assertEquals("C", classC.qualifiedName)
         assertEquals("class C", classC.text)
-        assertEquals(TextRange(17, 24), classC.textRange)
+        assertEquals(null, classC.textRange)
         assertEquals(23, classC.textOffset)
         assertEquals(17, classC.startOffsetInParent)
         assertTrue(classC.isWritable)
@@ -68,7 +68,8 @@ class LightClassFromTextTest : KotlinLightCodeInsightFixtureTestCase() {
     fun testMultifileClass() {
         myFixture.configureByFiles("multifile1.kt", "multifile2.kt")
 
-        val facadeClass = classesFromText("""
+        val facadeClass = classesFromText(
+            """
         @file:kotlin.jvm.JvmMultifileClass
         @file:kotlin.jvm.JvmName("Foo")
 
@@ -77,7 +78,8 @@ class LightClassFromTextTest : KotlinLightCodeInsightFixtureTestCase() {
 
         fun boo() {
         }
-         """).single()
+         """
+        ).single()
 
         assertEquals(1, facadeClass.findMethodsByName("jar", false).size)
         assertEquals(1, facadeClass.findMethodsByName("boo", false).size)
@@ -88,7 +90,8 @@ class LightClassFromTextTest : KotlinLightCodeInsightFixtureTestCase() {
     fun testReferenceToOuterContext() {
         val contextFile = myFixture.configureByText("Example.kt", "package foo\n class Example") as KtFile
 
-        val syntheticClass = classesFromText("""
+        val syntheticClass = classesFromText(
+            """
         package bar
 
         import foo.Example
@@ -96,7 +99,8 @@ class LightClassFromTextTest : KotlinLightCodeInsightFixtureTestCase() {
         class Usage {
             fun f(): Example = Example()
         }
-         """).single()
+         """
+        ).single()
 
         val exampleClass = contextFile.classes.single()
         assertEquals("Example", exampleClass.name)

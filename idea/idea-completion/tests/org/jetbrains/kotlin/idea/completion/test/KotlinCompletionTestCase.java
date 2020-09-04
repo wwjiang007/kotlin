@@ -10,7 +10,9 @@ import com.intellij.codeInsight.completion.CompletionTestCase;
 import com.intellij.openapi.vfs.newvfs.impl.VfsRootAccess;
 import com.intellij.util.ArrayUtil;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.WithMutedInDatabaseRunTest;
 
+@WithMutedInDatabaseRunTest
 abstract public class KotlinCompletionTestCase extends CompletionTestCase {
     @Override
     protected void setUp() throws Exception {
@@ -24,5 +26,11 @@ abstract public class KotlinCompletionTestCase extends CompletionTestCase {
         CodeInsightSettings.getInstance().EXCLUDED_PACKAGES = ArrayUtil.EMPTY_STRING_ARRAY;
         VfsRootAccess.disallowRootAccess(KotlinTestUtils.getHomeDirectory());
         super.tearDown();
+    }
+
+    @Override
+    protected void runTest() throws Throwable {
+        //noinspection Convert2MethodRef
+        KotlinTestUtils.runTestWithThrowable(this, () -> super.runTest());
     }
 }

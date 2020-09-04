@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -7,17 +7,19 @@ package org.jetbrains.kotlin.idea.debugger
 
 import com.intellij.debugger.engine.DebugProcessImpl
 import com.intellij.debugger.engine.DebuggerManagerThreadImpl
+import com.intellij.debugger.engine.SuspendContextImpl
 import com.intellij.debugger.engine.events.DebuggerCommandImpl
+import com.intellij.debugger.engine.events.SuspendContextCommandImpl
 import com.intellij.debugger.impl.DebuggerContextImpl
+import com.intellij.debugger.jdi.StackFrameProxyImpl
 import com.intellij.psi.PsiElement
 import com.sun.jdi.*
-import com.sun.tools.jdi.LocalVariableImpl
 import org.jetbrains.kotlin.codegen.binding.CodegenBinding.asmTypeForAnonymousClass
 import org.jetbrains.kotlin.codegen.coroutines.DO_RESUME_METHOD_NAME
 import org.jetbrains.kotlin.codegen.coroutines.INVOKE_SUSPEND_METHOD_NAME
 import org.jetbrains.kotlin.codegen.coroutines.continuationAsmTypes
 import org.jetbrains.kotlin.codegen.inline.KOTLIN_STRATA_NAME
-import org.jetbrains.kotlin.idea.core.KotlinFileTypeFactory
+import org.jetbrains.kotlin.idea.core.KotlinFileTypeFactoryUtils
 import org.jetbrains.kotlin.idea.core.util.CodeInsightUtils
 import org.jetbrains.kotlin.idea.core.util.getLineEndOffset
 import org.jetbrains.kotlin.idea.core.util.getLineStartOffset
@@ -31,9 +33,12 @@ import org.jetbrains.kotlin.resolve.inline.InlineUtil
 import java.util.*
 
 fun Location.isInKotlinSources(): Boolean {
-    val declaringType = declaringType()
-    val fileExtension = declaringType.safeSourceName()?.substringAfterLast('.')?.toLowerCase() ?: ""
-    return fileExtension in KotlinFileTypeFactory.KOTLIN_EXTENSIONS || declaringType.containsKotlinStrata()
+    return declaringType().isInKotlinSources()
+}
+
+fun ReferenceType.isInKotlinSources(): Boolean {
+    val fileExtension = safeSourceName()?.substringAfterLast('.')?.toLowerCase() ?: ""
+    return fileExtension in KotlinFileTypeFactoryUtils.KOTLIN_EXTENSIONS || containsKotlinStrata()
 }
 
 fun ReferenceType.containsKotlinStrata() = availableStrata().contains(KOTLIN_STRATA_NAME)
@@ -85,6 +90,24 @@ fun <T : Any> DebugProcessImpl.invokeInManagerThread(f: (DebuggerContextImpl) ->
     return result
 }
 
+fun <T : Any> SuspendContextImpl.invokeInSuspendManagerThread(debugProcessImpl: DebugProcessImpl, f: (SuspendContextImpl) -> T?): T? {
+    var result: T? = null
+    val command: SuspendContextCommandImpl = object : SuspendContextCommandImpl(this) {
+        override fun contextAction() {
+            result = runReadAction { f(this@invokeInSuspendManagerThread) }
+        }
+    }
+
+    when {
+        DebuggerManagerThreadImpl.isManagerThread() ->
+            debugProcessImpl.managerThread.invoke(command)
+        else ->
+            debugProcessImpl.managerThread.invokeAndWait(command)
+    }
+
+    return result
+}
+
 private fun lambdaOrdinalByArgument(elementAt: KtFunction, context: BindingContext): Int {
     val type = asmTypeForAnonymousClass(context, elementAt)
     return type.className.substringAfterLast("$").toInt()
@@ -101,14 +124,11 @@ private fun Location.visibleVariables(debugProcess: DebugProcessImpl): List<Loca
 }
 
 // For Kotlin up to 1.3.10
-private fun lambdaOrdinalByLocalVariable(name: String): Int {
-    try {
-        val nameWithoutPrefix = name.removePrefix(JvmAbi.LOCAL_VARIABLE_NAME_PREFIX_INLINE_ARGUMENT)
-        return Integer.parseInt(nameWithoutPrefix.substringBefore("$", nameWithoutPrefix))
-    }
-    catch(e: NumberFormatException) {
-        return 0
-    }
+private fun lambdaOrdinalByLocalVariable(name: String): Int = try {
+    val nameWithoutPrefix = name.removePrefix(JvmAbi.LOCAL_VARIABLE_NAME_PREFIX_INLINE_ARGUMENT)
+    Integer.parseInt(nameWithoutPrefix.substringBefore("$", nameWithoutPrefix))
+} catch (e: NumberFormatException) {
+    0
 }
 
 // For Kotlin up to 1.3.10
@@ -129,11 +149,9 @@ private class MockStackFrame(private val location: Location, private val vm: Vir
             val allVariables = location.method().safeVariables() ?: emptyList()
             val map = HashMap<String, LocalVariable>(allVariables.size)
 
-            for (allVariable in allVariables) {
-                val variable = allVariable as LocalVariableImpl
-                val name = variable.name()
+            for (variable in allVariables) {
                 if (variable.isVisible(this)) {
-                    map.put(name, variable)
+                    map[variable.name()] = variable
                 }
             }
             visibleVariables = map
@@ -143,7 +161,7 @@ private class MockStackFrame(private val location: Location, private val vm: Vir
     override fun visibleVariables(): List<LocalVariable> {
         createVisibleVariables()
         val mapAsList = ArrayList(visibleVariables!!.values)
-        Collections.sort(mapAsList)
+        mapAsList.sort()
         return mapAsList
     }
 
@@ -164,6 +182,17 @@ private class MockStackFrame(private val location: Location, private val vm: Vir
 private const val DO_RESUME_SIGNATURE = "(Ljava/lang/Object;Ljava/lang/Throwable;)Ljava/lang/Object;"
 private const val INVOKE_SUSPEND_SIGNATURE = "(Ljava/lang/Object;)Ljava/lang/Object;"
 
+fun StackFrameProxyImpl.isOnSuspensionPoint(): Boolean {
+    val location = this.safeLocation() ?: return false
+
+    if (isInSuspendMethod(location)) {
+        val firstLocation = getFirstMethodLocation(location) ?: return false
+        return firstLocation.safeLineNumber() == location.safeLineNumber() && firstLocation.codeIndex() != location.codeIndex()
+    }
+
+    return false
+}
+
 fun isInSuspendMethod(location: Location): Boolean {
     val method = location.method()
     val signature = method.signature()
@@ -177,31 +206,18 @@ fun isInSuspendMethod(location: Location): Boolean {
     return false
 }
 
-fun suspendFunctionFirstLineLocation(location: Location): Int? {
-    if (!isInSuspendMethod(location)) {
+private fun getFirstMethodLocation(location: Location): Location? {
+    val firstLocation = location.safeMethod()?.location() ?: return null
+    if (firstLocation.safeLineNumber() < 0) {
         return null
     }
 
-    val lineNumber = location.method().location()?.lineNumber()
-    if (lineNumber == -1) {
-        return null
-    }
-
-    return lineNumber
+    return firstLocation
 }
 
 fun isOnSuspendReturnOrReenter(location: Location): Boolean {
-    val suspendStartLineNumber = suspendFunctionFirstLineLocation(location) ?: return false
-    return suspendStartLineNumber == location.lineNumber()
-}
-
-fun isLastLineLocationInMethod(location: Location): Boolean {
-    val knownLines = location.method().safeAllLineLocations().map { it.lineNumber() }.filter { it != -1 }
-    if (knownLines.isEmpty()) {
-        return false
-    }
-
-    return knownLines.max() == location.lineNumber()
+    val firstLocation = getFirstMethodLocation(location) ?: return false
+    return firstLocation.safeLineNumber() == location.safeLineNumber()
 }
 
 fun isOneLineMethod(location: Location): Boolean {
@@ -238,14 +254,11 @@ fun findCallByEndToken(element: PsiElement): KtCallExpression? {
 
     return when (element.node.elementType) {
         KtTokens.RPAR -> (element.parent as? KtValueArgumentList)?.parent as? KtCallExpression
-        KtTokens.RBRACE -> {
-            val braceParent = CodeInsightUtils.getTopParentWithEndOffset(element, KtCallExpression::class.java)
-            when (braceParent) {
-                is KtCallExpression -> braceParent
-                is KtLambdaArgument -> braceParent.parent as? KtCallExpression
-                is KtValueArgument -> (braceParent.parent as? KtValueArgumentList)?.parent as? KtCallExpression
-                else -> null
-            }
+        KtTokens.RBRACE -> when (val braceParent = CodeInsightUtils.getTopParentWithEndOffset(element, KtCallExpression::class.java)) {
+            is KtCallExpression -> braceParent
+            is KtLambdaArgument -> braceParent.parent as? KtCallExpression
+            is KtValueArgument -> (braceParent.parent as? KtValueArgumentList)?.parent as? KtCallExpression
+            else -> null
         }
         else -> null
     }

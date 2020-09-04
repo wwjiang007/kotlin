@@ -22,10 +22,12 @@ import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.extensions.ProjectExtensionDescriptor
 import org.jetbrains.kotlin.incremental.components.LookupTracker
-import org.jetbrains.kotlin.load.java.components.SamConversionResolver
+import org.jetbrains.kotlin.resolve.sam.SamConversionResolver
 import org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver
+import org.jetbrains.kotlin.resolve.sam.SamConversionOracle
 import org.jetbrains.kotlin.resolve.scopes.SyntheticScope
 import org.jetbrains.kotlin.resolve.scopes.SyntheticScopes
+import org.jetbrains.kotlin.resolve.scopes.synthetic.FunInterfaceConstructorsSyntheticScope
 import org.jetbrains.kotlin.storage.StorageManager
 
 class JavaSyntheticScopes(
@@ -35,6 +37,7 @@ class JavaSyntheticScopes(
     lookupTracker: LookupTracker,
     languageVersionSettings: LanguageVersionSettings,
     samConventionResolver: SamConversionResolver,
+    samConversionOracle: SamConversionOracle,
     deprecationResolver: DeprecationResolver
 ) : SyntheticScopes {
     override val scopes: Collection<SyntheticScope>
@@ -46,7 +49,8 @@ class JavaSyntheticScopes(
 
     init {
         val samConversionPerArgumentIsEnabled =
-            languageVersionSettings.supportsFeature(LanguageFeature.SamConversionPerArgument)
+            languageVersionSettings.supportsFeature(LanguageFeature.SamConversionPerArgument) &&
+                    languageVersionSettings.supportsFeature(LanguageFeature.NewInference)
 
         val javaSyntheticPropertiesScope = JavaSyntheticPropertiesScope(storageManager, lookupTracker)
         val scopesFromExtensions = SyntheticScopeProviderExtension
@@ -57,20 +61,29 @@ class JavaSyntheticScopes(
         val samAdapterFunctionsScope = SamAdapterFunctionsScope(
             storageManager,
             samConventionResolver,
+            samConversionOracle,
             deprecationResolver,
             lookupTracker,
-            samViaSyntheticScopeDisabled = samConversionPerArgumentIsEnabled
+            samViaSyntheticScopeDisabled = samConversionPerArgumentIsEnabled,
+            shouldGenerateCandidateForVarargAfterSam = !languageVersionSettings.supportsFeature(
+                LanguageFeature.ProhibitVarargAsArrayAfterSamArgument
+            )
         )
 
-        scopes = listOf(javaSyntheticPropertiesScope, samAdapterFunctionsScope) + scopesFromExtensions
+        val funInterfaceConstructorsScopes =
+            FunInterfaceConstructorsSyntheticScope(storageManager, lookupTracker, samConventionResolver, samConversionOracle)
+
+        scopes = listOf(javaSyntheticPropertiesScope, samAdapterFunctionsScope, funInterfaceConstructorsScopes) + scopesFromExtensions
 
         if (samConversionPerArgumentIsEnabled) {
             val forceEnabledSamAdapterFunctionsScope = SamAdapterFunctionsScope(
                 storageManager,
                 samConventionResolver,
+                samConversionOracle,
                 deprecationResolver,
                 lookupTracker,
-                samViaSyntheticScopeDisabled = false
+                samViaSyntheticScopeDisabled = false,
+                shouldGenerateCandidateForVarargAfterSam = false
             )
 
             scopesWithForceEnabledSamAdapters =

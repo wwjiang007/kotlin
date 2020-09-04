@@ -56,7 +56,7 @@ fun <Data, Context> makeVerifyAction(verifier: (Context, Data) -> Unit): Action<
             verifier(context, data)
     }
 
-fun dumpIrElement(actionState: ActionState, data: IrElement, context: Any?): String {
+fun dumpIrElement(actionState: ActionState, data: IrElement, @Suppress("UNUSED_PARAMETER") context: Any?): String {
     val beforeOrAfterStr = actionState.beforeOrAfter.name.toLowerCaseAsciiOnly()
 
     var dumpText: String = ""
@@ -70,7 +70,7 @@ fun dumpIrElement(actionState: ActionState, data: IrElement, context: Any?): Str
                 element.acceptChildrenVoid(this)
             }
 
-            override fun visitDeclaration(declaration: IrDeclaration) {
+            override fun visitDeclaration(declaration: IrDeclarationBase) {
                 if (declaration is IrDeclarationWithName && FqName(dumpOnlyFqName) == declaration.fqNameWhenAvailable) {
                     dumpText += declaration.dump()
                 } else {
@@ -123,12 +123,13 @@ fun <Data, Context> dumpToStdout(
 
 val defaultDumper = makeDumpAction(dumpToStdout(::dumpIrElement) + dumpToFile("ir", ::dumpIrElement))
 
-fun <Fragment : IrElement> validationCallback(context: CommonBackendContext, fragment: Fragment) {
+fun <Fragment : IrElement> validationCallback(context: CommonBackendContext, fragment: Fragment, checkProperties: Boolean = false) {
     val validatorConfig = IrValidatorConfig(
         abortOnError = true,
         ensureAllNodesAreDifferent = true,
         checkTypes = false,
-        checkDescriptors = false
+        checkDescriptors = false,
+        checkProperties = checkProperties,
     )
     fragment.accept(IrValidator(context, validatorConfig), null)
     fragment.accept(CheckDeclarationParentsVisitor, null)

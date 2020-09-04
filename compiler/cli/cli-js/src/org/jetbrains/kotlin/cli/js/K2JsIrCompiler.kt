@@ -1,6 +1,6 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license
- * that can be found in the license/LICENSE.txt file.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.cli.js
@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.cli.js
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.text.StringUtil
+import org.jetbrains.kotlin.backend.common.serialization.metadata.KlibMetadataVersion
 import org.jetbrains.kotlin.cli.common.*
 import org.jetbrains.kotlin.cli.common.ExitCode.COMPILATION_ERROR
 import org.jetbrains.kotlin.cli.common.ExitCode.OK
@@ -15,6 +16,7 @@ import org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArguments
 import org.jetbrains.kotlin.cli.common.arguments.K2JsArgumentConstants
 import org.jetbrains.kotlin.cli.common.config.addKotlinSourceRoot
 import org.jetbrains.kotlin.cli.common.extensions.ScriptEvaluationExtension
+import org.jetbrains.kotlin.cli.common.messages.AnalyzerWithCompilerReport
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.*
 import org.jetbrains.kotlin.cli.common.messages.GroupingMessageCollector
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
@@ -29,20 +31,15 @@ import org.jetbrains.kotlin.config.Services
 import org.jetbrains.kotlin.incremental.components.ExpectActualTracker
 import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.incremental.js.IncrementalDataProvider
+import org.jetbrains.kotlin.incremental.js.IncrementalNextRoundChecker
 import org.jetbrains.kotlin.incremental.js.IncrementalResultsConsumer
-import org.jetbrains.kotlin.ir.backend.js.compile
-import org.jetbrains.kotlin.ir.backend.js.generateKLib
-import org.jetbrains.kotlin.ir.backend.js.jsPhases
-import org.jetbrains.kotlin.ir.backend.js.jsResolveLibraries
-import org.jetbrains.kotlin.js.config.EcmaVersion
-import org.jetbrains.kotlin.js.config.JSConfigurationKeys
-import org.jetbrains.kotlin.js.config.JsConfig
-import org.jetbrains.kotlin.js.config.SourceMapSourceEmbedding
+import org.jetbrains.kotlin.ir.backend.js.*
+import org.jetbrains.kotlin.ir.declarations.persistent.PersistentIrFactory
+import org.jetbrains.kotlin.js.config.*
 import org.jetbrains.kotlin.metadata.deserialization.BinaryVersion
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.serialization.js.ModuleKind
 import org.jetbrains.kotlin.util.Logger
-import org.jetbrains.kotlin.utils.JsMetadataVersion
 import org.jetbrains.kotlin.utils.KotlinPaths
 import org.jetbrains.kotlin.utils.PathUtil
 import org.jetbrains.kotlin.utils.fileUtils.withReplacedExtensionOrNull
@@ -104,11 +101,13 @@ class K2JsIrCompiler : CLICompiler<K2JSCompilerArguments>() {
             if (arguments.version) {
                 return OK
             }
-            messageCollector.report(ERROR, "Specify at least one source file or directory", null)
-            return COMPILATION_ERROR
+            if (arguments.includes.isNullOrEmpty()) {
+                messageCollector.report(ERROR, "Specify at least one source file or directory", null)
+                return COMPILATION_ERROR
+            }
         }
 
-        val libraries: List<String> = configureLibraries(arguments.libraries)
+        val libraries: List<String> = configureLibraries(arguments.libraries) + listOfNotNull(arguments.includes)
         val friendLibraries: List<String> = configureLibraries(arguments.friendModules)
 
         configuration.put(JSConfigurationKeys.LIBRARIES, libraries)
@@ -140,7 +139,7 @@ class K2JsIrCompiler : CLICompiler<K2JSCompilerArguments>() {
             return ExitCode.COMPILATION_ERROR
         }
 
-        if (sourcesFiles.isEmpty() && !IncrementalCompilation.isEnabledForJs()) {
+        if (sourcesFiles.isEmpty() && !IncrementalCompilation.isEnabledForJs() && arguments.includes.isNullOrEmpty()) {
             messageCollector.report(ERROR, "No source files", null)
             return COMPILATION_ERROR
         }
@@ -151,7 +150,10 @@ class K2JsIrCompiler : CLICompiler<K2JSCompilerArguments>() {
 
         val outputFile = File(outputFilePath)
 
-        configurationJs.put(CommonConfigurationKeys.MODULE_NAME, FileUtil.getNameWithoutExtension(outputFile))
+        configurationJs.put(
+            CommonConfigurationKeys.MODULE_NAME,
+            arguments.irModuleName ?: FileUtil.getNameWithoutExtension(outputFile)
+        )
 
         // TODO: in this method at least 3 different compiler configurations are used (original, env.configuration, jsConfig.configuration)
         // Such situation seems a bit buggy...
@@ -184,34 +186,64 @@ class K2JsIrCompiler : CLICompiler<K2JSCompilerArguments>() {
                 else
                     outputFilePath
 
-            generateKLib(
-                project = config.project,
-                files = sourcesFiles,
-                configuration = config.configuration,
-                allDependencies = resolvedLibraries,
-                friendDependencies = friendDependencies,
-                outputKlibPath = outputKlibPath,
-                nopack = arguments.irProduceKlibDir
-            )
+            try {
+                generateKLib(
+                    project = config.project,
+                    files = sourcesFiles,
+                    analyzer = AnalyzerWithCompilerReport(config.configuration),
+                    configuration = config.configuration,
+                    allDependencies = resolvedLibraries,
+                    friendDependencies = friendDependencies,
+                    irFactory = PersistentIrFactory,
+                    outputKlibPath = outputKlibPath,
+                    nopack = arguments.irProduceKlibDir
+                )
+            } catch (e: JsIrCompilationError) {
+                return COMPILATION_ERROR
+            }
         }
 
         if (arguments.irProduceJs) {
             val phaseConfig = createPhaseConfig(jsPhases, arguments, messageCollector)
 
-            val compiledModule = compile(
-                projectJs,
-                sourcesFiles,
-                config.configuration,
-                phaseConfig,
-                allDependencies = resolvedLibraries,
-                friendDependencies = friendDependencies,
-                mainArguments = mainCallArguments,
-                generateFullJs = !arguments.irDce,
-                generateDceJs = arguments.irDce
-            )
+            val includes = arguments.includes
 
-            val jsCode = if (arguments.irDce) compiledModule.dceJsCode!! else compiledModule.jsCode!!
-            outputFile.writeText(jsCode)
+            val mainModule = if (includes != null) {
+                if (sourcesFiles.isNotEmpty()) {
+                    messageCollector.report(ERROR, "Source files are not supported when -Xinclude is present")
+                }
+                val allLibraries = resolvedLibraries.getFullList()
+                val mainLib = allLibraries.find { it.libraryFile.absolutePath == File(includes).absolutePath }!!
+                MainModule.Klib(mainLib)
+            } else {
+                MainModule.SourceFiles(sourcesFiles)
+            }
+
+            val compiledModule = try {
+                compile(
+                    projectJs,
+                    mainModule,
+                    AnalyzerWithCompilerReport(config.configuration),
+                    config.configuration,
+                    phaseConfig,
+                    allDependencies = resolvedLibraries,
+                    friendDependencies = friendDependencies,
+                    mainArguments = mainCallArguments,
+                    generateFullJs = !arguments.irDce,
+                    generateDceJs = arguments.irDce,
+                    dceDriven = arguments.irDceDriven,
+                    multiModule = arguments.irPerModule,
+                    relativeRequirePath = true
+                )
+            } catch (e: JsIrCompilationError) {
+                return COMPILATION_ERROR
+            }
+
+            val jsCode = if (arguments.irDce && !arguments.irDceDriven) compiledModule.dceJsCode!! else compiledModule.jsCode!!
+            outputFile.writeText(jsCode.mainModule)
+            jsCode.dependencies.forEach { (name, content) ->
+                outputFile.resolveSibling("$name.js").writeText(content)
+            }
             if (arguments.generateDts) {
                 val dtsFile = outputFile.withReplacedExtensionOrNull(outputFile.extension, "d.ts")!!
                 dtsFile.writeText(compiledModule.tsDefinitions ?: error("No ts definitions"))
@@ -273,24 +305,17 @@ class K2JsIrCompiler : CLICompiler<K2JSCompilerArguments>() {
         }
         configuration.put(JSConfigurationKeys.MODULE_KIND, moduleKind)
 
-        val incrementalDataProvider = services[IncrementalDataProvider::class.java]
-        if (incrementalDataProvider != null) {
-            configuration.put(JSConfigurationKeys.INCREMENTAL_DATA_PROVIDER, incrementalDataProvider)
-        }
+        configuration.putIfNotNull(JSConfigurationKeys.INCREMENTAL_DATA_PROVIDER, services[IncrementalDataProvider::class.java])
+        configuration.putIfNotNull(JSConfigurationKeys.INCREMENTAL_RESULTS_CONSUMER, services[IncrementalResultsConsumer::class.java])
+        configuration.putIfNotNull(JSConfigurationKeys.INCREMENTAL_NEXT_ROUND_CHECKER, services[IncrementalNextRoundChecker::class.java])
+        configuration.putIfNotNull(CommonConfigurationKeys.LOOKUP_TRACKER, services[LookupTracker::class.java])
+        configuration.putIfNotNull(CommonConfigurationKeys.EXPECT_ACTUAL_TRACKER, services[ExpectActualTracker::class.java])
 
-        val incrementalResultsConsumer = services[IncrementalResultsConsumer::class.java]
-        if (incrementalResultsConsumer != null) {
-            configuration.put(JSConfigurationKeys.INCREMENTAL_RESULTS_CONSUMER, incrementalResultsConsumer)
-        }
+        val errorTolerancePolicy = arguments.errorTolerancePolicy?.let { ErrorTolerancePolicy.resolvePolicy(it) }
+        configuration.putIfNotNull(JSConfigurationKeys.ERROR_TOLERANCE_POLICY, errorTolerancePolicy)
 
-        val lookupTracker = services[LookupTracker::class.java]
-        if (lookupTracker != null) {
-            configuration.put(CommonConfigurationKeys.LOOKUP_TRACKER, lookupTracker)
-        }
-
-        val expectActualTracker = services[ExpectActualTracker::class.java]
-        if (expectActualTracker != null) {
-            configuration.put(CommonConfigurationKeys.EXPECT_ACTUAL_TRACKER, expectActualTracker)
+        if (errorTolerancePolicy?.allowErrors == true) {
+            configuration.put(JSConfigurationKeys.DEVELOPER_MODE, true)
         }
 
         val sourceMapEmbedContentString = arguments.sourceMapEmbedSources
@@ -309,15 +334,17 @@ class K2JsIrCompiler : CLICompiler<K2JSCompilerArguments>() {
         if (!arguments.sourceMap && sourceMapEmbedContentString != null) {
             messageCollector.report(WARNING, "source-map-embed-sources argument has no effect without source map", null)
         }
+
+        configuration.put(JSConfigurationKeys.PRINT_REACHABILITY_INFO, arguments.irDcePrintReachabilityInfo)
+        configuration.put(JSConfigurationKeys.DISABLE_FAKE_OVERRIDE_VALIDATOR, arguments.disableFakeOverrideValidator)
     }
 
     override fun executableScriptFileName(): String {
-        return "kotlinc-js -Xir"
+        TODO("Provide a proper way to run the compiler with IR BE")
     }
 
     override fun createMetadataVersion(versionArray: IntArray): BinaryVersion {
-        // TODO: Support metadata versions for klibs
-        return JsMetadataVersion(*versionArray)
+        return KlibMetadataVersion(*versionArray)
     }
 
     override fun MutableList<String>.addPlatformOptions(arguments: K2JSCompilerArguments) {}
@@ -370,7 +397,7 @@ class K2JsIrCompiler : CLICompiler<K2JSCompilerArguments>() {
 }
 
 fun messageCollectorLogger(collector: MessageCollector) = object : Logger {
-    override fun warning(message: String)= collector.report(STRONG_WARNING, message)
+    override fun warning(message: String) = collector.report(STRONG_WARNING, message)
     override fun error(message: String) = collector.report(ERROR, message)
     override fun log(message: String) = collector.report(LOGGING, message)
     override fun fatal(message: String): Nothing {

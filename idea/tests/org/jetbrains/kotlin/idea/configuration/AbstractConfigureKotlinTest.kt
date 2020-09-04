@@ -10,6 +10,7 @@ import com.intellij.openapi.application.PathMacros
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.ex.ProjectManagerEx
 import com.intellij.openapi.projectRoots.Sdk
 import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.util.io.FileUtil
@@ -20,13 +21,15 @@ import com.intellij.testFramework.UsefulTestCase
 import junit.framework.TestCase
 import org.jetbrains.kotlin.idea.configuration.KotlinWithLibraryConfigurator.FileState
 import org.jetbrains.kotlin.idea.framework.KotlinSdkType
-import org.jetbrains.kotlin.idea.test.PluginTestCaseBase
-import org.jetbrains.kotlin.idea.util.getProjectJdkTableSafe
+import org.jetbrains.kotlin.idea.test.PluginTestCaseBase.*
 import org.jetbrains.kotlin.test.KotlinTestUtils
+import org.jetbrains.kotlin.test.WithMutedInDatabaseRunTest
+import org.jetbrains.kotlin.test.runTest
 import org.jetbrains.kotlin.utils.PathUtil
 import java.io.File
 import java.nio.file.Path
 
+@WithMutedInDatabaseRunTest
 abstract class AbstractConfigureKotlinTest : PlatformTestCase() {
     override fun setUp() {
         super.setUp()
@@ -46,17 +49,13 @@ abstract class AbstractConfigureKotlinTest : PlatformTestCase() {
     override fun initApplication() {
         super.initApplication()
 
-        KotlinSdkType.setUpIfNeeded()
+        KotlinSdkType.setUpIfNeeded(testRootDisposable)
 
         ApplicationManager.getApplication().runWriteAction {
-            val jdkTable = getProjectJdkTableSafe()
-
-            jdkTable.addJdk(PluginTestCaseBase.mockJdk6())
-            jdkTable.addJdk(PluginTestCaseBase.mockJdk8())
-            jdkTable.addJdk(PluginTestCaseBase.mockJdk9())
+            addJdk(testRootDisposable, ::mockJdk6)
+            addJdk(testRootDisposable, ::mockJdk8)
+            addJdk(testRootDisposable, ::mockJdk9)
         }
-
-        PluginTestCaseBase.clearSdkTable(testRootDisposable)
 
         val tempLibDir = FileUtil.createTempDirectory("temp", null)
         PathMacros.getInstance().setMacro(TEMP_DIR_MACRO_KEY, FileUtilRt.toSystemDependentName(tempLibDir.absolutePath))
@@ -112,7 +111,7 @@ abstract class AbstractConfigureKotlinTest : PlatformTestCase() {
     }
 
     override fun doCreateProject(projectFile: Path): Project {
-        return myProjectManager.loadProject(projectFile.toFile().path)!!
+        return (ProjectManagerEx.getInstanceEx()).loadProject(projectFile)
     }
 
     private val projectName: String
@@ -120,8 +119,8 @@ abstract class AbstractConfigureKotlinTest : PlatformTestCase() {
             val testName = getTestName(true)
             return if (testName.contains("_")) {
                 testName.substring(0, testName.indexOf("_"))
-            }
-            else testName
+            } else
+                testName
         }
 
     protected val projectRoot: String
@@ -132,6 +131,10 @@ abstract class AbstractConfigureKotlinTest : PlatformTestCase() {
     private fun assertNoFilesInDefaultPaths() {
         UsefulTestCase.assertDoesntExist(File(JAVA_CONFIGURATOR.getDefaultPathToJarFile(project)))
         UsefulTestCase.assertDoesntExist(File(JS_CONFIGURATOR.getDefaultPathToJarFile(project)))
+    }
+
+    override fun runTest() {
+        return runTest { super.runTest() }
     }
 
     companion object {
@@ -150,11 +153,11 @@ abstract class AbstractConfigureKotlinTest : PlatformTestCase() {
         }
 
         private fun configure(
-                modules: List<Module>,
-                runtimeState: FileState,
-                configurator: KotlinWithLibraryConfigurator,
-                jarFromDist: String,
-                jarFromTemp: String
+            modules: List<Module>,
+            runtimeState: FileState,
+            configurator: KotlinWithLibraryConfigurator,
+            jarFromDist: String,
+            jarFromTemp: String
         ) {
             val project = modules.first().project
             val collector = createConfigureKotlinNotificationCollector(project)
@@ -181,14 +184,19 @@ abstract class AbstractConfigureKotlinTest : PlatformTestCase() {
 
         protected fun assertNotConfigured(module: Module, configurator: KotlinWithLibraryConfigurator) {
             TestCase.assertFalse(
-                    String.format("Module %s should not be configured as %s Module", module.name, configurator.presentableText),
-                    configurator.isConfigured(module))
+                String.format("Module %s should not be configured as %s Module", module.name, configurator.presentableText),
+                configurator.isConfigured(module)
+            )
         }
 
         protected fun assertConfigured(module: Module, configurator: KotlinWithLibraryConfigurator) {
-            TestCase.assertTrue(String.format("Module %s should be configured with configurator '%s'", module.name,
-                                              configurator.presentableText),
-                                configurator.isConfigured(module))
+            TestCase.assertTrue(
+                String.format(
+                    "Module %s should be configured with configurator '%s'", module.name,
+                    configurator.presentableText
+                ),
+                configurator.isConfigured(module)
+            )
         }
 
         protected fun assertProperlyConfigured(module: Module, configurator: KotlinWithLibraryConfigurator) {

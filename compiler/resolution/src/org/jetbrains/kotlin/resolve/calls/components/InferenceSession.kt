@@ -5,8 +5,8 @@
 
 package org.jetbrains.kotlin.resolve.calls.components
 
+import org.jetbrains.kotlin.resolve.calls.inference.components.ConstraintSystemCompletionMode
 import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintStorage
-import org.jetbrains.kotlin.resolve.calls.inference.model.NewTypeVariable
 import org.jetbrains.kotlin.resolve.calls.model.*
 import org.jetbrains.kotlin.types.TypeConstructor
 import org.jetbrains.kotlin.types.UnwrappedType
@@ -21,11 +21,19 @@ interface InferenceSession {
             override fun currentConstraintSystem(): ConstraintStorage = ConstraintStorage.Empty
             override fun inferPostponedVariables(
                 lambda: ResolvedLambdaAtom,
-                initialStorage: ConstraintStorage
+                initialStorage: ConstraintStorage,
+                completionMode: ConstraintSystemCompletionMode,
+                diagnosticsHolder: KotlinDiagnosticsHolder
             ): Map<TypeConstructor, UnwrappedType> = emptyMap()
 
             override fun writeOnlyStubs(callInfo: SingleCallResolutionResult): Boolean = false
             override fun callCompleted(resolvedAtom: ResolvedAtom): Boolean = false
+            override fun shouldCompleteResolvedSubAtomsOf(resolvedCallAtom: ResolvedCallAtom) = true
+            override fun computeCompletionMode(
+                candidate: KotlinResolutionCandidate
+            ): ConstraintSystemCompletionMode? = null
+
+            override fun resolveReceiverIndependently(): Boolean = false
         }
     }
 
@@ -34,9 +42,18 @@ interface InferenceSession {
     fun addCompletedCallInfo(callInfo: CompletedCallInfo)
     fun addErrorCallInfo(callInfo: ErrorCallInfo)
     fun currentConstraintSystem(): ConstraintStorage
-    fun inferPostponedVariables(lambda: ResolvedLambdaAtom, initialStorage: ConstraintStorage): Map<TypeConstructor, UnwrappedType>
+    fun inferPostponedVariables(
+        lambda: ResolvedLambdaAtom,
+        initialStorage: ConstraintStorage,
+        completionMode: ConstraintSystemCompletionMode,
+        diagnosticsHolder: KotlinDiagnosticsHolder
+    ): Map<TypeConstructor, UnwrappedType>?
+
     fun writeOnlyStubs(callInfo: SingleCallResolutionResult): Boolean
     fun callCompleted(resolvedAtom: ResolvedAtom): Boolean
+    fun shouldCompleteResolvedSubAtomsOf(resolvedCallAtom: ResolvedCallAtom): Boolean
+    fun computeCompletionMode(candidate: KotlinResolutionCandidate): ConstraintSystemCompletionMode?
+    fun resolveReceiverIndependently(): Boolean
 }
 
 interface PartialCallInfo {

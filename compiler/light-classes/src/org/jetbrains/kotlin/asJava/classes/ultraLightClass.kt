@@ -5,6 +5,8 @@
 
 package org.jetbrains.kotlin.asJava.classes
 
+import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.util.registry.Registry
 import com.intellij.psi.*
 import com.intellij.psi.impl.InheritanceImplUtil
 import com.intellij.psi.impl.PsiClassImplUtil
@@ -13,7 +15,6 @@ import com.intellij.psi.impl.light.LightMethodBuilder
 import com.intellij.psi.util.CachedValue
 import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
-import org.jetbrains.kotlin.asJava.UltraLightClassModifierExtension
 import org.jetbrains.kotlin.asJava.builder.LightClassData
 import org.jetbrains.kotlin.asJava.elements.KtLightField
 import org.jetbrains.kotlin.asJava.elements.KtLightMethod
@@ -185,7 +186,7 @@ open class KtUltraLightClass(classOrObject: KtClassOrObject, internal val suppor
                     membersBuilder.generateUniqueFieldName(companion.name.orEmpty(), usedNames),
                     this,
                     support,
-                    setOf(PsiModifier.STATIC, PsiModifier.FINAL, PsiModifier.PUBLIC)
+                    setOf(PsiModifier.STATIC, PsiModifier.FINAL, companion.simpleVisibility())
                 )
             )
 
@@ -226,7 +227,7 @@ open class KtUltraLightClass(classOrObject: KtClassOrObject, internal val suppor
             }
         }
 
-        if (isNamedObject()) {
+        if (isNamedObject() && !this.classOrObject.isLocal) {
             result.add(
                 KtUltraLightFieldForSourceDeclaration(
                     this.classOrObject,
@@ -404,7 +405,7 @@ open class KtUltraLightClass(classOrObject: KtClassOrObject, internal val suppor
         }
         val primary = classOrObject.primaryConstructor
         if (primary != null && shouldGenerateNoArgOverload(primary)) {
-            result.add(noArgConstructor(primary.simpleVisibility(), primary))
+            result.add(noArgConstructor(primary.simpleVisibility(), primary, METHOD_INDEX_FOR_NO_ARG_OVERLOAD_CTOR))
         }
         return result
     }
@@ -426,15 +427,20 @@ open class KtUltraLightClass(classOrObject: KtClassOrObject, internal val suppor
                 classOrObject is KtEnumEntry -> PsiModifier.PACKAGE_LOCAL
                 else -> PsiModifier.PUBLIC
             }
-        return noArgConstructor(visibility, classOrObject)
+        return noArgConstructor(visibility, classOrObject, METHOD_INDEX_FOR_DEFAULT_CTOR)
     }
 
-    private fun noArgConstructor(visibility: String, declaration: KtDeclaration): KtUltraLightMethod =
+    private fun noArgConstructor(
+        visibility: String,
+        declaration: KtDeclaration,
+        methodIndex: Int
+    ): KtUltraLightMethod =
         KtUltraLightMethodForSourceDeclaration(
             LightMethodBuilder(manager, language, name.orEmpty()).setConstructor(true).addModifier(visibility),
             declaration,
             support,
-            this
+            this,
+            methodIndex
         )
 
     private fun isHiddenByDeprecation(declaration: KtDeclaration): Boolean {
@@ -456,9 +462,16 @@ open class KtUltraLightClass(classOrObject: KtClassOrObject, internal val suppor
     override fun getInitializers(): Array<PsiClassInitializer> = emptyArray()
 
     override fun getContainingClass(): PsiClass? {
+
         val containingBody = classOrObject.parent as? KtClassBody
         val containingClass = containingBody?.parent as? KtClassOrObject
-        return containingClass?.let { create(it) }
+        containingClass?.let { return create(it) }
+
+        val containingBlock = classOrObject.parent as? KtBlockExpression
+        val containingScript = containingBlock?.parent as? KtScript
+        containingScript?.let { return KtLightClassForScript.create(it) }
+
+        return null
     }
 
     override fun getParent(): PsiElement? = containingClass ?: containingFile
@@ -471,4 +484,12 @@ open class KtUltraLightClass(classOrObject: KtClassOrObject, internal val suppor
     override fun isDeprecated(): Boolean = _deprecated
 
     override fun copy(): KtLightClassImpl = KtUltraLightClass(classOrObject.copy() as KtClassOrObject, support)
+
+    override fun getTextRange(): TextRange? {
+        if (Registry.`is`("kotlin.ultra.light.classes.empty.text.range", true)) {
+            return null
+        }
+
+        return super.getTextRange()
+    }
 }

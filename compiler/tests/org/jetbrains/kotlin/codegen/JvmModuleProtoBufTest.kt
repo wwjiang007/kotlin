@@ -55,10 +55,10 @@ class JvmModuleProtoBufTest : KtUsefulTestCase() {
         )
         val result = buildString {
             for (annotationClassId in mapping.moduleData.annotations) {
-                appendln("@$annotationClassId")
+                appendLine("@$annotationClassId")
             }
             for ((fqName, packageParts) in mapping.packageFqName2Parts) {
-                appendln(fqName)
+                appendLine(fqName)
                 for (part in packageParts.parts) {
                     append("  ")
                     append(part)
@@ -68,7 +68,7 @@ class JvmModuleProtoBufTest : KtUsefulTestCase() {
                         append(facadeName)
                         append(")")
                     }
-                    appendln()
+                    appendLine()
                 }
             }
         }
@@ -99,10 +99,10 @@ class JvmModuleProtoBufTest : KtUsefulTestCase() {
     fun testExperimental() {
         doTest(
             "/moduleProtoBuf/experimental", extraOptions = listOf(
-                "-Xuse-experimental=kotlin.Experimental",
+                "-Xopt-in=kotlin.RequiresOptIn",
                 "-Xexperimental=org.foo.A",
                 "-Xexperimental=org.foo.B.C",
-                "-Xuse-experimental=org.foo.D"
+                "-Xopt-in=org.foo.D"
             )
         )
     }

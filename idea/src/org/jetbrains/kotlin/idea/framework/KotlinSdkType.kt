@@ -1,22 +1,18 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
- * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
- */
-
-/*
- * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2000-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.framework
 
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.projectRoots.*
 import com.intellij.openapi.projectRoots.impl.ProjectJdkImpl
 import com.intellij.openapi.projectRoots.impl.SdkConfigurationUtil
-import com.intellij.openapi.roots.ui.configuration.projectRoot.ProjectSdksModel
 import com.intellij.util.Consumer
 import org.jdom.Element
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.KotlinIcons
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.idea.versions.bundledRuntimeVersion
@@ -25,26 +21,37 @@ import javax.swing.JComponent
 
 class KotlinSdkType : SdkType("KotlinSDK") {
     companion object {
-        @JvmField val INSTANCE = KotlinSdkType()
+        @JvmField
+        val INSTANCE = KotlinSdkType()
 
         val defaultHomePath: String
             get() = PathUtil.kotlinPathsForIdeaPlugin.homePath.absolutePath
 
         @JvmOverloads
-        fun setUpIfNeeded(checkIfNeeded: () -> Boolean = { true }) {
-            with(ProjectSdksModel()) {
-                reset(null)
-                if (sdks.any { it.sdkType is KotlinSdkType }) return
-                if (!checkIfNeeded()) return //do not create Kotlin SDK
-                addSdk(INSTANCE, defaultHomePath, null)
-                ApplicationManager.getApplication().invokeAndWait {
-                    runWriteAction { apply(null, true) }
+        fun setUpIfNeeded(disposable: Disposable? = null, checkIfNeeded: () -> Boolean = { true }) {
+            val projectSdks: Array<Sdk> = ProjectJdkTable.getInstance().allJdks
+            if (projectSdks.any { it.sdkType is KotlinSdkType }) return
+            if (!checkIfNeeded()) return // do not create Kotlin SDK
+
+            val newSdkName = SdkConfigurationUtil.createUniqueSdkName(INSTANCE, defaultHomePath, projectSdks.toList())
+            val newJdk = ProjectJdkImpl(newSdkName, INSTANCE)
+            newJdk.homePath = defaultHomePath
+            INSTANCE.setupSdkPaths(newJdk)
+
+            ApplicationManager.getApplication().invokeAndWait {
+                runWriteAction {
+                    if (ProjectJdkTable.getInstance().allJdks.any { it.sdkType is KotlinSdkType }) return@runWriteAction
+                    if (disposable != null) {
+                        ProjectJdkTable.getInstance().addJdk(newJdk, disposable)
+                    } else {
+                        ProjectJdkTable.getInstance().addJdk(newJdk)
+                    }
                 }
             }
         }
     }
 
-    override fun getPresentableName() = "Kotlin SDK"
+    override fun getPresentableName() = KotlinBundle.message("framework.name.kotlin.sdk")
 
     override fun getIcon() = KotlinIcons.SMALL_LOGO
 
@@ -75,5 +82,9 @@ class KotlinSdkType : SdkType("KotlinSDK") {
 
     override fun saveAdditionalData(additionalData: SdkAdditionalData, additional: Element) {
 
+    }
+
+    override fun allowCreationByUser(): Boolean {
+        return false
     }
 }

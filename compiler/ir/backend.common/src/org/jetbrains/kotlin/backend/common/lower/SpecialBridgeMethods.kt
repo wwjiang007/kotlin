@@ -1,12 +1,15 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.backend.common.lower
 
 import org.jetbrains.kotlin.backend.common.CommonBackendContext
+import org.jetbrains.kotlin.backend.common.ir.allOverridden
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
+import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.IrConstKind
 import org.jetbrains.kotlin.ir.expressions.IrExpression
@@ -17,14 +20,23 @@ import org.jetbrains.kotlin.ir.util.parentAsClass
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 
-data class SpecialMethodWithDefaultInfo(val defaultValueGenerator: (IrSimpleFunction) -> IrExpression, val argumentsToCheck: Int)
+data class SpecialMethodWithDefaultInfo(
+    val defaultValueGenerator: (IrSimpleFunction) -> IrExpression,
+    val argumentsToCheck: Int,
+    val needsArgumentBoxing: Boolean = false,
+    val needsGenericSignature: Boolean = false,
+)
+
+class BuiltInWithDifferentJvmName(
+    val needsGenericSignature: Boolean = false,
+)
 
 class SpecialBridgeMethods(val context: CommonBackendContext) {
     private data class SpecialMethodDescription(val kotlinFqClassName: FqName?, val name: Name, val arity: Int)
 
-    private fun makeDescription(classFqName: String, funName: String, arity: Int) =
+    private fun makeDescription(classFqName: FqName, funName: String, arity: Int = 0) =
         SpecialMethodDescription(
-            FqName(classFqName),
+            classFqName,
             Name.identifier(funName),
             arity
         )
@@ -50,41 +62,81 @@ class SpecialBridgeMethods(val context: CommonBackendContext) {
     private fun getSecondArg(bridge: IrSimpleFunction) =
         IrGetValueImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, bridge.valueParameters[1].symbol)
 
-    private val SPECIAL_METHODS_WITH_DEFAULTS_MAP = mapOf(
-        makeDescription("kotlin.collections.Collection", "contains", 1) to SpecialMethodWithDefaultInfo(::constFalse, 1),
-        makeDescription("kotlin.collections.MutableCollection", "remove", 1) to SpecialMethodWithDefaultInfo(::constFalse, 1),
-        makeDescription("kotlin.collections.Map", "containsKey", 1) to SpecialMethodWithDefaultInfo(::constFalse, 1),
-        makeDescription("kotlin.collections.Map", "containsValue", 1) to SpecialMethodWithDefaultInfo(::constFalse, 1),
-        makeDescription("kotlin.collections.MutableMap", "remove", 2) to SpecialMethodWithDefaultInfo(::constFalse, 2),
-        makeDescription("kotlin.collections.Map", "getOrDefault", 2) to SpecialMethodWithDefaultInfo(::getSecondArg, 1),
-        makeDescription("kotlin.collections.Map", "get", 1) to SpecialMethodWithDefaultInfo(::constNull, 1),
-        makeDescription("kotlin.collections.MutableMap", "remove", 1) to SpecialMethodWithDefaultInfo(::constNull, 1),
-        makeDescription("kotlin.collections.List", "indexOf", 1) to SpecialMethodWithDefaultInfo(::constMinusOne, 1),
-        makeDescription("kotlin.collections.List", "lastIndexOf", 1) to SpecialMethodWithDefaultInfo(::constMinusOne, 1)
+    private val specialMethodsWithDefaults = mapOf(
+        makeDescription(StandardNames.FqNames.collection, "contains", 1) to
+                SpecialMethodWithDefaultInfo(::constFalse, 1),
+        makeDescription(StandardNames.FqNames.mutableCollection, "remove", 1) to
+                SpecialMethodWithDefaultInfo(::constFalse, 1, needsArgumentBoxing = true),
+        makeDescription(StandardNames.FqNames.map, "containsKey", 1) to
+                SpecialMethodWithDefaultInfo(::constFalse, 1),
+        makeDescription(StandardNames.FqNames.map, "containsValue", 1) to
+                SpecialMethodWithDefaultInfo(::constFalse, 1),
+        makeDescription(StandardNames.FqNames.mutableMap, "remove", 2) to
+                SpecialMethodWithDefaultInfo(::constFalse, 2),
+        makeDescription(StandardNames.FqNames.list, "indexOf", 1) to
+                SpecialMethodWithDefaultInfo(::constMinusOne, 1),
+        makeDescription(StandardNames.FqNames.list, "lastIndexOf", 1) to
+                SpecialMethodWithDefaultInfo(::constMinusOne, 1),
+        makeDescription(StandardNames.FqNames.map, "getOrDefault", 2) to
+                SpecialMethodWithDefaultInfo(::getSecondArg, 1, needsGenericSignature = true),
+        makeDescription(StandardNames.FqNames.map, "get", 1) to
+                SpecialMethodWithDefaultInfo(::constNull, 1, needsGenericSignature = true),
+        makeDescription(StandardNames.FqNames.mutableMap, "remove", 1) to
+                SpecialMethodWithDefaultInfo(::constNull, 1, needsGenericSignature = true)
     )
 
-    fun findSpecialWithOverride(irFunction: IrSimpleFunction): Pair<IrSimpleFunction, SpecialMethodWithDefaultInfo>? {
-        irFunction.allOverridden().forEach { overridden ->
+    private val specialProperties = mapOf(
+        makeDescription(StandardNames.FqNames.collection, "size") to BuiltInWithDifferentJvmName(),
+        makeDescription(StandardNames.FqNames.map, "size") to BuiltInWithDifferentJvmName(),
+        makeDescription(StandardNames.FqNames.charSequence.toSafe(), "length") to BuiltInWithDifferentJvmName(),
+        makeDescription(StandardNames.FqNames.map, "keys") to BuiltInWithDifferentJvmName(needsGenericSignature = true),
+        makeDescription(StandardNames.FqNames.map, "values") to BuiltInWithDifferentJvmName(needsGenericSignature = true),
+        makeDescription(StandardNames.FqNames.map, "entries") to BuiltInWithDifferentJvmName(needsGenericSignature = true)
+    )
+
+    private val specialMethods = mapOf(
+        makeDescription(StandardNames.FqNames.number.toSafe(), "toByte") to BuiltInWithDifferentJvmName(),
+        makeDescription(StandardNames.FqNames.number.toSafe(), "toShort") to BuiltInWithDifferentJvmName(),
+        makeDescription(StandardNames.FqNames.number.toSafe(), "toInt") to BuiltInWithDifferentJvmName(),
+        makeDescription(StandardNames.FqNames.number.toSafe(), "toLong") to BuiltInWithDifferentJvmName(),
+        makeDescription(StandardNames.FqNames.number.toSafe(), "toFloat") to BuiltInWithDifferentJvmName(),
+        makeDescription(StandardNames.FqNames.number.toSafe(), "toDouble") to BuiltInWithDifferentJvmName(),
+        makeDescription(StandardNames.FqNames.charSequence.toSafe(), "get", 1) to BuiltInWithDifferentJvmName(),
+        makeDescription(StandardNames.FqNames.mutableList, "removeAt", 1) to BuiltInWithDifferentJvmName(needsGenericSignature = true)
+    )
+
+    val specialMethodNames = (specialMethodsWithDefaults + specialMethods).map { (description) -> description.name }.toHashSet()
+    val specialPropertyNames = specialProperties.map { (description) -> description.name }.toHashSet()
+
+    fun findSpecialWithOverride(
+        irFunction: IrSimpleFunction,
+        includeSelf: Boolean = false
+    ): Pair<IrSimpleFunction, SpecialMethodWithDefaultInfo>? {
+        if (irFunction.parent !is IrClass)
+            return null
+
+        for (overridden in irFunction.allOverridden(includeSelf)) {
             val description = overridden.toDescription()
-            SPECIAL_METHODS_WITH_DEFAULTS_MAP[description]?.let {
+            specialMethodsWithDefaults[description]?.let {
                 return Pair(overridden, it)
             }
         }
         return null
     }
-}
 
-fun IrSimpleFunction.allOverridden(): Sequence<IrSimpleFunction> {
-    val visited = mutableSetOf<IrSimpleFunction>()
-
-    fun IrSimpleFunction.search(): Sequence<IrSimpleFunction> {
-        if (this in visited) return emptySequence()
-        return sequence {
-            yield(this@search)
-            visited.add(this@search)
-            overriddenSymbols.forEach { yieldAll(it.owner.search()) }
-        }
+    fun getSpecialMethodInfo(irFunction: IrSimpleFunction): SpecialMethodWithDefaultInfo? {
+        val description = irFunction.toDescription()
+        return specialMethodsWithDefaults[description]
     }
 
-    return search().drop(1) // First element is `this`
+    fun getBuiltInWithDifferentJvmName(irFunction: IrSimpleFunction): BuiltInWithDifferentJvmName? {
+        irFunction.correspondingPropertySymbol?.let {
+            val classFqName = irFunction.parentAsClass.fqNameWhenAvailable
+                ?: return null
+
+            return specialProperties[makeDescription(classFqName, it.owner.name.asString())]
+        }
+
+        return specialMethods[irFunction.toDescription()]
+    }
 }

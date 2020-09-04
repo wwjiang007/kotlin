@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.refactoring.introduce.introduceTypeAlias
@@ -29,6 +18,7 @@ import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.idea.core.util.CodeInsightUtils.ElementKind.TYPE_CONSTRUCTOR
 import org.jetbrains.kotlin.idea.core.util.CodeInsightUtils.ElementKind.TYPE_ELEMENT
 import org.jetbrains.kotlin.idea.project.languageVersionSettings
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.refactoring.KotlinRefactoringSupportProvider
 import org.jetbrains.kotlin.idea.refactoring.checkConflictsInteractively
 import org.jetbrains.kotlin.idea.refactoring.introduce.AbstractIntroduceAction
@@ -43,21 +33,25 @@ import org.jetbrains.kotlin.psi.psiUtil.*
 open class KotlinIntroduceTypeAliasHandler : RefactoringActionHandler {
     companion object {
         @JvmField
-        val REFACTORING_NAME = "Introduce Type Alias"
+        val REFACTORING_NAME = KotlinBundle.message("name.introduce.type.alias")
 
         val INSTANCE = KotlinIntroduceTypeAliasHandler()
     }
 
-    private fun selectElements(editor: Editor, file: KtFile, continuation: (elements: List<PsiElement>, targetSibling: PsiElement) -> Unit) {
+    private fun selectElements(
+        editor: Editor,
+        file: KtFile,
+        continuation: (elements: List<PsiElement>, targetSibling: PsiElement) -> Unit
+    ) {
         selectElementsWithTargetSibling(
-                REFACTORING_NAME,
-                editor,
-                file,
-                "Select target code block",
-                listOf(TYPE_ELEMENT, TYPE_CONSTRUCTOR),
-                { null },
-                { _, parent -> listOf(parent.containingFile) },
-                continuation
+            REFACTORING_NAME,
+            editor,
+            file,
+            KotlinBundle.message("title.select.target.code.block"),
+            listOf(TYPE_ELEMENT, TYPE_CONSTRUCTOR),
+            { null },
+            { _, parent -> listOf(parent.containingFile) },
+            continuation
         )
     }
 
@@ -71,26 +65,31 @@ open class KotlinIntroduceTypeAliasHandler : RefactoringActionHandler {
     }
 
     open fun doInvoke(
-            project: Project,
-            editor: Editor,
-            elements: List<PsiElement>,
-            targetSibling: PsiElement,
-            descriptorSubstitutor: ((IntroduceTypeAliasDescriptor) -> IntroduceTypeAliasDescriptor)? = null
+        project: Project,
+        editor: Editor,
+        elements: List<PsiElement>,
+        targetSibling: PsiElement,
+        descriptorSubstitutor: ((IntroduceTypeAliasDescriptor) -> IntroduceTypeAliasDescriptor)? = null
     ) {
         val elementToExtract = elements.singleOrNull()
 
         val errorMessage = when (elementToExtract) {
             is KtSimpleNameExpression -> {
-                if (!(isTypeConstructorReference(elementToExtract) || isDoubleColonReceiver(elementToExtract))) "Type reference is expected" else null
+                if (!(isTypeConstructorReference(elementToExtract) || isDoubleColonReceiver(elementToExtract))) KotlinBundle.message("error.text.type.reference.is.expected"
+                ) else null
             }
-            !is KtTypeElement -> "No type to refactor"
+            !is KtTypeElement -> KotlinBundle.message("error.text.no.type.to.refactor")
             else -> null
         }
         if (errorMessage != null) return showErrorHint(project, editor, errorMessage, REFACTORING_NAME)
 
         val introduceData = when (elementToExtract) {
             is KtTypeElement -> IntroduceTypeAliasData(elementToExtract, targetSibling)
-            else -> IntroduceTypeAliasData(elementToExtract!!.getStrictParentOfType<KtTypeElement>() ?: elementToExtract as KtElement, targetSibling, true)
+            else -> IntroduceTypeAliasData(
+                elementToExtract!!.getStrictParentOfType<KtTypeElement>() ?: elementToExtract as KtElement,
+                targetSibling,
+                true
+            )
         }
         val analysisResult = introduceData.analyze()
         when (analysisResult) {
@@ -103,9 +102,14 @@ open class KotlinIntroduceTypeAliasHandler : RefactoringActionHandler {
                 if (ApplicationManager.getApplication().isUnitTestMode) {
                     val (descriptor, conflicts) = descriptorSubstitutor!!(originalDescriptor).validate()
                     project.checkConflictsInteractively(conflicts) { runRefactoring(descriptor, project, editor) }
-                }
-                else {
-                    KotlinIntroduceTypeAliasDialog(project, originalDescriptor) { runRefactoring(it.currentDescriptor, project, editor) }.show()
+                } else {
+                    KotlinIntroduceTypeAliasDialog(project, originalDescriptor) {
+                        runRefactoring(
+                            it.currentDescriptor,
+                            project,
+                            editor
+                        )
+                    }.show()
                 }
             }
         }
@@ -136,6 +140,6 @@ class IntroduceTypeAliasAction : AbstractIntroduceAction() {
 
     override fun isAvailableOnElementInEditorAndFile(element: PsiElement, editor: Editor, file: PsiFile, context: DataContext): Boolean {
         return super.isAvailableOnElementInEditorAndFile(element, editor, file, context) &&
-               (ModuleUtil.findModuleForPsiElement(file)?.languageVersionSettings?.supportsFeature(LanguageFeature.TypeAliases) ?: false)
+                (ModuleUtil.findModuleForPsiElement(file)?.languageVersionSettings?.supportsFeature(LanguageFeature.TypeAliases) ?: false)
     }
 }

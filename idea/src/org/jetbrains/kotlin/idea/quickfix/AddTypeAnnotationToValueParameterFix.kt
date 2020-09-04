@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.quickfix
@@ -21,6 +10,7 @@ import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.Errors
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.core.ShortenReferences
 import org.jetbrains.kotlin.idea.project.builtIns
@@ -34,7 +24,7 @@ import org.jetbrains.kotlin.resolve.calls.callUtil.getType
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 
 class AddTypeAnnotationToValueParameterFix(element: KtParameter) : KotlinQuickFixAction<KtParameter>(element) {
-    private val typeNameShort : String?
+    private val typeNameShort: String?
     val typeName: String?
 
     init {
@@ -46,8 +36,7 @@ class AddTypeAnnotationToValueParameterFix(element: KtParameter) : KotlinQuickFi
                     element.builtIns.getArrayElementType(type)
                 else
                     type.arguments.singleOrNull()?.type
-            }
-            else if (defaultValue is KtCollectionLiteralExpression) {
+            } else if (defaultValue is KtCollectionLiteralExpression) {
                 val builtIns = element.builtIns
                 val elementType = builtIns.getArrayElementType(type)
                 if (KotlinBuiltIns.isPrimitiveType(elementType)) {
@@ -65,8 +54,10 @@ class AddTypeAnnotationToValueParameterFix(element: KtParameter) : KotlinQuickFi
         return element.typeReference == null && typeNameShort != null
     }
 
-    override fun getFamilyName() = "Add type annotation"
-    override fun getText() = element?.let { "Add type '$typeNameShort' to parameter '${it.name}'" } ?: ""
+    override fun getFamilyName() = KotlinBundle.message("fix.add.type.annnotation.family")
+
+    override fun getText() =
+        element?.let { KotlinBundle.message("fix.add.type.annnotation.text", typeNameShort.toString(), it.name.toString()) } ?: ""
 
     override fun invoke(project: Project, editor: Editor?, file: KtFile) {
         val element = element ?: return

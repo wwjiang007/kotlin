@@ -11,24 +11,28 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Conditions
 import com.intellij.openapi.util.Disposer
 import com.intellij.psi.*
-import com.intellij.psi.impl.light.LightElement
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.psi.util.MethodSignature
 import com.intellij.testFramework.UsefulTestCase
 import com.intellij.util.PairProcessor
 import com.intellij.util.ref.DebugReflectionUtil
 import junit.framework.TestCase
+import org.jetbrains.kotlin.asJava.KotlinAsJavaSupport
 import org.jetbrains.kotlin.asJava.LightClassGenerationSupport
 import org.jetbrains.kotlin.asJava.classes.*
 import org.jetbrains.kotlin.asJava.elements.KtLightNullabilityAnnotation
 import org.jetbrains.kotlin.asJava.elements.KtLightPsiArrayInitializerMemberValue
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
+import org.jetbrains.kotlin.idea.caches.resolve.analyze
+import org.jetbrains.kotlin.idea.core.script.ScriptConfigurationManager
 import org.jetbrains.kotlin.idea.project.languageVersionSettings
+import org.jetbrains.kotlin.j2k.getContainingClass
 import org.jetbrains.kotlin.load.kotlin.NON_EXISTENT_CLASS_NAME
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtScript
 import org.junit.Assert
 import kotlin.test.assertFails
 
@@ -58,7 +62,6 @@ object UltraLightChecker {
     fun allClasses(file: KtFile): List<KtClassOrObject> =
         SyntaxTraverser.psiTraverser(file).filter(KtClassOrObject::class.java).toList()
 
-
     fun checkFacadeEquivalence(
         fqName: FqName,
         searchScope: GlobalSearchScope,
@@ -81,9 +84,35 @@ object UltraLightChecker {
         val gold = KtLightClassForSourceDeclaration.createNoCache(ktClass, forceUsingOldLightClasses = true)
         val ultraLightClass = LightClassGenerationSupport.getInstance(ktClass.project).createUltraLightClass(ktClass) ?: return null
 
+        val secondULInstance = LightClassGenerationSupport.getInstance(ktClass.project).createUltraLightClass(ktClass)
+        Assert.assertNotNull(secondULInstance)
+        Assert.assertTrue(ultraLightClass !== secondULInstance)
+        secondULInstance!!
+        Assert.assertEquals(ultraLightClass.ownMethods.size, secondULInstance.ownMethods.size)
+        Assert.assertTrue(ultraLightClass.ownMethods.containsAll(secondULInstance.ownMethods))
+
         checkClassEquivalenceByRendering(gold, ultraLightClass)
 
         return ultraLightClass
+    }
+
+    fun checkScriptEquivalence(script: KtScript): KtLightClass {
+
+        val ultraLightScript: KtLightClass?
+
+        val oldForceFlag = KtUltraLightSupport.forceUsingOldLightClasses
+        try {
+            KtUltraLightSupport.forceUsingOldLightClasses = false
+            ultraLightScript = KotlinAsJavaSupport.getInstance(script.project).getLightClassForScript(script)
+            TestCase.assertTrue(ultraLightScript is KtUltraLightClassForScript)
+            ultraLightScript!!
+            val gold = KtLightClassForScript.createNoCache(script, forceUsingOldLightClasses = true)
+            checkClassEquivalenceByRendering(gold, ultraLightScript)
+        } finally {
+            KtUltraLightSupport.forceUsingOldLightClasses = oldForceFlag
+        }
+
+        return ultraLightScript!!
     }
 
     private fun checkClassEquivalenceByRendering(gold: PsiClass?, ultraLightClass: PsiClass) {
@@ -170,13 +199,19 @@ object UltraLightChecker {
         if (this is PsiParameter && this.isVarArgs) {
             result += " /* vararg */"
         }
+
+        if (hasInitializer()) {
+            result += " = ${initializer?.text} /* initializer type: ${initializer?.type?.renderType()} */"
+        }
+
         computeConstantValue()?.let { result += " /* constant value $it */" }
+
         return result
     }
 
-    private fun PsiTypeParameterListOwner.renderTypeParams() =
-        if (typeParameters.isEmpty()) ""
-        else "<" + typeParameters.joinToString {
+    private fun Array<PsiTypeParameter>.renderTypeParams() =
+        if (isEmpty()) ""
+        else "<" + joinToString {
             val bounds =
                 if (it.extendsListTypes.isNotEmpty())
                     " extends " + it.extendsListTypes.joinToString(" & ", transform = { it.renderType() })
@@ -193,7 +228,7 @@ object UltraLightChecker {
     private fun PsiMethod.renderMethod() =
         renderModifiers(returnType) +
                 (if (isVarArgs) "/* vararg */ " else "") +
-                renderTypeParams() +
+                typeParameters.renderTypeParams() +
                 (returnType?.renderType() ?: "") + " " +
                 name +
                 "(" + parameterList.parameters.joinToString { it.renderModifiers(it.type) + it.type.renderType() } + ")" +
@@ -202,13 +237,21 @@ object UltraLightChecker {
                     if (thrownTypes.isEmpty()) ""
                     else " throws " + thrownTypes.joinToString { it.renderType() }
                 } +
-                ";"
+                ";" +
+                "// ${getSignature(PsiSubstitutor.EMPTY).renderSignature()}"
+
+    private fun MethodSignature.renderSignature(): String {
+        val typeParams = typeParameters.renderTypeParams()
+        val paramTypes = parameterTypes.joinToString(prefix = "(", postfix = ")") { it.renderType() }
+        val name = if (isConstructor) ".ctor" else name
+        return "$typeParams $name$paramTypes"
+    }
 
     private fun PsiEnumConstant.renderEnumConstant(): String {
         val initializingClass = initializingClass ?: return name
 
         return buildString {
-            appendln("$name {")
+            appendLine("$name {")
             append(initializingClass.renderMembers())
             append("}")
         }
@@ -226,10 +269,10 @@ object UltraLightChecker {
             append(renderModifiers())
             append("$classWord ")
             append("$name /* $qualifiedName*/")
-            append(renderTypeParams())
+            append(typeParameters.renderTypeParams())
             append(extendsList.renderRefList("extends"))
             append(implementsList.renderRefList("implements"))
-            appendln(" {")
+            appendLine(" {")
 
             if (isEnum) {
                 append(

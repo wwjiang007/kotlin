@@ -10,14 +10,16 @@ import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFile
-import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
+import org.jetbrains.kotlin.ir.expressions.IrTypeOperator
 import org.jetbrains.kotlin.ir.expressions.copyTypeArgumentsFrom
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
+import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
 import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.ir.util.isKFunction
 import org.jetbrains.kotlin.ir.util.isKSuspendFunction
+import org.jetbrains.kotlin.ir.util.parentAsClass
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 import org.jetbrains.kotlin.util.OperatorNameConventions
@@ -40,7 +42,7 @@ private class ReplaceKFunctionInvokeWithFunctionInvoke : FileLoweringPass, IrEle
 
     override fun visitCall(expression: IrCall): IrExpression {
         val callee = expression.symbol.owner
-        if (callee !is IrSimpleFunction || callee.name != OperatorNameConventions.INVOKE) return super.visitCall(expression)
+        if (callee.name != OperatorNameConventions.INVOKE) return super.visitCall(expression)
 
         val parentClass = callee.parent as? IrClass ?: return super.visitCall(expression)
         if (!parentClass.defaultType.isKFunction() && !parentClass.defaultType.isKSuspendFunction()) return super.visitCall(expression)
@@ -50,7 +52,10 @@ private class ReplaceKFunctionInvokeWithFunctionInvoke : FileLoweringPass, IrEle
         return expression.run {
             IrCallImpl(startOffset, endOffset, type, newCallee).apply {
                 copyTypeArgumentsFrom(expression)
-                dispatchReceiver = expression.dispatchReceiver?.transform(this@ReplaceKFunctionInvokeWithFunctionInvoke, null)
+                dispatchReceiver = expression.dispatchReceiver?.transform(this@ReplaceKFunctionInvokeWithFunctionInvoke, null)?.let {
+                    val newType = newCallee.owner.parentAsClass.defaultType
+                    IrTypeOperatorCallImpl(startOffset, endOffset, newType, IrTypeOperator.IMPLICIT_CAST, newType, it)
+                }
                 extensionReceiver = expression.extensionReceiver?.transform(this@ReplaceKFunctionInvokeWithFunctionInvoke, null)
                 for (i in 0 until valueArgumentsCount) {
                     putValueArgument(i, expression.getValueArgument(i)?.transform(this@ReplaceKFunctionInvokeWithFunctionInvoke, null))

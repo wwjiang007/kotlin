@@ -2,11 +2,13 @@ import com.moowork.gradle.node.NodeExtension
 import com.moowork.gradle.node.npm.NpmTask
 import de.undercouch.gradle.tasks.download.Download
 import org.gradle.internal.os.OperatingSystem
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinUsages
 
 plugins {
     kotlin("jvm")
     id("jps-compatible")
-    id("com.github.node-gradle.node")
+    id("com.github.node-gradle.node") version "2.2.0"
     id("de.undercouch.download")
 }
 
@@ -18,7 +20,8 @@ node {
 val antLauncherJar by configurations.creating
 val testJsRuntime by configurations.creating {
     attributes {
-        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE, objects.named(LibraryElements.JAR))
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(KotlinUsages.KOTLIN_RUNTIME))
+        attribute(KotlinPlatformType.attribute, KotlinPlatformType.js)
     }
 }
 
@@ -30,19 +33,36 @@ dependencies {
     testCompileOnly(project(":compiler:frontend"))
     testCompileOnly(project(":compiler:cli"))
     testCompileOnly(project(":compiler:cli-js"))
+    testCompileOnly(project(":compiler:cli-js-klib"))
     testCompileOnly(project(":compiler:util"))
     testCompileOnly(intellijCoreDep()) { includeJars("intellij-core") }
-    testCompileOnly(intellijDep()) { includeJars("openapi", "idea", "idea_rt", "util") }
+    Platform[193].orLower {
+        testCompileOnly(intellijDep()) { includeJars("openapi", rootProject = rootProject) }
+    }
+    testCompileOnly(intellijDep()) { includeJars("idea", "idea_rt", "util") }
     testCompile(project(":compiler:backend.js"))
     testCompile(project(":compiler:backend.wasm"))
-    testCompile(projectTests(":compiler:ir.serialization.js"))
     testCompile(project(":js:js.translator"))
     testCompile(project(":js:js.serializer"))
     testCompile(project(":js:js.dce"))
     testCompile(project(":js:js.engines"))
+    testCompile(project(":compiler:incremental-compilation-impl"))
     testCompile(commonDep("junit:junit"))
     testCompile(projectTests(":kotlin-build-common"))
     testCompile(projectTests(":generators:test-generator"))
+
+    testCompile(intellijCoreDep()) { includeJars("intellij-core") }
+    testCompile(project(":compiler:frontend"))
+    testCompile(project(":compiler:cli"))
+    testCompile(project(":compiler:util"))
+
+    testRuntime(project(":kotlin-reflect"))
+
+    if (Platform[193].orLower()) {
+        testRuntime(intellijDep()) { includeJars("picocontainer", rootProject = rootProject) }
+    }
+    testRuntime(intellijDep()) { includeJars("trove4j", "guava", "jdom", rootProject = rootProject) }
+
 
     val currentOs = OperatingSystem.current()
 
@@ -59,7 +79,8 @@ dependencies {
         }
     }
 
-    testCompile(j2v8idString)
+    testCompileOnly("com.eclipsesource.j2v8:j2v8_linux_x86_64:4.8.0")
+    testRuntimeOnly(j2v8idString)
 
     testRuntime(kotlinStdlib())
     testJsRuntime(kotlinStdlib("js"))
@@ -85,20 +106,21 @@ fun Test.setUpJsBoxTests(jsEnabled: Boolean, jsIrEnabled: Boolean) {
     dependsOn(":dist")
     if (jsEnabled) dependsOn(testJsRuntime)
     if (jsIrEnabled) {
-        dependsOn(":compiler:ir.serialization.js:generateFullRuntimeKLib")
-        dependsOn(":compiler:ir.serialization.js:generateReducedRuntimeKLib")
-        dependsOn(":compiler:ir.serialization.js:generateKotlinTestKLib")
+        dependsOn(":kotlin-stdlib-js-ir:compileKotlinJs")
+        systemProperty("kotlin.js.full.stdlib.path", "libraries/stdlib/js-ir/build/classes/kotlin/js/main")
+        dependsOn(":kotlin-stdlib-js-ir-minimal-for-test:compileKotlinJs")
+        systemProperty("kotlin.js.reduced.stdlib.path", "libraries/stdlib/js-ir-minimal-for-test/build/classes/kotlin/js/main")
+        dependsOn(":kotlin-test:kotlin-test-js-ir:compileKotlinJs")
+        systemProperty("kotlin.js.kotlin.test.path", "libraries/kotlin.test/js-ir/build/classes/kotlin/js/main")
     }
 
     exclude("org/jetbrains/kotlin/js/test/wasm/semantics/*")
+    exclude("org/jetbrains/kotlin/js/test/es6/semantics/*")
 
     if (jsEnabled && !jsIrEnabled) exclude("org/jetbrains/kotlin/js/test/ir/semantics/*")
     if (!jsEnabled && jsIrEnabled) include("org/jetbrains/kotlin/js/test/ir/semantics/*")
 
     jvmArgs("-da:jdk.nashorn.internal.runtime.RecompilableScriptFunctionData") // Disable assertion which fails due to a bug in nashorn (KT-23637)
-    if (findProperty("kotlin.compiler.js.ir.tests.skip")?.toString()?.toBoolean() == true) {
-        exclude("org/jetbrains/kotlin/js/test/ir/semantics/*")
-    }
     setUpBoxTests()
 }
 
@@ -108,6 +130,8 @@ fun Test.setUpBoxTests() {
         systemProperty("kotlin.ant.classpath", antLauncherJar.asPath)
         systemProperty("kotlin.ant.launcher.class", "org.apache.tools.ant.Main")
     }
+
+    systemProperty("overwrite.output", findProperty("overwrite.output") ?: "false")
 
     val prefixForPpropertiesToForward = "fd."
     for ((key, value) in properties) {
@@ -126,6 +150,34 @@ projectTest("jsTest", true) {
 }
 
 projectTest("jsIrTest", true) {
+    systemProperty("kotlin.js.ir.pir", "false")
+    setUpJsBoxTests(jsEnabled = false, jsIrEnabled = true)
+}
+
+projectTest("jsEs6IrTest", true) {
+    systemProperty("kotlin.js.ir.pir", "false")
+    systemProperty("kotlin.js.ir.es6", "true")
+
+    dependsOn(":dist")
+    dependsOn(":kotlin-stdlib-js-ir:compileKotlinJs")
+    systemProperty("kotlin.js.full.stdlib.path", "libraries/stdlib/js-ir/build/classes/kotlin/js/main")
+    dependsOn(":kotlin-stdlib-js-ir-minimal-for-test:compileKotlinJs")
+    systemProperty("kotlin.js.reduced.stdlib.path", "libraries/stdlib/js-ir-minimal-for-test/build/classes/kotlin/js/main")
+    dependsOn(":kotlin-test:kotlin-test-js-ir:compileKotlinJs")
+    systemProperty("kotlin.js.kotlin.test.path", "libraries/kotlin.test/js-ir/build/classes/kotlin/js/main")
+
+    exclude("org/jetbrains/kotlin/js/test/wasm/semantics/*")
+    exclude("org/jetbrains/kotlin/js/test/ir/semantics/*")
+    exclude("org/jetbrains/kotlin/js/test/semantics/*")
+
+    include("org/jetbrains/kotlin/js/test/es6/semantics/*")
+
+    jvmArgs("-da:jdk.nashorn.internal.runtime.RecompilableScriptFunctionData") // Disable assertion which fails due to a bug in nashorn (KT-23637)
+    setUpBoxTests()
+}
+
+projectTest("jsPirTest", true) {
+    systemProperty("kotlin.js.ir.skipRegularMode", "true")
     setUpJsBoxTests(jsEnabled = false, jsIrEnabled = true)
 }
 
@@ -151,7 +203,7 @@ val runMocha by task<NpmTask> {
     val target = if (project.hasProperty("teamcity")) "runOnTeamcity" else "test"
     setArgs(listOf("run", target))
 
-    setIgnoreExitValue(rootProject.getBooleanProperty("ignoreTestFailures") ?: false)
+    setIgnoreExitValue(kotlinBuildProperties.ignoreTestFailures)
 
     dependsOn(npmInstall, "test")
 
@@ -207,9 +259,12 @@ val unzipJsShell by task<Copy> {
 
 projectTest("wasmTest", true) {
     dependsOn(unzipJsShell)
-    dependsOn(":compiler:ir.serialization.js:generateWasmRuntimeKLib")
     include("org/jetbrains/kotlin/js/test/wasm/semantics/*")
     val jsShellExecutablePath = File(unzipJsShell.get().destinationDir, "js").absolutePath
     systemProperty("javascript.engine.path.SpiderMonkey", jsShellExecutablePath)
+
+    dependsOn(":kotlin-stdlib-js-ir:compileKotlinJs")
+    systemProperty("kotlin.wasm.stdlib.path", "libraries/stdlib/wasm/build/classes/kotlin/js/main")
+
     setUpBoxTests()
 }

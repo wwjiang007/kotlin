@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2000-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -14,6 +14,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElementVisitor
 import com.siyeh.ig.psiutils.TestUtils
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptorWithVisibility
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
 import org.jetbrains.kotlin.idea.core.unblockDocument
@@ -42,7 +43,8 @@ class KDocMissingDocumentationInspection : AbstractKotlinInspection() {
                     val descriptor =
                         element.resolveToDescriptorIfAny() as? DeclarationDescriptorWithVisibility ?: return@namedDeclarationVisitor
                     if (descriptor.isEffectivelyPublicApi) {
-                        val message = element.describe()?.let { "$it is missing documentation" } ?: "Missing documentation"
+                        val message = element.describe()?.let { KotlinBundle.message("0.is.missing.documentation", it) }
+                            ?: KotlinBundle.message("missing.documentation")
                         holder.registerProblem(nameIdentifier, message, AddDocumentationFix())
                     }
                 }
@@ -50,17 +52,15 @@ class KDocMissingDocumentationInspection : AbstractKotlinInspection() {
 
         }
 
-    override fun runForWholeFile(): Boolean = true
-
     class AddDocumentationFix : LocalQuickFix {
-        override fun getName(): String = "Add documentation"
+        override fun getName(): String = KotlinBundle.message("add.documentation.fix.text")
 
         override fun getFamilyName(): String = name
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {
             if (!FileModificationService.getInstance().preparePsiElementForWrite(descriptor.psiElement)) return
             val declaration = descriptor.psiElement.getParentOfType<KtNamedDeclaration>(true)
-                    ?: throw IllegalStateException("Can't find declaration")
+                ?: throw IllegalStateException("Can't find declaration")
 
             declaration.addBefore(KDocElementFactory(project).createKDocFromText("/**\n*\n*/\n"), declaration.firstChild)
 

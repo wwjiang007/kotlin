@@ -4,23 +4,17 @@ description = "Simple Kotlin/JS tests runner with TeamCity reporter"
 
 plugins {
     id("base")
-    id("com.github.node-gradle.node")
+    id("com.github.node-gradle.node") version "2.2.0"
 }
+
+publish()
 
 val default = configurations.getByName(Dependency.DEFAULT_CONFIGURATION)
-val archives = configurations.getByName(Dependency.ARCHIVES_CONFIGURATION)
-
-default.extendsFrom(archives)
-
-plugins.apply("maven")
-
-convention.getPlugin(MavenPluginConvention::class.java).also {
-    it.conf2ScopeMappings.addMapping(MavenPlugin.RUNTIME_PRIORITY, archives, Conf2ScopeMappingContainer.RUNTIME)
-}
+default.extendsFrom(configurations.publishedRuntime.get())
 
 dependencies {
     if (!kotlinBuildProperties.isInJpsBuildIdeaSync) {
-        archives(project(":kotlin-test:kotlin-test-js"))
+        publishedRuntime(project(":kotlin-test:kotlin-test-js"))
     }
 }
 
@@ -51,11 +45,14 @@ tasks {
         inputs.dir("src")
         inputs.files(
             "nodejs.ts",
+            "nodejs-idle.ts",
             "karma.ts",
             "karma-kotlin-reporter.js",
             "karma-debug-runner.js",
             "karma-debug-framework.js",
             "mocha-kotlin-reporter.js",
+            "tc-log-appender.js",
+            "tc-log-error-webpack.js",
             "package.json",
             "rollup.config.js",
             "tsconfig.json",
@@ -85,12 +82,6 @@ val jar by tasks.creating(Jar::class) {
 }
 
 artifacts {
-    add(
-        "archives",
-        jar.archiveFile.get().asFile
-    ) {
-        builtBy(jar)
-    }
+    add(configurations.archives.name, jar)
+    add(configurations.publishedRuntime.name, jar)
 }
-
-publish()

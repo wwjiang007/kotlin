@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.intentions
@@ -19,6 +8,7 @@ package org.jetbrains.kotlin.idea.intentions
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.util.PsiTreeUtil
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.core.util.range
 import org.jetbrains.kotlin.idea.core.util.start
 import org.jetbrains.kotlin.idea.util.CommentSaver
@@ -29,7 +19,7 @@ import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
 import org.jetbrains.kotlin.psi.psiUtil.lastBlockStatementOrThis
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 
-class SplitIfIntention : SelfTargetingIntention<KtExpression>(KtExpression::class.java, "Split 'if' into two") {
+class SplitIfIntention : SelfTargetingIntention<KtExpression>(KtExpression::class.java, KotlinBundle.lazyMessage("split.if.into.two")) {
     override fun isApplicableTo(element: KtExpression, caretOffset: Int): Boolean {
         return when (element) {
             is KtOperationReferenceExpression -> isOperatorValid(element)
@@ -64,14 +54,14 @@ class SplitIfIntention : SelfTargetingIntention<KtExpression>(KtExpression::clas
             KtTokens.OROR -> {
                 val container = ifExpression.parent
 
-                if (container is KtBlockExpression && elseBranch == null && thenBranch.lastBlockStatementOrThis().isExitStatement()) { // special case
+                // special case
+                if (container is KtBlockExpression && elseBranch == null && thenBranch.lastBlockStatementOrThis().isExitStatement()) {
                     val secondIf = container.addAfter(innerIf, ifExpression)
                     container.addAfter(psiFactory.createNewLine(), ifExpression)
                     val firstIf = ifExpression.replace(psiFactory.createIf(leftExpression, thenBranch))
                     commentSaver.restore(PsiChildRange(firstIf, secondIf))
                     return
-                }
-                else {
+                } else {
                     psiFactory.createIf(leftExpression, thenBranch, innerIf)
                 }
             }
@@ -98,7 +88,7 @@ class SplitIfIntention : SelfTargetingIntention<KtExpression>(KtExpression::clas
     private fun getFirstValidOperator(element: KtIfExpression): KtOperationReferenceExpression? {
         val condition = element.condition ?: return null
         return PsiTreeUtil.findChildrenOfType(condition, KtOperationReferenceExpression::class.java)
-                .firstOrNull { isOperatorValid(it) }
+            .firstOrNull { isOperatorValid(it) }
     }
 
     private fun isOperatorValid(element: KtOperationReferenceExpression): Boolean {

@@ -6,10 +6,7 @@
 package org.jetbrains.kotlin.psi2ir.generators
 
 import org.jetbrains.kotlin.ir.IrElement
-import org.jetbrains.kotlin.ir.declarations.IrDeclaration
-import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
-import org.jetbrains.kotlin.ir.declarations.IrField
-import org.jetbrains.kotlin.ir.declarations.IrTypeParametersContainer
+import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 
@@ -21,7 +18,7 @@ class AnnotationGenerator(context: GeneratorContext) : IrElementVisitorVoid {
         element.acceptChildrenVoid(this)
     }
 
-    override fun visitDeclaration(declaration: IrDeclaration) {
+    override fun visitDeclaration(declaration: IrDeclarationBase) {
         if (declaration is IrTypeParametersContainer) {
             typeTranslator.enterScope(declaration)
         }
@@ -36,12 +33,14 @@ class AnnotationGenerator(context: GeneratorContext) : IrElementVisitorVoid {
         // Delegate field is mapped to a new property descriptor with annotations of the original property delegate
         // (see IrPropertyDelegateDescriptorImpl), but annotations on backing fields should be processed manually here
         val annotatedDescriptor =
-            if (declaration is IrField && declaration.origin != IrDeclarationOrigin.DELEGATE)
+            if (declaration is IrField && declaration.origin != IrDeclarationOrigin.PROPERTY_DELEGATE)
                 declaration.descriptor.backingField
             else declaration.descriptor
 
-        annotatedDescriptor?.annotations?.mapNotNullTo(declaration.annotations) {
-            constantValueGenerator.generateAnnotationConstructorCall(it)
+        if (annotatedDescriptor != null) {
+            declaration.annotations += annotatedDescriptor.annotations.mapNotNull {
+                constantValueGenerator.generateAnnotationConstructorCall(it)
+            }
         }
     }
 }

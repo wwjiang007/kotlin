@@ -30,10 +30,76 @@ import org.junit.runner.RunWith
 @RunWith(JUnit3WithIdeaConfigurationRunner::class)
 class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
 
-    override fun getProjectDescriptor(): LightProjectDescriptor = KotlinJdkAndLibraryProjectDescriptor(ForTestCompileRuntime.runtimeJarForTests())
+    override fun getProjectDescriptor(): LightProjectDescriptor =
+        KotlinJdkAndLibraryProjectDescriptor(ForTestCompileRuntime.runtimeJarForTests())
+
+    fun testIsHiddenByDeprecated() {
+        myFixture.configureByText(
+            "test.kt", """
+            import kotlin.DeprecationLevel.WARNING
+            import kotlin.DeprecationLevel.HIDDEN
+            import java.lang.annotation.ElementType
+            import kotlin.DeprecationLevel
+            import kotlin.annotation.AnnotationTarget
+
+            @kotlin.annotation.Target(kotlin.annotation.AnnotationTarget.FUNCTION)
+            annotation class Dep(
+                val message: String = "",
+                val message1: String = "",
+                val level: DeprecationLevel = DeprecationLevel.WARNING
+            )
+
+            typealias LOL = Deprecated
+            typealias DL = DeprecationLevel
+
+            class A {
+                @Deprecated("", ReplaceWith("a"), HIDDEN)
+                fun a() {}
+
+                @Deprecated(message = "", level = HIDDEN)
+                fun b() {}
+
+                @Deprecated(message = "", replaceWith = ReplaceWith(""), level = DeprecationLevel.HIDDEN)
+                fun c() {}
+
+                @Deprecated(message = "", replaceWith = ReplaceWith(""), level = DeprecationLevel.WARNING)
+                fun d() {}
+
+                @Deprecated(message = "", replaceWith = ReplaceWith(""), level = WARNING)
+                fun e() {}
+
+                @Deprecated(message = "", replaceWith = ReplaceWith(""))
+                fun f() {}
+
+                @Deprecated("")
+                fun g() {}
+
+                @Deprecated(message = "", level = WARNING)
+                fun h() {}
+
+                @Dep(level = DeprecationLevel.HIDDEN)
+                fun i() {}
+
+                @Dep("", "", DeprecationLevel.HIDDEN)
+                fun j() {}
+
+                @LOL(level = HIDDEN, message="")
+                fun k() {}
+
+                @Deprecated(level = DL.HIDDEN, message="")
+                fun l() {}
+            }
+        """.trimIndent()
+        )
+        myFixture.testHighlighting("test.kt")
+
+        val methods = myFixture.findClass("A").methods.map { it.name }.sorted()
+        TestCase.assertEquals(listOf("A","d","e","f","g","h","i","j"), methods)
+    }
 
     fun testBooleanAnnotationDefaultValue() {
-        myFixture.addClass("""
+        myFixture.addClass(
+            """
             import java.lang.annotation.ElementType;
             import java.lang.annotation.Target;
 
@@ -41,24 +107,28 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
             public @interface Autowired {
                 boolean required() default true;
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
 
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             class AnnotatedClass{
                     @Autowired
                     lateinit var bean: String
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("Autowired.java", "AnnotatedClass.kt")
 
         val annotations = myFixture.findClass("AnnotatedClass").fields.single()
-                .expectAnnotations(2).single { it.qualifiedName == "Autowired" }
+            .expectAnnotations(2).single { it.qualifiedName == "Autowired" }
         val annotationAttributeVal = annotations.findAttributeValue("required") as PsiElement
         assertTextRangeAndValue("true", true, annotationAttributeVal)
     }
 
     fun testStringAnnotationWithUnnamedParameter() {
-        myFixture.addClass("""
+        myFixture.addClass(
+            """
             import java.lang.annotation.ElementType;
             import java.lang.annotation.Target;
 
@@ -66,17 +136,20 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
             public @interface Qualifier {
                 String value();
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
 
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             class AnnotatedClass {
                     fun bar(@Qualifier("foo") param: String){}
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("Qualifier.java", "AnnotatedClass.kt")
 
         val annotation = myFixture.findClass("AnnotatedClass").methods.first { it.name == "bar" }.parameterList.parameters.single()
-                .expectAnnotations(2).single { it.qualifiedName == "Qualifier" }
+            .expectAnnotations(2).single { it.qualifiedName == "Qualifier" }
         val annotationAttributeVal = annotation.findAttributeValue("value") as PsiExpression
         assertTextRangeAndValue("\"foo\"", "foo", annotationAttributeVal)
         TestCase.assertEquals(
@@ -86,18 +159,22 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
     }
 
     fun testAnnotationsInAnnotationsDeclarations() {
-        myFixture.addClass("""
+        myFixture.addClass(
+            """
             public @interface OuterAnnotation {
                 InnerAnnotation attribute();
                 @interface InnerAnnotation {
                 }
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
 
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             @OuterAnnotation(attribute = OuterAnnotation.InnerAnnotation())
             open class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("OuterAnnotation.java", "AnnotatedClass.kt")
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
@@ -272,18 +349,22 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
     }
 
     fun testAnnotationsInAnnotationsArrayDeclarations() {
-        myFixture.addClass("""
+        myFixture.addClass(
+            """
             public @interface OuterAnnotation {
                 InnerAnnotation[] attributes();
                 @interface InnerAnnotation {
                 }
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
 
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             @OuterAnnotation(attributes = arrayOf(OuterAnnotation.InnerAnnotation()))
             open class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("OuterAnnotation.java", "AnnotatedClass.kt")
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
@@ -294,18 +375,22 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
 
 
     fun testAnnotationsInAnnotationsFinalDeclarations() {
-        myFixture.addClass("""
+        myFixture.addClass(
+            """
             public @interface OuterAnnotation {
                 InnerAnnotation attribute();
                 @interface InnerAnnotation {
                 }
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
 
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             @OuterAnnotation(attribute = OuterAnnotation.InnerAnnotation())
             class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("OuterAnnotation.java", "AnnotatedClass.kt")
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
@@ -315,7 +400,8 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
     }
 
     fun testAnnotationsInAnnotationsInAnnotationsDeclarations() {
-        myFixture.addClass("""
+        myFixture.addClass(
+            """
             public @interface OuterAnnotation {
                 InnerAnnotation attribute();
                 @interface InnerAnnotation {
@@ -324,12 +410,15 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
                     }
                 }
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
 
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             @OuterAnnotation(attribute = OuterAnnotation.InnerAnnotation(attribute = OuterAnnotation.InnerAnnotation.InnerInnerAnnotation()))
             open class AnnotatedClass //There is another exception if class is not open
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("OuterAnnotation.java", "AnnotatedClass.kt")
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
@@ -342,14 +431,16 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
     }
 
     fun testKotlinAnnotations() {
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             annotation class Anno1(val anno2: Anno2)
             annotation class Anno2(val anno3: Anno3)
             annotation class Anno3
 
             @Anno1(Anno2(Anno3()))
             class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("AnnotatedClass.kt")
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
@@ -363,11 +454,13 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
     }
 
     fun testKotlinAnnotationWithStringArray() {
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             annotation class Anno(val params: Array<String>)
             @Anno(arrayOf("abc", "def"))
             class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("AnnotatedClass.kt")
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
@@ -383,11 +476,13 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
 
     fun testKotlinAnnotationWithStringArrayLiteral() {
         configureKotlinVersion("1.2")
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             annotation class Anno(val params: Array<String>)
             @Anno(params = ["abc", "def"])
             class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("AnnotatedClass.kt")
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
@@ -401,13 +496,15 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
 
 
     fun testKotlinAnnotationsArray() {
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             annotation class Anno1(val anno2: Array<Anno2>)
             annotation class Anno2(val v:Int)
 
             @Anno1(anno2 = arrayOf(Anno2(1), Anno2(2)))
             class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("AnnotatedClass.kt")
 
         val annotation = myFixture.findClass("AnnotatedClass").expectAnnotations(1).single()
@@ -439,18 +536,22 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
 
     fun testVarargAnnotation() {
 
-        myFixture.configureByText("Outer.java", """
+        myFixture.configureByText(
+            "Outer.java", """
             @interface Outer{
                 Inner[] value() default {};
             }
 
             @interface Inner{
             }
-        """)
-        myFixture.configureByText("AnnotatedClass.kt", """
+        """
+        )
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             @Outer(Inner())
             class MyAnnotated {}
-        """.trimIndent())
+        """.trimIndent()
+        )
 
         val annotations = myFixture.findClass("MyAnnotated").expectAnnotations(1)
         annotations[0].let { annotation ->
@@ -469,13 +570,17 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
 
     fun testKtVarargAnnotation() {
 
-        myFixture.configureByText("Anno.kt", """
+        myFixture.configureByText(
+            "Anno.kt", """
             annotation class Anno(vararg val vars: String)
-        """)
-        myFixture.configureByText("AnnotatedClass.kt", """
+        """
+        )
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             @Anno("hello", "world")
             class MyAnnotated
-        """.trimIndent())
+        """.trimIndent()
+        )
 
         val annotations = myFixture.findClass("MyAnnotated").expectAnnotations(1)
         val annotationAttributeVal = annotations.first().findAttributeValue("vars")
@@ -521,16 +626,20 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
     fun testVarargClasses() = doVarargTest("""Class<?>""", listOf("Any::class", "String::class", "Int::class"))
 
     fun testVarargWithSpread() {
-        myFixture.addClass("""
+        myFixture.addClass(
+            """
             public @interface Annotation {
                 String[] value();
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
 
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             @Annotation(value = *arrayOf("a", "b", "c"))
             open class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("Annotation.java", "AnnotatedClass.kt")
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
@@ -543,16 +652,20 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
     }
 
     fun testVarargWithSpreadComplex() {
-        myFixture.addClass("""
+        myFixture.addClass(
+            """
             public @interface Annotation {
                 String[] value();
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
 
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             @Annotation(value = arrayOf(*arrayOf("a", "b"), "c", *arrayOf("d", "e")))
             open class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("Annotation.java", "AnnotatedClass.kt")
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
@@ -565,16 +678,20 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
     }
 
     fun testVarargWithArrayLiteral() {
-        myFixture.addClass("""
+        myFixture.addClass(
+            """
             public @interface Annotation {
                 String[] value();
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
 
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             @Annotation(value = ["a", "b", "c"])
             open class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("Annotation.java", "AnnotatedClass.kt")
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
@@ -587,16 +704,20 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
     }
 
     fun testVarargWithSingleArg() {
-        myFixture.addClass("""
+        myFixture.addClass(
+            """
             public @interface Annotation {
                 String[] value();
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
 
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             @Annotation("a")
             open class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("Annotation.java", "AnnotatedClass.kt")
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
@@ -609,16 +730,20 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
     }
 
     fun testVarargWithArrayLiteralAndSpread() {
-        myFixture.addClass("""
+        myFixture.addClass(
+            """
             public @interface Annotation {
                 String[] value();
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
 
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             @Annotation(*["a", "b", "c"])
             open class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
         myFixture.testHighlighting("Annotation.java", "AnnotatedClass.kt")
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
@@ -634,7 +759,8 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
         //See https://youtrack.jetbrains.com/issue/KT-34107
         return
 
-        myFixture.configureByText("RAnno.java", """
+        myFixture.configureByText(
+            "RAnno.java", """
             import java.lang.annotation.Repeatable;
 
             @interface RContainer{
@@ -645,13 +771,16 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
             public @interface RAnno {
                 String[] value() default {};
             }
-        """)
-        myFixture.configureByText("AnnotatedClass.kt", """
+        """
+        )
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             @RAnno()
             @RAnno("1")
             @RAnno("1", "2")
             class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(3)
         annotations[0].let { annotation ->
@@ -701,12 +830,14 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
     }
 
     fun testWrongNamesPassed() {
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             annotation class Anno1(val i:Int , val j: Int)
 
             @Anno1(k = 3, l = 5)
             class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
         val annotation = annotations.first()
@@ -717,12 +848,14 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
     }
 
     fun testWrongValuesPassed() {
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             annotation class Anno1(val i: Int , val j: Int)
 
             @Anno1(i = true, j = false)
             class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
         val annotation = annotations.first()
@@ -731,12 +864,14 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
     }
 
     fun testDuplicateParameters() {
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             annotation class Anno1(val i:Int , val i: Boolean)
 
             @Anno1(i = true, i = 3)
             class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
 
         val annotations = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
         val annotation = annotations.first()
@@ -748,12 +883,14 @@ class KtLightAnnotationTest : KotlinLightCodeInsightFixtureTestCase() {
         //See https://youtrack.jetbrains.com/issue/KT-34107
         return
 
-        myFixture.configureByText("AnnotatedClass.kt", """
+        myFixture.configureByText(
+            "AnnotatedClass.kt", """
             annotation class Anno1(val i: Int = 0)
 
             @Anno1()
             class AnnotatedClass
-        """.trimIndent())
+        """.trimIndent()
+        )
 
         val (annotation) = myFixture.findClass("AnnotatedClass").expectAnnotations(1)
         assertTextAndRange("0", annotation.findAttributeValue("i")!!)

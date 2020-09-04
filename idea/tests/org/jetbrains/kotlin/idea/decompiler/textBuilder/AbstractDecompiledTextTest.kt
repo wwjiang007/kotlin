@@ -12,17 +12,30 @@ import com.intellij.openapi.roots.OrderRootType
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
 import com.intellij.util.indexing.FileContentImpl
+import com.intellij.util.io.exists
+import com.intellij.util.io.readText
 import org.jetbrains.kotlin.idea.decompiler.classFile.KotlinClsStubBuilder
 import org.jetbrains.kotlin.idea.decompiler.classFile.KtClsFile
 import org.jetbrains.kotlin.idea.decompiler.stubBuilder.serializeToString
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.psi.stubs.elements.KtFileStubBuilder
 import org.junit.Assert
+import java.nio.file.Paths
 import kotlin.test.assertTrue
 
-abstract class AbstractDecompiledTextTest(baseDirectory: String, allowKotlinPackage: Boolean)
-    : AbstractDecompiledTextBaseTest(baseDirectory, allowKotlinPackage = allowKotlinPackage) {
-    override fun getFileToDecompile(): VirtualFile = getClassFile(TEST_PACKAGE, getTestName(false), module!!)
+abstract class AbstractDecompiledTextTest(baseDirectory: String, allowKotlinPackage: Boolean) :
+    AbstractDecompiledTextBaseTest(baseDirectory, allowKotlinPackage = allowKotlinPackage) {
+
+    private val CUSTOM_PACKAGE_FILE = "package.txt"
+
+    override fun getFileToDecompile(): VirtualFile {
+        val className = getTestName(false)
+
+        val customPackageFile = Paths.get(TEST_DATA_PATH, className, CUSTOM_PACKAGE_FILE)
+        val testFilePackage = customPackageFile.takeIf { it.exists() }?.readText()?.trimEnd() ?: TEST_PACKAGE
+
+        return getClassFile(testFilePackage, className, module!!)
+    }
 
     override fun checkStubConsistency(file: VirtualFile, decompiledText: String) {
         val fileWithDecompiledText = KtPsiFactory(project).createFile(decompiledText)
@@ -34,7 +47,7 @@ abstract class AbstractDecompiledTextTest(baseDirectory: String, allowKotlinPack
     }
 
     override fun checkPsiFile(psiFile: PsiFile) =
-            assertTrue(psiFile is KtClsFile, "Expecting decompiled kotlin file, was: " + psiFile::class.java)
+        assertTrue(psiFile is KtClsFile, "Expecting decompiled kotlin file, was: " + psiFile::class.java)
 
     override fun textToCheck(psiFile: PsiFile) = psiFile.text
 }
@@ -53,11 +66,11 @@ fun findTestLibraryRoot(module: Module): VirtualFile? {
 }
 
 fun getClassFile(
-        packageName: String,
-        className: String,
-        module: Module
+    packageName: String,
+    className: String,
+    module: Module
 ): VirtualFile {
     val root = findTestLibraryRoot(module)!!
     val packageDir = root.findFileByRelativePath(packageName.replace(".", "/"))!!
-    return packageDir.findChild(className + ".class")!!
+    return packageDir.findChild("$className.class")!!
 }

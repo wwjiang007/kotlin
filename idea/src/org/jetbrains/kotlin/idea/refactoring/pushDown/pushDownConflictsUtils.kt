@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.refactoring.pushDown
@@ -24,10 +13,12 @@ import com.intellij.usageView.UsageInfo
 import com.intellij.util.containers.MultiMap
 import org.jetbrains.kotlin.asJava.unwrapped
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.refactoring.memberInfo.KtPsiClassWrapper
 import org.jetbrains.kotlin.idea.refactoring.pullUp.renderForConflicts
 import org.jetbrains.kotlin.idea.references.KtReference
 import org.jetbrains.kotlin.idea.references.mainReference
+import org.jetbrains.kotlin.idea.references.resolveToDescriptors
 import org.jetbrains.kotlin.idea.resolve.ResolutionFacade
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
@@ -42,8 +33,10 @@ import org.jetbrains.kotlin.types.substitutions.getTypeSubstitutor
 import org.jetbrains.kotlin.util.findCallableMemberBySignature
 import java.util.*
 
-fun analyzePushDownConflicts(context: KotlinPushDownContext,
-                             usages: Array<out UsageInfo>): MultiMap<PsiElement, String> {
+fun analyzePushDownConflicts(
+    context: KotlinPushDownContext,
+    usages: Array<out UsageInfo>
+): MultiMap<PsiElement, String> {
     val targetClasses = usages.mapNotNull { it.element?.unwrapped }
 
     val conflicts = MultiMap<PsiElement, String>()
@@ -55,9 +48,7 @@ fun analyzePushDownConflicts(context: KotlinPushDownContext,
         if (!info.isChecked || ((member is KtClassOrObject || member is KtPsiClassWrapper) && info.overrides != null)) continue
 
         membersToPush += member
-        if ((member is KtNamedFunction || member is KtProperty)
-            && info.isToAbstract
-            && (context.memberDescriptors[member] as CallableMemberDescriptor).modality != Modality.ABSTRACT) {
+        if ((member is KtNamedFunction || member is KtProperty) && info.isToAbstract && (context.memberDescriptors[member] as CallableMemberDescriptor).modality != Modality.ABSTRACT) {
             membersToKeepAbstract += member
         }
     }
@@ -70,28 +61,33 @@ fun analyzePushDownConflicts(context: KotlinPushDownContext,
 }
 
 private fun checkConflicts(
-        conflicts: MultiMap<PsiElement, String>,
-        context: KotlinPushDownContext,
-        targetClass: PsiElement,
-        membersToKeepAbstract: List<KtNamedDeclaration>,
-        membersToPush: ArrayList<KtNamedDeclaration>
+    conflicts: MultiMap<PsiElement, String>,
+    context: KotlinPushDownContext,
+    targetClass: PsiElement,
+    membersToKeepAbstract: List<KtNamedDeclaration>,
+    membersToPush: ArrayList<KtNamedDeclaration>
 ) {
     if (targetClass !is KtClassOrObject) {
         conflicts.putValue(
-                targetClass,
-                "Non-Kotlin ${RefactoringUIUtil.getDescription(targetClass, false)} won't be affected by the refactoring"
+            targetClass,
+            KotlinBundle.message(
+                "text.non.kotlin.0.will.not.be.affected.by.refactoring",
+                RefactoringUIUtil.getDescription(targetClass, false)
+            )
         )
         return
     }
 
     val targetClassDescriptor = context.resolutionFacade.resolveToDescriptor(targetClass) as ClassDescriptor
     val substitutor = getTypeSubstitutor(context.sourceClassDescriptor.defaultType, targetClassDescriptor.defaultType)
-                      ?: TypeSubstitutor.EMPTY
+        ?: TypeSubstitutor.EMPTY
 
     if (!context.sourceClass.isInterface() && targetClass is KtClass && targetClass.isInterface()) {
-        val message = "${targetClassDescriptor.renderForConflicts()} " +
-                      "inherits from ${context.sourceClassDescriptor.renderForConflicts()}.\n" +
-                      "It won't be affected by the refactoring"
+        val message = KotlinBundle.message(
+            "text.0.inherits.from.1.it.will.not.be.affected.by.refactoring",
+            targetClassDescriptor.renderForConflicts(),
+            context.sourceClassDescriptor.renderForConflicts()
+        )
         conflicts.putValue(targetClass, message.capitalize())
     }
 
@@ -104,27 +100,36 @@ private fun checkConflicts(
 }
 
 private fun checkMemberClashing(
-        conflicts: MultiMap<PsiElement, String>,
-        context: KotlinPushDownContext,
-        member: KtNamedDeclaration,
-        membersToKeepAbstract: List<KtNamedDeclaration>,
-        substitutor: TypeSubstitutor,
-        targetClass: KtClassOrObject,
-        targetClassDescriptor: ClassDescriptor) {
+    conflicts: MultiMap<PsiElement, String>,
+    context: KotlinPushDownContext,
+    member: KtNamedDeclaration,
+    membersToKeepAbstract: List<KtNamedDeclaration>,
+    substitutor: TypeSubstitutor,
+    targetClass: KtClassOrObject,
+    targetClassDescriptor: ClassDescriptor
+) {
     when (member) {
         is KtNamedFunction, is KtProperty -> {
             val memberDescriptor = context.memberDescriptors[member] as CallableMemberDescriptor
-            val clashingDescriptor = targetClassDescriptor.findCallableMemberBySignature(memberDescriptor.substitute(substitutor) as CallableMemberDescriptor)
+            val clashingDescriptor =
+                targetClassDescriptor.findCallableMemberBySignature(memberDescriptor.substitute(substitutor) as CallableMemberDescriptor)
             val clashingDeclaration = clashingDescriptor?.source?.getPsi() as? KtNamedDeclaration
             if (clashingDescriptor != null && clashingDeclaration != null) {
                 if (memberDescriptor.modality != Modality.ABSTRACT && member !in membersToKeepAbstract) {
-                    val message = "${targetClassDescriptor.renderForConflicts()} already contains ${clashingDescriptor.renderForConflicts()}"
+                    val message = KotlinBundle.message(
+                        "text.0.already.contains.1",
+                        targetClassDescriptor.renderForConflicts(),
+                        clashingDescriptor.renderForConflicts()
+                    )
                     conflicts.putValue(clashingDeclaration, CommonRefactoringUtil.capitalize(message))
                 }
                 if (!clashingDeclaration.hasModifier(KtTokens.OVERRIDE_KEYWORD)) {
-                    val message = "${clashingDescriptor.renderForConflicts()} in ${targetClassDescriptor.renderForConflicts()} " +
-                                  "will override corresponding member of ${context.sourceClassDescriptor.renderForConflicts()} " +
-                                  "after refactoring"
+                    val message = KotlinBundle.message(
+                        "text.0.in.1.will.override.corresponding.member.of.2.after.refactoring",
+                        clashingDescriptor.renderForConflicts(),
+                        targetClassDescriptor.renderForConflicts(),
+                        context.sourceClassDescriptor.renderForConflicts()
+                    )
                     conflicts.putValue(clashingDeclaration, CommonRefactoringUtil.capitalize(message))
                 }
             }
@@ -134,49 +139,54 @@ private fun checkMemberClashing(
             targetClass.declarations
                 .asSequence()
                 .filterIsInstance<KtClassOrObject>()
-                    .firstOrNull() { it.name == member.name }
-                    ?.let {
-                        val message = "${targetClassDescriptor.renderForConflicts()} " +
-                                      "already contains nested class named ${CommonRefactoringUtil.htmlEmphasize(member.name ?: "")}"
-                        conflicts.putValue(it, message.capitalize())
-                    }
+                .firstOrNull() { it.name == member.name }
+                ?.let {
+                    val message = KotlinBundle.message(
+                        "text.0.already.contains.nested.class.1",
+                        targetClassDescriptor.renderForConflicts(),
+                        CommonRefactoringUtil.htmlEmphasize(member.name ?: "")
+                    )
+                    conflicts.putValue(it, message.capitalize())
+                }
         }
     }
 }
 
 private fun checkSuperCalls(
-        conflicts: MultiMap<PsiElement, String>,
-        context: KotlinPushDownContext,
-        member: KtNamedDeclaration,
-        membersToPush: ArrayList<KtNamedDeclaration>
+    conflicts: MultiMap<PsiElement, String>,
+    context: KotlinPushDownContext,
+    member: KtNamedDeclaration,
+    membersToPush: ArrayList<KtNamedDeclaration>
 ) {
     member.accept(
-            object : KtTreeVisitorVoid() {
-                override fun visitSuperExpression(expression: KtSuperExpression) {
-                    val qualifiedExpression = expression.getQualifiedExpressionForReceiver() ?: return
-                    val refExpr = qualifiedExpression.selectorExpression.getCalleeExpressionIfAny() as? KtSimpleNameExpression ?: return
-                    for (descriptor in refExpr.mainReference.resolveToDescriptors(context.sourceClassContext)) {
-                        val memberDescriptor = descriptor as? CallableMemberDescriptor ?: continue
-                        val containingClass = memberDescriptor.containingDeclaration as? ClassDescriptor ?: continue
-                        if (!DescriptorUtils.isSubclass(context.sourceClassDescriptor, containingClass)) continue
-                        val memberInSource = context.sourceClassDescriptor.findCallableMemberBySignature(memberDescriptor)?.source?.getPsi()
-                                             ?: continue
-                        if (memberInSource !in membersToPush) {
-                            conflicts.putValue(qualifiedExpression,
-                                               "Pushed member won't be available in '${qualifiedExpression.text}'")
-                        }
+        object : KtTreeVisitorVoid() {
+            override fun visitSuperExpression(expression: KtSuperExpression) {
+                val qualifiedExpression = expression.getQualifiedExpressionForReceiver() ?: return
+                val refExpr = qualifiedExpression.selectorExpression.getCalleeExpressionIfAny() as? KtSimpleNameExpression ?: return
+                for (descriptor in refExpr.mainReference.resolveToDescriptors(context.sourceClassContext)) {
+                    val memberDescriptor = descriptor as? CallableMemberDescriptor ?: continue
+                    val containingClass = memberDescriptor.containingDeclaration as? ClassDescriptor ?: continue
+                    if (!DescriptorUtils.isSubclass(context.sourceClassDescriptor, containingClass)) continue
+                    val memberInSource = context.sourceClassDescriptor.findCallableMemberBySignature(memberDescriptor)?.source?.getPsi()
+                        ?: continue
+                    if (memberInSource !in membersToPush) {
+                        conflicts.putValue(
+                            qualifiedExpression,
+                            KotlinBundle.message("text.pushed.member.will.not.be.available.in.0", qualifiedExpression.text)
+                        )
                     }
                 }
             }
+        }
     )
 }
 
 internal fun checkExternalUsages(
-        conflicts: MultiMap<PsiElement, String>,
-        member: PsiElement,
-        targetClassDescriptor: ClassDescriptor,
-        resolutionFacade: ResolutionFacade
-): Unit {
+    conflicts: MultiMap<PsiElement, String>,
+    member: PsiElement,
+    targetClassDescriptor: ClassDescriptor,
+    resolutionFacade: ResolutionFacade
+) {
     for (ref in ReferencesSearch.search(member, member.resolveScope, false)) {
         val calleeExpr = ref.element as? KtSimpleNameExpression ?: continue
         val resolvedCall = calleeExpr.getResolvedCall(resolutionFacade.analyze(calleeExpr)) ?: continue
@@ -185,38 +195,42 @@ internal fun checkExternalUsages(
         if (dispatchReceiver == null || dispatchReceiver is Qualifier) continue
         val receiverClassDescriptor = dispatchReceiver.type.constructor.declarationDescriptor as? ClassDescriptor ?: continue
         if (!DescriptorUtils.isSubclass(receiverClassDescriptor, targetClassDescriptor)) {
-            conflicts.putValue(callElement, "Pushed member won't be available in '${callElement.text}'")
+            conflicts.putValue(callElement, KotlinBundle.message("text.pushed.member.will.not.be.available.in.0", callElement.text))
         }
     }
 }
 
 private fun checkVisibility(
-        conflicts: MultiMap<PsiElement, String>,
-        context: KotlinPushDownContext,
-        member: KtNamedDeclaration,
-        targetClassDescriptor: ClassDescriptor
+    conflicts: MultiMap<PsiElement, String>,
+    context: KotlinPushDownContext,
+    member: KtNamedDeclaration,
+    targetClassDescriptor: ClassDescriptor
 ) {
     fun reportConflictIfAny(targetDescriptor: DeclarationDescriptor) {
         val target = (targetDescriptor as? DeclarationDescriptorWithSource)?.source?.getPsi() ?: return
         if (targetDescriptor is DeclarationDescriptorWithVisibility
-            && !Visibilities.isVisibleIgnoringReceiver(targetDescriptor, targetClassDescriptor)) {
-            val message = "${context.memberDescriptors[member]!!.renderForConflicts()} " +
-                          "uses ${targetDescriptor.renderForConflicts()}, " +
-                          "which is not accessible from the ${targetClassDescriptor.renderForConflicts()}"
+            && !DescriptorVisibilities.isVisibleIgnoringReceiver(targetDescriptor, targetClassDescriptor)
+        ) {
+            val message = KotlinBundle.message(
+                "text.0.uses.1.which.is.not.accessible.from.2",
+                context.memberDescriptors.getValue(member).renderForConflicts(),
+                targetDescriptor.renderForConflicts(),
+                targetClassDescriptor.renderForConflicts()
+            )
             conflicts.putValue(target, message.capitalize())
         }
     }
 
     member.accept(
-            object : KtTreeVisitorVoid() {
-                override fun visitReferenceExpression(expression: KtReferenceExpression) {
-                    super.visitReferenceExpression(expression)
+        object : KtTreeVisitorVoid() {
+            override fun visitReferenceExpression(expression: KtReferenceExpression) {
+                super.visitReferenceExpression(expression)
 
-                    expression.references
-                            .flatMap { (it as? KtReference)?.resolveToDescriptors(context.sourceClassContext) ?: emptyList() }
-                            .forEach(::reportConflictIfAny)
+                expression.references
+                    .flatMap { (it as? KtReference)?.resolveToDescriptors(context.sourceClassContext) ?: emptyList() }
+                    .forEach(::reportConflictIfAny)
 
-                }
             }
+        }
     )
 }

@@ -504,7 +504,7 @@ class OverrideResolver(
     private fun checkVisibilityForMember(declaration: KtDeclaration, memberDescriptor: CallableMemberDescriptor) {
         val visibility = memberDescriptor.visibility
         for (descriptor in memberDescriptor.overriddenDescriptors) {
-            val compare = Visibilities.compare(visibility, descriptor.visibility)
+            val compare = DescriptorVisibilities.compare(visibility, descriptor.visibility)
             if (compare == null) {
                 trace.report(
                     CANNOT_CHANGE_ACCESS_PRIVILEGE.on(
@@ -601,7 +601,7 @@ class OverrideResolver(
             val relevantDirectlyOverridden =
                 getRelevantDirectlyOverridden(overriddenDeclarationsByDirectParent, allFilteredOverriddenDeclarations)
 
-            if (descriptor.visibility === Visibilities.INVISIBLE_FAKE) {
+            if (descriptor.visibility === DescriptorVisibilities.INVISIBLE_FAKE) {
                 checkInvisibleFakeOverride(descriptor, relevantDirectlyOverridden, reportingStrategy)
                 return
             }
@@ -918,7 +918,7 @@ class OverrideResolver(
             declaringClass: ClassDescriptor,
             kotlinTypeRefiner: KotlinTypeRefiner
         ): CallableMemberDescriptor? {
-            @UseExperimental(TypeRefinement::class)
+            @OptIn(TypeRefinement::class)
             for (supertype in kotlinTypeRefiner.refineSupertypes(declaringClass)) {
                 val all = linkedSetOf<CallableMemberDescriptor>()
                 all.addAll(supertype.memberScope.getContributedFunctions(declared.name, NoLookupLocation.WHEN_CHECK_OVERRIDES))

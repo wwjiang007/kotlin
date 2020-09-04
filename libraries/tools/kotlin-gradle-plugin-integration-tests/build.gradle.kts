@@ -21,6 +21,7 @@ dependencies {
     testCompile(project(":kotlin-noarg"))
     testCompile(project(":kotlin-sam-with-receiver"))
     testCompile(project(":kotlin-test:kotlin-test-jvm"))
+    testCompile(project(":native:kotlin-native-utils"))
 
     testCompile(projectRuntimeJar(":kotlin-compiler-embeddable"))
     testCompile(intellijCoreDep()) { includeJars("jdom") }
@@ -38,6 +39,7 @@ dependencies {
     testCompile(gradleApi())
 
     testRuntime(projectRuntimeJar(":kotlin-android-extensions"))
+    testRuntime(project(":compiler:tests-mutes"))
 
     // Workaround for missing transitive import of the common(project `kotlin-test-common`
     // for `kotlin-test-jvm` into the IDE:
@@ -51,7 +53,7 @@ val shortenTempRootName = System.getProperty("os.name")!!.contains("Windows")
 projectTest("test", shortenTempRootName = shortenTempRootName) {}
 
 projectTest("testAdvanceGradleVersion", shortenTempRootName = shortenTempRootName) {
-    val gradleVersionForTests = "5.3-rc-2"
+    val gradleVersionForTests = "6.3"
     systemProperty("kotlin.gradle.version.for.tests", gradleVersionForTests)
 }
 
@@ -91,31 +93,7 @@ tasks.withType<Test> {
     onlyIf { !project.hasProperty("noTest") }
 
     dependsOn(":kotlin-gradle-plugin:validateTaskProperties")
-    dependsOn(
-        ":kotlin-allopen:install",
-        ":kotlin-allopen:plugin-marker:install",
-        ":kotlin-noarg:install",
-        ":kotlin-allopen:plugin-marker:install",
-        ":kotlin-sam-with-receiver:install",
-        ":kotlin-android-extensions:install",
-        ":kotlin-build-common:install",
-        ":kotlin-compiler-embeddable:install",
-        ":kotlin-gradle-plugin:install",
-        ":kotlin-gradle-plugin:plugin-marker:install",
-        ":kotlin-reflect:install",
-        ":kotlin-annotation-processing-gradle:install",
-        ":kotlin-test:kotlin-test-jvm:install",
-        ":kotlin-test:kotlin-test-js:install",
-        ":kotlin-gradle-subplugin-example:install",
-        ":kotlin-stdlib-jdk8:install",
-        ":kotlin-stdlib-js:install",
-        ":examples:annotation-processor-example:install",
-        ":kotlin-scripting-common:install",
-        ":kotlin-scripting-jvm:install",
-        ":kotlin-scripting-compiler-embeddable:install",
-        ":kotlin-test-js-runner:install",
-        ":kotlin-source-map-loader:install"
-    )
+    dependsOnKotlinPluginInstall()
 
     executable = "${rootProject.extra["JDK_18"]!!}/bin/java"
 

@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.refactoring.introduce.ui
@@ -22,6 +11,7 @@ import com.intellij.ui.ToolbarDecorator
 import com.intellij.ui.table.JBTable
 import com.intellij.util.ui.EditableModel
 import org.jetbrains.annotations.NonNls
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.psi.psiUtil.isIdentifier
 import java.awt.BorderLayout
 import java.awt.Component
@@ -33,7 +23,8 @@ import javax.swing.table.AbstractTableModel
 import kotlin.math.max
 import kotlin.math.min
 
-abstract class AbstractParameterTablePanel<Param, UIParam : AbstractParameterTablePanel.AbstractParameterInfo<Param>> : JPanel(BorderLayout()) {
+abstract class AbstractParameterTablePanel<Param, UIParam : AbstractParameterTablePanel.AbstractParameterInfo<Param>> :
+    JPanel(BorderLayout()) {
     companion object {
         val CHECKMARK_COLUMN = 0
         val PARAMETER_NAME_COLUMN = 1
@@ -75,7 +66,7 @@ abstract class AbstractParameterTablePanel<Param, UIParam : AbstractParameterTab
             headerValue = ""
             cellRenderer = object : BooleanTableCellRenderer() {
                 override fun getTableCellRendererComponent(
-                        table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int
+                    table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int
                 ): Component {
                     val rendererComponent = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column)
                     rendererComponent.isEnabled = this@AbstractParameterTablePanel.isEnabled
@@ -85,7 +76,7 @@ abstract class AbstractParameterTablePanel<Param, UIParam : AbstractParameterTab
             }
         }
 
-        table.columnModel.getColumn(PARAMETER_NAME_COLUMN).headerValue = "Name"
+        table.columnModel.getColumn(PARAMETER_NAME_COLUMN).headerValue = KotlinBundle.message("text.Name")
 
         createAdditionalColumns()
 

@@ -1,4 +1,4 @@
-// IGNORE_BACKEND_FIR: JVM_IR
+// !LANGUAGE: -PolymorphicSignature
 // TARGET_BACKEND: JVM
 // FULL_JDK
 // SKIP_JDK6
@@ -43,6 +43,12 @@ fun box(): String {
 
     val r8 = mh.invoke(arrayOf(args))
     if (r8 !is Array<*> || r8[0] !is Array<*> || !(r8[0] as Array<*>).contentEquals(args)) return "Fail 8: $r8"
+
+    // The next two calls check behavior in a statement context (where the call result is not used)
+
+    mh.invokeExact(args)
+
+    mh.invoke(args)
 
     return "OK"
 }

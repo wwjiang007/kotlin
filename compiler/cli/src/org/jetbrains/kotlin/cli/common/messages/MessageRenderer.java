@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.cli.common.messages;
 
+import com.intellij.openapi.util.io.FileUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.utils.fileUtils.FileUtilsKt;
@@ -31,7 +32,7 @@ public interface MessageRenderer {
     MessageRenderer WITHOUT_PATHS = new PlainTextMessageRenderer() {
         @Nullable
         @Override
-        protected String getPath(@NotNull CompilerMessageLocation location) {
+        protected String getPath(@NotNull CompilerMessageSourceLocation location) {
             return null;
         }
 
@@ -44,7 +45,7 @@ public interface MessageRenderer {
     MessageRenderer PLAIN_FULL_PATHS = new PlainTextMessageRenderer() {
         @NotNull
         @Override
-        protected String getPath(@NotNull CompilerMessageLocation location) {
+        protected String getPath(@NotNull CompilerMessageSourceLocation location) {
             return location.getPath();
         }
 
@@ -59,7 +60,7 @@ public interface MessageRenderer {
 
         @NotNull
         @Override
-        protected String getPath(@NotNull CompilerMessageLocation location) {
+        protected String getPath(@NotNull CompilerMessageSourceLocation location) {
             return FileUtilsKt.descendantRelativeTo(new File(location.getPath()), cwd).getPath();
         }
 
@@ -69,11 +70,28 @@ public interface MessageRenderer {
         }
     };
 
+    MessageRenderer SYSTEM_INDEPENDENT_RELATIVE_PATHS = new PlainTextMessageRenderer() {
+        private final File cwd = new File(".").getAbsoluteFile();
+
+        @Nullable
+        @Override
+        protected String getPath(@NotNull CompilerMessageSourceLocation location) {
+            return FileUtil.toSystemIndependentName(
+                    FileUtilsKt.descendantRelativeTo(new File(location.getPath()), cwd).getPath()
+            );
+        }
+
+        @Override
+        public String getName() {
+            return "SystemIndependentRelativePath";
+        }
+    };
+
     MessageRenderer GRADLE_STYLE = new GradleStyleMessageRenderer();
 
     String renderPreamble();
 
-    String render(@NotNull CompilerMessageSeverity severity, @NotNull String message, @Nullable CompilerMessageLocation location);
+    String render(@NotNull CompilerMessageSeverity severity, @NotNull String message, @Nullable CompilerMessageSourceLocation location);
 
     String renderUsage(@NotNull String usage);
 

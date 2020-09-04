@@ -12,10 +12,11 @@ import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.load.java.JavaVisibilities
+import org.jetbrains.kotlin.load.java.JavaDescriptorVisibilities
 import org.jetbrains.kotlin.load.java.descriptors.JavaMethodDescriptor
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.*
@@ -61,13 +62,13 @@ class KotlinRedundantOverrideInspection : AbstractKotlinInspection(), CleanupLoc
             val functionDescriptor = context[BindingContext.FUNCTION, function]
             if (function.hasDerivedProperty(functionDescriptor, context)) return
             val overriddenDescriptors = functionDescriptor?.original?.overriddenDescriptors
-            if (overriddenDescriptors?.any { it is JavaMethodDescriptor && it.visibility == JavaVisibilities.PACKAGE_VISIBILITY } == true) return
+            if (overriddenDescriptors?.any { it is JavaMethodDescriptor && it.visibility == JavaDescriptorVisibilities.PACKAGE_VISIBILITY } == true) return
             if (function.isAmbiguouslyDerived(overriddenDescriptors, context)) return
 
             val descriptor = holder.manager.createProblemDescriptor(
                 function,
                 TextRange(modifierList.startOffsetInParent, funKeyword.endOffset - function.startOffset),
-                "Redundant overriding method",
+                KotlinBundle.message("redundant.overriding.method"),
                 ProblemHighlightType.LIKE_UNUSED_SYMBOL,
                 isOnTheFly,
                 RedundantOverrideFix()
@@ -109,7 +110,7 @@ class KotlinRedundantOverrideInspection : AbstractKotlinInspection(), CleanupLoc
     }
 
     private class RedundantOverrideFix : LocalQuickFix {
-        override fun getName() = "Remove redundant overriding method"
+        override fun getName() = KotlinBundle.message("redundant.override.fix.text")
         override fun getFamilyName() = name
 
         override fun applyFix(project: Project, descriptor: ProblemDescriptor) {

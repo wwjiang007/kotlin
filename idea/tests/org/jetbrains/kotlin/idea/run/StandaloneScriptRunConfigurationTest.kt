@@ -71,7 +71,7 @@ class StandaloneScriptRunConfigurationTest : KotlinCodeInsightTestCase() {
     fun testOnFileMoveWithDefaultWorkingDir() {
         configureByFile("move/script.kts")
 
-        ScriptConfigurationManager.updateScriptDependenciesSynchronously(myFile, project)
+        ScriptConfigurationManager.updateScriptDependenciesSynchronously(myFile)
 
         val script = KotlinScriptFqnIndex.instance.get("foo.Script", project, project.allScope()).single()
         val runConfiguration = createConfigurationFromElement(script, save = true) as KotlinStandaloneScriptRunConfiguration
@@ -98,7 +98,7 @@ class StandaloneScriptRunConfigurationTest : KotlinCodeInsightTestCase() {
     fun testOnFileMoveWithNonDefaultWorkingDir() {
         configureByFile("move/script.kts")
 
-        ScriptConfigurationManager.updateScriptDependenciesSynchronously(myFile, project)
+        ScriptConfigurationManager.updateScriptDependenciesSynchronously(myFile)
 
         val script = KotlinScriptFqnIndex.instance.get("foo.Script", project, project.allScope()).single()
         val runConfiguration = createConfigurationFromElement(script, save = true) as KotlinStandaloneScriptRunConfiguration
@@ -134,10 +134,10 @@ class StandaloneScriptRunConfigurationTest : KotlinCodeInsightTestCase() {
         ActionRunner.runInsideWriteAction { VfsUtil.createDirectoryIfMissing(scriptFile.virtualFile.parent, "dest") }
 
         MoveFilesOrDirectoriesProcessor(
-                project,
-                arrayOf(scriptFile),
-                JavaPsiFacade.getInstance(project).findPackage("dest")!!.directories[0],
-                false, true, null, null
+            project,
+            arrayOf(scriptFile),
+            JavaPsiFacade.getInstance(project).findPackage("dest")!!.directories[0],
+            false, true, null, null
         ).run()
     }
 

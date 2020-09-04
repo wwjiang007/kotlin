@@ -1,11 +1,12 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.resolve
 
 import com.google.common.collect.Lists
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiPolyVariantReference
 import com.intellij.psi.PsiReference
@@ -16,9 +17,11 @@ import org.jetbrains.kotlin.idea.completion.test.configureWithExtraFile
 import org.jetbrains.kotlin.idea.test.KotlinLightPlatformCodeInsightFixtureTestCase
 import org.jetbrains.kotlin.idea.test.KotlinWithJdkAndRuntimeLightProjectDescriptor
 import org.jetbrains.kotlin.idea.test.PluginTestCaseBase
+import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.test.InTextDirectivesUtils
 import org.jetbrains.kotlin.test.util.renderAsGotoImplementation
 import org.junit.Assert
+import java.util.concurrent.Callable
 import kotlin.test.assertTrue
 
 abstract class AbstractReferenceResolveTest : KotlinLightPlatformCodeInsightFixtureTestCase() {
@@ -38,8 +41,7 @@ abstract class AbstractReferenceResolveTest : KotlinLightPlatformCodeInsightFixt
     protected fun performChecks() {
         if (InTextDirectivesUtils.isDirectiveDefined(myFixture.file.text, MULTIRESOLVE)) {
             doMultiResolveTest()
-        }
-        else {
+        } else {
             doSingleResolveTest()
         }
     }
@@ -67,7 +69,9 @@ abstract class AbstractReferenceResolveTest : KotlinLightPlatformCodeInsightFixt
             assertTrue(psiReference is PsiPolyVariantReference)
             psiReference as PsiPolyVariantReference
 
-            val results = wrapReference(psiReference).multiResolve(true)
+            val results = executeOnPooledThreadInReadAction {
+                wrapReference(psiReference).multiResolve(true)
+            }
 
             val actualResolvedTo = Lists.newArrayList<String>()
             for (result in results) {
@@ -102,9 +106,11 @@ abstract class AbstractReferenceResolveTest : KotlinLightPlatformCodeInsightFixt
             if (shouldBeUnresolved) {
                 Assert.assertTrue("REF: directives will be ignored for $REF_EMPTY test: $refs", refs.isEmpty())
                 referenceToString = "<empty>"
-            }
-            else {
-                assertTrue(refs.size == 1, "Must be a single ref: $refs.\nUse $MULTIRESOLVE if you need multiple refs\nUse $REF_EMPTY for an unresolved reference")
+            } else {
+                assertTrue(
+                    refs.size == 1,
+                    "Must be a single ref: $refs.\nUse $MULTIRESOLVE if you need multiple refs\nUse $REF_EMPTY for an unresolved reference"
+                )
                 referenceToString = refs.get(0)
                 Assert.assertNotNull("Test data wasn't found, use \"// REF: \" directive", referenceToString)
             }
@@ -119,30 +125,40 @@ abstract class AbstractReferenceResolveTest : KotlinLightPlatformCodeInsightFixt
             return InTextDirectivesUtils.findLinesWithPrefixesRemoved(text, prefix)
         }
 
-        fun checkReferenceResolve(expectedResolveData: ExpectedResolveData, offset: Int, psiReference: PsiReference?, checkResolvedTo: (PsiElement) -> Unit = {}) {
+        fun checkReferenceResolve(
+            expectedResolveData: ExpectedResolveData,
+            offset: Int,
+            psiReference: PsiReference?,
+            checkResolvedTo: (PsiElement) -> Unit = {}
+        ) {
             val expectedString = expectedResolveData.referenceString
             if (psiReference != null) {
-                val resolvedTo = psiReference.resolve()
+                val resolvedTo = executeOnPooledThreadInReadAction { psiReference.resolve() }
                 if (resolvedTo != null) {
                     checkResolvedTo(resolvedTo)
                     val resolvedToElementStr = replacePlaceholders(resolvedTo.renderAsGotoImplementation())
-                    assertEquals("Found reference to '$resolvedToElementStr', but '$expectedString' was expected", expectedString, resolvedToElementStr)
-                }
-                else {
+                    assertEquals(
+                        "Found reference to '$resolvedToElementStr', but '$expectedString' was expected",
+                        expectedString,
+                        resolvedToElementStr
+                    )
+                } else {
                     if (!expectedResolveData.shouldBeUnresolved()) {
-                        assertNull("Element $psiReference (${psiReference.element.text}) wasn't resolved to anything, but $expectedString was expected", expectedString)
+                        assertNull(
+                            "Element $psiReference (${psiReference.element
+                                .text}) wasn't resolved to anything, but $expectedString was expected", expectedString
+                        )
                     }
                 }
-            }
-            else {
+            } else {
                 assertNull("No reference found at offset: $offset, but one resolved to $expectedString was expected", expectedString)
             }
         }
 
         private fun replacePlaceholders(actualString: String): String {
             val replaced = PathUtil.toSystemIndependentName(actualString)
-                    .replace(PluginTestCaseBase.TEST_DATA_PROJECT_RELATIVE, "/<test dir>")
-                    .replace("//", "/") // additional slashes to fix discrepancy between windows and unix
+                .replace(PluginTestCaseBase.TEST_DATA_PROJECT_RELATIVE, "/<test dir>")
+                .replace("//", "/") // additional slashes to fix discrepancy between windows and unix
             if ("!/" in replaced) {
                 return replaced.replace(replaced.substringBefore("!/"), "<jar>")
             }
@@ -150,3 +166,6 @@ abstract class AbstractReferenceResolveTest : KotlinLightPlatformCodeInsightFixt
         }
     }
 }
+
+private fun <R> executeOnPooledThreadInReadAction(action: () -> R): R =
+    ApplicationManager.getApplication().executeOnPooledThread<R> { runReadAction(action) }.get()

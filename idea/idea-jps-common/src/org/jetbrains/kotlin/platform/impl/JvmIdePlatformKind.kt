@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -16,9 +16,10 @@ import org.jetbrains.kotlin.platform.IdePlatform
 import org.jetbrains.kotlin.platform.IdePlatformKind
 import org.jetbrains.kotlin.platform.TargetPlatform
 import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
+import org.jetbrains.kotlin.platform.jvm.isJvm
 
 object JvmIdePlatformKind : IdePlatformKind<JvmIdePlatformKind>() {
-    override fun supportsTargetPlatform(platform: TargetPlatform): Boolean = platforms.contains(platform)
+    override fun supportsTargetPlatform(platform: TargetPlatform): Boolean = platform.isJvm()
 
     override fun platformByCompilerArguments(arguments: CommonCompilerArguments): TargetPlatform? {
         if (arguments !is K2JVMCompilerArguments) return null
@@ -43,7 +44,9 @@ object JvmIdePlatformKind : IdePlatformKind<JvmIdePlatformKind>() {
         return K2JVMCompilerArguments()
     }
 
-    val platforms: List<TargetPlatform> = JvmTarget.values().map { ver -> JvmPlatforms.jvmPlatformByTargetVersion(ver) } + listOf(JvmPlatforms.unspecifiedJvmPlatform)
+    val platforms: List<TargetPlatform> = JvmTarget.values()
+        .map { ver -> JvmPlatforms.jvmPlatformByTargetVersion(ver) } + listOf(JvmPlatforms.unspecifiedJvmPlatform)
+
     override val defaultPlatform get() = JvmPlatforms.defaultJvmPlatform
 
     override val argumentsClass get() = K2JVMCompilerArguments::class.java

@@ -48,7 +48,16 @@ import org.jetbrains.kotlin.renderer.render
 import org.jetbrains.kotlin.resolve.ModifierCheckerCore
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 
-open class KeywordLookupObject
+/**
+ * We want all [KeywordLookupObject]s to be equal to each other.
+ *
+ * That way, if the same keyword is completed twice, it would not be duplicated in the completion. This is not required in the regular
+ * completion, but can be a problem in CodeWithMe plugin (see https://youtrack.jetbrains.com/issue/CWM-438).
+ */
+open class KeywordLookupObject {
+    override fun equals(other: Any?): Boolean = this === other || javaClass == other?.javaClass
+    override fun hashCode(): Int = javaClass.hashCode()
+}
 
 object KeywordCompletion {
     private val ALL_KEYWORDS = (KEYWORDS.types + SOFT_KEYWORDS.types)
@@ -104,7 +113,7 @@ object KeywordCompletion {
             var keyword = keywordToken.value
 
             val nextKeyword = when {
-                keywordToken == SUSPEND_KEYWORD && ((position.containingFile as? KtFile)?.isScript() == true) -> null
+                keywordToken == SUSPEND_KEYWORD && position.getStrictParentOfType<KtTypeReference>() != null -> null
                 else -> COMPOUND_KEYWORDS[keywordToken]
             }
             var applicableAsCompound = false

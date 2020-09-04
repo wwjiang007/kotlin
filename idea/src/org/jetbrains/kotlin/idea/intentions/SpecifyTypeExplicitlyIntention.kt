@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.intentions
@@ -25,8 +14,10 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiDocumentManager
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.core.ShortenReferences
@@ -47,13 +38,16 @@ import org.jetbrains.kotlin.utils.ifEmpty
 
 class SpecifyTypeExplicitlyIntention : SelfTargetingRangeIntention<KtCallableDeclaration>(
     KtCallableDeclaration::class.java,
-    "Specify type explicitly"
+    KotlinBundle.lazyMessage("specify.type.explicitly")
 ), HighPriorityAction {
-
     override fun applicabilityRange(element: KtCallableDeclaration): TextRange? {
         if (!ExplicitApiDeclarationChecker.returnTypeCheckIsApplicable(element)) return null
-
-        text = if (element is KtFunction) "Specify return type explicitly" else "Specify type explicitly"
+        setTextGetter(
+            if (element is KtFunction)
+                KotlinBundle.lazyMessage("specify.return.type.explicitly")
+            else
+                defaultTextGetter
+        )
 
         val initializer = (element as? KtDeclarationWithInitializer)?.initializer
         return if (initializer != null) {
@@ -67,7 +61,7 @@ class SpecifyTypeExplicitlyIntention : SelfTargetingRangeIntention<KtCallableDec
         val type = getTypeForDeclaration(element)
         if (type.isError) {
             if (editor != null) {
-                HintManager.getInstance().showErrorHint(editor, "Cannot infer type for this declaration")
+                HintManager.getInstance().showErrorHint(editor, KotlinBundle.message("cannot.infer.type.for.this.declaration"))
             }
             return
         }
@@ -99,6 +93,7 @@ class SpecifyTypeExplicitlyIntention : SelfTargetingRangeIntention<KtCallableDec
             } else {
                 if (!type.isFlexible()) return null
             }
+
             return type
         }
 
@@ -110,9 +105,11 @@ class SpecifyTypeExplicitlyIntention : SelfTargetingRangeIntention<KtCallableDec
                 else
                     it.returnType
             }
+
             if (type != null && type.isError && descriptor is PropertyDescriptor) {
                 return descriptor.setterType ?: ErrorUtils.createErrorType("null type")
             }
+
             return type ?: ErrorUtils.createErrorType("null type")
         }
 
@@ -141,6 +138,7 @@ class SpecifyTypeExplicitlyIntention : SelfTargetingRangeIntention<KtCallableDec
                 val declarationDescriptor = contextElement.resolveToDescriptorIfAny() as? CallableDescriptor
                 declarationDescriptor?.overriddenDescriptors?.mapNotNull { it.returnType }
             } ?: emptyList()
+
             val types = (listOf(exprType) + overriddenTypes).distinct().flatMap {
                 it.toResolvableApproximations()
             }.ifEmpty { return null }
@@ -160,7 +158,6 @@ class SpecifyTypeExplicitlyIntention : SelfTargetingRangeIntention<KtCallableDec
                     val targetType = types.firstOrNull { !KotlinBuiltIns.isNothingOrNullableNothing(it) } ?: types.first()
                     return TypeChooseValueExpression(listOf(targetType), targetType)
                 }
-
             }
 
             return TypeChooseValueExpression(types, types.first())
@@ -174,7 +171,7 @@ class SpecifyTypeExplicitlyIntention : SelfTargetingRangeIntention<KtCallableDec
                 IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_NO_ANNOTATIONS.renderType(element)
 
             override fun getResult(element: KotlinType): String {
-                val renderType = IdeDescriptorRenderers.SOURCE_CODE.renderType(element)
+                val renderType = IdeDescriptorRenderers.FQ_NAMES_IN_TYPES_WITH_NORMALIZER.renderType(element)
                 val descriptor = element.constructor.declarationDescriptor
                 if (descriptor?.name?.asString() == renderType) {
                     val className = (DescriptorToSourceUtils.descriptorToDeclaration(descriptor) as? KtClass)?.nameIdentifier?.text
@@ -182,16 +179,15 @@ class SpecifyTypeExplicitlyIntention : SelfTargetingRangeIntention<KtCallableDec
                         return className
                     }
                 }
+
                 return renderType
             }
         }
 
-        fun addTypeAnnotation(editor: Editor?, declaration: KtCallableDeclaration, exprType: KotlinType) {
-            if (editor != null) {
-                addTypeAnnotationWithTemplate(editor, declaration, exprType)
-            } else {
-                declaration.setType(exprType)
-            }
+        fun addTypeAnnotation(editor: Editor?, declaration: KtCallableDeclaration, exprType: KotlinType) = if (editor != null) {
+            addTypeAnnotationWithTemplate(editor, declaration, exprType)
+        } else {
+            declaration.setType(exprType)
         }
 
         @JvmOverloads
@@ -229,7 +225,7 @@ class SpecifyTypeExplicitlyIntention : SelfTargetingRangeIntention<KtCallableDec
             val project = declaration.project
             val expression = createTypeExpressionForTemplate(exprType, declaration, useTypesFromOverridden = true) ?: return
 
-            declaration.setType(KotlinBuiltIns.FQ_NAMES.any.asString())
+            declaration.setType(StandardNames.FqNames.any.asString())
 
             PsiDocumentManager.getInstance(project).commitAllDocuments()
             PsiDocumentManager.getInstance(project).doPostponedOperationsAndUnblockDocument(editor.document)

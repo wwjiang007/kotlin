@@ -4,12 +4,15 @@ apply plugin: 'kotlin'
 
 configureJvm6Project(project)
 
-def includeJava9 = BuildPropertiesKt.getKotlinBuildProperties(project).includeJava9
+def includeJava9 = BuildPropertiesExtKt.getIncludeJava9(project.kotlinBuildProperties)
 
 sourceSets {
     main {
         java {
             srcDir "${rootDir}/core/reflection.jvm/src"
+        }
+        resources {
+            srcDir("${rootDir}/core/reflection.jvm/resources")
         }
     }
 
@@ -42,6 +45,9 @@ compileKotlin {
         freeCompilerArgs = ["-version",
                             "-Xallow-kotlin-package",
                             "-Xnormalize-constructor-calls=enable",
+                            "-Xno-optimized-callable-references",
+                            "-Xno-kotlin-nothing-value-exception",
+                            "-Xopt-in=kotlin.RequiresOptIn",
                             "-module-name", "kotlin-reflection"]
     }
 }

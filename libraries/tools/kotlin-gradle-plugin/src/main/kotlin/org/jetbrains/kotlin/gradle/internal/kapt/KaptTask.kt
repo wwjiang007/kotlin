@@ -1,6 +1,5 @@
 package org.jetbrains.kotlin.gradle.internal
 
-import com.intellij.openapi.util.io.FileUtil
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.file.FileCollection
 import org.gradle.api.internal.ConventionTask
@@ -14,6 +13,7 @@ import org.jetbrains.kotlin.gradle.internal.tasks.TaskWithLocalState
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.jetbrains.kotlin.gradle.tasks.cacheOnlyIfEnabledForKotlin
 import org.jetbrains.kotlin.gradle.tasks.clearLocalState
+import org.jetbrains.kotlin.gradle.utils.getValue
 import org.jetbrains.kotlin.gradle.utils.isJavaFile
 import java.io.File
 import java.util.jar.JarFile
@@ -27,23 +27,28 @@ abstract class KaptTask : ConventionTask(), TaskWithLocalState {
         outputs.cacheIf(reason) { useBuildCache }
     }
 
-    override fun localStateDirectories(): FileCollection = project.files()
+    override fun localStateDirectories(): FileCollection = objects.fileCollection()
 
     @get:Internal
+    @field:Transient
     internal lateinit var kotlinCompileTask: KotlinCompile
 
     @get:Internal
     internal lateinit var stubsDir: File
 
-    @get:Classpath
-    @get:InputFiles
-    val kaptClasspath: FileCollection
-        get() = project.files(*kaptClasspathConfigurations.toTypedArray())
+    @get:Internal
+    internal val objects = project.objects
 
     @get:Classpath
     @get:InputFiles
-    val compilerClasspath: List<File>
-        get() = kotlinCompileTask.computedCompilerClasspath
+    val kaptClasspath: FileCollection
+        get() = objects.fileCollection().from(kaptClasspathConfigurations)
+
+    @get:Classpath
+    @get:InputFiles
+    val compilerClasspath: List<File> by project.provider {
+        kotlinCompileTask.computedCompilerClasspath
+    }
 
     @get:Internal
     internal lateinit var kaptClasspathConfigurations: List<Configuration>
@@ -82,8 +87,9 @@ abstract class KaptTask : ConventionTask(), TaskWithLocalState {
 
     // @Internal because _abiClasspath and _nonAbiClasspath are used for actual checks
     @get:Internal
-    val classpath: FileCollection
-        get() = kotlinCompileTask.classpath
+    val classpath: FileCollection by project.provider {
+        kotlinCompileTask.classpath
+    }
 
     @Suppress("unused", "DeprecatedCallableAddReplaceWith")
     @Deprecated(
@@ -92,8 +98,9 @@ abstract class KaptTask : ConventionTask(), TaskWithLocalState {
     )
     @get:CompileClasspath
     @get:InputFiles
-    internal val internalAbiClasspath: FileCollection
-        get() = if (includeCompileClasspath) project.files() else kotlinCompileTask.classpath
+    internal val internalAbiClasspath: FileCollection by project.provider {
+        if (includeCompileClasspath) project.files() else kotlinCompileTask.classpath
+    }
 
 
     @Suppress("unused", "DeprecatedCallableAddReplaceWith")
@@ -103,8 +110,9 @@ abstract class KaptTask : ConventionTask(), TaskWithLocalState {
     )
     @get:Classpath
     @get:InputFiles
-    internal val internalNonAbiClasspath: FileCollection
-        get() = if (includeCompileClasspath) kotlinCompileTask.classpath else project.files()
+    internal val internalNonAbiClasspath: FileCollection by project.provider {
+        if (includeCompileClasspath) kotlinCompileTask.classpath else project.files()
+    }
 
     @get:Internal
     var useBuildCache: Boolean = false
@@ -120,15 +128,47 @@ abstract class KaptTask : ConventionTask(), TaskWithLocalState {
             return result
         }
 
+    // store the files before filtering, so that Gradle doesn't serialize the filtered collection for instant execution state and reuse it
+    private val unfilteredJavaSourceRoots by project.provider {
+        (kotlinCompileTask.sourceRootsContainer.sourceRoots + stubsDir)
+    }
+
     @get:Internal
     protected val javaSourceRoots: Set<File>
-        get() = (kotlinCompileTask.sourceRootsContainer.sourceRoots + stubsDir)
-            .filterTo(HashSet(), ::isRootAllowed)
+        get() = unfilteredJavaSourceRoots.filterTo(HashSet(), ::isRootAllowed)
 
     private fun isRootAllowed(file: File): Boolean =
         file.exists() &&
-                !FileUtil.isAncestor(destinationDir, file, /* strict = */ false) &&
-                !FileUtil.isAncestor(classesDir, file, /* strict = */ false)
+                !isAncestor(destinationDir, file) &&
+                !isAncestor(classesDir, file)
+
+    //Have to avoid using FileUtil because it is required system property reading that is not allowed for configuration cache
+    private fun isAncestor(dir: File, file: File): Boolean {
+        val path = file.canonicalPath
+        val prefix = dir.canonicalPath
+        val pathLength = path.length
+        val prefixLength = prefix.length
+        //TODO
+        val caseSensitive = true
+        return if (prefixLength == 0) {
+            true
+        } else if (prefixLength > pathLength) {
+            false
+        } else if (!path.regionMatches(0, prefix, 0, prefixLength, ignoreCase = !caseSensitive)) {
+            return false
+        } else if (pathLength == prefixLength) {
+            return true
+        } else {
+            val lastPrefixChar: Char = prefix.get(prefixLength - 1)
+            var slashOrSeparatorIdx = prefixLength
+            if (lastPrefixChar == '/' || lastPrefixChar == File.separatorChar) {
+                slashOrSeparatorIdx = prefixLength - 1
+            }
+            val next1 = path[slashOrSeparatorIdx]
+            return !(next1 != '/' && next1 != File.separatorChar)
+        }
+    }
+
 
     private fun FileCollection?.orEmpty(): FileCollection =
         this ?: project.files()
@@ -163,8 +203,10 @@ abstract class KaptTask : ConventionTask(), TaskWithLocalState {
     }
 
     // TODO(gavra): Here we assume that kotlinc and javac output is available for incremental runs. We should insert some checks.
-    @Internal
-    protected fun getCompiledSources() = listOfNotNull(kotlinCompileTask.destinationDir, kotlinCompileTask.javaOutputDir)
+    @get:Internal
+    internal val compiledSources by project.provider {
+        listOfNotNull(kotlinCompileTask.destinationDir, kotlinCompileTask.javaOutputDir)
+    }
 
     protected fun getIncrementalChanges(inputs: IncrementalTaskInputs): KaptIncrementalChanges {
         return if (isIncremental) {

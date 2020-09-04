@@ -5,11 +5,11 @@
 
 package org.jetbrains.kotlin.ir.backend.js.lower
 
-import org.jetbrains.kotlin.backend.common.FileLoweringPass
+import org.jetbrains.kotlin.backend.common.BodyLoweringPass
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
-import org.jetbrains.kotlin.ir.declarations.IrFile
-import org.jetbrains.kotlin.ir.declarations.name
+import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstructorCallImpl
@@ -21,21 +21,22 @@ import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 
-class VarargLowering(val context: JsIrBackendContext) : FileLoweringPass {
-    override fun lower(irFile: IrFile) {
-        irFile.transformChildrenVoid(VarargTransformer(context))
+class VarargLowering(val context: JsIrBackendContext) : BodyLoweringPass {
+
+    override fun lower(irBody: IrBody, container: IrDeclaration) {
+        irBody.transformChildrenVoid(VarargTransformer(context))
     }
 }
-
 private class VarargTransformer(
     val context: JsIrBackendContext
 ) : IrElementTransformerVoid() {
 
+    @OptIn(ObsoleteDescriptorBasedAPI::class)
     private fun List<IrExpression>.toArrayLiteral(type: IrType, varargElementType: IrType): IrExpression {
 
         // TODO: Use symbols when builtins symbol table is fixes
         val primitiveType = context.intrinsics.primitiveArrays
-            .mapKeys { it.key.descriptor }[type.classifierOrNull?.descriptor]
+            .mapKeys { it.key }[type.classifierOrNull]
 
         val intrinsic =
             if (primitiveType != null)
@@ -48,8 +49,15 @@ private class VarargTransformer(
 
         val irVararg = IrVarargImpl(startOffset, endOffset, type, varargElementType, this)
 
-        return IrCallImpl(startOffset, endOffset, type, intrinsic).apply {
-            if (intrinsic.owner.typeParameters.isNotEmpty()) putTypeArgument(0, varargElementType)
+        return IrCallImpl(
+            startOffset, endOffset,
+            type, intrinsic,
+            typeArgumentsCount = if (intrinsic.owner.typeParameters.isNotEmpty()) 1 else 0,
+            valueArgumentsCount = 1
+        ).apply {
+            if (typeArgumentsCount == 1) {
+                putTypeArgument(0, varargElementType)
+            }
             putValueArgument(0, irVararg)
         }
     }
@@ -150,7 +158,9 @@ private class VarargTransformer(
                     expression.startOffset,
                     expression.endOffset,
                     arrayInfo.primitiveArrayType,
-                    copyFunction
+                    copyFunction,
+                    typeArgumentsCount = 1,
+                    valueArgumentsCount = 1
                 ).apply {
                     putTypeArgument(0, arrayInfo.primitiveArrayType)
                     putValueArgument(0, segment)
@@ -176,7 +186,9 @@ private class VarargTransformer(
             expression.startOffset,
             expression.endOffset,
             arrayInfo.primitiveArrayType,
-            concatFun
+            concatFun,
+            typeArgumentsCount = 0,
+            valueArgumentsCount = 1
         ).apply {
             putValueArgument(0, arrayLiteral)
         }

@@ -20,6 +20,7 @@ import kotlin.Pair;
 import kotlin.Unit;
 import kotlin.annotations.jvm.Mutable;
 import kotlin.collections.CollectionsKt;
+import kotlin.jvm.functions.Function0;
 import kotlin.jvm.functions.Function1;
 import kotlin.jvm.functions.Function2;
 import org.jetbrains.annotations.NotNull;
@@ -76,6 +77,14 @@ public class OverridingUtil {
         return new OverridingUtil(DEFAULT_TYPE_CONSTRUCTOR_EQUALITY, kotlinTypeRefiner);
     }
 
+    @NotNull
+    public static OverridingUtil create(
+            @NotNull KotlinTypeRefiner kotlinTypeRefiner,
+            @NotNull KotlinTypeChecker.TypeConstructorEquality equalityAxioms
+    ) {
+            return new OverridingUtil(equalityAxioms, kotlinTypeRefiner);
+    }
+
     private final KotlinTypeRefiner kotlinTypeRefiner;
     private final KotlinTypeChecker.TypeConstructorEquality equalityAxioms;
 
@@ -97,7 +106,7 @@ public class OverridingUtil {
                                         DescriptorUtilsKt
                                                 .isTypeRefinementEnabled(DescriptorUtilsKt.getModule(candidateSet.iterator().next()));
 
-        return filterOverrides(candidateSet, allowDescriptorCopies, new Function2<D, D, Pair<CallableDescriptor, CallableDescriptor>>() {
+        return filterOverrides(candidateSet, allowDescriptorCopies, null, new Function2<D, D, Pair<CallableDescriptor, CallableDescriptor>>() {
             @Override
             public Pair<CallableDescriptor, CallableDescriptor> invoke(D a, D b) {
                 return new Pair<CallableDescriptor, CallableDescriptor>(a, b);
@@ -109,6 +118,7 @@ public class OverridingUtil {
     public static <D> Set<D> filterOverrides(
             @NotNull Set<D> candidateSet,
             boolean allowDescriptorCopies,
+            @Nullable Function0<?> cancellationCallback,
             @NotNull Function2<? super D, ? super D, Pair<CallableDescriptor, CallableDescriptor>> transformFirst
     ) {
         if (candidateSet.size() <= 1) return candidateSet;
@@ -116,15 +126,18 @@ public class OverridingUtil {
         Set<D> result = new LinkedHashSet<D>();
         outerLoop:
         for (D meD : candidateSet) {
+            if (cancellationCallback != null) {
+                cancellationCallback.invoke();
+            }
             for (Iterator<D> iterator = result.iterator(); iterator.hasNext(); ) {
                 D otherD = iterator.next();
                 Pair<CallableDescriptor, CallableDescriptor> meAndOther = transformFirst.invoke(meD, otherD);
                 CallableDescriptor me = meAndOther.component1();
                 CallableDescriptor other = meAndOther.component2();
-                if (overrides(me, other, allowDescriptorCopies)) {
+                if (overrides(me, other, allowDescriptorCopies, true)) {
                     iterator.remove();
                 }
-                else if (overrides(other, me, allowDescriptorCopies)) {
+                else if (overrides(other, me, allowDescriptorCopies, true)) {
                     continue outerLoop;
                 }
             }
@@ -140,7 +153,10 @@ public class OverridingUtil {
      * @return whether f overrides g
      */
     public static <D extends CallableDescriptor> boolean overrides(
-            @NotNull D f, @NotNull D g, boolean allowDeclarationCopies
+            @NotNull D f,
+            @NotNull D g,
+            boolean allowDeclarationCopies,
+            boolean distinguishExpectsAndNonExpects
     ) {
         // In a multi-module project different "copies" of the same class may be present in different libraries,
         // that's why we use structural equivalence for members (DescriptorEquivalenceForOverrides).
@@ -150,11 +166,27 @@ public class OverridingUtil {
         // we'll be getting sets of members that do not override each other, but are structurally equivalent.
         // As other code relies on no equal descriptors passed here, we guard against f == g, but this may not be necessary
         // Note that this is needed for the usage of this function in the IDE code
-        if (!f.equals(g) && DescriptorEquivalenceForOverrides.INSTANCE.areEquivalent(f.getOriginal(), g.getOriginal(), allowDeclarationCopies)) return true;
+        if (!f.equals(g)
+            && DescriptorEquivalenceForOverrides.INSTANCE.areEquivalent(
+                    f.getOriginal(),
+                    g.getOriginal(),
+                    allowDeclarationCopies,
+                    distinguishExpectsAndNonExpects
+            )
+        ) {
+            return true;
+        }
 
         CallableDescriptor originalG = g.getOriginal();
         for (D overriddenFunction : DescriptorUtils.getAllOverriddenDescriptors(f)) {
-            if (DescriptorEquivalenceForOverrides.INSTANCE.areEquivalent(originalG, overriddenFunction, allowDeclarationCopies)) return true;
+            if (DescriptorEquivalenceForOverrides.INSTANCE.areEquivalent(
+                    originalG,
+                    overriddenFunction,
+                    allowDeclarationCopies,
+                    distinguishExpectsAndNonExpects
+            )) {
+                return true;
+            }
         }
         return false;
     }
@@ -457,8 +489,8 @@ public class OverridingUtil {
     }
 
     public static boolean isVisibleForOverride(@NotNull MemberDescriptor overriding, @NotNull MemberDescriptor fromSuper) {
-        return !Visibilities.isPrivate(fromSuper.getVisibility()) &&
-               Visibilities.isVisibleIgnoringReceiver(fromSuper, overriding);
+        return !DescriptorVisibilities.isPrivate(fromSuper.getVisibility()) &&
+               DescriptorVisibilities.isVisibleIgnoringReceiver(fromSuper, overriding);
     }
 
     private Collection<CallableMemberDescriptor> extractAndBindOverridesForMember(
@@ -569,7 +601,7 @@ public class OverridingUtil {
             @NotNull DeclarationDescriptorWithVisibility a,
             @NotNull DeclarationDescriptorWithVisibility b
     ) {
-        Integer result = Visibilities.compare(a.getVisibility(), b.getVisibility());
+        Integer result = DescriptorVisibilities.compare(a.getVisibility(), b.getVisibility());
         return result == null || result >= 0;
     }
 
@@ -659,7 +691,7 @@ public class OverridingUtil {
         Collection<CallableMemberDescriptor> effectiveOverridden = allInvisible ? overridables : visibleOverridables;
 
         Modality modality = determineModalityForFakeOverride(effectiveOverridden, current);
-        Visibility visibility = allInvisible ? Visibilities.INVISIBLE_FAKE : Visibilities.INHERITED;
+        DescriptorVisibility visibility = allInvisible ? DescriptorVisibilities.INVISIBLE_FAKE : DescriptorVisibilities.INHERITED;
 
         // FIXME doesn't work as expected for flexible types: should create a refined signature.
         // Current algorithm produces bad results in presence of annotated Java signatures such as:
@@ -756,8 +788,8 @@ public class OverridingUtil {
             @Override
             public Boolean invoke(CallableMemberDescriptor descriptor) {
                 //nested class could capture private member, so check for private visibility added
-                return !Visibilities.isPrivate(descriptor.getVisibility()) &&
-                       Visibilities.isVisibleIgnoringReceiver(descriptor, current);
+                return !DescriptorVisibilities.isPrivate(descriptor.getVisibility()) &&
+                       DescriptorVisibilities.isVisibleIgnoringReceiver(descriptor, current);
             }
         });
     }
@@ -840,22 +872,22 @@ public class OverridingUtil {
             @Nullable Function1<CallableMemberDescriptor, Unit> cannotInferVisibility
     ) {
         for (CallableMemberDescriptor descriptor : memberDescriptor.getOverriddenDescriptors()) {
-            if (descriptor.getVisibility() == Visibilities.INHERITED) {
+            if (descriptor.getVisibility() == DescriptorVisibilities.INHERITED) {
                 resolveUnknownVisibilityForMember(descriptor, cannotInferVisibility);
             }
         }
 
-        if (memberDescriptor.getVisibility() != Visibilities.INHERITED) {
+        if (memberDescriptor.getVisibility() != DescriptorVisibilities.INHERITED) {
             return;
         }
 
-        Visibility maxVisibility = computeVisibilityToInherit(memberDescriptor);
-        Visibility visibilityToInherit;
+        DescriptorVisibility maxVisibility = computeVisibilityToInherit(memberDescriptor);
+        DescriptorVisibility visibilityToInherit;
         if (maxVisibility == null) {
             if (cannotInferVisibility != null) {
                 cannotInferVisibility.invoke(memberDescriptor);
             }
-            visibilityToInherit = Visibilities.PUBLIC;
+            visibilityToInherit = DescriptorVisibilities.PUBLIC;
         }
         else {
             visibilityToInherit = maxVisibility;
@@ -882,9 +914,9 @@ public class OverridingUtil {
     }
 
     @Nullable
-    private static Visibility computeVisibilityToInherit(@NotNull CallableMemberDescriptor memberDescriptor) {
+    private static DescriptorVisibility computeVisibilityToInherit(@NotNull CallableMemberDescriptor memberDescriptor) {
         Collection<? extends CallableMemberDescriptor> overriddenDescriptors = memberDescriptor.getOverriddenDescriptors();
-        Visibility maxVisibility = findMaxVisibility(overriddenDescriptors);
+        DescriptorVisibility maxVisibility = findMaxVisibility(overriddenDescriptors);
         if (maxVisibility == null) {
             return null;
         }
@@ -901,19 +933,19 @@ public class OverridingUtil {
     }
 
     @Nullable
-    public static Visibility findMaxVisibility(@NotNull Collection<? extends CallableMemberDescriptor> descriptors) {
+    public static DescriptorVisibility findMaxVisibility(@NotNull Collection<? extends CallableMemberDescriptor> descriptors) {
         if (descriptors.isEmpty()) {
-            return Visibilities.DEFAULT_VISIBILITY;
+            return DescriptorVisibilities.DEFAULT_VISIBILITY;
         }
-        Visibility maxVisibility = null;
+        DescriptorVisibility maxVisibility = null;
         for (CallableMemberDescriptor descriptor : descriptors) {
-            Visibility visibility = descriptor.getVisibility();
-            assert visibility != Visibilities.INHERITED : "Visibility should have been computed for " + descriptor;
+            DescriptorVisibility visibility = descriptor.getVisibility();
+            assert visibility != DescriptorVisibilities.INHERITED : "Visibility should have been computed for " + descriptor;
             if (maxVisibility == null) {
                 maxVisibility = visibility;
                 continue;
             }
-            Integer compareResult = Visibilities.compare(visibility, maxVisibility);
+            Integer compareResult = DescriptorVisibilities.compare(visibility, maxVisibility);
             if (compareResult == null) {
                 maxVisibility = null;
             }
@@ -925,7 +957,7 @@ public class OverridingUtil {
             return null;
         }
         for (CallableMemberDescriptor descriptor : descriptors) {
-            Integer compareResult = Visibilities.compare(maxVisibility, descriptor.getVisibility());
+            Integer compareResult = DescriptorVisibilities.compare(maxVisibility, descriptor.getVisibility());
             if (compareResult == null || compareResult < 0) {
                 return null;
             }

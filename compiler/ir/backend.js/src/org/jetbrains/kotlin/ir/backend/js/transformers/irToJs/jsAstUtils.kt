@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.ir.backend.js.transformers.irToJs
 
 import org.jetbrains.kotlin.backend.common.ir.isElseBranch
 import org.jetbrains.kotlin.backend.common.ir.isSuspend
+import org.jetbrains.kotlin.ir.backend.js.lower.InteropCallableReferenceLowering
 import org.jetbrains.kotlin.ir.backend.js.utils.*
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
@@ -54,18 +55,19 @@ fun translateFunction(declaration: IrFunction, name: JsName?, context: JsGenerat
 
     declaration.extensionReceiverParameter?.let { function.addParameter(functionContext.getNameForValueDeclaration(it)) }
     functionParams.forEach { function.addParameter(it) }
-    if (declaration.descriptor.isSuspend) {
+    if (declaration.isSuspend) {
         function.addParameter(JsName(Namer.CONTINUATION)) // TODO: Use namer?
     }
 
     return function
 }
 
-private fun isNativeInvoke(call: IrCall): Boolean {
+private fun isFunctionTypeInvoke(receiver: JsExpression?, call: IrCall): Boolean {
+    if (receiver == null || receiver is JsThisRef) return false
     val simpleFunction = call.symbol.owner as? IrSimpleFunction ?: return false
     val receiverType = simpleFunction.dispatchReceiverParameter?.type ?: return false
 
-    if (simpleFunction.isSuspend) return false
+    if (call.origin === InteropCallableReferenceLowering.Companion.EXPLICIT_INVOKE) return false
 
     return simpleFunction.name == OperatorNameConventions.INVOKE && receiverType.isFunctionTypeOrSubtype()
 }
@@ -76,11 +78,8 @@ fun translateCall(
     transformer: IrElementToJsExpressionTransformer
 ): JsExpression {
     val function = expression.symbol.owner.realOverrideTarget
-    require(function is IrSimpleFunction) { "Only IrSimpleFunction could be called via IrCall" } // TODO: fix it in IrCall
 
-    val symbol = function.symbol
-
-    context.staticContext.intrinsics[symbol]?.let {
+    context.staticContext.intrinsics[function.symbol]?.let {
         return it(expression, context)
     }
 
@@ -102,8 +101,8 @@ fun translateCall(
         }
     }
 
-    if (isNativeInvoke(expression)) {
-        return JsInvocation(jsDispatchReceiver!!, arguments)
+    if (isFunctionTypeInvoke(jsDispatchReceiver, expression) || expression.symbol.owner.isJsNativeInvoke()) {
+        return JsInvocation(jsDispatchReceiver ?: jsExtensionReceiver!!, arguments)
     }
 
     expression.superQualifierSymbol?.let { superQualifier ->
@@ -199,13 +198,15 @@ fun translateCall(
     }
 }
 
-fun translateCallArguments(expression: IrMemberAccessExpression, context: JsGenerationContext, transformer: IrElementToJsExpressionTransformer): List<JsExpression> {
+fun translateCallArguments(expression: IrMemberAccessExpression<*>, context: JsGenerationContext, transformer: IrElementToJsExpressionTransformer): List<JsExpression> {
     val size = expression.valueArgumentsCount
 
     val arguments = (0 until size).mapTo(ArrayList(size)) { index ->
         val argument = expression.getValueArgument(index)
         val result = argument?.accept(transformer, context)
         if (result == null) {
+            if (context.staticContext.backendContext.es6mode) return@mapTo JsPrefixOperation(JsUnaryOperator.VOID, JsIntLiteral(2))
+
             assert(expression is IrFunctionAccessExpression && expression.symbol.owner.isExternalOrInheritedFromExternal())
             JsPrefixOperation(JsUnaryOperator.VOID, JsIntLiteral(1))
         } else
@@ -226,8 +227,8 @@ fun defineProperty(receiver: JsExpression, name: String, value: () -> JsExpressi
 
 fun defineProperty(receiver: JsExpression, name: String, getter: JsExpression?, setter: JsExpression? = null) =
     defineProperty(receiver, name) {
-        val literal = JsObjectLiteral(true)
-        literal.apply {
+        JsObjectLiteral(true).apply {
+            propertyInitializers += JsPropertyInitializer(JsStringLiteral("configurable"), JsBooleanLiteral(true))
             if (getter != null)
                 propertyInitializers += JsPropertyInitializer(JsStringLiteral("get"), getter)
             if (setter != null)

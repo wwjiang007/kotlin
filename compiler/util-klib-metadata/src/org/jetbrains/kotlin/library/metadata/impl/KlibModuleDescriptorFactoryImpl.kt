@@ -6,11 +6,13 @@
 package org.jetbrains.kotlin.descriptors.konan.impl
 
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
-import org.jetbrains.kotlin.descriptors.ModuleDescriptor
+import org.jetbrains.kotlin.descriptors.ModuleCapability
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
-import org.jetbrains.kotlin.descriptors.konan.*
+import org.jetbrains.kotlin.descriptors.konan.KlibModuleDescriptorFactory
+import org.jetbrains.kotlin.descriptors.konan.KlibModuleOrigin
 import org.jetbrains.kotlin.descriptors.konan.isInteropLibrary
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.platform.konan.NativePlatforms
 import org.jetbrains.kotlin.resolve.ImplicitIntegerCoercion
 import org.jetbrains.kotlin.storage.StorageManager
 
@@ -21,7 +23,7 @@ internal class KlibModuleDescriptorFactoryImpl(val createBuiltIns: (StorageManag
         storageManager: StorageManager,
         builtIns: KotlinBuiltIns,
         origin: KlibModuleOrigin,
-        customCapabilities: Map<ModuleDescriptor.Capability<*>, Any?>
+        customCapabilities: Map<ModuleCapability<*>, Any?>
     ) = ModuleDescriptorImpl(
         name,
         storageManager,
@@ -29,14 +31,16 @@ internal class KlibModuleDescriptorFactoryImpl(val createBuiltIns: (StorageManag
         capabilities = customCapabilities + mapOf(
             KlibModuleOrigin.CAPABILITY to origin,
             ImplicitIntegerCoercion.MODULE_CAPABILITY to origin.isInteropLibrary()
-        )
+        ),
+        // TODO: don't use hardcoded platform; it should be supplied as a parameter
+        platform = NativePlatforms.unspecifiedNativePlatform
     )
 
     override fun createDescriptorAndNewBuiltIns(
         name: Name,
         storageManager: StorageManager,
         origin: KlibModuleOrigin,
-        customCapabilities: Map<ModuleDescriptor.Capability<*>, Any?>
+        customCapabilities: Map<ModuleCapability<*>, Any?>
     ): ModuleDescriptorImpl {
 
         val builtIns = createBuiltIns(storageManager)

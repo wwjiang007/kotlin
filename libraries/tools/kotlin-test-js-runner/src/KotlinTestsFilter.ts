@@ -2,9 +2,9 @@ import {escapeRegExp, startsWith, trim} from "./utils";
 import {KotlinTestRunner} from "./KotlinTestRunner";
 
 export interface KotlinTestsFilter {
-    mayContainTestsFromSuite(fqn: string): boolean;
+    mayContainTestsFromSuite(fqn: string, alternativeFqn?: string): boolean;
 
-    containsTest(fqn: string): boolean;
+    containsTest(fqn: string, alternativeFqn?: string): boolean;
 }
 
 export function runWithFilter(
@@ -38,20 +38,14 @@ export function runWithFilter(
         return `${path[0]}.${javaClassName}`
     }
 
-    function everyOfJsOrJavaNames(
-        predicate: (value: string) => boolean
-    ): boolean {
-        return [jsClassName(), javaClassName()]
-            .every(value => predicate(value))
-    }
-
     return {
         suite: function (name: string, isIgnored: boolean, fn: () => void) {
             path.push(name);
 
             try {
-                if (path.length > 0 && everyOfJsOrJavaNames((value) => !filter.mayContainTestsFromSuite(value)))
+                if (path.length > 0 && !filter.mayContainTestsFromSuite(jsClassName(), javaClassName())) {
                     return;
+                }
 
                 runner.suite(name, isIgnored, fn);
             } finally {
@@ -61,7 +55,7 @@ export function runWithFilter(
 
         test: function (name: string, isIgnored: boolean, fn: () => void) {
             try {
-                if (everyOfJsOrJavaNames(value => !filter.containsTest(`${value}.${name}`)))
+                if (!filter.containsTest(`${jsClassName()}.${name}`, `${javaClassName()}.${name}`))
                     return;
 
                 runner.test(name, isIgnored, fn);
@@ -105,17 +99,13 @@ export class StartsWithFilter implements KotlinTestsFilter {
     ) {
     }
 
-    isPrefixMatched(fqn: string): boolean {
+    mayContainTestsFromSuite(fqn: string): boolean {
         return startsWith(this.prefix, fqn)
             || startsWith(fqn, this.prefix);
     }
 
-    mayContainTestsFromSuite(fqn: string): boolean {
-        return this.isPrefixMatched(fqn);
-    }
-
     containsAllTestsFromSuite(fqn: string): boolean {
-        return this.filter == null && this.isPrefixMatched(fqn);
+        return this.filter == null && startsWith(fqn, this.prefix);
     }
 
     containsTest(fqn: string): boolean {
@@ -182,22 +172,26 @@ export class CompositeTestFilter implements KotlinTestsFilter {
         })
     }
 
-    mayContainTestsFromSuite(fqn: string): boolean {
+    mayContainTestsFromSuite(fqn: string, alternativeFqn: string): boolean {
         for (const excl of this.excludePrefix) {
-            if (excl.containsAllTestsFromSuite(fqn)) return false
+            if (excl.containsAllTestsFromSuite(fqn) || excl.containsAllTestsFromSuite(alternativeFqn)) {
+                return false
+            }
         }
         for (const incl of this.include) {
-            if (incl.mayContainTestsFromSuite(fqn)) return true
+            if (incl.mayContainTestsFromSuite(fqn) || incl.mayContainTestsFromSuite(alternativeFqn)) {
+                return true
+            }
         }
         return false;
     }
 
-    containsTest(fqn: string): boolean {
+    containsTest(fqn: string, alternativeFqn: string): boolean {
         for (const excl of this.exclude) {
-            if (excl.containsTest(fqn)) return false
+            if (excl.containsTest(fqn) || excl.containsTest(alternativeFqn)) return false
         }
         for (const incl of this.include) {
-            if (incl.containsTest(fqn)) return true
+            if (incl.containsTest(fqn) || incl.containsTest(alternativeFqn)) return true
         }
         return false
     }

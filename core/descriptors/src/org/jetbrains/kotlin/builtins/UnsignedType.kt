@@ -43,6 +43,7 @@ object UnsignedTypes {
     fun getUnsignedClassIdByArrayClassId(arrayClassId: ClassId): ClassId? = arrayClassIdToUnsignedClassId[arrayClassId]
     fun getUnsignedArrayClassIdByUnsignedClassId(arrayClassId: ClassId): ClassId? = unsignedClassIdToArrayClassId[arrayClassId]
 
+    @JvmStatic
     fun isUnsignedType(type: KotlinType): Boolean {
         if (TypeUtils.noExpectedType(type)) return false
 
@@ -62,7 +63,7 @@ object UnsignedTypes {
     fun isUnsignedClass(descriptor: DeclarationDescriptor): Boolean {
         val container = descriptor.containingDeclaration
         return container is PackageFragmentDescriptor &&
-                container.fqName == KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAME &&
+                container.fqName == StandardNames.BUILT_INS_PACKAGE_FQ_NAME &&
                 descriptor.name in UnsignedTypes.unsignedTypeNames
     }
 }

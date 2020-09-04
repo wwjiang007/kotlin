@@ -7,14 +7,12 @@ package org.jetbrains.kotlin.fir.java.scopes
 
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.fir.FirSession
-import org.jetbrains.kotlin.fir.declarations.FirCallableMemberDeclaration
-import org.jetbrains.kotlin.fir.declarations.FirProperty
-import org.jetbrains.kotlin.fir.declarations.FirSimpleFunction
-import org.jetbrains.kotlin.fir.declarations.modality
+import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.java.JavaTypeParameterStack
 import org.jetbrains.kotlin.fir.java.enhancement.readOnlyToMutable
-import org.jetbrains.kotlin.fir.java.toNotNullConeKotlinType
+import org.jetbrains.kotlin.fir.java.toConeKotlinTypeProbablyFlexible
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
+import org.jetbrains.kotlin.fir.resolve.substitution.substitutorByMap
 import org.jetbrains.kotlin.fir.scopes.impl.FirAbstractOverrideChecker
 import org.jetbrains.kotlin.fir.typeContext
 import org.jetbrains.kotlin.fir.types.*
@@ -28,32 +26,56 @@ class JavaOverrideChecker internal constructor(
     private fun isEqualTypes(candidateType: ConeKotlinType, baseType: ConeKotlinType, substitutor: ConeSubstitutor): Boolean {
         if (candidateType is ConeFlexibleType) return isEqualTypes(candidateType.lowerBound, baseType, substitutor)
         if (baseType is ConeFlexibleType) return isEqualTypes(candidateType, baseType.lowerBound, substitutor)
-        return if (candidateType is ConeClassLikeType && baseType is ConeClassLikeType) {
-            candidateType.lookupTag.classId.let { it.readOnlyToMutable() ?: it } == baseType.lookupTag.classId.let { it.readOnlyToMutable() ?: it }
-        } else {
-            with(context) {
-                isEqualTypeConstructors(
-                    substitutor.substituteOrSelf(candidateType).typeConstructor(),
-                    substitutor.substituteOrSelf(baseType).typeConstructor()
-                )
+        if (candidateType is ConeClassLikeType && baseType is ConeClassLikeType) {
+            return candidateType.lookupTag.classId.let { it.readOnlyToMutable() ?: it } == baseType.lookupTag.classId.let { it.readOnlyToMutable() ?: it }
+        }
+        if (candidateType is ConeClassLikeType && baseType is ConeTypeParameterType) {
+            val boundType = baseType.lookupTag.typeParameterSymbol.fir.bounds.singleOrNull()?.toConeKotlinTypeProbablyFlexible(
+                session, javaTypeParameterStack
+            )
+            if (boundType != null) {
+                return isEqualTypes(candidateType, boundType, substitutor)
             }
+        }
+        return with(context) {
+            isEqualTypeConstructors(
+                substitutor.substituteOrSelf(candidateType).typeConstructor(),
+                substitutor.substituteOrSelf(baseType).typeConstructor()
+            )
         }
     }
 
     override fun isEqualTypes(candidateTypeRef: FirTypeRef, baseTypeRef: FirTypeRef, substitutor: ConeSubstitutor) =
         isEqualTypes(
-            candidateTypeRef.toNotNullConeKotlinType(session, javaTypeParameterStack),
-            baseTypeRef.toNotNullConeKotlinType(session, javaTypeParameterStack),
+            candidateTypeRef.toConeKotlinTypeProbablyFlexible(session, javaTypeParameterStack),
+            baseTypeRef.toConeKotlinTypeProbablyFlexible(session, javaTypeParameterStack),
             substitutor
         )
 
+    override fun buildTypeParametersSubstitutorIfCompatible(
+        overrideCandidate: FirCallableMemberDeclaration<*>,
+        baseDeclaration: FirCallableMemberDeclaration<*>
+    ): ConeSubstitutor? {
+
+        if (overrideCandidate.typeParameters.isEmpty() && baseDeclaration.typeParameters.isEmpty()) return ConeSubstitutor.Empty
+
+        val typeParametersErasure =
+            (overrideCandidate.typeParameters + baseDeclaration.typeParameters).associate {
+                val symbol = it.symbol
+                val firstBound = symbol.fir.bounds.first() // Note that in Java type parameter typed arguments always erased to first bound
+                symbol to firstBound.toConeKotlinTypeProbablyFlexible(session, javaTypeParameterStack)
+            }
+        return substitutorByMap(typeParametersErasure)
+    }
+
     override fun isOverriddenFunction(overrideCandidate: FirSimpleFunction, baseDeclaration: FirSimpleFunction): Boolean {
+        if (overrideCandidate.isStatic != baseDeclaration.isStatic) return false
         // NB: overrideCandidate is from Java and has no receiver
         val receiverTypeRef = baseDeclaration.receiverTypeRef
         val baseParameterTypes = listOfNotNull(receiverTypeRef) + baseDeclaration.valueParameters.map { it.returnTypeRef }
 
         if (overrideCandidate.valueParameters.size != baseParameterTypes.size) return false
-        val substitutor = getSubstitutorIfTypeParametersAreCompatible(overrideCandidate, baseDeclaration) ?: return false
+        val substitutor = buildTypeParametersSubstitutorIfCompatible(overrideCandidate, baseDeclaration) ?: return false
 
         return overrideCandidate.valueParameters.zip(baseParameterTypes).all { (paramFromJava, baseType) ->
             isEqualTypes(paramFromJava.returnTypeRef, baseType, substitutor)

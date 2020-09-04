@@ -96,6 +96,37 @@ class KaptIncrementalWithIsolatingApt : KaptIncrementalIT() {
     }
 
     @Test
+    fun testUnchangedAnnotationProcessorClasspathButContentChanged() {
+        val project = getProject()
+        val processorJar = project.projectDir.resolve("processor.jar").also {
+            ZipOutputStream(it.outputStream()).use {
+                // create an empty jar
+            }
+        }
+        project.gradleBuildScript().appendText(
+            """
+            
+            dependencies {
+                kapt files("processor.jar")
+            }
+        """.trimIndent()
+        )
+
+        project.build("clean", "build") {
+            assertSuccessful()
+        }
+
+        ZipOutputStream(processorJar.outputStream()).use {
+            it.putNextEntry(ZipEntry("resource.txt"))
+            it.closeEntry()
+        }
+        project.build("build") {
+            assertSuccessful()
+            assertContains("Unable to use existing data, re-initializing classpath information for KAPT.")
+        }
+    }
+
+    @Test
     fun testNonIncrementalWithUnrecognizedInputs() {
         val project = getProject()
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2017 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2000-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -17,6 +17,7 @@ import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.ex.dummy.DummyFileSystem
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.NotNullableUserDataProperty
@@ -25,11 +26,14 @@ fun showDecompiledCode(sourceFile: KtFile) {
     ProgressManager.getInstance().run(KotlinBytecodeDecompilerTask(sourceFile))
 }
 
-class KotlinBytecodeDecompilerTask(val file: KtFile) : Task.Backgroundable(file.project, "Decompile kotlin bytecode") {
+class KotlinBytecodeDecompilerTask(val file: KtFile) : Task.Backgroundable(
+    file.project,
+    KotlinBundle.message("internal.action.text.decompile.kotlin.bytecode")
+) {
     override fun run(indicator: ProgressIndicator) {
         val decompilerService = KotlinDecompilerService.getInstance() ?: return
 
-        indicator.text = "Decompiling ${file.name}"
+        indicator.text = KotlinBundle.message("internal.indicator.text.decompiling", file.name)
 
         val decompiledText = try {
             decompilerService.decompile(file)
@@ -43,7 +47,10 @@ class KotlinBytecodeDecompilerTask(val file: KtFile) : Task.Backgroundable(file.
 
                 if (decompiledText == null) {
                     ApplicationManager.getApplication().invokeLater {
-                        Messages.showErrorDialog("Cannot decompile ${file.name}", "Decompiler error")
+                        Messages.showErrorDialog(
+                            KotlinBundle.message("internal.error.text.cannot.decompile", file.name),
+                            KotlinBundle.message("internal.title.decompiler.error")
+                        )
                     }
                     return@runWriteAction
                 }
@@ -67,6 +74,6 @@ val KOTLIN_DECOMPILED_ROOT = "dummy://$KOTLIN_DECOMPILED_FOLDER"
 var VirtualFile.isKotlinDecompiledFile: Boolean by NotNullableUserDataProperty(Key.create("IS_KOTLIN_DECOMPILED_FILE"), false)
 
 fun getOrCreateDummyRoot(): VirtualFile =
-    VirtualFileManager.getInstance().refreshAndFindFileByUrl(KOTLIN_DECOMPILED_ROOT) ?:
-       DummyFileSystem.getInstance().createRoot(KOTLIN_DECOMPILED_FOLDER)
+    VirtualFileManager.getInstance().refreshAndFindFileByUrl(KOTLIN_DECOMPILED_ROOT)
+        ?: DummyFileSystem.getInstance().createRoot(KOTLIN_DECOMPILED_FOLDER)
 

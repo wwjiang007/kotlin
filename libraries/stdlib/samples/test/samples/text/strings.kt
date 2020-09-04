@@ -50,6 +50,15 @@ class Strings {
     }
 
     @Sample
+    fun chunked() {
+        val dnaFragment = "ATTCGCGGCCGCCAA"
+
+        val codons = dnaFragment.chunked(3)
+
+        assertPrints(codons, "[ATT, CGC, GGC, CGC, CAA]")
+    }
+
+    @Sample
     fun chunkedTransform() {
         val codonTable = mapOf("ATT" to "Isoleucine", "CAA" to "Glutamine", "CGC" to "Arginine", "GGC" to "Glycine")
         val dnaFragment = "ATTCGCGGCCGCCAA"
@@ -68,6 +77,24 @@ class Strings {
 
         // sequence is evaluated lazily, so that unknown codon is not reached
         assertPrints(proteins.take(5).toList(), "[Isoleucine, Arginine, Glycine, Arginine, Glutamine]")
+    }
+
+    @Sample
+    fun filter() {
+        val text = "a1b2c3d4e5"
+
+        val textWithOnlyDigits = text.filter { it.isDigit() }
+
+        assertPrints(textWithOnlyDigits, "12345")
+    }
+
+    @Sample
+    fun filterNot() {
+        val text = "a1b2c3d4e5"
+
+        val textWithoutDigits = text.filterNot { it.isDigit() }
+
+        assertPrints(textWithoutDigits, "abcde")
     }
 
     @Sample
@@ -162,6 +189,14 @@ class Strings {
     }
 
     @Sample
+    fun partition() {
+        fun isVowel(c: Char) = "aeuio".contains(c, ignoreCase = true)
+        val string = "Discussion"
+        val result = string.partition(::isVowel)
+        assertPrints(result, "(iuio, Dscssn)")
+    }
+
+    @Sample
     fun stringToByteArray() {
         val charset = Charsets.UTF_8
         val byteArray = "Hello".toByteArray(charset)
@@ -204,6 +239,7 @@ class Strings {
         val noPadding = "abcde".padEnd(3)
         assertPrints("'$noPadding'", "'abcde'")
     }
+
     @Sample
     fun clearStringBuilder() {
         val builder = StringBuilder()
@@ -357,4 +393,19 @@ class Strings {
         assertPrints(string.map { it.toUpperCase() }, "[K, O, T, L, I, N]")
     }
 
+    @Sample
+    fun indexOf() {
+        fun matchDetails(inputString: String, whatToFind: String, startIndex: Int = 0): String {
+            val matchIndex = inputString.indexOf(whatToFind, startIndex)
+            return "Searching for '$whatToFind' in '$inputString' starting at position $startIndex: " +
+                    if (matchIndex >= 0) "Found at $matchIndex" else "Not found"
+        }
+
+        val inputString = "Never ever give up"
+        val toFind = "ever"
+
+        assertPrints(matchDetails(inputString, toFind), "Searching for 'ever' in 'Never ever give up' starting at position 0: Found at 1")
+        assertPrints(matchDetails(inputString, toFind, 2), "Searching for 'ever' in 'Never ever give up' starting at position 2: Found at 6")
+        assertPrints(matchDetails(inputString, toFind, 10), "Searching for 'ever' in 'Never ever give up' starting at position 10: Not found")
+    }
 }

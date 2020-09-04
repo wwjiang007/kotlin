@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -7,7 +7,9 @@ package org.jetbrains.kotlin.gradle.targets.js.testing
 
 import groovy.lang.Closure
 import org.gradle.api.file.FileCollection
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.Internal
 import org.gradle.process.internal.DefaultProcessForkOptions
@@ -21,22 +23,48 @@ import org.jetbrains.kotlin.gradle.targets.js.npm.npmProject
 import org.jetbrains.kotlin.gradle.targets.js.testing.karma.KotlinKarma
 import org.jetbrains.kotlin.gradle.targets.js.testing.mocha.KotlinMocha
 import org.jetbrains.kotlin.gradle.tasks.KotlinTest
+import org.jetbrains.kotlin.gradle.utils.newFileProperty
+import javax.inject.Inject
 
-open class KotlinJsTest : KotlinTest(), RequiresNpmDependencies {
+open class KotlinJsTest
+@Inject
+constructor(
+    @Internal override var compilation: KotlinJsCompilation
+) :
+    KotlinTest(),
+    RequiresNpmDependencies {
     private val nodeJs get() = NodeJsRootPlugin.apply(project.rootProject)
 
     @get:Internal
-    internal var testFramework: KotlinJsTestFramework? = null
+    var testFramework: KotlinJsTestFramework? = null
+        set(value) {
+            field = value
+            onTestFrameworkCallbacks.forEach { callback ->
+                callback(value)
+            }
+        }
+
+    private var onTestFrameworkCallbacks: MutableList<(KotlinJsTestFramework?) -> Unit> =
+        mutableListOf()
+
+    fun onTestFrameworkSet(action: (KotlinJsTestFramework?) -> Unit) {
+        onTestFrameworkCallbacks.add(action)
+        testFramework?.let { testFramework: KotlinJsTestFramework ->
+            onTestFrameworkCallbacks.forEach { callback ->
+                callback(testFramework)
+            }
+        }
+    }
 
     @Suppress("unused")
     val testFrameworkSettings: String
         @Input get() = testFramework!!.settingsState
 
+    @InputFile
+    val inputFileProperty: RegularFileProperty = project.newFileProperty()
+
     @Input
     var debug: Boolean = false
-
-    @Internal
-    override lateinit var compilation: KotlinJsCompilation
 
     @Suppress("unused")
     val runtimeClasspath: FileCollection
@@ -59,7 +87,7 @@ open class KotlinJsTest : KotlinTest(), RequiresNpmDependencies {
     override val nodeModulesRequired: Boolean
         @Internal get() = testFramework!!.nodeModulesRequired
 
-    override val requiredNpmDependencies: Collection<RequiredKotlinJsDependency>
+    override val requiredNpmDependencies: Set<RequiredKotlinJsDependency>
         @Internal get() = testFramework!!.requiredNpmDependencies
 
     @Deprecated("Use useMocha instead", ReplaceWith("useMocha()"))
@@ -110,7 +138,7 @@ open class KotlinJsTest : KotlinTest(), RequiresNpmDependencies {
     override fun createTestExecutionSpec(): TCServiceMessagesTestExecutionSpec {
         val forkOptions = DefaultProcessForkOptions(fileResolver)
         forkOptions.workingDir = compilation.npmProject.dir
-        forkOptions.executable = nodeJs.environment.nodeExecutable
+        forkOptions.executable = nodeJs.requireConfigured().nodeExecutable
 
         val nodeJsArgs = mutableListOf<String>()
 

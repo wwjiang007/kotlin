@@ -5,7 +5,7 @@
 
 package org.jetbrains.kotlin.resolve.checkers
 
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.KotlinTarget
@@ -19,6 +19,7 @@ import org.jetbrains.kotlin.resolve.constants.ArrayValue
 import org.jetbrains.kotlin.resolve.constants.ConstantValue
 import org.jetbrains.kotlin.resolve.constants.KClassValue
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
+import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 class ExperimentalMarkerDeclarationAnnotationChecker(private val module: ModuleDescriptor) : AdditionalAnnotationChecker {
     private val WRONG_TARGETS_FOR_MARKER = setOf(KotlinTarget.EXPRESSION, KotlinTarget.FILE)
@@ -29,12 +30,13 @@ class ExperimentalMarkerDeclarationAnnotationChecker(private val module: ModuleD
         for (entry in entries) {
             val annotation = trace.bindingContext.get(BindingContext.ANNOTATION, entry)
             when (annotation?.fqName) {
-                ExperimentalUsageChecker.USE_EXPERIMENTAL_FQ_NAME -> {
+                in ExperimentalUsageChecker.USE_EXPERIMENTAL_FQ_NAMES -> {
                     val annotationClasses =
-                        (annotation.allValueArguments[ExperimentalUsageChecker.USE_EXPERIMENTAL_ANNOTATION_CLASS] as? ArrayValue)?.value.orEmpty()
+                        annotation!!.allValueArguments[ExperimentalUsageChecker.USE_EXPERIMENTAL_ANNOTATION_CLASS]
+                            .safeAs<ArrayValue>()?.value.orEmpty()
                     checkUseExperimentalUsage(annotationClasses, trace, entry)
                 }
-                ExperimentalUsageChecker.EXPERIMENTAL_FQ_NAME -> {
+                in ExperimentalUsageChecker.EXPERIMENTAL_FQ_NAMES -> {
                     isAnnotatedWithExperimental = true
                 }
             }
@@ -68,7 +70,7 @@ class ExperimentalMarkerDeclarationAnnotationChecker(private val module: ModuleD
         val targetEntry =
             entries.associate { entry -> entry to trace.bindingContext.get(BindingContext.ANNOTATION, entry) }
                 .entries
-                .firstOrNull { (_, descriptor) -> descriptor != null && descriptor.fqName == KotlinBuiltIns.FQ_NAMES.target }
+                .firstOrNull { (_, descriptor) -> descriptor != null && descriptor.fqName == StandardNames.FqNames.target }
                     ?: return
         val (entry, descriptor) = targetEntry
         val allowedTargets = AnnotationChecker.loadAnnotationTargets(descriptor!!) ?: return

@@ -1,5 +1,4 @@
 // IGNORE_BACKEND_FIR: JVM_IR
-// IGNORE_BACKEND: JVM_IR
 // TARGET_BACKEND: JVM
 
 // FULL_JDK
@@ -14,7 +13,7 @@ fun box(): String {
     try {
         val b: String = a[0]
         return "Fail: an exception should be thrown"
-    } catch (e: IllegalStateException) {
+    } catch (e: NullPointerException) {
         val st = (e as java.lang.Throwable).getStackTrace()
         if (st.size < 5) {
             return "Fail: very small stack trace, should at least have current function and JUnit reflective calls: ${Arrays.toString(st)}"

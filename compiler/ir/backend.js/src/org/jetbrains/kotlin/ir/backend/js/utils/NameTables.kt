@@ -9,7 +9,7 @@ import org.jetbrains.kotlin.backend.common.ir.isMethodOfAny
 import org.jetbrains.kotlin.backend.common.ir.isTopLevel
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.backend.js.JsLoweredDeclarationOrigin
-import org.jetbrains.kotlin.ir.backend.js.lower.serialization.ir.JsMangler
+import org.jetbrains.kotlin.ir.backend.js.lower.serialization.ir.JsManglerIr
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrLoop
 import org.jetbrains.kotlin.ir.types.isUnit
@@ -23,7 +23,7 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.utils.addToStdlib.ifNotEmpty
 
 fun <T> mapToKey(declaration: T): String {
-    return with(JsMangler) {
+    return with(JsManglerIr) {
         if (declaration is IrDeclaration && isPublic(declaration)) {
             declaration.hashedMangle.toString()
         } else if (declaration is Signature) {
@@ -32,7 +32,7 @@ fun <T> mapToKey(declaration: T): String {
     }
 }
 
-fun JsMangler.isPublic(declaration: IrDeclaration) =
+fun JsManglerIr.isPublic(declaration: IrDeclaration) =
     declaration.isExported() && declaration !is IrScript && declaration !is IrVariable && declaration !is IrValueParameter
 
 class NameTable<T>(
@@ -274,23 +274,15 @@ class NameTables(
 
         if (field.isEffectivelyExternal()) {
             memberNames.declareStableName(signature, field.name.identifier)
+        } else {
+            memberNames.declareFreshName(signature, "_" + sanitizeName(field.name.asString()))
         }
-
-        memberNames.declareFreshName(signature, "_" + sanitizeName(field.name.asString()))
     }
 
     private fun generateNameForMemberFunction(declaration: IrSimpleFunction) {
         when (val signature = functionSignature(declaration)) {
             is StableNameSignature -> memberNames.declareStableName(signature, signature.name)
-            is ParameterTypeBasedSignature -> {
-                // TODO: Fix hack: Coroutines runtime currently relies on stable names
-                //       of `invoke` functions in FunctionN interfaces
-                if (declaration.name.asString().startsWith("invoke")) {
-                    memberNames.declareStableName(signature, sanitizeName(signature.mangledName))
-                } else {
-                    memberNames.declareFreshName(signature, signature.suggestedName)
-                }
-            }
+            is ParameterTypeBasedSignature -> memberNames.declareFreshName(signature, signature.suggestedName)
         }
     }
 
@@ -309,11 +301,6 @@ class NameTables(
         val global: String? = globalNames.names[declaration]
         if (global != null) return global
 
-        if (declaration is IrTypeParameter) {
-            // TODO: Fix type parameters
-            return declaration.name.identifier
-        }
-
         var parent: IrDeclarationParent = declaration.parent
         while (parent is IrDeclaration) {
             val parentLocalNames = localNames[parent]
@@ -325,16 +312,18 @@ class NameTables(
             parent = parent.parent
         }
 
-        return mappedNames[mapToKey(declaration)] ?: error("Can't find name for declaration ${declaration.fqNameWhenAvailable}")
+        return mappedNames[mapToKey(declaration)] ?: error("Can't find name for declaration ${declaration.render()}")
     }
 
     fun getNameForMemberField(field: IrField): String {
         val signature = fieldSignature(field)
         val name = memberNames.names[signature] ?: mappedNames[mapToKey(signature)]
 
-        require(name != null) {
-            "Can't find name for member field $field"
+        // TODO investigate
+        if (name == null) {
+            return sanitizeName(field.name.asString()) + "__error"
         }
+
         return name
     }
 
@@ -342,13 +331,12 @@ class NameTables(
         val signature = functionSignature(function)
         val name = memberNames.names[signature] ?: mappedNames[mapToKey(signature)]
 
-        // TODO: Fix hack: Coroutines runtime currently relies on stable names
-        //       of `invoke` functions in FunctionN interfaces
-        if (name == null && signature is ParameterTypeBasedSignature && signature.suggestedName.startsWith("invoke"))
-            return signature.suggestedName
-        require(name != null) {
-            "Can't find name for member function ${function.render()}"
+        // TODO Add a compiler flag, which enables this behaviour
+        // TODO remove in DCE
+        if (name == null) {
+            return sanitizeName(function.name.asString()) + "__error" // TODO one case is a virtual method of an abstract class with no implementation
         }
+
         return name
     }
 
@@ -357,7 +345,7 @@ class NameTables(
             declaration !is IrDeclarationWithName ->
                 return
 
-            declaration.isEffectivelyExternal() ->
+            declaration.isEffectivelyExternal() && (declaration.getJsModule() == null || declaration.isJsNonModule()) ->
                 globalNames.declareStableName(declaration, declaration.getJsNameOrKotlinName().identifier)
 
             else ->
@@ -377,17 +365,7 @@ class NameTables(
             element.acceptChildrenVoid(this)
         }
 
-        override fun visitValueParameter(declaration: IrValueParameter) {
-            val parentFunction = declaration.parent as? IrFunction
-            if ((declaration.origin == IrDeclarationOrigin.INSTANCE_RECEIVER && declaration.name.isSpecial) ||
-                (parentFunction != null && declaration == parentFunction.dispatchReceiverParameter)
-            )
-                table.declareStableName(declaration, Namer.IMPLICIT_RECEIVER_NAME)
-            else
-                super.visitValueParameter(declaration)
-        }
-
-        override fun visitDeclaration(declaration: IrDeclaration) {
+        override fun visitDeclaration(declaration: IrDeclarationBase) {
             if (declaration is IrDeclarationWithName && declaration is IrSymbolOwner) {
                 table.declareFreshName(declaration, declaration.name.asString())
             }

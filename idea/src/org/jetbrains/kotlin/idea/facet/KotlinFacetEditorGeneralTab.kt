@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.facet
@@ -27,18 +16,18 @@ import org.jetbrains.kotlin.cli.common.arguments.*
 import org.jetbrains.kotlin.config.CompilerSettings
 import org.jetbrains.kotlin.config.createArguments
 import org.jetbrains.kotlin.config.splitArgumentString
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.compiler.configuration.*
 import org.jetbrains.kotlin.idea.core.util.onTextChange
 import org.jetbrains.kotlin.platform.*
 import org.jetbrains.kotlin.platform.js.isJs
+import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
 import org.jetbrains.kotlin.platform.jvm.isJvm
 import java.awt.BorderLayout
+import java.awt.Component
 import javax.swing.*
 import javax.swing.border.EmptyBorder
 import kotlin.reflect.full.findAnnotation
-import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
-import java.awt.Component
-import kotlin.math.min
 
 class KotlinFacetEditorGeneralTab(
     private val configuration: KotlinFacetConfiguration,
@@ -94,10 +83,13 @@ class KotlinFacetEditorGeneralTab(
 
         private fun FormBuilder.addTargetPlatformComponents(): FormBuilder {
             return if (configuration?.settings?.isHmppEnabled == true) {
-                targetPlatformLabel.toolTipText = "The project is imported from external build system and could not be edited"
-                this.addLabeledComponent("Selected target platforms:", targetPlatformLabel)
+                targetPlatformLabel.toolTipText =
+                    KotlinBundle.message("facet.label.text.the.project.is.imported.from.external.build.system.and.could.not.be.edited")
+                this.addLabeledComponent(
+                    KotlinBundle.message("facet.label.text.selected.target.platforms"), targetPlatformLabel)
             } else {
-                this.addLabeledComponent("&Target platform: ", targetPlatformSelectSingleCombobox)
+                this.addLabeledComponent(
+                    KotlinBundle.message("facet.label.text.target.platform"), targetPlatformSelectSingleCombobox)
             }
         }
 
@@ -143,11 +135,11 @@ class KotlinFacetEditorGeneralTab(
                 isMultiEditor
             )
 
-            useProjectSettingsCheckBox = ThreeStateCheckBox("Use project settings").apply { isThirdStateEnabled = isMultiEditor }
+            useProjectSettingsCheckBox = ThreeStateCheckBox(KotlinBundle.message("facet.checkbox.text.use.project.settings")).apply { isThirdStateEnabled = isMultiEditor }
             dependsOnLabel = JLabel()
 
-            targetPlatformWrappers =
-                CommonPlatforms.allDefaultTargetPlatforms.sortedBy { unifyJvmVersion(it.oldFashionedDescription) }.map { TargetPlatformWrapper(it) }
+            targetPlatformWrappers = CommonPlatforms.allDefaultTargetPlatforms.sortedBy { unifyJvmVersion(it.oldFashionedDescription) }
+                .map { TargetPlatformWrapper(it) }
             targetPlatformLabel = JLabel() //JTextField()? targetPlatformLabel.isEditable = false
             targetPlatformSelectSingleCombobox =
                 ComboBox(targetPlatformWrappers.toTypedArray()).apply {
@@ -161,15 +153,16 @@ class KotlinFacetEditorGeneralTab(
                         ): Component {
                             return super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus).apply {
                                 text =
-                                    (value as? TargetPlatformWrapper)?.targetPlatform?.componentPlatforms?.singleOrNull()?.oldFashionedDescription
-                                        ?: "Multiplatform"
+                                    (value as? TargetPlatformWrapper)?.targetPlatform?.componentPlatforms?.singleOrNull()
+                                        ?.oldFashionedDescription
+                                        ?: KotlinBundle.message("facet.text.multiplatform")
                             }
                         }
                     })
                 }
             targetPlatformSelectSingleCombobox.maximumRowCount =
                 targetPlatformsComboboxRowsCount(targetPlatformWrappers.size)
-            projectSettingsLink = HoverHyperlinkLabel("Edit project settings").apply {
+            projectSettingsLink = HoverHyperlinkLabel(KotlinBundle.message("facet.link.text.edit.project.settings")).apply {
                 addHyperlinkListener {
                     ShowSettingsUtilImpl.showSettingsDialog(project, compilerConfigurable.id, "")
                     if (useProjectSettingsCheckBox.isSelected) {
@@ -234,7 +227,8 @@ class KotlinFacetEditorGeneralTab(
 
     inner class ArgumentConsistencyValidator : FacetEditorValidator() {
         override fun check(): ValidationResult {
-            val platform = editor.getChosenPlatform() ?: return ValidationResult("At least one target platform should be selected")
+            val platform = editor.getChosenPlatform() ?: return ValidationResult(
+                KotlinBundle.message("facet.error.text.at.least.one.target.platform.should.be.selected"))
             val primaryArguments = platform.createArguments {
                 editor.compilerConfigurable.applyTo(
                     this,
@@ -270,13 +264,19 @@ class KotlinFacetEditorGeneralTab(
             if (overridingArguments.isNotEmpty() || redundantArguments.isNotEmpty()) {
                 val message = buildString {
                     if (overridingArguments.isNotEmpty()) {
-                        append("Following arguments override facet settings: ${overridingArguments.joinToString()}")
+                        append(
+                            KotlinBundle.message(
+                                "facet.text.following.arguments.override.facet.settings",
+                                overridingArguments.joinToString()
+                            )
+                        )
                     }
                     if (redundantArguments.isNotEmpty()) {
                         if (isNotEmpty()) {
                             append("<br/>")
                         }
-                        append("Following arguments are redundant: ${redundantArguments.joinToString()}")
+                        append(
+                            KotlinBundle.message("facet.text.following.arguments.are.redundant", redundantArguments.joinToString()))
                     }
                 }
                 return ValidationResult(message)
@@ -369,7 +369,8 @@ class KotlinFacetEditorGeneralTab(
 
         // work-around for hacked equals in JvmPlatform
         if (!configuration?.settings?.isHmppEnabled) {
-            if (configuration.settings.targetPlatform?.let { TargetPlatformWrapper(it) } != editor.targetPlatformSelectSingleCombobox.selectedItemTyped) {
+            if (configuration.settings.targetPlatform?.let { TargetPlatformWrapper(it) } != editor.targetPlatformSelectSingleCombobox
+                    .selectedItemTyped) {
                 return true
             }
         }
@@ -391,7 +392,7 @@ class KotlinFacetEditorGeneralTab(
                 editor.targetPlatformsCurrentlySelected?.componentPlatforms?.map { it.oldFashionedDescription.trim() }?.joinToString(", ")
                     ?: "<none>"
             editor.dependsOnLabel.isVisible = configuration.settings.dependsOnModuleNames.isNotEmpty()
-            editor.dependsOnLabel.text = configuration.settings.dependsOnModuleNames.joinToString(", ","Depends on: ", ".")
+            editor.dependsOnLabel.text = configuration.settings.dependsOnModuleNames.joinToString(", ", "Depends on: ", ".")
 
             editor.targetPlatformSelectSingleCombobox.selectedItem = configuration.settings.targetPlatform?.let {
                 val index = editor.targetPlatformWrappers.indexOf(TargetPlatformWrapper(it))
@@ -435,7 +436,7 @@ class KotlinFacetEditorGeneralTab(
         }
     }
 
-    override fun getDisplayName() = "General"
+    override fun getDisplayName() = KotlinBundle.message("facet.name.general")
 
     override fun createComponent(): JComponent {
         return editor

@@ -5,26 +5,31 @@
 
 package org.jetbrains.kotlin.backend.jvm.ir
 
-import org.jetbrains.kotlin.backend.common.IrElementVisitorVoidWithContext
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.backend.jvm.codegen.isInlineFunctionCall
 import org.jetbrains.kotlin.backend.jvm.codegen.isInlineIrExpression
+import org.jetbrains.kotlin.ir.util.isLambda
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationBase
 import org.jetbrains.kotlin.ir.declarations.IrFunction
-import org.jetbrains.kotlin.ir.expressions.*
-import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
+import org.jetbrains.kotlin.ir.declarations.IrValueParameter
+import org.jetbrains.kotlin.ir.expressions.IrBlock
+import org.jetbrains.kotlin.ir.expressions.IrCallableReference
+import org.jetbrains.kotlin.ir.expressions.IrFunctionAccessExpression
+import org.jetbrains.kotlin.ir.expressions.IrFunctionReference
+import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 
-internal open class IrInlineReferenceLocator(private val context: JvmBackendContext) : IrElementVisitorVoidWithContext() {
-    val inlineReferences = mutableSetOf<IrCallableReference>()
+internal open class IrInlineReferenceLocator(private val context: JvmBackendContext) : IrElementVisitor<Unit, IrDeclaration?> {
+    override fun visitElement(element: IrElement, data: IrDeclaration?) {
+        element.acceptChildren(this, data)
+    }
 
-    // For crossinline lambdas, the call site is null as it's probably in a separate class somewhere.
-    // All other lambdas are guaranteed to be inlined into the scope they are declared in.
-    val lambdaToCallSite = mutableMapOf<IrFunction, IrDeclaration?>()
+    override fun visitDeclaration(declaration: IrDeclarationBase, data: IrDeclaration?) {
+        declaration.acceptChildren(this, declaration)
+    }
 
-    override fun visitElement(element: IrElement) = element.acceptChildrenVoid(this)
-
-    override fun visitFunctionAccess(expression: IrFunctionAccessExpression) {
+    override fun visitFunctionAccess(expression: IrFunctionAccessExpression, data: IrDeclaration?) {
         val function = expression.symbol.owner
         if (function.isInlineFunctionCall(context)) {
             for (parameter in function.valueParameters) {
@@ -35,37 +40,30 @@ internal open class IrInlineReferenceLocator(private val context: JvmBackendCont
                 if (!isInlineIrExpression(valueArgument))
                     continue
 
-                if (valueArgument is IrPropertyReference) {
-                    handleInlineFunctionCallableReferenceParam(valueArgument)
-                    continue
-                }
-
-                val reference = when (valueArgument) {
-                    is IrFunctionReference -> valueArgument
-                    is IrBlock -> valueArgument.statements.filterIsInstance<IrFunctionReference>().singleOrNull()
-                    else -> null
-                } ?: continue
-
-                handleInlineFunctionCallableReferenceParam(reference)
                 if (valueArgument is IrBlock && valueArgument.origin.isLambda) {
-                    val declaration = if (parameter.isCrossinline) null else currentScope!!.irElement as IrDeclaration
-                    handleInlineFunctionLambdaParam(reference.symbol.owner, function, declaration)
+                    val reference = valueArgument.statements.last() as IrFunctionReference
+                    visitInlineLambda(reference, function, parameter, data!!)
+                } else if (valueArgument is IrCallableReference<*>) {
+                    visitInlineReference(valueArgument)
                 }
             }
         }
-        return super.visitFunctionAccess(expression)
+        return super.visitFunctionAccess(expression, data)
     }
 
-    open fun handleInlineFunctionCallableReferenceParam(valueArgument: IrCallableReference) {
-        inlineReferences.add(valueArgument)
-    }
+    open fun visitInlineReference(argument: IrCallableReference<*>) {}
 
-    open fun handleInlineFunctionLambdaParam(lambda: IrFunction, callee: IrFunction, callSite: IrDeclaration?) {
-        lambdaToCallSite[lambda] = callSite
-    }
+    open fun visitInlineLambda(argument: IrFunctionReference, callee: IrFunction, parameter: IrValueParameter, scope: IrDeclaration) =
+        visitInlineReference(argument)
 
     companion object {
-        fun scan(context: JvmBackendContext, element: IrElement) =
-            IrInlineReferenceLocator(context).apply { element.accept(this, null) }
+        fun scan(context: JvmBackendContext, element: IrElement): Set<IrCallableReference<*>> =
+            mutableSetOf<IrCallableReference<*>>().apply {
+                element.accept(object : IrInlineReferenceLocator(context) {
+                    override fun visitInlineReference(argument: IrCallableReference<*>) {
+                        add(argument)
+                    }
+                }, null)
+            }
     }
 }

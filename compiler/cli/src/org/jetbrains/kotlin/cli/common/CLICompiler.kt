@@ -33,6 +33,7 @@ import org.jetbrains.kotlin.config.Services
 import org.jetbrains.kotlin.metadata.deserialization.BinaryVersion
 import org.jetbrains.kotlin.progress.CompilationCanceledException
 import org.jetbrains.kotlin.progress.CompilationCanceledStatus
+import org.jetbrains.kotlin.progress.IncrementalNextRoundException
 import org.jetbrains.kotlin.progress.ProgressIndicatorAndCompilationCanceledStatus
 import org.jetbrains.kotlin.utils.KotlinPaths
 import org.jetbrains.kotlin.utils.PathUtil
@@ -43,6 +44,8 @@ import java.util.ArrayList
 abstract class CLICompiler<A : CommonCompilerArguments> : CLITool<A>() {
 
     protected abstract val performanceManager: CommonCompilerPerformanceManager
+
+    protected open fun createPerformanceManager(arguments: A, services: Services): CommonCompilerPerformanceManager = performanceManager
 
     // Used in CompilerRunnerUtil#invokeExecMethod, in Eclipse plugin (KotlinCLICompiler) and in kotlin-gradle-plugin (GradleCompilerRunner)
     fun execAndOutputXml(errStream: PrintStream, services: Services, vararg args: String): ExitCode {
@@ -55,7 +58,7 @@ abstract class CLICompiler<A : CommonCompilerArguments> : CLITool<A>() {
     }
 
     public override fun execImpl(messageCollector: MessageCollector, services: Services, arguments: A): ExitCode {
-        val performanceManager = performanceManager
+        val performanceManager = createPerformanceManager(arguments, services)
         if (arguments.reportPerf || arguments.dumpPerf != null) {
             performanceManager.enableCollectingPerformanceStatistics()
         }
@@ -86,8 +89,10 @@ abstract class CLICompiler<A : CommonCompilerArguments> : CLITool<A>() {
 
                 performanceManager.notifyCompilationFinished()
                 if (arguments.reportPerf) {
-                    performanceManager.getMeasurementResults()
-                        .forEach { it -> configuration.get(MESSAGE_COLLECTOR_KEY)!!.report(INFO, "PERF: " + it.render(), null) }
+                    collector.report(INFO, "PERF: " + performanceManager.getTargetInfo())
+                    for (measurement in performanceManager.getMeasurementResults()) {
+                        collector.report(INFO, "PERF: " + measurement.render(), null)
+                    }
                 }
 
                 if (arguments.dumpPerf != null) {
@@ -96,12 +101,12 @@ abstract class CLICompiler<A : CommonCompilerArguments> : CLITool<A>() {
 
                 return if (collector.hasErrors()) COMPILATION_ERROR else code
             } catch (e: CompilationCanceledException) {
-                collector.report(INFO, "Compilation was canceled", null)
+                collector.reportCompilationCancelled(e)
                 return ExitCode.OK
             } catch (e: RuntimeException) {
                 val cause = e.cause
                 if (cause is CompilationCanceledException) {
-                    collector.report(INFO, "Compilation was canceled", null)
+                    collector.reportCompilationCancelled(cause)
                     return ExitCode.OK
                 } else {
                     throw e
@@ -116,6 +121,12 @@ abstract class CLICompiler<A : CommonCompilerArguments> : CLITool<A>() {
             return INTERNAL_ERROR
         } finally {
             collector.flush()
+        }
+    }
+
+    private fun MessageCollector.reportCompilationCancelled(e: CompilationCanceledException) {
+        if (e !is IncrementalNextRoundException) {
+            report(INFO, "Compilation was canceled", null)
         }
     }
 

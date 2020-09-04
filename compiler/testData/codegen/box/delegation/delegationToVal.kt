@@ -1,4 +1,3 @@
-// IGNORE_BACKEND_FIR: JVM_IR
 // TARGET_BACKEND: JVM
 
 // WITH_RUNTIME
@@ -36,7 +35,7 @@ fun box(): String {
 
     try {
         Test2::class.java.getDeclaredField("\$\$delegate_0")
-        return "\$\$delegate_0 field generated for class Test but should not"
+        return "\$\$delegate_0 field generated for class Test2 but should not"
     }
     catch (e: NoSuchFieldException) {
         // ok

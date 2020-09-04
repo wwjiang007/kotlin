@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2000-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -10,6 +10,7 @@ import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.codeInspection.ProblemsHolder
 import com.intellij.psi.PsiElementVisitor
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.intentions.AddNamesToCallArgumentsIntention
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
@@ -36,10 +37,10 @@ class CopyWithoutNamedArgumentsInspection : AbstractKotlinInspection() {
             if (call.candidateDescriptor != context[BindingContext.DATA_CLASS_COPY_FUNCTION, receiver]) return
 
             holder.registerProblem(
-                    expression.calleeExpression ?: return,
-                    "'copy' method of data class is called without named arguments",
-                    ProblemHighlightType.GENERIC_ERROR_OR_WARNING,
-                    IntentionWrapper(AddNamesToCallArgumentsIntention(), expression.containingKtFile)
+                expression.calleeExpression ?: return,
+                KotlinBundle.message("copy.method.of.data.class.is.called.without.named.arguments"),
+                ProblemHighlightType.GENERIC_ERROR_OR_WARNING,
+                IntentionWrapper(AddNamesToCallArgumentsIntention(), expression.containingKtFile)
             )
         })
     }

@@ -1,21 +1,12 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.caches.resolve
 
+import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.CachedValueProvider
@@ -31,7 +22,10 @@ import org.jetbrains.kotlin.idea.caches.trackers.KotlinCodeBlockModificationList
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.CompositeBindingContext
+import org.jetbrains.kotlin.storage.CancellableSimpleLock
+import org.jetbrains.kotlin.storage.guarded
 import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
+import java.util.concurrent.locks.ReentrantLock
 
 internal class ProjectResolutionFacade(
     private val debugString: String,
@@ -57,20 +51,50 @@ internal class ProjectResolutionFacade(
     private val cachedResolverForProject: ResolverForProject<IdeaModuleInfo>
         get() = globalContext.storageManager.compute { cachedValue.value }
 
+    private val analysisResultsLock = ReentrantLock()
+    private val analysisResultsSimpleLock = CancellableSimpleLock(analysisResultsLock,
+                                                                  checkCancelled = {
+                                                                      ProgressManager.checkCanceled()
+                                                                  },
+                                                                  interruptedExceptionHandler = { throw ProcessCanceledException(it) })
+
     private val analysisResults = CachedValuesManager.getManager(project).createCachedValue(
         {
             val resolverForProject = cachedResolverForProject
             val results = object : SLRUCache<KtFile, PerFileAnalysisCache>(2, 3) {
+                private val lock = ReentrantLock()
+
                 override fun createValue(file: KtFile): PerFileAnalysisCache {
                     return PerFileAnalysisCache(
                         file,
                         resolverForProject.resolverForModule(file.getModuleInfo()).componentProvider
                     )
                 }
+
+                override fun get(key: KtFile?): PerFileAnalysisCache {
+                    lock.lock()
+                    try {
+                        return super.get(key)
+                    } finally {
+                        lock.unlock()
+                    }
+                }
+
+                override fun getIfCached(key: KtFile?): PerFileAnalysisCache? {
+                    if (lock.tryLock()) {
+                        try {
+                            return super.getIfCached(key)
+                        } finally {
+                            lock.unlock()
+                        }
+                    }
+                    return null
+                }
             }
 
-            val allDependencies =
-                resolverForProjectDependencies + listOf(KotlinCodeBlockModificationListener.getInstance(project).kotlinOutOfCodeBlockTracker)
+            val allDependencies = resolverForProjectDependencies + listOf(
+                KotlinCodeBlockModificationListener.getInstance(project).kotlinOutOfCodeBlockTracker
+            )
             CachedValueProvider.Result.create(results, allDependencies)
         }, false
     )
@@ -114,8 +138,8 @@ internal class ProjectResolutionFacade(
     internal fun resolverForElement(element: PsiElement): ResolverForModule {
         val infos = element.getModuleInfos()
         return infos.asIterable().firstNotNullResult { cachedResolverForProject.tryGetResolverForModule(it) }
-                ?: cachedResolverForProject.tryGetResolverForModule(NotUnderContentRootModuleInfo)
-                ?: cachedResolverForProject.diagnoseUnknownModuleInfo(infos.toList())
+            ?: cachedResolverForProject.tryGetResolverForModule(NotUnderContentRootModuleInfo)
+            ?: cachedResolverForProject.diagnoseUnknownModuleInfo(infos.toList())
     }
 
     internal fun resolverForDescriptor(moduleDescriptor: ModuleDescriptor) =
@@ -124,16 +148,17 @@ internal class ProjectResolutionFacade(
     internal fun findModuleDescriptor(ideaModuleInfo: IdeaModuleInfo): ModuleDescriptor {
         return cachedResolverForProject.descriptorForModule(ideaModuleInfo)
     }
+    
+    internal fun getResolverForProject(): ResolverForProject<IdeaModuleInfo> = cachedResolverForProject
 
     internal fun getAnalysisResultsForElements(elements: Collection<KtElement>): AnalysisResult {
         assert(elements.isNotEmpty()) { "elements collection should not be empty" }
-        val slruCache = synchronized(analysisResults) {
+
+        val slruCache = analysisResultsSimpleLock.guarded {
             analysisResults.value!!
         }
         val results = elements.map {
-            val perFileCache = synchronized(slruCache) {
-                slruCache[it.containingKtFile]
-            }
+            val perFileCache = slruCache[it.containingKtFile]
             perFileCache.getAnalysisResults(it)
         }
         val withError = results.firstOrNull { it.isError() }
@@ -144,6 +169,18 @@ internal class ProjectResolutionFacade(
 
         //TODO: (module refactoring) several elements are passed here in debugger
         return AnalysisResult.success(bindingContext, findModuleDescriptor(elements.first().getModuleInfo()))
+    }
+
+    internal fun fetchAnalysisResultsForElement(element: KtElement): AnalysisResult? {
+        val slruCache = if (analysisResultsLock.tryLock()) {
+            try {
+                analysisResults.upToDateOrNull?.get()
+            } finally {
+                analysisResultsLock.unlock()
+            }
+        } else null
+
+        return slruCache?.getIfCached(element.containingKtFile)?.fetchAnalysisResults(element)
     }
 
     override fun toString(): String {

@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.refactoring.introduce.introduceProperty
@@ -24,6 +13,7 @@ import com.intellij.openapi.util.Pass
 import com.intellij.psi.PsiElement
 import com.intellij.ui.NonFocusableCheckBox
 import com.intellij.ui.PopupMenuListenerAdapter
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractionEngine.ExtractionResult
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractionEngine.ExtractionTarget
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractionEngine.generateDeclaration
@@ -40,16 +30,16 @@ import javax.swing.*
 import javax.swing.event.PopupMenuEvent
 
 class KotlinInplacePropertyIntroducer(
-        property: KtProperty,
-        editor: Editor,
-        project: Project,
-        title: String,
-        doNotChangeVar: Boolean,
-        exprType: KotlinType?,
-        private var extractionResult: ExtractionResult,
-        private val availableTargets: List<ExtractionTarget>
-): KotlinInplaceVariableIntroducer<KtProperty>(
-        property, editor, project, title, KtExpression.EMPTY_ARRAY, null, false, property, false, doNotChangeVar, exprType, false
+    property: KtProperty,
+    editor: Editor,
+    project: Project,
+    title: String,
+    doNotChangeVar: Boolean,
+    exprType: KotlinType?,
+    private var extractionResult: ExtractionResult,
+    private val availableTargets: List<ExtractionTarget>
+) : KotlinInplaceVariableIntroducer<KtProperty>(
+    property, editor, project, title, KtExpression.EMPTY_ARRAY, null, false, property, false, doNotChangeVar, exprType, false
 ) {
     init {
         assert(availableTargets.isNotEmpty()) { "No targets available: ${property.getElementTextWithContext()}" }
@@ -61,7 +51,7 @@ class KotlinInplacePropertyIntroducer(
 
             field = value
             runWriteActionAndRestartRefactoring {
-                with (extractionResult.config) {
+                with(extractionResult.config) {
                     extractionResult = copy(generatorOptions = generatorOptions.copy(target = currentTarget)).generateDeclaration(property)
                     property = extractionResult.declaration as KtProperty
                     myElementToRename = property
@@ -83,33 +73,32 @@ class KotlinInplacePropertyIntroducer(
     override fun initPanelControls() {
         if (availableTargets.size > 1) {
             addPanelControl(
-                    ControlWrapper {
-                        val propertyKindComboBox = with(JComboBox(availableTargets.map { it.targetName.capitalize() }.toTypedArray())) {
-                            addPopupMenuListener(
-                                    object : PopupMenuListenerAdapter() {
-                                        override fun popupMenuWillBecomeInvisible(e: PopupMenuEvent?) {
-                                            ApplicationManager.getApplication().invokeLater {
-                                                currentTarget = availableTargets[selectedIndex]
-                                            }
-                                        }
+                ControlWrapper {
+                    val propertyKindComboBox = with(JComboBox(availableTargets.map { it.targetName.capitalize() }.toTypedArray())) {
+                        addPopupMenuListener(
+                            object : PopupMenuListenerAdapter() {
+                                override fun popupMenuWillBecomeInvisible(e: PopupMenuEvent?) {
+                                    ApplicationManager.getApplication().invokeLater {
+                                        currentTarget = availableTargets[selectedIndex]
                                     }
-                            )
+                                }
+                            }
+                        )
 
-                            selectedIndex = availableTargets.indexOf(currentTarget)
+                        selectedIndex = availableTargets.indexOf(currentTarget)
 
-                            this
-                        }
-
-                        val propertyKindLabel = JLabel("Introduce as: ")
-                        propertyKindLabel.setDisplayedMnemonic('I')
-                        propertyKindLabel.labelFor = propertyKindComboBox
-
-                        val panel = JPanel()
-                        panel.add(propertyKindLabel)
-                        panel.add(propertyKindComboBox)
-
-                        panel
+                        this
                     }
+
+                    val propertyKindLabel = JLabel(KotlinBundle.message("label.text.introduce.as"))
+                    propertyKindLabel.labelFor = propertyKindComboBox
+
+                    val panel = JPanel()
+                    panel.add(propertyKindLabel)
+                    panel.add(propertyKindComboBox)
+
+                    panel
+                }
             )
         }
 
@@ -117,7 +106,7 @@ class KotlinInplacePropertyIntroducer(
             val condition = { isInitializer() }
 
             createVarCheckBox?.let {
-                val initializer = object: Pass<JComponent>() {
+                val initializer = object : Pass<JComponent>() {
                     override fun pass(t: JComponent) {
                         (t as JCheckBox).isSelected = property.isVar
                     }
@@ -125,7 +114,7 @@ class KotlinInplacePropertyIntroducer(
                 addPanelControl(ControlWrapper(it, condition, initializer))
             }
             createExplicitTypeCheckBox?.let {
-                val initializer = object: Pass<JComponent>() {
+                val initializer = object : Pass<JComponent>() {
                     override fun pass(t: JComponent) {
                         (t as JCheckBox).isSelected = property.typeReference != null
                     }
@@ -137,13 +126,13 @@ class KotlinInplacePropertyIntroducer(
         val occurrenceCount = extractionResult.duplicateReplacers.size
         if (occurrenceCount > 1) {
             addPanelControl(
-                    ControlWrapper {
-                        val replaceAllCheckBox = NonFocusableCheckBox("Replace all occurrences ($occurrenceCount)")
-                        replaceAllCheckBox.isSelected = replaceAll
-                        replaceAllCheckBox.setMnemonic('R')
-                        replaceAllCheckBox.addActionListener { replaceAll = replaceAllCheckBox.isSelected }
-                        replaceAllCheckBox
-                    }
+                ControlWrapper {
+                    val replaceAllCheckBox = NonFocusableCheckBox(
+                        KotlinBundle.message("checkbox.text.replace.all.occurrences.0", occurrenceCount))
+                    replaceAllCheckBox.isSelected = replaceAll
+                    replaceAllCheckBox.addActionListener { replaceAll = replaceAllCheckBox.isSelected }
+                    replaceAllCheckBox
+                }
             )
         }
     }

@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.refactoring.introduce.extractionEngine
@@ -27,7 +16,8 @@ import com.intellij.refactoring.BaseRefactoringProcessor
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.builtins.isFunctionType
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.descriptors.PropertyDescriptor
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.idea.core.*
 import org.jetbrains.kotlin.idea.core.util.isMultiLine
 import org.jetbrains.kotlin.idea.inspections.PublicApiImplicitTypeInspection
@@ -35,15 +25,20 @@ import org.jetbrains.kotlin.idea.inspections.UseExpressionBodyInspection
 import org.jetbrains.kotlin.idea.intentions.InfixCallToOrdinaryIntention
 import org.jetbrains.kotlin.idea.intentions.OperatorToFunctionIntention
 import org.jetbrains.kotlin.idea.intentions.RemoveExplicitTypeArgumentsIntention
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.refactoring.introduce.*
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractionEngine.OutputValue.*
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractionEngine.OutputValueBoxer.AsTuple
 import org.jetbrains.kotlin.idea.refactoring.removeTemplateEntryBracesIfPossible
+import org.jetbrains.kotlin.idea.search.usagesSearch.descriptor
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
+import org.jetbrains.kotlin.idea.util.getAllAccessibleVariables
+import org.jetbrains.kotlin.idea.util.getResolutionScope
 import org.jetbrains.kotlin.idea.util.psi.patternMatching.*
 import org.jetbrains.kotlin.idea.util.psi.patternMatching.UnificationResult.StronglyMatched
 import org.jetbrains.kotlin.idea.util.psi.patternMatching.UnificationResult.WeaklyMatched
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.KtPsiFactory.CallableBuilder
 import org.jetbrains.kotlin.psi.psiUtil.*
@@ -58,7 +53,10 @@ import java.util.*
 private fun buildSignature(config: ExtractionGeneratorConfiguration, renderer: DescriptorRenderer): CallableBuilder {
     val extractionTarget = config.generatorOptions.target
     if (!extractionTarget.isAvailable(config.descriptor)) {
-        val message = "Can't generate ${extractionTarget.targetName}: ${config.descriptor.extractionData.codeFragmentText}"
+        val message = KotlinBundle.message("error.text.can.t.generate.0.1",
+            extractionTarget.targetName,
+            config.descriptor.extractionData.codeFragmentText
+        )
         throw BaseRefactoringProcessor.ConflictsInTestsException(listOf(message))
     }
 
@@ -72,10 +70,16 @@ private fun buildSignature(config: ExtractionGeneratorConfiguration, renderer: D
         fun TypeParameter.isReified() = originalDeclaration.hasModifier(KtTokens.REIFIED_KEYWORD)
         val shouldBeInline = config.descriptor.typeParameters.any { it.isReified() }
 
+
+        val annotations = if (config.descriptor.annotations.isEmpty()) {
+            ""
+        } else {
+            config.descriptor.annotations.joinToString(separator = "\n", postfix = "\n") { renderer.renderAnnotation(it) }
+        }
         val extraModifiers = config.descriptor.modifiers.map { it.value } +
                 listOfNotNull(if (shouldBeInline) KtTokens.INLINE_KEYWORD.value else null)
         val modifiers = if (visibility.isNotEmpty()) listOf(visibility) + extraModifiers else extraModifiers
-        modifier(modifiers.joinToString(separator = " "))
+        modifier(annotations + modifiers.joinToString(separator = " "))
 
         typeParams(
             config.descriptor.typeParameters.map {
@@ -129,7 +133,14 @@ fun ExtractionGeneratorConfiguration.getDeclarationPattern(
 ): String {
     val extractionTarget = generatorOptions.target
     if (!extractionTarget.isAvailable(descriptor)) {
-        throw BaseRefactoringProcessor.ConflictsInTestsException(listOf("Can't generate ${extractionTarget.targetName}: ${descriptor.extractionData.codeFragmentText}"))
+        throw BaseRefactoringProcessor.ConflictsInTestsException(
+            listOf(
+                KotlinBundle.message("error.text.can.t.generate.0.1",
+                    extractionTarget.targetName,
+                    descriptor.extractionData.codeFragmentText
+                )
+            )
+        )
     }
 
     return buildSignature(this, descriptorRenderer).let { builder ->
@@ -308,7 +319,9 @@ private fun makeCall(
     val psiFactory = KtPsiFactory(anchor.project)
     val newLine = psiFactory.createNewLine()
 
-    if (controlFlow.outputValueBoxer is AsTuple && controlFlow.outputValues.size > 1 && controlFlow.outputValues.all { it is Initializer }) {
+    if (controlFlow.outputValueBoxer is AsTuple && controlFlow.outputValues.size > 1 && controlFlow.outputValues
+            .all { it is Initializer }
+    ) {
         val declarationsToMerge = controlFlow.outputValues.map { (it as Initializer).initializedDeclaration }
         val isVar = declarationsToMerge.first().isVar
         if (declarationsToMerge.all { it.isVar == isVar }) {
@@ -486,8 +499,8 @@ fun ExtractionGeneratorConfiguration.generateDeclaration(
         val visibility = (descriptor.visibility ?: KtTokens.DEFAULT_VISIBILITY_KEYWORD).toVisibility()
         return when {
             visibility.isPublicAPI -> true
-            inspection.reportInternal && visibility == Visibilities.INTERNAL -> true
-            inspection.reportPrivate && visibility == Visibilities.PRIVATE -> true
+            inspection.reportInternal && visibility == DescriptorVisibilities.INTERNAL -> true
+            inspection.reportPrivate && visibility == DescriptorVisibilities.PRIVATE -> true
             else -> false
         }
     }
@@ -556,7 +569,9 @@ fun ExtractionGeneratorConfiguration.generateDeclaration(
         if (lastExpression is KtReturnExpression) return
 
         val defaultExpression =
-            if (!generatorOptions.inTempFile && defaultValue != null && descriptor.controlFlow.outputValueBoxer.boxingRequired && lastExpression!!.isMultiLine()) {
+            if (!generatorOptions.inTempFile && defaultValue != null && descriptor.controlFlow.outputValueBoxer
+                    .boxingRequired && lastExpression!!.isMultiLine()
+            ) {
                 val varNameValidator = NewDeclarationNameValidator(body, lastExpression, NewDeclarationNameValidator.Target.VARIABLES)
                 val resultVal = KotlinNameSuggester.suggestNamesByType(defaultValue.valueType, varNameValidator, null).first()
                 body.addBefore(psiFactory.createDeclaration("val $resultVal = ${lastExpression.text}"), lastExpression)
@@ -588,7 +603,7 @@ fun ExtractionGeneratorConfiguration.generateDeclaration(
             val bodyExpression = body.statements.singleOrNull()
             val bodyOwner = body.parent as KtDeclarationWithBody
             val useExpressionBodyInspection = UseExpressionBodyInspection()
-            if (bodyExpression != null && !bodyExpression.isMultiLine() && useExpressionBodyInspection.isActiveFor(bodyOwner)) {
+            if (bodyExpression != null && useExpressionBodyInspection.isActiveFor(bodyOwner)) {
                 useExpressionBodyInspection.simplify(bodyOwner, !useExplicitReturnType())
             }
         }
@@ -627,9 +642,9 @@ fun ExtractionGeneratorConfiguration.generateDeclaration(
         }
 
         val marginalCandidate = if (insertBefore) {
-            anchorCandidates.minBy { it.startOffset }!!
+            anchorCandidates.minByOrNull { it.startOffset }!!
         } else {
-            anchorCandidates.maxBy { it.startOffset }!!
+            anchorCandidates.maxByOrNull { it.startOffset }!!
         }
 
         // Ascend to the level of targetSibling
@@ -668,6 +683,21 @@ fun ExtractionGeneratorConfiguration.generateDeclaration(
             if (RemoveExplicitTypeArgumentsIntention.isApplicableTo(typeArgumentList, false)) {
                 typeArgumentList.delete()
             }
+        }
+    }
+
+    if (declaration is KtProperty) {
+        if (declaration.isExtensionDeclaration() && !declaration.isTopLevel) {
+            val receiverTypeReference = (declaration as? KtCallableDeclaration)?.receiverTypeReference
+            receiverTypeReference?.siblings(withItself = false)?.firstOrNull { it.node.elementType == KtTokens.DOT }?.delete()
+            receiverTypeReference?.delete()
+        }
+        if ((declaration.descriptor as? PropertyDescriptor)?.let { DescriptorUtils.isOverride(it) } == true) {
+            val scope = declaration.getResolutionScope()
+            val newName = KotlinNameSuggester.suggestNameByName(descriptor.name) {
+                it != descriptor.name && scope.getAllAccessibleVariables(Name.identifier(it)).isEmpty()
+            }
+            declaration.setName(newName)
         }
     }
 

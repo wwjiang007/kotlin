@@ -17,14 +17,12 @@
 package org.jetbrains.kotlin.psi2ir.generators
 
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
-import org.jetbrains.kotlin.descriptors.Visibilities
-import org.jetbrains.kotlin.descriptors.Visibility
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
+import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrExpressionBody
 import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
-import org.jetbrains.kotlin.ir.expressions.impl.IrExpressionBodyImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrGetValueImpl
-import org.jetbrains.kotlin.ir.util.declareFieldWithOverrides
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffsetSkippingComments
@@ -55,7 +53,7 @@ class PropertyGenerator(declarationGenerator: DeclarationGenerator) : Declaratio
         ).also { irProperty ->
             irProperty.backingField =
                 generatePropertyBackingField(ktParameter, propertyDescriptor) {
-                    IrExpressionBodyImpl(
+                    context.irFactory.createExpressionBody(
                         IrGetValueImpl(
                             ktParameter.startOffsetSkippingComments, ktParameter.endOffset,
                             irPropertyType,
@@ -76,6 +74,8 @@ class PropertyGenerator(declarationGenerator: DeclarationGenerator) : Declaratio
                 irProperty.setter =
                     FunctionGenerator(declarationGenerator).generateDefaultAccessorForPrimaryConstructorParameter(setter, ktParameter)
             }
+
+            irProperty.linkCorrespondingPropertySymbol()
         }
     }
 
@@ -102,6 +102,9 @@ class PropertyGenerator(declarationGenerator: DeclarationGenerator) : Declaratio
         DelegatedPropertyGenerator(declarationGenerator)
             .generateDelegatedProperty(ktProperty, ktDelegate, propertyDescriptor)
 
+    private fun PropertyDescriptor.actuallyHasBackingField(bindingContext: BindingContext) =
+        hasBackingField(bindingContext) || context.extensions.isPropertyWithPlatformField(this)
+
     private fun generateSimpleProperty(ktProperty: KtProperty, propertyDescriptor: PropertyDescriptor): IrProperty =
         context.symbolTable.declareProperty(
             ktProperty.startOffsetSkippingComments, ktProperty.endOffset,
@@ -110,12 +113,12 @@ class PropertyGenerator(declarationGenerator: DeclarationGenerator) : Declaratio
             isDelegated = false
         ).buildWithScope { irProperty ->
             irProperty.backingField =
-                if (propertyDescriptor.hasBackingField(context.bindingContext))
+                if (propertyDescriptor.actuallyHasBackingField(context.bindingContext))
                     generatePropertyBackingField(ktProperty, propertyDescriptor) { irField ->
                         ktProperty.initializer?.let { ktInitializer ->
                             val compileTimeConst = propertyDescriptor.compileTimeInitializer
                             if (propertyDescriptor.isConst && compileTimeConst != null)
-                                IrExpressionBodyImpl(
+                                context.irFactory.createExpressionBody(
                                     context.constantValueGenerator.generateConstantValueAsExpression(
                                         ktInitializer.startOffsetSkippingComments, ktInitializer.endOffset,
                                         compileTimeConst
@@ -130,31 +133,24 @@ class PropertyGenerator(declarationGenerator: DeclarationGenerator) : Declaratio
 
             irProperty.getter = generateGetterIfRequired(ktProperty, propertyDescriptor)
             irProperty.setter = generateSetterIfRequired(ktProperty, propertyDescriptor)
+
+            irProperty.linkCorrespondingPropertySymbol()
         }
 
     fun generateFakeOverrideProperty(propertyDescriptor: PropertyDescriptor, ktElement: KtPureElement): IrProperty? {
-        if (propertyDescriptor.visibility == Visibilities.INVISIBLE_FAKE) return null
+        if (propertyDescriptor.visibility == DescriptorVisibilities.INVISIBLE_FAKE) return null
 
         val startOffset = ktElement.pureStartOffsetOrUndefined
         val endOffset = ktElement.pureEndOffsetOrUndefined
 
-        val backingField =
-            if (propertyDescriptor.hasBackingField(context.bindingContext) && propertyDescriptor.fieldVisibility.admitsFakeOverride)
-                context.symbolTable.declareFieldWithOverrides(
-                    startOffset, endOffset, IrDeclarationOrigin.FAKE_OVERRIDE,
-                    propertyDescriptor, propertyDescriptor.type.toIrType()
-                ) { it.hasBackingField(context.bindingContext) }
-            else
-                null
-
         return context.symbolTable.declareProperty(startOffset, endOffset, IrDeclarationOrigin.FAKE_OVERRIDE, propertyDescriptor).apply {
-            this.backingField = backingField
             this.getter = propertyDescriptor.getter?.let {
                 FunctionGenerator(declarationGenerator).generateFakeOverrideFunction(it, ktElement)
             }
             this.setter = propertyDescriptor.setter?.let {
                 FunctionGenerator(declarationGenerator).generateFakeOverrideFunction(it, ktElement)
             }
+            this.linkCorrespondingPropertySymbol()
         }
     }
 
@@ -174,15 +170,22 @@ class PropertyGenerator(declarationGenerator: DeclarationGenerator) : Declaratio
         return variableDescriptor as? PropertyDescriptor ?: TODO("not a property: $variableDescriptor")
     }
 
-    private val Visibility.admitsFakeOverride: Boolean
-        get() = !Visibilities.isPrivate(this) && this != Visibilities.INVISIBLE_FAKE
+    private val DescriptorVisibility.admitsFakeOverride: Boolean
+        get() = !DescriptorVisibilities.isPrivate(this) && this != DescriptorVisibilities.INVISIBLE_FAKE
 
-    private val PropertyDescriptor.fieldVisibility: Visibility
+    private val PropertyDescriptor.fieldVisibility: DescriptorVisibility
         get() = declarationGenerator.context.extensions.computeFieldVisibility(this)
             ?: when {
                 isLateInit -> setter?.visibility ?: visibility
                 isConst -> visibility
-                else -> Visibilities.PRIVATE
+                else -> DescriptorVisibilities.PRIVATE
             }
 }
+
+internal fun IrProperty.linkCorrespondingPropertySymbol() {
+    backingField?.correspondingPropertySymbol = symbol
+    getter?.correspondingPropertySymbol = symbol
+    setter?.correspondingPropertySymbol = symbol
+}
+
 

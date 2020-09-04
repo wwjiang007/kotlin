@@ -15,11 +15,14 @@ import org.jetbrains.kotlin.config.languageVersionSettings
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.*
-import org.jetbrains.kotlin.idea.debugger.evaluate.*
+import org.jetbrains.kotlin.idea.FrontendInternals
+import org.jetbrains.kotlin.idea.debugger.evaluate.EvaluationStatus
+import org.jetbrains.kotlin.idea.debugger.evaluate.ExecutionContext
 import org.jetbrains.kotlin.idea.debugger.evaluate.classLoading.ClassToLoad
 import org.jetbrains.kotlin.idea.debugger.evaluate.classLoading.GENERATED_CLASS_NAME
 import org.jetbrains.kotlin.idea.debugger.evaluate.classLoading.GENERATED_FUNCTION_NAME
 import org.jetbrains.kotlin.idea.debugger.evaluate.compilation.CompiledDataDescriptor.MethodSignature
+import org.jetbrains.kotlin.idea.debugger.evaluate.getResolutionFacadeForCodeFragment
 import org.jetbrains.kotlin.idea.project.languageVersionSettings
 import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.incremental.components.LookupLocation
@@ -50,12 +53,16 @@ class CodeFragmentCompiler(private val executionContext: ExecutionContext, priva
         val mainMethodSignature: MethodSignature
     )
 
-    fun compile(codeFragment: KtCodeFragment, bindingContext: BindingContext, moduleDescriptor: ModuleDescriptor): CompilationResult {
-        return runReadAction { doCompile(codeFragment, bindingContext, moduleDescriptor) }
+    fun compile(
+        codeFragment: KtCodeFragment, filesToCompile: List<KtFile>,
+        bindingContext: BindingContext, moduleDescriptor: ModuleDescriptor
+    ): CompilationResult {
+        return runReadAction { doCompile(codeFragment, filesToCompile, bindingContext, moduleDescriptor) }
     }
 
     private fun doCompile(
-        codeFragment: KtCodeFragment, bindingContext: BindingContext, moduleDescriptor: ModuleDescriptor
+        codeFragment: KtCodeFragment, filesToCompile: List<KtFile>,
+        bindingContext: BindingContext, moduleDescriptor: ModuleDescriptor
     ): CompilationResult {
         require(codeFragment is KtBlockCodeFragment || codeFragment is KtExpressionCodeFragment) {
             "Unsupported code fragment type: $codeFragment"
@@ -63,6 +70,8 @@ class CodeFragmentCompiler(private val executionContext: ExecutionContext, priva
 
         val project = codeFragment.project
         val resolutionFacade = getResolutionFacadeForCodeFragment(codeFragment)
+
+        @OptIn(FrontendInternals::class)
         val resolveSession = resolutionFacade.getFrontendService(ResolveSession::class.java)
         val moduleDescriptorWrapper = EvaluatorModuleDescriptor(codeFragment, moduleDescriptor, resolveSession)
 
@@ -74,8 +83,8 @@ class CodeFragmentCompiler(private val executionContext: ExecutionContext, priva
 
         val generationState = GenerationState.Builder(
             project, ClassBuilderFactories.BINARIES, moduleDescriptorWrapper,
-            bindingContext, listOf(codeFragment), compilerConfiguration
-        ).build()
+            bindingContext, filesToCompile, compilerConfiguration
+        ).generateDeclaredClassFilter(GeneratedClassFilterForCodeFragment(codeFragment)).build()
 
         val parameterInfo = CodeFragmentParameterAnalyzer(executionContext, codeFragment, bindingContext, status).analyze()
         val (classDescriptor, methodDescriptor) = createDescriptorsForCodeFragment(
@@ -87,7 +96,7 @@ class CodeFragmentCompiler(private val executionContext: ExecutionContext, priva
         CodeFragmentCodegen.setCodeFragmentInfo(codeFragment, codegenInfo)
 
         try {
-            KotlinCodegenFacade.compileCorrectFiles(generationState, CompilationErrorHandler.THROW_EXCEPTION)
+            KotlinCodegenFacade.compileCorrectFiles(generationState)
 
             val classes = generationState.factory.asList().filterClassFiles()
                 .map { ClassToLoad(it.internalClassName, it.relativePath, it.asByteArray()) }
@@ -101,6 +110,14 @@ class CodeFragmentCompiler(private val executionContext: ExecutionContext, priva
         } finally {
             CodeFragmentCodegen.clearCodeFragmentInfo(codeFragment)
         }
+    }
+
+    private class GeneratedClassFilterForCodeFragment(private val codeFragment: KtCodeFragment) : GenerationState.GenerateClassFilter() {
+        override fun shouldGeneratePackagePart(@Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE") file: KtFile) = file == codeFragment
+        override fun shouldAnnotateClass(processingClassOrObject: KtClassOrObject) = true
+        override fun shouldGenerateClass(processingClassOrObject: KtClassOrObject) = processingClassOrObject.containingFile == codeFragment
+        override fun shouldGenerateCodeFragment(codeFragment: KtCodeFragment) = codeFragment == this.codeFragment
+        override fun shouldGenerateScript(script: KtScript) = false
     }
 
     private fun getLocalFunctionSuffixes(
@@ -192,7 +209,7 @@ class CodeFragmentCompiler(private val executionContext: ExecutionContext, priva
 
         methodDescriptor.initialize(
             null, classDescriptor.thisAsReceiverParameter, emptyList(),
-            parameters, returnType, Modality.FINAL, Visibilities.PUBLIC
+            parameters, returnType, Modality.FINAL, DescriptorVisibilities.PUBLIC
         )
 
         val memberScope = EvaluatorMemberScopeForMethod(methodDescriptor)
@@ -270,7 +287,7 @@ private class EvaluatorModuleDescriptor(
                     MemberScope.Empty
                 } else {
                     val scopes = fragments.map { it.getMemberScope() } + SubpackagesScope(module, fqName)
-                    ChainedMemberScope("package view scope for $fqName in ${module.name}", scopes)
+                    ChainedMemberScope.create("package view scope for $fqName in ${module.name}", scopes)
                 }
             }
 

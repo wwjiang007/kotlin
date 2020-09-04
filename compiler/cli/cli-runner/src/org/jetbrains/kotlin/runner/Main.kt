@@ -36,25 +36,48 @@ object Main {
 
     private fun run(args: Array<String>) {
         val classpath = arrayListOf<URL>()
+        val compilerClasspath = arrayListOf<URL>()
         var runner: Runner? = null
         var collectingArguments = false
+        var collectingExpressions = false
+        var needsCompiler = false
         val arguments = arrayListOf<String>()
+        var expression: String? = null
         var noReflect = false
+
+        fun setExpression(expr: String) {
+            if (expression == null) {
+                expression = expr
+            } else {
+                throw RunnerException("Only single -e/-expression argument supported")
+            }
+        }
 
         var i = 0
         while (i < args.size) {
             val arg = args[i]
-            if (collectingArguments) {
-                arguments.add(arg)
-                i++
-                continue
-            }
 
             fun next(): String {
                 if (++i == args.size) {
                     throw RunnerException("argument expected to $arg")
                 }
                 return args[i]
+            }
+
+            if (collectingExpressions) {
+                if ("-expression" == arg || "-e" == arg) {
+                    setExpression(next())
+                    i++
+                    continue
+                } else {
+                    collectingArguments = true
+                }
+            }
+
+            if (collectingArguments) {
+                arguments.add(arg)
+                i++
+                continue
             }
 
             if ("-help" == arg || "-h" == arg) {
@@ -68,9 +91,15 @@ object Main {
                     classpath.addPath(path)
                 }
             }
+            else if ("-compiler-path" == arg) {
+                for (path in next().split(File.pathSeparator).filter(String::isNotEmpty)) {
+                    compilerClasspath.addPath(path)
+                }
+            }
             else if ("-expression" == arg || "-e" == arg) {
-                runner = ExpressionRunner(next())
-                collectingArguments = true
+                setExpression(next())
+                collectingExpressions = true
+                needsCompiler = true
             }
             else if ("-no-reflect" == arg) {
                 noReflect = true
@@ -85,6 +114,7 @@ object Main {
             else if (arg.endsWith(".kts")) {
                 runner = ScriptRunner(arg)
                 collectingArguments = true
+                needsCompiler = true
             }
             else {
                 runner = MainClassRunner(arg)
@@ -97,17 +127,26 @@ object Main {
             classpath.addPath(".")
         }
 
-        classpath.addPath(KOTLIN_HOME.toString() + "/lib/kotlin-stdlib.jar")
+        classpath.addPath("$KOTLIN_HOME/lib/kotlin-stdlib.jar")
 
         if (!noReflect) {
-            classpath.addPath(KOTLIN_HOME.toString() + "/lib/kotlin-reflect.jar")
+            classpath.addPath("$KOTLIN_HOME/lib/kotlin-reflect.jar")
         }
 
-        if (runner == null) {
+        if (expression != null) {
+            runner = ExpressionRunner(expression!!)
+        } else if (runner == null) {
             runner = ReplRunner()
+            needsCompiler = true
         }
 
-        runner.run(classpath, arguments)
+        if (needsCompiler && compilerClasspath.isEmpty()) {
+            findCompilerJar(this::class.java, KOTLIN_HOME.resolve("lib")).forEach {
+                compilerClasspath.add(it.absoluteFile.toURI().toURL())
+            }
+        }
+
+        runner.run(classpath, arguments, compilerClasspath)
     }
 
     private fun MutableList<URL>.addPath(path: String) {

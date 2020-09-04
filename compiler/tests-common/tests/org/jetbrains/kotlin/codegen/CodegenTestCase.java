@@ -5,8 +5,6 @@
 
 package org.jetbrains.kotlin.codegen;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.testFramework.TestDataFile;
@@ -16,20 +14,23 @@ import kotlin.io.FilesKt;
 import kotlin.text.Charsets;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.TestHelperGeneratorKt;
 import org.jetbrains.kotlin.TestsCompilerError;
 import org.jetbrains.kotlin.TestsCompiletimeError;
 import org.jetbrains.kotlin.backend.common.output.OutputFile;
 import org.jetbrains.kotlin.backend.common.output.SimpleOutputFileCollection;
-import org.jetbrains.kotlin.checkers.CompilerTestLanguageVersionSettings;
 import org.jetbrains.kotlin.checkers.utils.CheckerTestUtil;
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys;
 import org.jetbrains.kotlin.cli.common.output.OutputUtilsKt;
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles;
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment;
 import org.jetbrains.kotlin.cli.jvm.compiler.NoScopeRecordCliBindingTrace;
+import org.jetbrains.kotlin.cli.jvm.config.JvmClasspathRoot;
 import org.jetbrains.kotlin.codegen.forTestCompile.ForTestCompileRuntime;
 import org.jetbrains.kotlin.codegen.state.GenerationState;
-import org.jetbrains.kotlin.config.*;
+import org.jetbrains.kotlin.config.CompilerConfiguration;
+import org.jetbrains.kotlin.config.JVMConfigurationKeys;
+import org.jetbrains.kotlin.config.JvmTarget;
 import org.jetbrains.kotlin.fileClasses.JvmFileClassUtil;
 import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.psi.KtFile;
@@ -37,7 +38,6 @@ import org.jetbrains.kotlin.scripting.definitions.ScriptDependenciesProvider;
 import org.jetbrains.kotlin.scripting.resolve.ScriptCompilationConfigurationWrapper;
 import org.jetbrains.kotlin.test.*;
 import org.jetbrains.kotlin.test.clientserver.TestProxy;
-import org.jetbrains.kotlin.test.testFramework.KtUsefulTestCase;
 import org.jetbrains.kotlin.utils.ExceptionUtilsKt;
 import org.jetbrains.org.objectweb.asm.ClassReader;
 import org.jetbrains.org.objectweb.asm.tree.ClassNode;
@@ -52,20 +52,13 @@ import org.jetbrains.org.objectweb.asm.util.TraceMethodVisitor;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.*;
 
-import static org.jetbrains.kotlin.checkers.CompilerTestLanguageVersionSettingsKt.parseLanguageVersionSettings;
 import static org.jetbrains.kotlin.cli.common.output.OutputUtilsKt.writeAllTo;
 import static org.jetbrains.kotlin.codegen.CodegenTestUtil.*;
 import static org.jetbrains.kotlin.codegen.TestUtilsKt.extractUrls;
@@ -73,7 +66,7 @@ import static org.jetbrains.kotlin.test.KotlinTestUtils.getAnnotationsJar;
 import static org.jetbrains.kotlin.test.clientserver.TestProcessServerKt.getBoxMethodOrNull;
 import static org.jetbrains.kotlin.test.clientserver.TestProcessServerKt.getGeneratedClass;
 
-public abstract class CodegenTestCase extends KtUsefulTestCase {
+public abstract class CodegenTestCase extends KotlinBaseTest<KotlinBaseTest.TestFile> {
     private static final String DEFAULT_TEST_FILE_NAME = "a_test";
     private static final String DEFAULT_JVM_TARGET = System.getProperty("kotlin.test.default.jvm.target");
     public static final String BOX_IN_SEPARATE_PROCESS_PORT = System.getProperty("kotlin.test.box.in.separate.process.port");
@@ -85,7 +78,6 @@ public abstract class CodegenTestCase extends KtUsefulTestCase {
     protected GeneratedClassLoader initializedClassLoader;
     protected File javaClassesOutputDirectory = null;
     protected List<File> additionalDependencies = null;
-    protected String coroutinesPackage = "";
 
     protected ConfigurationKind configurationKind = ConfigurationKind.JDK_ONLY;
 
@@ -94,16 +86,6 @@ public abstract class CodegenTestCase extends KtUsefulTestCase {
             @NotNull File... javaSourceRoots
     ) {
         createEnvironmentWithMockJdkAndIdeaAnnotations(configurationKind, Collections.emptyList(), TestJdkKind.MOCK_JDK, javaSourceRoots);
-    }
-
-    @NotNull
-    protected static TestJdkKind getJdkKind(@NotNull List<TestFile> files) {
-        for (TestFile file : files) {
-            if (InTextDirectivesUtils.isDirectiveDefined(file.content, "FULL_JDK")) {
-                return TestJdkKind.FULL_JDK;
-            }
-        }
-        return TestJdkKind.MOCK_JDK;
     }
 
     protected final void createEnvironmentWithMockJdkAndIdeaAnnotations(
@@ -127,180 +109,6 @@ public abstract class CodegenTestCase extends KtUsefulTestCase {
         myEnvironment = KotlinCoreEnvironment.createForTests(
                 getTestRootDisposable(), configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES
         );
-    }
-
-    protected void configureTestSpecific(@NotNull CompilerConfiguration configuration, @NotNull List<TestFile> testFiles) {}
-
-    @NotNull
-    protected CompilerConfiguration createConfiguration(
-            @NotNull ConfigurationKind kind,
-            @NotNull TestJdkKind jdkKind,
-            @NotNull List<File> classpath,
-            @NotNull List<File> javaSource,
-            @NotNull List<TestFile> testFilesWithConfigurationDirectives
-    ) {
-        CompilerConfiguration configuration = KotlinTestUtils.newConfiguration(kind, jdkKind, classpath, javaSource);
-        configuration.put(JVMConfigurationKeys.IR, getBackend().isIR());
-
-        updateConfigurationByDirectivesInTestFiles(testFilesWithConfigurationDirectives, configuration, coroutinesPackage);
-        updateConfiguration(configuration);
-        setCustomDefaultJvmTarget(configuration);
-
-        configureTestSpecific(configuration, testFilesWithConfigurationDirectives);
-
-        return configuration;
-    }
-
-    protected static void updateConfigurationByDirectivesInTestFiles(
-            @NotNull List<TestFile> testFilesWithConfigurationDirectives,
-            @NotNull CompilerConfiguration configuration
-    ) {
-        updateConfigurationByDirectivesInTestFiles(testFilesWithConfigurationDirectives, configuration, "");
-    }
-
-    private static void updateConfigurationByDirectivesInTestFiles(
-            @NotNull List<TestFile> testFilesWithConfigurationDirectives,
-            @NotNull CompilerConfiguration configuration,
-            @NotNull String coroutinesPackage
-    ) {
-        LanguageVersionSettings explicitLanguageVersionSettings = null;
-        boolean disableReleaseCoroutines = false;
-
-        List<String> kotlinConfigurationFlags = new ArrayList<>(0);
-        for (TestFile testFile : testFilesWithConfigurationDirectives) {
-            kotlinConfigurationFlags.addAll(InTextDirectivesUtils.findListWithPrefixes(testFile.content, "// KOTLIN_CONFIGURATION_FLAGS:"));
-
-            List<String> lines = InTextDirectivesUtils.findLinesWithPrefixesRemoved(testFile.content, "// JVM_TARGET:");
-            if (!lines.isEmpty()) {
-                String targetString = CollectionsKt.single(lines);
-                JvmTarget jvmTarget = JvmTarget.Companion.fromString(targetString);
-                assert jvmTarget != null : "Unknown target: " + targetString;
-                configuration.put(JVMConfigurationKeys.JVM_TARGET, jvmTarget);
-            }
-
-            String version = InTextDirectivesUtils.findStringWithPrefixes(testFile.content, "// LANGUAGE_VERSION:");
-            if (version != null) {
-                throw new AssertionError(
-                        "Do not use LANGUAGE_VERSION directive in compiler tests because it's prone to limiting the test\n" +
-                        "to a specific language version, which will become obsolete at some point and the test won't check\n" +
-                        "things like feature intersection with newer releases. Use `// !LANGUAGE: [+-]FeatureName` directive instead,\n" +
-                        "where FeatureName is an entry of the enum `LanguageFeature`\n"
-                );
-            }
-
-            if (!InTextDirectivesUtils.findLinesWithPrefixesRemoved(testFile.content, "// COMMON_COROUTINES_TEST").isEmpty()) {
-                assert !testFile.content.contains("COROUTINES_PACKAGE") : "Must replace COROUTINES_PACKAGE prior to tests compilation";
-                if (coroutinesPackage.equals("kotlin.coroutines.experimental")) {
-                    disableReleaseCoroutines = true;
-                }
-            }
-
-            Map<String, String> directives = KotlinTestUtils.parseDirectives(testFile.content);
-
-            LanguageVersionSettings fileLanguageVersionSettings = parseLanguageVersionSettings(directives);
-            if (fileLanguageVersionSettings != null) {
-                assert explicitLanguageVersionSettings == null : "Should not specify !LANGUAGE directive twice";
-                explicitLanguageVersionSettings = fileLanguageVersionSettings;
-            }
-        }
-
-        if (disableReleaseCoroutines) {
-            explicitLanguageVersionSettings = new CompilerTestLanguageVersionSettings(
-                    Collections.singletonMap(LanguageFeature.ReleaseCoroutines, LanguageFeature.State.DISABLED),
-                    ApiVersion.LATEST_STABLE,
-                    LanguageVersion.LATEST_STABLE,
-                    Collections.emptyMap()
-            );
-        }
-
-        if (explicitLanguageVersionSettings != null) {
-            CommonConfigurationKeysKt.setLanguageVersionSettings(configuration, explicitLanguageVersionSettings);
-        }
-
-        updateConfigurationWithFlags(configuration, kotlinConfigurationFlags);
-    }
-
-    private static final Map<String, Class<?>> FLAG_NAMESPACE_TO_CLASS = ImmutableMap.of(
-            "CLI", CLIConfigurationKeys.class,
-            "JVM", JVMConfigurationKeys.class
-    );
-
-    private static final List<Class<?>> FLAG_CLASSES = ImmutableList.of(CLIConfigurationKeys.class, JVMConfigurationKeys.class);
-
-    private static final Pattern BOOLEAN_FLAG_PATTERN = Pattern.compile("([+-])(([a-zA-Z_0-9]*)\\.)?([a-zA-Z_0-9]*)");
-    private static final Pattern CONSTRUCTOR_CALL_NORMALIZATION_MODE_FLAG_PATTERN = Pattern.compile(
-            "CONSTRUCTOR_CALL_NORMALIZATION_MODE=([a-zA-Z_\\-0-9]*)");
-    private static final Pattern ASSERTIONS_MODE_FLAG_PATTERN = Pattern.compile("ASSERTIONS_MODE=([a-zA-Z_0-9-]*)");
-
-    private static void updateConfigurationWithFlags(@NotNull CompilerConfiguration configuration, @NotNull List<String> flags) {
-        for (String flag : flags) {
-            Matcher m = BOOLEAN_FLAG_PATTERN.matcher(flag);
-            if (m.matches()) {
-                boolean flagEnabled = !"-".equals(m.group(1));
-                String flagNamespace = m.group(3);
-                String flagName = m.group(4);
-
-                tryApplyBooleanFlag(configuration, flag, flagEnabled, flagNamespace, flagName);
-                continue;
-            }
-
-            m = CONSTRUCTOR_CALL_NORMALIZATION_MODE_FLAG_PATTERN.matcher(flag);
-            if (m.matches()) {
-                String flagValueString = m.group(1);
-                JVMConstructorCallNormalizationMode mode = JVMConstructorCallNormalizationMode.fromStringOrNull(flagValueString);
-                assert mode != null : "Wrong CONSTRUCTOR_CALL_NORMALIZATION_MODE value: " + flagValueString;
-                configuration.put(JVMConfigurationKeys.CONSTRUCTOR_CALL_NORMALIZATION_MODE, mode);
-            }
-
-            m = ASSERTIONS_MODE_FLAG_PATTERN.matcher(flag);
-            if (m.matches()) {
-                String flagValueString = m.group(1);
-                JVMAssertionsMode mode = JVMAssertionsMode.fromStringOrNull(flagValueString);
-                assert mode != null : "Wrong ASSERTIONS_MODE value: " + flagValueString;
-                configuration.put(JVMConfigurationKeys.ASSERTIONS_MODE, mode);
-            }
-        }
-    }
-
-    private static void tryApplyBooleanFlag(
-            @NotNull CompilerConfiguration configuration,
-            @NotNull String flag,
-            boolean flagEnabled,
-            @Nullable String flagNamespace,
-            @NotNull String flagName
-    ) {
-        Class<?> configurationKeysClass;
-        Field configurationKeyField = null;
-        if (flagNamespace == null) {
-            for (Class<?> flagClass : FLAG_CLASSES) {
-                try {
-                    configurationKeyField = flagClass.getField(flagName);
-                    break;
-                }
-                catch (Exception ignored) {
-                }
-            }
-        }
-        else {
-            configurationKeysClass = FLAG_NAMESPACE_TO_CLASS.get(flagNamespace);
-            assert configurationKeysClass != null : "Expected [+|-][namespace.]configurationKey, got: " + flag;
-            try {
-                configurationKeyField = configurationKeysClass.getField(flagName);
-            }
-            catch (Exception e) {
-                configurationKeyField = null;
-            }
-        }
-        assert configurationKeyField != null : "Expected [+|-][namespace.]configurationKey, got: " + flag;
-
-        try {
-            @SuppressWarnings("unchecked")
-            CompilerConfigurationKey<Boolean> configurationKey = (CompilerConfigurationKey<Boolean>) configurationKeyField.get(null);
-            configuration.put(configurationKey, flagEnabled);
-        }
-        catch (Exception e) {
-            assert false : "Expected [+|-][namespace.]configurationKey, got: " + flag;
-        }
     }
 
     @Override
@@ -384,11 +192,6 @@ public abstract class CodegenTestCase extends KtUsefulTestCase {
     }
 
     @NotNull
-    protected GeneratedClassLoader generateAndCreateClassLoader() {
-        return generateAndCreateClassLoader(true);
-    }
-
-    @NotNull
     protected GeneratedClassLoader generateAndCreateClassLoader(boolean reportProblems) {
         if (initializedClassLoader != null) {
             fail("Double initialization of class loader in same test");
@@ -429,6 +232,7 @@ public abstract class CodegenTestCase extends KtUsefulTestCase {
         if (additionalDependencies != null) {
             files.addAll(additionalDependencies);
         }
+        files.addAll(getExtraDependenciesFromKotlinCompileClasspath());
 
         ScriptDependenciesProvider externalImportsProvider =
                 ScriptDependenciesProvider.Companion.getInstance(myEnvironment.getProject());
@@ -454,6 +258,20 @@ public abstract class CodegenTestCase extends KtUsefulTestCase {
             throw ExceptionUtilsKt.rethrow(e);
         }
     }
+
+    private Set<File> getExtraDependenciesFromKotlinCompileClasspath() {
+        List<File> includeFromCompileClasspath = CollectionsKt.listOf(
+                ForTestCompileRuntime.coroutinesCompatForTests()
+        );
+        List<File> compileClasspath =
+                CollectionsKt.map(
+                        CollectionsKt.filterIsInstance(
+                                myEnvironment.getConfiguration().get(CLIConfigurationKeys.CONTENT_ROOTS),
+                                JvmClasspathRoot.class),
+                        JvmClasspathRoot::getFile);
+        return CollectionsKt.intersect(compileClasspath, includeFromCompileClasspath);
+    }
+
 
     @NotNull
     protected String generateToText() {
@@ -514,27 +332,21 @@ public abstract class CodegenTestCase extends KtUsefulTestCase {
             );
             classFileFactory = generationState.getFactory();
 
-            if (verifyWithDex() && DxChecker.RUN_DX_CHECKER) {
+            // Some names are not allowed in the dex file format and the VM will reject the program
+            // if they are used. Therefore, a few tests cannot be dexed as they use such names that
+            // are valid on the JVM but not on the Android Runtime.
+            boolean ignoreDexing = myFiles.getPsiFiles().stream().anyMatch(
+                it -> InTextDirectivesUtils.isDirectiveDefined(it.getText(), "IGNORE_DEXING")
+            );
+            if (verifyWithDex() && DxChecker.RUN_DX_CHECKER && !ignoreDexing) {
                 DxChecker.check(classFileFactory);
+                D8Checker.check(classFileFactory);
             }
         }
         catch (TestsCompiletimeError e) {
             if (reportProblems) {
                 e.getOriginal().printStackTrace();
-                System.err.println("Generating instructions as text...");
-                try {
-                    if (classFileFactory == null) {
-                        System.err.println("Cannot generate text: exception was thrown during generation");
-                    }
-                    else {
-                        System.err.println(classFileFactory.createText());
-                    }
-                }
-                catch (Throwable e1) {
-                    System.err.println("Exception thrown while trying to generate text, the actual exception follows:");
-                    e1.printStackTrace();
-                    System.err.println("-----------------------------------------------------------------------------");
-                }
+                generateInstructionsAsText();
                 System.err.println("See exceptions above");
             }
             else {
@@ -543,9 +355,29 @@ public abstract class CodegenTestCase extends KtUsefulTestCase {
             throw e;
         }
         catch (Throwable e) {
+            if (reportProblems) {
+                generateInstructionsAsText();
+            }
             throw new TestsCompilerError(e);
         }
         return classFileFactory;
+    }
+
+    private void generateInstructionsAsText() {
+        System.err.println("Generating instructions as text...");
+        try {
+            if (classFileFactory == null) {
+                System.err.println("Cannot generate text: exception was thrown during generation");
+            }
+            else {
+                System.err.println(classFileFactory.createText());
+            }
+        }
+        catch (Throwable e1) {
+            System.err.println("Exception thrown while trying to generate text, the actual exception follows:");
+            e1.printStackTrace();
+            System.err.println("-----------------------------------------------------------------------------");
+        }
     }
 
     protected boolean verifyWithDex() {
@@ -613,19 +445,16 @@ public abstract class CodegenTestCase extends KtUsefulTestCase {
         return findDeclaredMethodByName(generateFacadeClass(), name);
     }
 
+    @Override
     protected void updateConfiguration(@NotNull CompilerConfiguration configuration) {
-
+        setCustomDefaultJvmTarget(configuration);
     }
 
     protected ClassBuilderFactory getClassBuilderFactory() {
         return ClassBuilderFactories.TEST;
     }
 
-    protected void setupEnvironment(@NotNull KotlinCoreEnvironment environment) {
-
-    }
-
-    protected void setCustomDefaultJvmTarget(CompilerConfiguration configuration) {
+    private static void setCustomDefaultJvmTarget(CompilerConfiguration configuration) {
         if (DEFAULT_JVM_TARGET != null) {
             JvmTarget customDefaultTarget = JvmTarget.fromString(DEFAULT_JVM_TARGET);
             assert customDefaultTarget != null : "Can't construct JvmTarget for " + DEFAULT_JVM_TARGET;
@@ -665,7 +494,7 @@ public abstract class CodegenTestCase extends KtUsefulTestCase {
         }
 
         CompilerConfiguration configuration = createConfiguration(
-                configurationKind, getJdkKind(files),
+                configurationKind, getTestJdkKind(files),
                 classpath,
                 ArraysKt.filterNotNull(new File[] {javaSourceDir}),
                 files
@@ -696,29 +525,15 @@ public abstract class CodegenTestCase extends KtUsefulTestCase {
             if (loadAndroidAnnotations) {
                 javaClasspath.add(ForTestCompileRuntime.androidAnnotationsForTests().getPath());
             }
+            javaClasspath.addAll(CollectionsKt.map(getExtraDependenciesFromKotlinCompileClasspath(), File::getPath));
+            updateJavaClasspath(javaClasspath);
 
             javaClassesOutputDirectory = getJavaClassesOutputDirectory();
             compileJava(findJavaSourcesInDirectory(javaSourceDir), javaClasspath, javacOptions, javaClassesOutputDirectory);
         }
     }
 
-
-    protected ConfigurationKind extractConfigurationKind(@NotNull List<TestFile> files) {
-        boolean addRuntime = false;
-        boolean addReflect = false;
-        for (TestFile file : files) {
-            if (InTextDirectivesUtils.isDirectiveDefined(file.content, "WITH_RUNTIME")) {
-                addRuntime = true;
-            }
-            if (InTextDirectivesUtils.isDirectiveDefined(file.content, "WITH_REFLECT")) {
-                addReflect = true;
-            }
-        }
-
-        return addReflect ? ConfigurationKind.ALL :
-               addRuntime ? ConfigurationKind.NO_KOTLIN_REFLECT :
-               ConfigurationKind.JDK_ONLY;
-    }
+    protected void updateJavaClasspath(@NotNull List<String> javaClasspath) {}
 
     @NotNull
     protected static List<String> extractJavacOptions(@NotNull List<TestFile> files) {
@@ -739,41 +554,14 @@ public abstract class CodegenTestCase extends KtUsefulTestCase {
         }
     }
 
+    @NotNull
+    @Override
     protected TargetBackend getBackend() {
         return TargetBackend.JVM;
     }
 
-    public static class TestFile implements Comparable<TestFile> {
-        public final String name;
-        public final String content;
-
-        public TestFile(@NotNull String name, @NotNull String content) {
-            this.name = name;
-            this.content = content;
-        }
-
-        @Override
-        public int compareTo(@NotNull TestFile o) {
-            return name.compareTo(o.name);
-        }
-
-        @Override
-        public int hashCode() {
-            return name.hashCode();
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            return obj instanceof TestFile && ((TestFile) obj).name.equals(name);
-        }
-
-        @Override
-        public String toString() {
-            return name;
-        }
-    }
-
-    protected void doTest(String filePath) throws Exception {
+    @Override
+    protected void doTest(@NotNull String filePath) throws Exception {
         File file = new File(filePath);
 
         String expectedText = KotlinTestUtils.doLoadFile(file);
@@ -781,26 +569,45 @@ public abstract class CodegenTestCase extends KtUsefulTestCase {
             expectedText = expectedText.replace("COROUTINES_PACKAGE", coroutinesPackage);
         }
 
-        List<TestFile> testFiles = createTestFiles(file, expectedText, coroutinesPackage);
+        List<TestFile> testFiles = createTestFilesFromFile(file, expectedText);
 
         doMultiFileTest(file, testFiles);
     }
 
-    protected void doTestWithCoroutinesPackageReplacement(String filePath, String packageName) throws Exception {
+    @Override
+    protected void doTestWithCoroutinesPackageReplacement(@NotNull String filePath, @NotNull String packageName) throws Exception {
         this.coroutinesPackage = packageName;
         doTest(filePath);
     }
 
+    @Override
     @NotNull
-    private static List<TestFile> createTestFiles(File file, String expectedText, String coroutinesPackage) {
-        return TestFiles.createTestFiles(file.getName(), expectedText, new TestFiles.TestFileFactoryNoModules<TestFile>() {
-            @NotNull
-            @Override
-            public TestFile create(@NotNull String fileName, @NotNull String text, @NotNull Map<String, String> directives) {
-                return new TestFile(fileName, text);
-            }
-        }, coroutinesPackage);
+    protected List<TestFile> createTestFilesFromFile(@NotNull File file, @NotNull String expectedText) {
+        return createTestFilesFromFile(file, expectedText, coroutinesPackage, parseDirectivesPerFiles(), getBackend());
     }
+
+    @NotNull
+    public static List<TestFile> createTestFilesFromFile(
+            @NotNull File file,
+            @NotNull String expectedText,
+            @NotNull String coroutinesPackage,
+            boolean parseDirectivesPerFiles,
+            @NotNull TargetBackend backend
+    ) {
+        List<TestFile> testFiles =
+                TestFiles.createTestFiles(file.getName(), expectedText, new TestFiles.TestFileFactoryNoModules<TestFile>() {
+                    @NotNull
+                    @Override
+                    public TestFile create(@NotNull String fileName, @NotNull String text, @NotNull Directives directives) {
+                        return new TestFile(fileName, text, directives);
+                    }
+                }, false, coroutinesPackage, parseDirectivesPerFiles);
+        if (InTextDirectivesUtils.isDirectiveDefined(expectedText, "WITH_HELPERS")) {
+            testFiles.add(new TestFile("CodegenTestHelpers.kt", TestHelperGeneratorKt.createTextForCodegenTestHelpers(backend)));
+        }
+        return testFiles;
+    }
+
 
     @NotNull
     protected File getJavaSourcesOutputDirectory() {
@@ -839,13 +646,6 @@ public abstract class CodegenTestCase extends KtUsefulTestCase {
         }
 
         return dir;
-    }
-
-    protected void doMultiFileTest(
-            @NotNull File wholeFile,
-            @NotNull List<TestFile> files
-    ) throws Exception {
-        throw new UnsupportedOperationException("Multi-file test cases are not supported in this test");
     }
 
     protected void callBoxMethodAndCheckResult(URLClassLoader classLoader, String className)

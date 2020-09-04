@@ -5,20 +5,21 @@
 
 package org.jetbrains.kotlin.ir.backend.js.lower
 
-import org.jetbrains.kotlin.backend.common.FileLoweringPass
+import org.jetbrains.kotlin.backend.common.BodyLoweringPass
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
 import org.jetbrains.kotlin.ir.backend.js.ir.JsIrBuilder
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationParent
-import org.jetbrains.kotlin.ir.declarations.IrFile
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationBase
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrBranchImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrCatchImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrElseBranchImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrTryImpl
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
-import org.jetbrains.kotlin.ir.types.*
+import org.jetbrains.kotlin.ir.types.IrDynamicType
+import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformer
 
 /**
@@ -45,14 +46,14 @@ import org.jetbrains.kotlin.ir.visitors.IrElementTransformer
  * finally {}
  */
 
-class MultipleCatchesLowering(private val context: JsIrBackendContext) : FileLoweringPass {
+class MultipleCatchesLowering(private val context: JsIrBackendContext) : BodyLoweringPass {
     private val litTrue get() = JsIrBuilder.buildBoolean(context.irBuiltIns.booleanType, true)
     private val nothingType = context.irBuiltIns.nothingType
 
-    override fun lower(irFile: IrFile) {
-        irFile.transformChildren(object : IrElementTransformer<IrDeclarationParent> {
+    override fun lower(irBody: IrBody, container: IrDeclaration) {
+        irBody.transform(object : IrElementTransformer<IrDeclarationParent> {
 
-            override fun visitDeclaration(declaration: IrDeclaration, data: IrDeclarationParent): IrStatement {
+            override fun visitDeclaration(declaration: IrDeclarationBase, data: IrDeclarationParent): IrStatement {
                 val parent = (declaration as? IrDeclarationParent) ?: data
                 return super.visitDeclaration(declaration, parent)
             }
@@ -117,6 +118,6 @@ class MultipleCatchesLowering(private val context: JsIrBackendContext) : FileLow
             private fun buildImplicitCast(value: IrExpression, toType: IrType) =
                 JsIrBuilder.buildTypeOperator(toType, IrTypeOperator.IMPLICIT_CAST, value, toType)
 
-        }, irFile)
+        }, container as? IrDeclarationParent ?: container.parent)
     }
 }

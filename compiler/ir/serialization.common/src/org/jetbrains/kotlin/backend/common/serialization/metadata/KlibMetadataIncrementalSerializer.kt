@@ -1,13 +1,10 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.ir.backend.js.lower.serialization.metadata
 
-import org.jetbrains.kotlin.backend.common.serialization.DescriptorTable
-import org.jetbrains.kotlin.backend.common.serialization.isExpectMember
-import org.jetbrains.kotlin.backend.common.serialization.isSerializableExpectClass
 import org.jetbrains.kotlin.backend.common.serialization.metadata.KlibMetadataSerializer
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
@@ -18,7 +15,6 @@ import org.jetbrains.kotlin.library.SerializedMetadata
 import org.jetbrains.kotlin.metadata.ProtoBuf
 import org.jetbrains.kotlin.metadata.deserialization.BinaryVersion
 import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.serialization.DescriptorSerializer
@@ -27,11 +23,10 @@ import org.jetbrains.kotlin.serialization.DescriptorSerializer
 class KlibMetadataIncrementalSerializer(
     languageVersionSettings: LanguageVersionSettings,
     metadataVersion: BinaryVersion,
-    descriptorTable: DescriptorTable
-) : KlibMetadataSerializer(languageVersionSettings, metadataVersion, descriptorTable) {
+    skipExpects: Boolean
+) : KlibMetadataSerializer(languageVersionSettings, metadataVersion, skipExpects) {
 
     fun serializePackageFragment(
-        bindingContext: BindingContext,
         module: ModuleDescriptor,
         scope: Collection<DeclarationDescriptor>,
         fqName: FqName
@@ -43,13 +38,11 @@ class KlibMetadataIncrementalSerializer(
 
         val classifierDescriptors = allDescriptors
             .filterIsInstance<ClassifierDescriptor>()
-            .filter { !it.isExpectMember || it.isSerializableExpectClass }
             .sortedBy { it.fqNameSafe.asString() }
 
         val topLevelDescriptors = DescriptorSerializer.sort(
             allDescriptors
                 .filterIsInstance<CallableDescriptor>()
-                .filter { !it.isExpectMember }
         )
 
         // TODO: For now, in the incremental serializer, we assume
@@ -57,7 +50,7 @@ class KlibMetadataIncrementalSerializer(
         // This is no always the case, actually.
         // But marrying split package fragments with incremental compilation is an endeavour.
         // See monolithic serializer for details.
-        return serializeDescriptors(fqName, classifierDescriptors, topLevelDescriptors, bindingContext).single()
+        return serializeDescriptors(fqName, classifierDescriptors, topLevelDescriptors).single()
     }
 
     fun serializedMetadata(

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -30,7 +30,7 @@ public class DiagnosticMessageTestGenerated extends AbstractDiagnosticMessageTes
     }
 
     public void testAllFilesPresentInDiagnosticMessage() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/diagnosticMessage"), Pattern.compile("^(.+)\\.kt$"), false);
+        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/diagnosticMessage"), Pattern.compile("^(.+)\\.kt$"), null, false);
     }
 
     @TestMetadata("annotationsForResolve.kt")
@@ -41,6 +41,16 @@ public class DiagnosticMessageTestGenerated extends AbstractDiagnosticMessageTes
     @TestMetadata("assignedButNeverAccessedVariable.kt")
     public void testAssignedButNeverAccessedVariable() throws Exception {
         runTest("idea/testData/diagnosticMessage/assignedButNeverAccessedVariable.kt");
+    }
+
+    @TestMetadata("callableReferenceResolutionAmbiguityHtml.kt")
+    public void testCallableReferenceResolutionAmbiguityHtml() throws Exception {
+        runTest("idea/testData/diagnosticMessage/callableReferenceResolutionAmbiguityHtml.kt");
+    }
+
+    @TestMetadata("callableReferenceResolutionAmbiguityTxt.kt")
+    public void testCallableReferenceResolutionAmbiguityTxt() throws Exception {
+        runTest("idea/testData/diagnosticMessage/callableReferenceResolutionAmbiguityTxt.kt");
     }
 
     @TestMetadata("cannotInferVisibility.kt")

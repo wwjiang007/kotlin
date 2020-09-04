@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2000-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -14,13 +14,14 @@ import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToCall
 import org.jetbrains.kotlin.idea.core.formatter.KotlinCodeStyleSettings
+import org.jetbrains.kotlin.idea.core.util.getLineCount
+import org.jetbrains.kotlin.idea.core.util.isMultiLine
 import org.jetbrains.kotlin.idea.intentions.SpecifyTypeExplicitlyIntention
-import org.jetbrains.kotlin.idea.intentions.branchedTransformations.lineCount
 import org.jetbrains.kotlin.idea.refactoring.getLineNumber
 import org.jetbrains.kotlin.idea.references.resolveMainReferenceToDescriptors
 import org.jetbrains.kotlin.idea.util.getResolutionScope
 import org.jetbrains.kotlin.incremental.components.NoLookupLocation
-import org.jetbrains.kotlin.load.java.sam.SamConstructorDescriptor
+import org.jetbrains.kotlin.resolve.sam.SamConstructorDescriptor
 import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
@@ -103,8 +104,8 @@ fun provideTypeHint(element: KtCallableDeclaration, offset: Int): List<InlayInfo
     } else if (name?.isSpecial == true) {
         return emptyList()
     }
-    
-    if (element is KtProperty && element.isLocal && type.isUnit() && element.lineCount() > 1) {
+
+    if (element is KtProperty && element.isLocal && type.isUnit() && element.isMultiLine()) {
         val propertyLine = element.getLineNumber()
         val equalsTokenLine = element.equalsToken?.getLineNumber() ?: -1
         val initializerLine = element.initializer?.getLineNumber() ?: -1
@@ -116,7 +117,7 @@ fun provideTypeHint(element: KtCallableDeclaration, offset: Int): List<InlayInfo
             }
         }
     }
-    
+
     return if (isUnclearType(type, element)) {
         val settings = CodeStyle.getCustomSettings(element.containingFile, KotlinCodeStyleSettings::class.java)
         val declString = buildString {
@@ -186,7 +187,8 @@ private fun isConstructorCall(initializer: KtExpression?): Boolean {
 
 private fun KtExpression.isClassOrPackageReference(): Boolean =
     when (this) {
-        is KtNameReferenceExpression -> this.resolveMainReferenceToDescriptors().singleOrNull().let { it is ClassDescriptor || it is PackageViewDescriptor }
+        is KtNameReferenceExpression -> this.resolveMainReferenceToDescriptors().singleOrNull()
+            .let { it is ClassDescriptor || it is PackageViewDescriptor }
         is KtDotQualifiedExpression -> this.selectorExpression?.isClassOrPackageReference() ?: false
         else -> false
     }

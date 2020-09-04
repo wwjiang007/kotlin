@@ -14,35 +14,56 @@ import org.jetbrains.kotlin.codegen.AsmUtil.genAreEqualCall
 import org.jetbrains.kotlin.codegen.AsmUtil.isPrimitive
 import org.jetbrains.kotlin.codegen.StackValue
 import org.jetbrains.kotlin.codegen.intrinsics.IntrinsicMethods
-import org.jetbrains.kotlin.codegen.pseudoInsns.fakeAlwaysFalseIfeq
-import org.jetbrains.kotlin.codegen.pseudoInsns.fakeAlwaysTrueIfeq
 import org.jetbrains.kotlin.config.LanguageFeature
+import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrFunctionAccessExpression
 import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
 import org.jetbrains.kotlin.ir.types.classOrNull
 import org.jetbrains.kotlin.ir.types.isNullable
 import org.jetbrains.kotlin.ir.types.toKotlinType
+import org.jetbrains.kotlin.ir.util.isEnumClass
+import org.jetbrains.kotlin.ir.util.isEnumEntry
+import org.jetbrains.kotlin.ir.util.isIntegerConst
 import org.jetbrains.kotlin.ir.util.isNullConst
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi2ir.generators.hasNoSideEffects
 import org.jetbrains.kotlin.resolve.jvm.AsmTypes
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmMethodSignature
 import org.jetbrains.kotlin.types.isNullable
 import org.jetbrains.kotlin.types.typeUtil.isPrimitiveNumberOrNullableType
 import org.jetbrains.kotlin.types.typeUtil.upperBoundedByPrimitiveNumberOrNullableType
 import org.jetbrains.org.objectweb.asm.Label
+import org.jetbrains.org.objectweb.asm.Opcodes
 import org.jetbrains.org.objectweb.asm.Type
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
 
-class Equals(val operator: IElementType) : IntrinsicMethod() {
-    private class BooleanConstantFalseCheck(val value: PromisedValue) : BooleanValue(value.codegen) {
-        override fun materialize() = value.discard().let { mv.iconst(0) }
-        override fun jumpIfFalse(target: Label) = value.discard().let { mv.fakeAlwaysTrueIfeq(target) }
-        override fun jumpIfTrue(target: Label) = value.discard().let { mv.fakeAlwaysFalseIfeq(target) }
+class ExplicitEquals : IntrinsicMethod() {
+    override fun invoke(expression: IrFunctionAccessExpression, codegen: ExpressionCodegen, data: BlockInfo): PromisedValue? {
+        val (a, b) = expression.receiverAndArgs()
+
+        // TODO use specialized boxed type - this might require types like 'java.lang.Integer' in IR
+        a.accept(codegen, data).materializeAt(AsmTypes.OBJECT_TYPE, codegen.context.irBuiltIns.anyNType)
+        b.accept(codegen, data).materializeAt(AsmTypes.OBJECT_TYPE, codegen.context.irBuiltIns.anyNType)
+        codegen.mv.visitMethodInsn(
+            Opcodes.INVOKEVIRTUAL,
+            AsmTypes.OBJECT_TYPE.internalName,
+            "equals",
+            Type.getMethodDescriptor(Type.BOOLEAN_TYPE, AsmTypes.OBJECT_TYPE),
+            false
+        )
+
+        return MaterialValue(codegen, Type.BOOLEAN_TYPE, codegen.context.irBuiltIns.booleanType)
     }
+}
+
+class Equals(val operator: IElementType) : IntrinsicMethod() {
 
     private class BooleanNullCheck(val value: PromisedValue) : BooleanValue(value.codegen) {
         override fun jumpIfFalse(target: Label) = value.materialize().also { mv.ifnonnull(target) }
         override fun jumpIfTrue(target: Label) = value.materialize().also { mv.ifnull(target) }
+        override fun discard() {
+            value.discard()
+        }
     }
 
     override fun invoke(expression: IrFunctionAccessExpression, codegen: ExpressionCodegen, data: BlockInfo): PromisedValue? {
@@ -52,27 +73,76 @@ class Equals(val operator: IElementType) : IntrinsicMethod() {
             val value = irValue.accept(codegen, data)
             return if (!isPrimitive(value.type) && (irValue.type.classOrNull?.owner?.isInline != true || irValue.type.isNullable()))
                 BooleanNullCheck(value)
-            else
-                BooleanConstantFalseCheck(value)
+            else {
+                value.discard()
+                BooleanConstant(codegen, false)
+            }
         }
 
         val leftType = with(codegen) { a.asmType }
         val rightType = with(codegen) { b.asmType }
         val opToken = expression.origin
+
+        fun loadOther(expression: IrExpression, type: Type): () -> MaterialValue {
+            return if (expression.hasNoSideEffects()) {
+                { expression.accept(codegen, data).materializedAt(type, expression.type) }
+            } else {
+                val aValue = expression.accept(codegen, data).materializedAt(type, expression.type)
+                val local = codegen.frameMap.enterTemp(type)
+                codegen.mv.store(local, type)
+                ({
+                    codegen.mv.load(local, type)
+                    codegen.frameMap.leaveTemp(type)
+                    aValue
+                })
+            }
+        }
+
+        // Avoid boxing for `primitive == object` and `boxed primitive == primitive` where we know
+        // what comparison means. The optimization does not apply to `object == primitive` as equals
+        // could be overridden for the object.
+        if ((opToken == IrStatementOrigin.EQEQ || opToken == IrStatementOrigin.EXCLEQ) &&
+            ((AsmUtil.isIntOrLongPrimitive(leftType) && !AsmUtil.isPrimitive(rightType)) ||
+                    (AsmUtil.isIntOrLongPrimitive(rightType) && AsmUtil.isBoxedPrimitiveType(leftType)))
+        ) {
+            val leftIsPrimitive = AsmUtil.isIntOrLongPrimitive(leftType)
+            val primitiveType = if (leftIsPrimitive) leftType else rightType
+            val nonPrimitiveType = if (leftIsPrimitive) rightType else leftType
+            val useNullCheck = AsmUtil.isBoxedPrimitiveType(nonPrimitiveType)
+            return if (leftIsPrimitive) {
+                val loadOther = loadOther(a, leftType)
+                val boxedValue = b.accept(codegen, data).materializedAt(rightType, b.type)
+                PrimitiveToObjectComparison(operator, boxedValue, useNullCheck, primitiveType, loadOther)
+            } else {
+                val boxedValue = a.accept(codegen, data).materializedAt(leftType, a.type)
+                val loadOther = loadOther(b, rightType)
+                PrimitiveToObjectComparison(operator, boxedValue, useNullCheck, primitiveType, loadOther)
+            }
+        }
+
+        val aIsEnum = a.type.classOrNull?.owner?.run { isEnumClass || isEnumEntry } == true
+        val bIsEnum = b.type.classOrNull?.owner?.run { isEnumClass || isEnumEntry } == true
         val useEquals = opToken !== IrStatementOrigin.EQEQEQ && opToken !== IrStatementOrigin.EXCLEQEQ &&
                 // `==` is `equals` for objects and floating-point numbers. In the latter case, the difference
                 // is that `equals` is a total order (-0 < +0 and NaN == NaN) and `===` is IEEE754-compliant.
                 (!isPrimitive(leftType) || leftType != rightType || leftType == Type.FLOAT_TYPE || leftType == Type.DOUBLE_TYPE)
+                // Reference equality can be used for enums.
+                && !aIsEnum && !bIsEnum
         return if (useEquals) {
-            a.accept(codegen, data).coerce(AsmTypes.OBJECT_TYPE, codegen.context.irBuiltIns.anyNType).materialize()
-            b.accept(codegen, data).coerce(AsmTypes.OBJECT_TYPE, codegen.context.irBuiltIns.anyNType).materialize()
+            a.accept(codegen, data).materializeAt(AsmTypes.OBJECT_TYPE, codegen.context.irBuiltIns.anyNType)
+            b.accept(codegen, data).materializeAt(AsmTypes.OBJECT_TYPE, codegen.context.irBuiltIns.anyNType)
             genAreEqualCall(codegen.mv)
             MaterialValue(codegen, Type.BOOLEAN_TYPE, codegen.context.irBuiltIns.booleanType)
         } else {
             val operandType = if (!isPrimitive(leftType)) AsmTypes.OBJECT_TYPE else leftType
-            val aValue = a.accept(codegen, data).coerce(operandType, a.type).materialized
-            val bValue = b.accept(codegen, data).coerce(operandType, b.type).materialized
-            BooleanComparison(operator, aValue, bValue)
+            if (operandType == Type.INT_TYPE && (a.isIntegerConst(0) || b.isIntegerConst(0))) {
+                val nonZero = if (a.isIntegerConst(0)) b else a
+                IntegerZeroComparison(operator, nonZero.accept(codegen, data).materializedAt(operandType, nonZero.type))
+            } else {
+                val aValue = a.accept(codegen, data).materializedAt(operandType, a.type)
+                val bValue = b.accept(codegen, data).materializedAt(operandType, b.type)
+                BooleanComparison(operator, aValue, bValue)
+            }
         }
     }
 }

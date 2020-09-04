@@ -7,9 +7,9 @@ package org.jetbrains.kotlin.scripting.compiler.plugin
 
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.util.Disposer
-import junit.framework.Assert
 import org.jetbrains.kotlin.cli.common.CLITool
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
+import org.junit.Assert
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
@@ -24,12 +24,26 @@ fun runWithKotlinc(
     expectedOutPatterns: List<String> = emptyList(),
     expectedExitCode: Int = 0,
     workDirectory: File? = null,
-    classpath: List<File> = emptyList()
+    classpath: List<File> = emptyList(),
+    additionalEnvVars: Iterable<Pair<String, String>>? = null
 ) {
-    val executableName = "kotlinc"
-    // TODO:
+    runWithKotlinc(
+        arrayOf("-script", scriptPath),
+        expectedOutPatterns, expectedExitCode, workDirectory, classpath, additionalEnvVars
+    )
+}
+
+fun runWithKotlinLauncherScript(
+    launcherScriptName: String,
+    compilerArgs: Iterable<String>,
+    expectedOutPatterns: List<String> = emptyList(),
+    expectedExitCode: Int = 0,
+    workDirectory: File? = null,
+    classpath: List<File> = emptyList(),
+    additionalEnvVars: Iterable<Pair<String, String>>? = null
+) {
     val executableFileName =
-        if (System.getProperty("os.name").contains("windows", ignoreCase = true)) "$executableName.bat" else executableName
+        if (System.getProperty("os.name").contains("windows", ignoreCase = true)) "$launcherScriptName.bat" else launcherScriptName
     val launcherFile = File("dist/kotlinc/bin/$executableFileName")
     Assert.assertTrue("Launcher script not found, run dist task: ${launcherFile.absolutePath}", launcherFile.exists())
 
@@ -38,12 +52,38 @@ fun runWithKotlinc(
             add("-cp")
             add(classpath.joinToString(File.pathSeparator))
         }
-        add("-script")
-        add(scriptPath)
+        addAll(compilerArgs)
     }
+
+    runAndCheckResults(args, expectedOutPatterns, expectedExitCode, workDirectory, additionalEnvVars)
+}
+
+fun runWithKotlinc(
+    compilerArgs: Array<String>,
+    expectedOutPatterns: List<String> = emptyList(),
+    expectedExitCode: Int = 0,
+    workDirectory: File? = null,
+    classpath: List<File> = emptyList(),
+    additionalEnvVars: Iterable<Pair<String, String>>? = null
+) {
+    runWithKotlinLauncherScript(
+        "kotlinc", compilerArgs.asIterable(), expectedOutPatterns, expectedExitCode, workDirectory, classpath, additionalEnvVars
+    )
+}
+
+fun runAndCheckResults(
+    args: List<String>,
+    expectedOutPatterns: List<String> = emptyList(),
+    expectedExitCode: Int = 0,
+    workDirectory: File? = null,
+    additionalEnvVars: Iterable<Pair<String, String>>? = null
+) {
     val processBuilder = ProcessBuilder(args)
     if (workDirectory != null) {
         processBuilder.directory(workDirectory)
+    }
+    if (additionalEnvVars != null) {
+        processBuilder.environment().putAll(additionalEnvVars)
     }
     val process = processBuilder.start()
 
@@ -112,15 +152,26 @@ fun runWithK2JVMCompiler(
         add("-script")
         add(scriptPath)
     }
+    runWithK2JVMCompiler(args.toTypedArray(), expectedOutPatterns, expectedExitCode)
+}
+
+fun runWithK2JVMCompiler(
+    args: Array<String>,
+    expectedOutPatterns: List<String> = emptyList(),
+    expectedExitCode: Int = 0
+) {
     val (out, err, ret) = captureOutErrRet {
         CLITool.doMainNoExit(
             K2JVMCompiler(),
-            args.toTypedArray()
+            args
         )
     }
     try {
         val outLines = out.lines()
-        Assert.assertEquals(expectedOutPatterns.size, outLines.size)
+        Assert.assertEquals(
+            "Expecting pattern:\n  ${expectedOutPatterns.joinToString("\n  ")}\nGot:\n  ${outLines.joinToString("\n  ")}",
+            expectedOutPatterns.size, outLines.size
+        )
         for ((expectedPattern, actualLine) in expectedOutPatterns.zip(outLines)) {
             Assert.assertTrue(
                 "line \"$actualLine\" do not match with expected pattern \"$expectedPattern\"",
@@ -169,6 +220,16 @@ internal fun <R> withDisposable(body: (Disposable) -> R) {
         body(disposable)
     } finally {
         Disposer.dispose(disposable)
+    }
+}
+
+class TestDisposable : Disposable {
+    @Volatile
+    var isDisposed = false
+        private set
+
+    override fun dispose() {
+        isDisposed = true
     }
 }
 

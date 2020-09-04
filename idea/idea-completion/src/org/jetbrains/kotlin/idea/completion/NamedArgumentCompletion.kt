@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.completion
@@ -20,30 +9,36 @@ import com.intellij.codeInsight.completion.InsertHandler
 import com.intellij.codeInsight.completion.InsertionContext
 import com.intellij.codeInsight.lookup.LookupElement
 import com.intellij.codeInsight.lookup.LookupElementBuilder
+import org.jetbrains.kotlin.config.LanguageFeature
+import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.idea.KotlinIcons
+import org.jetbrains.kotlin.idea.caches.resolve.resolveToCall
 import org.jetbrains.kotlin.idea.completion.handlers.WithTailInsertHandler
 import org.jetbrains.kotlin.idea.core.ArgumentPositionData
 import org.jetbrains.kotlin.idea.core.ExpectedInfo
+import org.jetbrains.kotlin.idea.project.languageVersionSettings
+import org.jetbrains.kotlin.idea.resolve.ResolutionFacade
 import org.jetbrains.kotlin.idea.util.CallType
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtCallElement
 import org.jetbrains.kotlin.psi.KtSimpleNameExpression
 import org.jetbrains.kotlin.psi.KtValueArgument
+import org.jetbrains.kotlin.psi.ValueArgument
 import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 import org.jetbrains.kotlin.renderer.render
+import org.jetbrains.kotlin.resolve.calls.callUtil.getParameterForArgument
+import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.types.KotlinType
 import java.util.*
 
 object NamedArgumentCompletion {
-    fun isOnlyNamedArgumentExpected(nameExpression: KtSimpleNameExpression): Boolean {
+    fun isOnlyNamedArgumentExpected(nameExpression: KtSimpleNameExpression, resolutionFacade: ResolutionFacade): Boolean {
         val thisArgument = nameExpression.parent as? KtValueArgument ?: return false
+
         if (thisArgument.isNamed()) return false
+        val resolvedCall = thisArgument.getStrictParentOfType<KtCallElement>()?.resolveToCall(resolutionFacade) ?: return false
 
-        val callElement = thisArgument.getStrictParentOfType<KtCallElement>() ?: return false
-
-        return callElement.valueArguments
-                .takeWhile { it != thisArgument }
-                .any { it.isNamed() }
+        return !thisArgument.canBeUsedWithoutNameInCall(resolvedCall)
     }
 
     fun complete(collector: LookupElementsCollector, expectedInfos: Collection<ExpectedInfo>, callType: CallType<*>) {
@@ -61,10 +56,10 @@ object NamedArgumentCompletion {
             val typeText = types.singleOrNull()?.let { BasicLookupElementFactory.SHORT_NAMES_RENDERER.renderType(it) } ?: "..."
             val nameString = name.asString()
             val lookupElement = LookupElementBuilder.create("$nameString =")
-                    .withPresentableText("$nameString =")
-                    .withTailText(" $typeText")
-                    .withIcon(KotlinIcons.PARAMETER)
-                    .withInsertHandler(NamedArgumentInsertHandler(name))
+                .withPresentableText("$nameString =")
+                .withTailText(" $typeText")
+                .withIcon(KotlinIcons.PARAMETER)
+                .withInsertHandler(NamedArgumentInsertHandler(name))
             lookupElement.putUserData(SmartCompletionInBasicWeigher.NAMED_ARGUMENT_KEY, Unit)
             collector.addElement(lookupElement)
         }
@@ -80,4 +75,36 @@ object NamedArgumentCompletion {
             WithTailInsertHandler.EQ.postHandleInsert(context, item)
         }
     }
+}
+
+/**
+ * Checks whether argument in the [resolvedCall] can be used without its name (as positional argument).
+ */
+fun KtValueArgument.canBeUsedWithoutNameInCall(resolvedCall: ResolvedCall<out CallableDescriptor>): Boolean {
+    val argumentsBeforeThis = resolvedCall.call.valueArguments.takeWhile { it != this }
+    return if (languageVersionSettings.supportsFeature(LanguageFeature.MixedNamedArgumentsInTheirOwnPosition)) {
+        argumentsBeforeThis.none { it.isNamed() && !it.placedOnItsOwnPositionInCall(resolvedCall) }
+    } else {
+        argumentsBeforeThis.none { it.isNamed() }
+    }
+}
+
+/**
+ * Checks whether argument in the [resolvedCall] is on the same position as it listed in the callable definition.
+ *
+ * It is always true for the positional arguments, but may be untrue for the named arguments.
+ *
+ * ```
+ * fun foo(a: Int, b: Int, c: Int, d: Int) {}
+ *
+ * foo(
+ *     10,      // true
+ *     b = 10,  // true, possible since Kotlin 1.4 with `MixedNamedArgumentsInTheirOwnPosition` feature
+ *     d = 30,  // false, 3 vs 4
+ *     c = 40   // false, 4 vs 3
+ * )
+ * ```
+ */
+fun ValueArgument.placedOnItsOwnPositionInCall(resolvedCall: ResolvedCall<out CallableDescriptor>): Boolean {
+    return resolvedCall.getParameterForArgument(this)?.index == resolvedCall.call.valueArguments.indexOf(this)
 }

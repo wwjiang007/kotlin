@@ -12,6 +12,8 @@ import kotlin.text.StringsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.backend.common.CodegenUtil;
+import org.jetbrains.kotlin.builtins.StandardNames;
+import org.jetbrains.kotlin.builtins.functions.BuiltInFunctionArity;
 import org.jetbrains.kotlin.builtins.functions.FunctionInvokeDescriptor;
 import org.jetbrains.kotlin.codegen.binding.CalculatedClosure;
 import org.jetbrains.kotlin.codegen.context.CodegenContext;
@@ -22,23 +24,28 @@ import org.jetbrains.kotlin.codegen.state.GenerationState;
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper;
 import org.jetbrains.kotlin.config.ApiVersion;
 import org.jetbrains.kotlin.config.JvmAnalysisFlags;
+import org.jetbrains.kotlin.config.JvmDefaultMode;
 import org.jetbrains.kotlin.config.LanguageVersionSettings;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.descriptors.impl.AnonymousFunctionDescriptor;
 import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor;
-import org.jetbrains.kotlin.load.java.JvmAbi;
+import org.jetbrains.kotlin.load.java.DescriptorsJvmAbiUtil;
 import org.jetbrains.kotlin.load.java.descriptors.JavaCallableMemberDescriptor;
 import org.jetbrains.kotlin.load.java.descriptors.JavaPropertyDescriptor;
 import org.jetbrains.kotlin.load.kotlin.ModuleVisibilityUtilsKt;
 import org.jetbrains.kotlin.metadata.jvm.deserialization.ModuleMapping;
-import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.name.Name;
-import org.jetbrains.kotlin.psi.*;
+import org.jetbrains.kotlin.psi.KtCodeFragment;
+import org.jetbrains.kotlin.psi.KtFile;
+import org.jetbrains.kotlin.psi.KtFunction;
+import org.jetbrains.kotlin.psi.KtSuperTypeListEntry;
 import org.jetbrains.kotlin.resolve.BindingContext;
 import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils;
 import org.jetbrains.kotlin.resolve.DescriptorUtils;
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall;
 import org.jetbrains.kotlin.resolve.inline.InlineUtil;
+import org.jetbrains.kotlin.resolve.jvm.annotations.JvmAnnotationUtilKt;
+import org.jetbrains.kotlin.resolve.jvm.checkers.PolymorphicSignatureCallChecker;
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue;
 import org.jetbrains.kotlin.resolve.scopes.receivers.TransientReceiver;
 import org.jetbrains.kotlin.resolve.source.PsiSourceElement;
@@ -53,9 +60,9 @@ import static org.jetbrains.kotlin.codegen.coroutines.CoroutineCodegenUtilKt.SUS
 import static org.jetbrains.kotlin.descriptors.ClassKind.ANNOTATION_CLASS;
 import static org.jetbrains.kotlin.descriptors.ClassKind.INTERFACE;
 import static org.jetbrains.kotlin.descriptors.Modality.FINAL;
-import static org.jetbrains.kotlin.resolve.BindingContext.DELEGATED_PROPERTY_CALL;
+import static org.jetbrains.kotlin.resolve.BindingContext.DELEGATED_PROPERTY_RESOLVED_CALL;
 import static org.jetbrains.kotlin.resolve.DescriptorUtils.isCompanionObject;
-import static org.jetbrains.kotlin.resolve.jvm.annotations.JvmAnnotationUtilKt.hasJvmDefaultAnnotation;
+import static org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind.NO_EXPLICIT_RECEIVER;
 import static org.jetbrains.kotlin.resolve.jvm.annotations.JvmAnnotationUtilKt.hasJvmFieldAnnotation;
 
 public class JvmCodegenUtil {
@@ -63,7 +70,7 @@ public class JvmCodegenUtil {
     private JvmCodegenUtil() {
     }
 
-    public static boolean isNonDefaultInterfaceMember(@NotNull CallableMemberDescriptor descriptor) {
+    public static boolean isNonDefaultInterfaceMember(@NotNull CallableMemberDescriptor descriptor, @NotNull JvmDefaultMode jvmDefaultMode) {
         if (!isJvmInterface(descriptor.getContainingDeclaration())) {
             return false;
         }
@@ -71,7 +78,7 @@ public class JvmCodegenUtil {
             return descriptor.getModality() == Modality.ABSTRACT;
         }
 
-        return !hasJvmDefaultAnnotation(descriptor);
+        return !JvmAnnotationUtilKt.isCompiledToJvmDefault(descriptor, jvmDefaultMode);
     }
 
     public static boolean isJvmInterface(@Nullable DeclarationDescriptor descriptor) {
@@ -101,7 +108,7 @@ public class JvmCodegenUtil {
         boolean isDelegate = descriptor.getKind() == CallableMemberDescriptor.Kind.DELEGATION;
 
         DeclarationDescriptor containingDeclaration = descriptor.getContainingDeclaration().getOriginal();
-        if (JvmAbi.isPropertyWithBackingFieldInOuterClass(descriptor)) {
+        if (DescriptorsJvmAbiUtil.isPropertyWithBackingFieldInOuterClass(descriptor)) {
             // For property with backed field, check if the access is done in the same class containing the backed field and
             // not the class that declared the field.
             containingDeclaration = containingDeclaration.getContainingDeclaration();
@@ -149,29 +156,6 @@ public class JvmCodegenUtil {
 
     public static boolean isConstOrHasJvmFieldAnnotation(@NotNull PropertyDescriptor propertyDescriptor) {
         return propertyDescriptor.isConst() || hasJvmFieldAnnotation(propertyDescriptor);
-    }
-
-    public static boolean couldUseDirectAccessToCompanionObject(
-            @NotNull ClassDescriptor companionObjectDescriptor,
-            @NotNull MethodContext contextBeforeInline
-    ) {
-        if (!Visibilities.isPrivate(companionObjectDescriptor.getVisibility())) {
-            // Non-private companion object can be directly accessed anywhere it's allowed by the front-end.
-            return true;
-        }
-
-        if (isDebuggerContext(contextBeforeInline)) {
-            return true;
-        }
-
-        CodegenContext context = contextBeforeInline.getFirstCrossInlineOrNonInlineContext();
-        if (context.isInlineMethodContext()) {
-            // Inline method can be called from a nested class.
-            return false;
-        }
-
-        // Private companion object is directly accessible only from the corresponding class
-        return context.getContextDescriptor().getContainingDeclaration() == companionObjectDescriptor.getContainingDeclaration();
     }
 
     public static String getCompanionObjectAccessorName(@NotNull ClassDescriptor companionObjectDescriptor) {
@@ -237,7 +221,7 @@ public class JvmCodegenUtil {
         if (DescriptorPsiUtilsKt.hasBody(accessor)) return false;
 
         // If the accessor is private or final, it can't be overridden in the subclass and thus we can use direct access
-        return Visibilities.isPrivate(accessor.getVisibility()) || accessor.getModality() == FINAL;
+        return DescriptorVisibilities.isPrivate(accessor.getVisibility()) || accessor.getModality() == FINAL;
     }
 
     public static boolean isDebuggerContext(@NotNull CodegenContext context) {
@@ -319,10 +303,16 @@ public class JvmCodegenUtil {
     ) {
         VariableAccessorDescriptor getter = descriptor.getGetter();
         if (getter != null) {
-            Call call = bindingContext.get(DELEGATED_PROPERTY_CALL, getter);
+            ResolvedCall<FunctionDescriptor> call = bindingContext.get(DELEGATED_PROPERTY_RESOLVED_CALL, getter);
             if (call != null) {
-                assert call.getExplicitReceiver() != null : "No explicit receiver for call:" + call;
-                return ((ReceiverValue) call.getExplicitReceiver()).getType();
+                assert call.getExplicitReceiverKind() != NO_EXPLICIT_RECEIVER : "No explicit receiver for call:" + call;
+                ReceiverValue extensionReceiver = call.getExtensionReceiver();
+                if (extensionReceiver != null) return extensionReceiver.getType();
+
+                ReceiverValue dispatchReceiver = call.getDispatchReceiver();
+                if (dispatchReceiver != null) return dispatchReceiver.getType();
+
+                return null;
             }
         }
         return null;
@@ -350,12 +340,12 @@ public class JvmCodegenUtil {
     public static boolean isCompanionObjectInInterfaceNotIntrinsic(@NotNull DeclarationDescriptor companionObject) {
         return isCompanionObject(companionObject) &&
                isJvmInterface(companionObject.getContainingDeclaration()) &&
-               !JvmAbi.isMappedIntrinsicCompanionObject((ClassDescriptor) companionObject);
+               !DescriptorsJvmAbiUtil.isMappedIntrinsicCompanionObject((ClassDescriptor) companionObject);
     }
 
     public static boolean isNonIntrinsicPrivateCompanionObjectInInterface(@NotNull DeclarationDescriptorWithVisibility companionObject) {
         return isCompanionObjectInInterfaceNotIntrinsic(companionObject) &&
-               Visibilities.isPrivate(companionObject.getVisibility());
+               DescriptorVisibilities.isPrivate(companionObject.getVisibility());
     }
 
     public static boolean isDeclarationOfBigArityFunctionInvoke(@Nullable DeclarationDescriptor descriptor) {
@@ -364,7 +354,7 @@ public class JvmCodegenUtil {
 
     public static boolean isDeclarationOfBigArityCreateCoroutineMethod(@Nullable DeclarationDescriptor descriptor) {
         return descriptor instanceof SimpleFunctionDescriptor && descriptor.getName().asString().equals(SUSPEND_FUNCTION_CREATE_METHOD_NAME) &&
-               ((SimpleFunctionDescriptor) descriptor).getValueParameters().size() >= FunctionInvokeDescriptor.BIG_ARITY - 1 &&
+               ((SimpleFunctionDescriptor) descriptor).getValueParameters().size() >= BuiltInFunctionArity.BIG_ARITY - 1 &&
                descriptor.getContainingDeclaration() instanceof AnonymousFunctionDescriptor && ((AnonymousFunctionDescriptor) descriptor.getContainingDeclaration()).isSuspend();
     }
 
@@ -391,7 +381,7 @@ public class JvmCodegenUtil {
     }
 
     public static boolean isPolymorphicSignature(@NotNull FunctionDescriptor descriptor) {
-        return descriptor.getAnnotations().hasAnnotation(new FqName("java.lang.invoke.MethodHandle.PolymorphicSignature"));
+        return descriptor.getAnnotations().hasAnnotation(PolymorphicSignatureCallChecker.polymorphicSignatureFqName);
     }
 
     @NotNull
@@ -416,10 +406,29 @@ public class JvmCodegenUtil {
         // The Result class is the only inline class in the standard library without special rules for equality.
         // We only call Result.equals-impl0 if we are compiling for Kotlin 1.4 or later. Otherwise, the code
         // might well be running against an older version of the standard library.
-        if (DescriptorUtils.getFqNameSafe(classDescriptor).equals(DescriptorUtils.RESULT_FQ_NAME)) {
+        if (DescriptorUtils.getFqNameSafe(classDescriptor).equals(StandardNames.RESULT_FQ_NAME)) {
             return state.getLanguageVersionSettings().getApiVersion().compareTo(ApiVersion.KOTLIN_1_4) >= 0;
         } else {
             return ((DeserializedClassDescriptor) descriptor).getMetadataVersion().isAtLeast(1, 1, 16);
         }
+    }
+
+    public static boolean isInSamePackage(DeclarationDescriptor descriptor1, DeclarationDescriptor descriptor2) {
+        PackageFragmentDescriptor package1 = DescriptorUtils.getParentOfType(descriptor1, PackageFragmentDescriptor.class, false);
+        PackageFragmentDescriptor package2 = DescriptorUtils.getParentOfType(descriptor2, PackageFragmentDescriptor.class, false);
+
+        return package1 != null && package2 != null &&
+               package1.getFqName().equals(package2.getFqName());
+    }
+
+    // Used mainly for debugging purposes.
+    @SuppressWarnings("unused")
+    public static String dumpContextHierarchy(CodegenContext context) {
+        StringBuilder result = new StringBuilder();
+        int i = 0;
+        for (CodegenContext current = context; current != null; current = current.getParentContext(), ++i) {
+            result.append(i).append(": ").append(current).append('\n');
+        }
+        return result.toString();
     }
 }

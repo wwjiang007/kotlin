@@ -25,6 +25,15 @@ class LazyScriptClassMemberScope(
     trace: BindingTrace
 ) : LazyClassMemberScope(resolveSession, declarationProvider, scriptDescriptor, trace) {
 
+    private val _variableNames: MutableSet<Name>
+            by lazy(LazyThreadSafetyMode.PUBLICATION) {
+                super.getVariableNames().apply {
+                    scriptDescriptor.resultFieldName()?.let {
+                        add(it)
+                    }
+                }
+            }
+
     private val scriptPrimaryConstructor: () -> ClassConstructorDescriptorImpl? = resolveSession.storageManager.createNullableLazyValue {
         val baseClass = scriptDescriptor.baseClassDescriptor()
         val baseConstructorDescriptor = baseClass?.unsubstitutedPrimaryConstructor
@@ -76,15 +85,17 @@ class LazyScriptClassMemberScope(
                     SourceElement.NO_SOURCE
                 ).initialize(
                     emptyList(),
-                    Visibilities.PUBLIC
+                    DescriptorVisibilities.PUBLIC
                 )
         setDeferredReturnType(constructor)
         return constructor
     }
 
+    override fun getVariableNames() = _variableNames
+
     override fun getNonDeclaredProperties(name: Name, result: MutableSet<PropertyDescriptor>) {
         super.getNonDeclaredProperties(name, result)
-        if (scriptDescriptor.resultFieldName() == name.asString()) {
+        if (scriptDescriptor.resultFieldName() == name) {
             scriptDescriptor.resultValue?.let {
                 result.add(it)
             }

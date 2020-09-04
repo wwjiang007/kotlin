@@ -1,54 +1,60 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.scripting.gradle
 
-import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.kotlin.idea.core.script.configuration.cache.ScriptConfigurationCacheScope
-import com.intellij.util.io.systemIndependentPath
 import org.jetbrains.kotlin.idea.core.script.configuration.listener.ScriptChangeListener
-import org.jetbrains.kotlin.idea.core.script.configuration.listener.ScriptConfigurationUpdater
-import org.jetbrains.plugins.gradle.GradleManager
-import org.jetbrains.plugins.gradle.settings.GradleProjectSettings
-import org.jetbrains.plugins.gradle.util.GradleConstants
+import org.jetbrains.kotlin.idea.scripting.gradle.legacy.GradleLegacyScriptListener
+import org.jetbrains.kotlin.idea.scripting.gradle.roots.GradleBuildRootsManager
 
 class GradleScriptListener(project: Project) : ScriptChangeListener(project) {
+    // todo(gradle6): remove
+    private val legacy = GradleLegacyScriptListener(project)
 
-    override fun editorActivated(vFile: VirtualFile, updater: ScriptConfigurationUpdater) {
-        if (!isGradleKotlinScript(vFile)) return
+    private val buildRootsManager
+        get() = GradleBuildRootsManager.getInstance(project)
 
-        if (useScriptConfigurationFromImportOnly()) {
-            // do nothing
+    init {
+        // listen changes using VFS events, including gradle-configuration related files
+        addVfsListener(this, buildRootsManager)
+    }
+
+    // cache buildRootsManager service for hot path under vfs changes listener
+    val fileChangesProcessor: (filePath: String, ts: Long) -> Unit
+        get() {
+            val buildRootsManager = buildRootsManager
+            return { filePath, ts ->
+                buildRootsManager.fileChanged(filePath, ts)
+            }
+        }
+
+    fun fileChanged(filePath: String, ts: Long) =
+        fileChangesProcessor(filePath, ts)
+
+    override fun isApplicable(vFile: VirtualFile) =
+        // todo(gradle6): replace with `isCustomScriptingSupport(vFile)`
+        legacy.isApplicable(vFile)
+
+    private fun isCustomScriptingSupport(vFile: VirtualFile) =
+        buildRootsManager.isApplicable(vFile)
+
+    override fun editorActivated(vFile: VirtualFile) {
+        if (isCustomScriptingSupport(vFile)) {
+            buildRootsManager.updateNotifications(restartAnalyzer = false) { it == vFile.path }
         } else {
-            val file = getAnalyzableKtFileForScript(vFile) ?: return
-            updater.ensureUpToDatedConfigurationSuggested(file)
+            legacy.editorActivated(vFile)
         }
     }
 
-    override fun documentChanged(vFile: VirtualFile, updater: ScriptConfigurationUpdater) {
-        val file = getAnalyzableKtFileForScript(vFile)
-        if (file != null) {
-            // *.gradle.kts file was changed
-            updater.ensureUpToDatedConfigurationSuggested(file)
-            updater.postponeConfigurationReload(ScriptConfigurationCacheScope.Except(file))
-        } else {
-            updater.postponeConfigurationReload(ScriptConfigurationCacheScope.All)
+    override fun documentChanged(vFile: VirtualFile) {
+        fileChanged(vFile.path, System.currentTimeMillis())
+
+        if (!isCustomScriptingSupport(vFile)) {
+            legacy.documentChanged(vFile)
         }
-    }
-
-    override fun isApplicable(vFile: VirtualFile): Boolean {
-        val gradleSettings = ExternalSystemApiUtil.getSettings(project, GradleConstants.SYSTEM_ID)
-        if (gradleSettings.getLinkedProjectsSettings().isEmpty()) return false
-
-        val projectSettings = gradleSettings.getLinkedProjectsSettings().filterIsInstance<GradleProjectSettings>().firstOrNull()
-            ?: return false
-
-        val affectedFiles = ExternalSystemApiUtil.getAllManagers().filterIsInstance<GradleManager>().firstOrNull()
-            ?.getAffectedExternalProjectFiles(projectSettings.externalProjectPath, project)
-        return affectedFiles?.any { it.toPath().systemIndependentPath == vFile.path } == true
     }
 }

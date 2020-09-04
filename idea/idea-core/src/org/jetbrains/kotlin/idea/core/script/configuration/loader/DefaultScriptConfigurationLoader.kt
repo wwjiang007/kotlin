@@ -10,7 +10,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.kotlin.idea.core.script.configuration.cache.CachedConfigurationInputs
 import org.jetbrains.kotlin.idea.core.script.configuration.cache.ScriptConfigurationSnapshot
-import org.jetbrains.kotlin.idea.core.script.debug
+import org.jetbrains.kotlin.idea.core.script.scriptingDebugLog
+import org.jetbrains.kotlin.idea.core.script.settings.KotlinScriptingSettings
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.scripting.definitions.KotlinScriptDefinition
 import org.jetbrains.kotlin.scripting.definitions.ScriptDefinition
@@ -38,12 +39,28 @@ open class DefaultScriptConfigurationLoader(val project: Project) : ScriptConfig
     ): Boolean {
         val virtualFile = ktFile.originalFile.virtualFile
 
-        debug(ktFile) { "start dependencies loading" }
+        val result = getConfigurationThroughScriptingApi(ktFile, virtualFile, scriptDefinition)
 
-        val inputs = getInputsStamp(virtualFile, ktFile)
+        if (KotlinScriptingSettings.getInstance(project).autoReloadConfigurations(scriptDefinition)) {
+            context.saveNewConfiguration(virtualFile, result)
+        } else {
+            context.suggestNewConfiguration(virtualFile, result)
+        }
+
+        return true
+    }
+
+    protected fun getConfigurationThroughScriptingApi(
+        file: KtFile,
+        vFile: VirtualFile,
+        scriptDefinition: ScriptDefinition
+    ): ScriptConfigurationSnapshot {
+        scriptingDebugLog(file) { "start dependencies loading" }
+
+        val inputs = getInputsStamp(vFile, file)
         val scriptingApiResult = try {
             refineScriptCompilationConfiguration(
-                KtFileScriptSource(ktFile), scriptDefinition, ktFile.project
+                KtFileScriptSource(file), scriptDefinition, file.project
             )
         } catch (e: Throwable) {
             if (e is ControlFlowException) throw e
@@ -57,11 +74,8 @@ open class DefaultScriptConfigurationLoader(val project: Project) : ScriptConfig
             scriptingApiResult.valueOrNull()
         )
 
-        context.suggestNewConfiguration(virtualFile, result)
-
-        debug(ktFile) { "finish dependencies loading" }
-
-        return true
+        scriptingDebugLog(file) { "finish dependencies loading" }
+        return result
     }
 
     protected open fun getInputsStamp(virtualFile: VirtualFile, file: KtFile): CachedConfigurationInputs {

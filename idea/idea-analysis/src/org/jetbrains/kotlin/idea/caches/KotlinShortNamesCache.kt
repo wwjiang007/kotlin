@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.caches
@@ -31,6 +20,7 @@ import com.intellij.util.Processor
 import com.intellij.util.Processors
 import com.intellij.util.containers.ContainerUtil
 import com.intellij.util.indexing.IdFilter
+import gnu.trove.THashSet
 import org.jetbrains.kotlin.asJava.LightClassUtil
 import org.jetbrains.kotlin.asJava.defaultImplsChild
 import org.jetbrains.kotlin.asJava.finder.JavaElementFinder
@@ -59,13 +49,13 @@ class KotlinShortNamesCache(private val project: Project) : PsiShortNamesCache()
 
     //region Classes
 
-    override fun processAllClassNames(processor: Processor<String>): Boolean {
+    override fun processAllClassNames(processor: StringProcessor): Boolean {
         if (disableSearch.get()) return true
         return KotlinClassShortNameIndex.getInstance().processAllKeys(project, processor) &&
                 KotlinFileFacadeShortNameIndex.INSTANCE.processAllKeys(project, processor)
     }
 
-    override fun processAllClassNames(processor: Processor<String>, scope: GlobalSearchScope, filter: IdFilter?): Boolean {
+    override fun processAllClassNames(processor: StringProcessor, scope: GlobalSearchScope, filter: IdFilter?): Boolean {
         if (disableSearch.get()) return true
         return processAllClassNames(processor)
     }
@@ -97,7 +87,8 @@ class KotlinShortNamesCache(private val project: Project) : PsiShortNamesCache()
                 LOG.error(
                     "A declaration obtained from index has non-matching name:" +
                             "\nin index: $name" +
-                            "\ndeclared: ${fqName.shortName()}($fqName)")
+                            "\ndeclared: ${fqName.shortName()}($fqName)"
+                )
 
                 return@Processor true
             }
@@ -159,7 +150,7 @@ class KotlinShortNamesCache(private val project: Project) : PsiShortNamesCache()
 
     //region Methods
 
-    override fun processAllMethodNames(processor: Processor<String>, scope: GlobalSearchScope, filter: IdFilter?): Boolean {
+    override fun processAllMethodNames(processor: StringProcessor, scope: GlobalSearchScope, filter: IdFilter?): Boolean {
         if (disableSearch.get()) return true
         return processAllMethodNames(processor)
     }
@@ -171,7 +162,7 @@ class KotlinShortNamesCache(private val project: Project) : PsiShortNamesCache()
         }
     }
 
-    private fun processAllMethodNames(processor: Processor<String>): Boolean {
+    private fun processAllMethodNames(processor: StringProcessor): Boolean {
         if (disableSearch.get()) return true
         if (!KotlinFunctionShortNameIndex.getInstance().processAllKeys(project, processor)) {
             return false
@@ -215,11 +206,9 @@ class KotlinShortNamesCache(private val project: Project) : PsiShortNamesCache()
                 filter,
                 KtNamedDeclaration::class.java
             ) { ktNamedDeclaration ->
-                val methods = ktNamedDeclaration.getAccessorLightMethods()
+                val methods: Sequence<PsiMethod> = ktNamedDeclaration.getAccessorLightMethods()
                     .asSequence()
                     .filter { it.name == name }
-                    .map { it as? PsiMethod }
-                    .filterNotNull()
 
                 return@processElements methods.all { method ->
                     processor.process(method)
@@ -256,7 +245,7 @@ class KotlinShortNamesCache(private val project: Project) : PsiShortNamesCache()
         }
     }
 
-    override fun processMethodsWithName(name: String, scope: GlobalSearchScope, processor: Processor<PsiMethod>): Boolean {
+    override fun processMethodsWithName(name: String, scope: GlobalSearchScope, processor: PsiMethodProcessor): Boolean {
         if (disableSearch.get()) return true
         return ContainerUtil.process(getMethodsByName(name, scope), processor)
     }
@@ -264,7 +253,7 @@ class KotlinShortNamesCache(private val project: Project) : PsiShortNamesCache()
 
     //region Fields
 
-    override fun processAllFieldNames(processor: Processor<String>, scope: GlobalSearchScope, filter: IdFilter?): Boolean {
+    override fun processAllFieldNames(processor: StringProcessor, scope: GlobalSearchScope, filter: IdFilter?): Boolean {
         if (disableSearch.get()) return true
         return processAllFieldNames(processor)
     }
@@ -276,7 +265,7 @@ class KotlinShortNamesCache(private val project: Project) : PsiShortNamesCache()
         }
     }
 
-    private fun processAllFieldNames(processor: Processor<String>): Boolean {
+    private fun processAllFieldNames(processor: StringProcessor): Boolean {
         if (disableSearch.get()) return true
         return KotlinPropertyShortNameIndex.getInstance().processAllKeys(project, processor)
     }
@@ -337,7 +326,7 @@ class KotlinShortNamesCache(private val project: Project) : PsiShortNamesCache()
     }
 
     private class CancelableArrayCollectProcessor<T> : Processor<T> {
-        val troveSet = ContainerUtil.newTroveSet<T>()
+        val troveSet = THashSet<T>()
         private val processor = Processors.cancelableCollectProcessor<T>(troveSet)
 
         override fun process(value: T): Boolean {

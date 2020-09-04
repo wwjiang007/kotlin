@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.injection
@@ -30,6 +19,7 @@ import org.intellij.plugins.intelliLang.Configuration
 import org.intellij.plugins.intelliLang.inject.*
 import org.intellij.plugins.intelliLang.inject.config.BaseInjection
 import org.jetbrains.annotations.NonNls
+import org.jetbrains.kotlin.idea.KotlinJvmBundle
 import org.jetbrains.kotlin.idea.patterns.KotlinPatterns
 import org.jetbrains.kotlin.idea.util.addAnnotation
 import org.jetbrains.kotlin.idea.util.application.executeWriteCommand
@@ -40,7 +30,8 @@ import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.siblings
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 
-@NonNls val KOTLIN_SUPPORT_ID = "kotlin"
+@NonNls
+val KOTLIN_SUPPORT_ID = "kotlin"
 
 class KotlinLanguageInjectionSupport : AbstractLanguageInjectionSupport() {
     override fun getId(): String = KOTLIN_SUPPORT_ID
@@ -83,7 +74,7 @@ class KotlinLanguageInjectionSupport : AbstractLanguageInjectionSupport() {
 
         TemporaryPlacesRegistry.getInstance(project).removeHostWithUndo(project, psiElement)
 
-        project.executeWriteCommand("remove injection in-code instructions") {
+        project.executeWriteCommand(KotlinJvmBundle.message("command.action.remove.injection.in.code.instructions")) {
             injectInstructions.forEach(PsiElement::delete)
         }
 
@@ -117,7 +108,8 @@ class KotlinLanguageInjectionSupport : AbstractLanguageInjectionSupport() {
 }
 
 private fun extractStringArgumentByName(annotationEntry: KtAnnotationEntry, name: String): String? {
-    val namedArgument: ValueArgument = annotationEntry.valueArguments.firstOrNull { it.getArgumentName()?.asName?.asString() == name } ?: return null
+    val namedArgument: ValueArgument =
+        annotationEntry.valueArguments.firstOrNull { it.getArgumentName()?.asName?.asString() == name } ?: return null
     return extractStringValue(namedArgument)
 }
 
@@ -152,21 +144,19 @@ private fun canInjectWithAnnotation(host: PsiElement): Boolean {
     return javaPsiFacade.findClass(AnnotationUtil.LANGUAGE, GlobalSearchScope.moduleWithDependenciesAndLibrariesScope(module)) != null
 }
 
-private fun findElementToInjectWithAnnotation(host: KtElement): KtModifierListOwner? {
-    return PsiTreeUtil.getParentOfType(
-            host,
-            KtModifierListOwner::class.java,
-            false, /* strict */
-            KtBlockExpression::class.java, KtParameterList::class.java, KtTypeParameterList::class.java /* Stop at */
-    )
-}
+private fun findElementToInjectWithAnnotation(host: KtElement): KtModifierListOwner? = PsiTreeUtil.getParentOfType(
+    host,
+    KtModifierListOwner::class.java,
+    false, /* strict */
+    KtBlockExpression::class.java, KtParameterList::class.java, KtTypeParameterList::class.java /* Stop at */
+)
 
 private fun findElementToInjectWithComment(host: KtElement): KtExpression? {
     val parentBlockExpression = PsiTreeUtil.getParentOfType(
-            host,
-            KtBlockExpression::class.java,
-            true, /* strict */
-            KtDeclaration::class.java /* Stop at */
+        host,
+        KtBlockExpression::class.java,
+        true, /* strict */
+        KtDeclaration::class.java /* Stop at */
     ) ?: return null
 
     return parentBlockExpression.statements.firstOrNull { statement ->
@@ -182,7 +172,7 @@ private fun addInjectionInstructionInCode(language: Language, host: PsiLanguageI
     val modifierListOwner = findElementToInjectWithAnnotation(ktHost)
 
     if (modifierListOwner != null && canInjectWithAnnotation(ktHost)) {
-        project.executeWriteCommand("Add injection annotation") {
+        project.executeWriteCommand(KotlinJvmBundle.message("command.action.add.injection.annotation")) {
             modifierListOwner.addAnnotation(FqName(AnnotationUtil.LANGUAGE), "\"${language.id}\"")
         }
 
@@ -191,14 +181,12 @@ private fun addInjectionInstructionInCode(language: Language, host: PsiLanguageI
 
     // Find the place where injection can be done with one-line comment
     val commentBeforeAnchor: PsiElement =
-            modifierListOwner?.firstNonCommentChild() ?:
-            findElementToInjectWithComment(ktHost) ?:
-            return false
+        modifierListOwner?.firstNonCommentChild() ?: findElementToInjectWithComment(ktHost) ?: return false
 
     val psiFactory = KtPsiFactory(project)
     val injectComment = psiFactory.createComment("//language=" + language.id)
 
-    project.executeWriteCommand("Add injection comment") {
+    project.executeWriteCommand(KotlinJvmBundle.message("command.action.add.injection.comment")) {
         commentBeforeAnchor.parent.addBefore(injectComment, commentBeforeAnchor)
     }
 
@@ -217,18 +205,16 @@ private fun checkIsValidPlaceForInjectionWithLineComment(statement: KtExpression
     if (hostStart - statementStartOffset > 2) {
         // ... there's no non-empty valid host in between comment and e2
         if (prevWalker(host, statement).asSequence().takeWhile { it != null }.any {
-            it is PsiLanguageInjectionHost && it.isValidHost && !StringUtil.isEmptyOrSpaces(it.text)
-        }) {
-            return false
-        }
+                it is PsiLanguageInjectionHost && it.isValidHost && !StringUtil.isEmptyOrSpaces(it.text)
+            }
+        ) return false
     }
 
     return true
 }
 
-private fun PsiElement.firstNonCommentChild(): PsiElement? {
-    return firstChild.siblings().dropWhile { it is PsiComment || it is PsiWhiteSpace }.firstOrNull()
-}
+private fun PsiElement.firstNonCommentChild(): PsiElement? =
+    firstChild.siblings().dropWhile { it is PsiComment || it is PsiWhiteSpace }.firstOrNull()
 
 // Based on InjectorUtils.prevWalker
 private fun prevWalker(element: PsiElement, scope: PsiElement): Iterator<PsiElement?> {
@@ -243,8 +229,7 @@ private fun prevWalker(element: PsiElement, scope: PsiElement): Iterator<PsiElem
             val prev = current.prevSibling
             e = if (prev != null) {
                 getDeepestLast(prev)
-            }
-            else {
+            } else {
                 val parent = current.parent
                 if (parent === scope || parent is PsiFile) null else parent
             }

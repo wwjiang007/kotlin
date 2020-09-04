@@ -43,7 +43,7 @@ class AlternativesRenderLogTest : AbstractKotlinUastTest() {
                     builder.append("    ".repeat(level))
                     builder.append("[${uElement.size}]:")
                     builder.append(uElement.joinToString(", ", "[", "]") { it.asLogString() })
-                    builder.appendln()
+                    builder.appendLine()
                 }
                 if (uElement.any()) level++
                 element.acceptChildren(this)
@@ -54,6 +54,6 @@ class AlternativesRenderLogTest : AbstractKotlinUastTest() {
     }
 
     private fun getTestFile(testName: String, ext: String) =
-        File(File(AbstractKotlinUastTest.TEST_KOTLIN_MODEL_DIR, testName).canonicalPath + '.' + ext)
+        File(File(TEST_KOTLIN_MODEL_DIR, testName).canonicalPath + '.' + ext)
 
 }

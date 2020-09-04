@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.idea.refactoring.changeSignature
 
+import com.intellij.application.options.CodeStyle
 import com.intellij.codeInsight.TargetElementUtil
 import com.intellij.codeInsight.TargetElementUtil.ELEMENT_NAME_ACCEPTED
 import com.intellij.codeInsight.TargetElementUtil.REFERENCED_ELEMENT_ACCEPTED
@@ -24,7 +25,7 @@ import junit.framework.TestCase
 import org.jetbrains.kotlin.asJava.getRepresentativeLightMethod
 import org.jetbrains.kotlin.asJava.toLightMethods
 import org.jetbrains.kotlin.builtins.DefaultBuiltIns
-import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.refactoring.changeSignature.ui.KotlinChangeSignatureDialog.Companion.getTypeCodeFragmentContext
 import org.jetbrains.kotlin.idea.refactoring.changeSignature.ui.KotlinChangeSignatureDialog.Companion.getTypeInfo
@@ -50,6 +51,7 @@ import org.jetbrains.kotlin.utils.sure
 import org.junit.runner.RunWith
 import java.io.File
 import java.util.*
+
 @RunWith(JUnit3WithIdeaConfigurationRunner::class)
 class KotlinChangeSignatureTest : KotlinLightCodeInsightFixtureTestCase() {
     companion object {
@@ -61,19 +63,24 @@ class KotlinChangeSignatureTest : KotlinLightCodeInsightFixtureTestCase() {
 
     override fun getProjectDescriptor(): LightProjectDescriptor = KotlinWithJdkAndRuntimeLightProjectDescriptor.INSTANCE
 
+    override fun setUp() {
+        super.setUp()
+        CodeStyle.getSettings(project).clearCodeStyleSettings()
+    }
+
     override fun tearDown() {
         files = emptyList()
         psiFiles = PsiFile.EMPTY_ARRAY
         super.tearDown()
     }
 
-    lateinit var files: List<String>
-    lateinit var psiFiles: Array<PsiFile>
+    private lateinit var files: List<String>
+    private lateinit var psiFiles: Array<PsiFile>
 
     private fun findCallers(method: PsiMethod): LinkedHashSet<PsiMethod> {
-        val root = KotlinMethodNode(method, HashSet(), project, Runnable { })
-        return (0..root.childCount - 1).flatMapTo(LinkedHashSet<PsiMethod>()) {
-            (root.getChildAt(it) as KotlinMethodNode).method.toLightMethods()
+        val root = KotlinMethodNode(method, HashSet(), project) { }
+        return (0 until root.childCount).flatMapTo(LinkedHashSet<PsiMethod>()) {
+            (root.getChildAt(it) as KotlinMethodNode).member.toLightMethods()
         }
     }
 
@@ -82,7 +89,7 @@ class KotlinChangeSignatureTest : KotlinLightCodeInsightFixtureTestCase() {
         var i = 0
         indexLoop@ while (true) {
             for (extension in EXTENSIONS) {
-                val extraFileName = getTestName(false) + "Before" + (if (i > 0) "." + i else "") + extension
+                val extraFileName = getTestName(false) + "Before" + (if (i > 0) ".$i" else "") + extension
                 val extraFile = File(testDataPath + extraFileName)
                 if (extraFile.exists()) {
                     fileList.add(extraFileName)
@@ -102,13 +109,13 @@ class KotlinChangeSignatureTest : KotlinLightCodeInsightFixtureTestCase() {
 
         val element = (KotlinChangeSignatureHandler().findTargetMember(file, editor) as KtElement?).sure { "Target element is null" }
         val context = file
-                .findElementAt(editor.caretModel.offset)
-                ?.getNonStrictParentOfType<KtElement>()
-                .sure { "Context element is null" }
+            .findElementAt(editor.caretModel.offset)
+            ?.getNonStrictParentOfType<KtElement>()
+            .sure { "Context element is null" }
         val bindingContext = element.analyze(BodyResolveMode.FULL)
         val callableDescriptor = KotlinChangeSignatureHandler
-                .findDescriptor(element, project, editor, bindingContext)
-                .sure { "Target descriptor is null" }
+            .findDescriptor(element, project, editor, bindingContext)
+            .sure { "Target descriptor is null" }
         return createChangeInfo(project, callableDescriptor, KotlinChangeSignatureConfiguration.Empty, context)!!
     }
 
@@ -122,8 +129,7 @@ class KotlinChangeSignatureTest : KotlinLightCodeInsightFixtureTestCase() {
         try {
             testAction()
             TestCase.fail("No conflicts found")
-        }
-        catch (e: Throwable) {
+        } catch (e: Throwable) {
             val message = when {
                 e is BaseRefactoringProcessor.ConflictsInTestsException -> StringUtil.join(e.messages.sorted(), "\n")
                 e is CommonRefactoringUtil.RefactoringErrorHintException -> e.message
@@ -141,8 +147,7 @@ class KotlinChangeSignatureTest : KotlinLightCodeInsightFixtureTestCase() {
         try {
             doTest(configure)
             TestCase.fail("No conflicts found")
-        }
-        catch (e: RuntimeException) {
+        } catch (e: RuntimeException) {
             if ((e.message ?: "").contains("Cannot modify file")) return
 
             val message = when {
@@ -160,7 +165,7 @@ class KotlinChangeSignatureTest : KotlinLightCodeInsightFixtureTestCase() {
         val project = method.project
 
         var newName = method.name
-        var newReturnType = method.returnType ?: PsiType.VOID
+        var newReturnType: PsiType = method.returnType ?: PsiType.VOID
         val newParameters = ArrayList<ParameterInfoImpl>()
         val parameterPropagationTargets = LinkedHashSet<PsiMethod>()
 
@@ -175,25 +180,25 @@ class KotlinChangeSignatureTest : KotlinLightCodeInsightFixtureTestCase() {
 
         init {
             method.parameterList.parameters
-                    .withIndex()
-                    .mapTo(newParameters) {
-                        val (i, param) = it
-                        ParameterInfoImpl(i, param.name, param.type)
-                    }
+                .withIndex()
+                .mapTo(newParameters) {
+                    val (i, param) = it
+                    ParameterInfoImpl(i, param.name, param.type)
+                }
         }
 
         fun createProcessor(): ChangeSignatureProcessor {
             return ChangeSignatureProcessor(
-                    project,
-                    method,
-                    false,
-                    VisibilityUtil.getVisibilityModifier(method.modifierList),
-                    newName,
-                    CanonicalTypes.createTypeWrapper(newReturnType),
-                    newParameters.toTypedArray(),
-                    arrayOf(),
-                    parameterPropagationTargets,
-                    emptySet<PsiMethod>()
+                project,
+                method,
+                false,
+                VisibilityUtil.getVisibilityModifier(method.modifierList),
+                newName,
+                CanonicalTypes.createTypeWrapper(newReturnType),
+                newParameters.toTypedArray(),
+                arrayOf(),
+                parameterPropagationTargets,
+                emptySet<PsiMethod>()
             )
         }
     }
@@ -204,10 +209,7 @@ class KotlinChangeSignatureTest : KotlinLightCodeInsightFixtureTestCase() {
         val targetElement = TargetElementUtil.findTargetElement(editor, ELEMENT_NAME_ACCEPTED or REFERENCED_ELEMENT_ACCEPTED)
         val targetMethod = (targetElement as? PsiMethod).sure { "<caret> is not on method name" }
 
-        JavaRefactoringConfiguration(targetMethod)
-                .apply { configure() }
-                .createProcessor()
-                .run()
+        JavaRefactoringConfiguration(targetMethod).apply { configure() }.createProcessor().run()
 
         compareEditorsWithExpectedData()
     }
@@ -221,8 +223,7 @@ class KotlinChangeSignatureTest : KotlinLightCodeInsightFixtureTestCase() {
             val afterFilePath = file.replace("Before.", "After.")
             try {
                 myFixture.checkResultByFile(file, afterFilePath, true)
-            }
-            catch (e: ComparisonFailure) {
+            } catch (e: ComparisonFailure) {
                 KotlinTestUtils.assertEqualsToFile(File(testDataPath + afterFilePath), psiFile.text)
             }
 
@@ -251,760 +252,1394 @@ class KotlinChangeSignatureTest : KotlinLightCodeInsightFixtureTestCase() {
         TestCase.assertNull(KotlinChangeSignatureHandler().findTargetMember(file, editor))
     }
 
-    fun testSynthesized() = doTestConflict()
+    fun testSynthesized() {
+        doTestConflict()
+    }
 
-    fun testPreferContainedInClass() = TestCase.assertEquals("param", createChangeInfo().newParameters[0].name)
+    fun testPreferContainedInClass() {
+        TestCase.assertEquals("param", createChangeInfo().newParameters[0].name)
+    }
 
-    fun testRenameFunction() = doTest { newName = "after" }
+    fun testRenameFunction() {
+        doTest { newName = "after" }
+    }
 
-    fun testChangeReturnType() = doTest { newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.floatType) }
+    fun testChangeReturnType() {
+        doTest { newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.floatType) }
+    }
 
-    fun testAddReturnType() = doTest { newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.floatType) }
+    fun testAddReturnType() {
+        doTest { newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.floatType) }
+    }
 
-    fun testRemoveReturnType() = doTest { newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.unitType) }
+    fun testRemoveReturnType() {
+        doTest { newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.unitType) }
+    }
 
-    fun testChangeConstructorVisibility() = doTest { newVisibility = Visibilities.PROTECTED }
+    fun testChangeConstructorVisibility() {
+        doTest { newVisibility = DescriptorVisibilities.PROTECTED }
+    }
 
-    fun testAddConstructorVisibility() = doTest {
-        newVisibility = Visibilities.PROTECTED
+    fun testAddConstructorVisibility() {
+        doTest {
+            newVisibility = DescriptorVisibilities.PROTECTED
 
-        val newParameter = KotlinParameterInfo(
+            val newParameter = KotlinParameterInfo(
                 callableDescriptor = originalBaseFunctionDescriptor,
                 name = "x",
                 originalTypeInfo = KotlinTypeInfo(false, BUILT_INS.anyType),
                 defaultValueForCall = KtPsiFactory(project).createExpression("12"),
                 valOrVar = KotlinValVar.Val
-        )
-        addParameter(newParameter)
-    }
-
-    fun testConstructor() = doTest {
-        newVisibility = Visibilities.PUBLIC
-
-        newParameters[0].valOrVar = KotlinValVar.Var
-        newParameters[1].valOrVar = KotlinValVar.None
-        newParameters[2].valOrVar = KotlinValVar.Val
-
-        newParameters[0].name = "_x1"
-        newParameters[1].name = "_x2"
-        newParameters[2].name = "_x3"
-
-        newParameters[1].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.floatType.makeNullable())
-    }
-
-    fun testGenericConstructor() = doTest {
-        newVisibility = Visibilities.PUBLIC
-
-        newParameters[0].valOrVar = KotlinValVar.Var
-        newParameters[1].valOrVar = KotlinValVar.None
-        newParameters[2].valOrVar = KotlinValVar.Val
-
-        newParameters[0].name = "_x1"
-        newParameters[1].name = "_x2"
-        newParameters[2].name = "_x3"
-
-        newParameters[1].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.doubleType.makeNullable())
-    }
-
-    fun testConstructorSwapArguments() = doTest {
-        newParameters[0].name = "_x1"
-        newParameters[1].name = "_x2"
-
-        swapParameters(0, 2)
-    }
-
-    fun testFunctions() = doTest {
-        newVisibility = Visibilities.PUBLIC
-
-        newParameters[0].name = "_x1"
-        newParameters[1].name = "_x2"
-        newParameters[2].name = "_x3"
-
-        newParameters[1].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.floatType.makeNullable())
-    }
-
-    fun testGenericFunctions() = doTest() {
-        newVisibility = Visibilities.PUBLIC
-
-        newParameters[0].name = "_x1"
-        newParameters[1].name = "_x2"
-        newParameters[2].name = "_x3"
-
-        newParameters[1].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.doubleType.makeNullable())
-    }
-
-    fun testExpressionFunction() = doTest {
-        newParameters[0].name = "x1"
-
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "y1", KotlinTypeInfo(false, BUILT_INS.intType)))
-    }
-
-    fun testFunctionsAddRemoveArguments() = doTest {
-        newVisibility = Visibilities.INTERNAL
-
-        val defaultValueForCall = KtPsiFactory(project).createExpression("null")
-        val newParameters = newParameters
-        setNewParameter(2, newParameters[1])
-        setNewParameter(1, newParameters[0])
-        setNewParameter(0, KotlinParameterInfo(originalBaseFunctionDescriptor,
-                                               -1,
-                                               "x0",
-                                               KotlinTypeInfo(false, BUILT_INS.nullableAnyType),
-                                               null,
-                                               defaultValueForCall))
-    }
-
-    fun testFakeOverride() = doTest {
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "i", KotlinTypeInfo(false, BUILT_INS.intType)))
-    }
-
-    fun testFunctionLiteral() = doTest {
-        newParameters[1].name = "y1"
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "x", KotlinTypeInfo(false, BUILT_INS.anyType)))
-
-        newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.intType)
-    }
-
-    fun testVarargs() = doTestConflict()
-
-    fun testUnmodifiableFromLibrary() = doTestUnmodifiable()
-
-    fun testUnmodifiableFromBuiltins() = doTestUnmodifiable()
-
-    fun testInnerFunctionsConflict() = doTestConflict {
-        newName = "inner2"
-        newParameters[0].name = "y"
-    }
-
-    fun testMemberFunctionsConflict() = doTestConflict {
-        newName = "inner2"
-        newParameters[0].name = "y"
-    }
-
-    fun testTopLevelFunctionsConflict() = doTestConflict { newName = "fun2" }
-
-    fun testConstructorsConflict() = doTestConflict {
-        newParameters[0].name = "_x"
-        newParameters[1].name = "_y"
-        newParameters[2].name = "_z"
-    }
-
-    fun testNoDefaultValuesInOverrides() = doTest { swapParameters(0, 1) }
-
-    fun testOverridesInEnumEntries() = doTest {
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "s", KotlinTypeInfo(false, BUILT_INS.stringType)))
-    }
-
-    fun testEnumEntriesWithoutSuperCalls() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("1")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor,
-                                         -1,
-                                         "n",
-                                         KotlinTypeInfo(false, BUILT_INS.intType),
-                                         null,
-                                         defaultValueForCall))
-    }
-
-    fun testParameterChangeInOverrides() = doTest {
-        newParameters[0].name = "n"
-        newParameters[0].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.intType)
-    }
-
-    fun testConstructorJavaUsages() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("\"abc\"")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor,
-                                         -1,
-                                         "s",
-                                         KotlinTypeInfo(false, BUILT_INS.stringType),
-                                         null,
-                                         defaultValueForCall))
-    }
-
-    fun testFunctionJavaUsagesAndOverridesAddParam() = doTest {
-        val psiFactory = KtPsiFactory(project)
-        val defaultValueForCall1 = psiFactory.createExpression("\"abc\"")
-        val defaultValueForCall2 = psiFactory.createExpression("\"def\"")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor,
-                                         -1,
-                                         "s",
-                                         KotlinTypeInfo(false, BUILT_INS.stringType),
-                                         null,
-                                         defaultValueForCall1))
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor,
-                                         -1,
-                                         "o",
-                                         KotlinTypeInfo(false, BUILT_INS.nullableAnyType),
-                                         null,
-                                         defaultValueForCall2))
-    }
-
-    fun testFunctionJavaUsagesAndOverridesChangeNullability() = doTest {
-        newParameters[1].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.stringType.makeNullable())
-        newParameters[2].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.anyType)
-
-        newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.stringType.makeNullable())
-    }
-
-    fun testFunctionJavaUsagesAndOverridesChangeTypes() = doTest {
-        newParameters[0].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.stringType.makeNullable())
-        newParameters[1].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.intType)
-        newParameters[2].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.longType.makeNullable())
-
-        newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.nullableAnyType)
-    }
-
-    fun testGenericsWithOverrides() = doTest {
-        newParameters[0].currentTypeInfo = KotlinTypeInfo(false, null, "List<C>")
-        newParameters[1].currentTypeInfo = KotlinTypeInfo(false, null, "A?")
-        newParameters[2].currentTypeInfo = KotlinTypeInfo(false, null, "U<B>")
-
-        newReturnTypeInfo = KotlinTypeInfo(true, null, "U<C>?")
-    }
-
-    fun testAddReceiverToGenericsWithOverrides() = doTest {
-        val parameterInfo = newParameters[0]
-        parameterInfo.currentTypeInfo = KotlinTypeInfo(false, null, "U<A>")
-        receiverParameterInfo = parameterInfo
-    }
-
-    fun testJavaMethodKotlinUsages() = doJavaTest {
-        newName = "bar"
-        newParameters.removeAt(1)
-    }
-
-    fun testJavaConstructorKotlinUsages() = doJavaTest { newParameters.removeAt(1) }
-
-    fun testSAMAddToEmptyParamList() = doJavaTest { newParameters.add(ParameterInfoImpl(-1, "s", stringPsiType)) }
-
-    fun testSAMAddToSingletonParamList() = doJavaTest { newParameters.add(0, ParameterInfoImpl(-1, "n", PsiType.INT)) }
-
-    fun testSAMAddToNonEmptyParamList() = doJavaTest { newParameters.add(ParameterInfoImpl(-1, "o", objectPsiType)) }
-
-    fun testSAMRemoveSingletonParamList() = doJavaTest { newParameters.clear() }
-
-    fun testSAMRemoveParam() = doJavaTest { newParameters.removeAt(0) }
-
-    fun testSAMRenameParam() = doJavaTest { newParameters[0].name = "p" }
-
-    fun testSAMChangeParamType() = doJavaTest { newParameters[0].setType(objectPsiType) }
-
-    fun testSAMRenameMethod() = doJavaTest { newName = "bar" }
-
-    fun testSAMChangeMethodReturnType() = doJavaTest { newReturnType = objectPsiType }
-
-    fun testGenericsWithSAMConstructors() = doJavaTest {
-        newParameters[0].setType(psiFactory.createTypeFromText("java.util.List<X<B>>", method.parameterList))
-        newParameters[1].setType(psiFactory.createTypeFromText("X<java.util.Set<A>>", method.parameterList))
-
-        newReturnType = psiFactory.createTypeFromText("X<java.util.List<A>>", method)
-    }
-
-    fun testFunctionRenameJavaUsages() = doTest { newName = "bar" }
-
-    fun testParameterModifiers() = doTest {
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "n", KotlinTypeInfo(false, BUILT_INS.intType)))
-    }
-
-    fun testFqNameShortening() = doTest {
-        val newParameter = KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "s", KotlinTypeInfo(false, BUILT_INS.anyType)).apply {
-            currentTypeInfo = KotlinTypeInfo(false, null, "kotlin.String")
+            )
+            addParameter(newParameter)
         }
-        addParameter(newParameter)
     }
 
-    fun testObjectMember() = doTest { removeParameter(0) }
+    fun testConstructor() {
+        doTest {
+            newVisibility = DescriptorVisibilities.PUBLIC
 
-    fun testParameterListAddParam() = doTest {
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "l", KotlinTypeInfo(false, BUILT_INS.longType)))
+            newParameters[0].valOrVar = KotlinValVar.Var
+            newParameters[1].valOrVar = KotlinValVar.None
+            newParameters[2].valOrVar = KotlinValVar.Val
+
+            newParameters[0].name = "_x1"
+            newParameters[1].name = "_x2"
+            newParameters[2].name = "_x3"
+
+            newParameters[1].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.floatType.makeNullable())
+        }
     }
 
-    fun testParameterListRemoveParam() = doTest { removeParameter(getNewParametersCount() - 1) }
+    fun testGenericConstructor() {
+        doTest {
+            newVisibility = DescriptorVisibilities.PUBLIC
 
-    fun testParameterListRemoveAllParams() = doTest { clearParameters() }
+            newParameters[0].valOrVar = KotlinValVar.Var
+            newParameters[1].valOrVar = KotlinValVar.None
+            newParameters[2].valOrVar = KotlinValVar.Val
 
-    fun testAddNewReceiver() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("X(0)")
-        receiverParameterInfo = KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "_", KotlinTypeInfo(false, BUILT_INS.anyType), null, defaultValueForCall)
+            newParameters[0].name = "_x1"
+            newParameters[1].name = "_x2"
+            newParameters[2].name = "_x3"
+
+            newParameters[1].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.doubleType.makeNullable())
+        }
+    }
+
+    fun testConstructorSwapArguments() {
+        doTest {
+            newParameters[0].name = "_x1"
+            newParameters[1].name = "_x2"
+
+            swapParameters(0, 2)
+        }
+    }
+
+    fun testFunctions() {
+        doTest {
+            newVisibility = DescriptorVisibilities.PUBLIC
+
+            newParameters[0].name = "_x1"
+            newParameters[1].name = "_x2"
+            newParameters[2].name = "_x3"
+
+            newParameters[1].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.floatType.makeNullable())
+        }
+    }
+
+    fun testGenericFunctions() {
+        doTest {
+            newVisibility = DescriptorVisibilities.PUBLIC
+
+            newParameters[0].name = "_x1"
+            newParameters[1].name = "_x2"
+            newParameters[2].name = "_x3"
+
+            newParameters[1].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.doubleType.makeNullable())
+        }
+    }
+
+    fun testExpressionFunction() {
+        doTest {
+            newParameters[0].name = "x1"
+
+            addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "y1", KotlinTypeInfo(false, BUILT_INS.intType)))
+        }
+    }
+
+    fun testFunctionsAddRemoveArguments() {
+        doTest {
+            newVisibility = DescriptorVisibilities.INTERNAL
+
+            val defaultValueForCall = KtPsiFactory(project).createExpression("null")
+            val newParameters = newParameters
+            setNewParameter(2, newParameters[1])
+            setNewParameter(1, newParameters[0])
+            setNewParameter(
+                0, KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "x0",
+                    KotlinTypeInfo(false, BUILT_INS.nullableAnyType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+        }
+    }
+
+    fun testFakeOverride() {
+        doTest {
+            addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "i", KotlinTypeInfo(false, BUILT_INS.intType)))
+        }
+    }
+
+    fun testFunctionLiteral() {
+        doTest {
+            newParameters[1].name = "y1"
+            addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "x", KotlinTypeInfo(false, BUILT_INS.anyType)))
+
+            newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.intType)
+        }
+    }
+
+    fun testVarargs() {
+        doTestConflict()
+    }
+
+    fun testUnmodifiableFromLibrary() {
+        doTestUnmodifiable()
+    }
+
+    fun testUnmodifiableFromBuiltins() {
+        doTestUnmodifiable()
+    }
+
+    fun testInnerFunctionsConflict() {
+        doTestConflict {
+            newName = "inner2"
+            newParameters[0].name = "y"
+        }
+    }
+
+    fun testMemberFunctionsConflict() {
+        doTestConflict {
+            newName = "inner2"
+            newParameters[0].name = "y"
+        }
+    }
+
+    fun testTopLevelFunctionsConflict() {
+        doTestConflict { newName = "fun2" }
+    }
+
+    fun testConstructorsConflict() {
+        doTestConflict {
+            newParameters[0].name = "_x"
+            newParameters[1].name = "_y"
+            newParameters[2].name = "_z"
+        }
+    }
+
+    fun testNoDefaultValuesInOverrides() {
+        doTest { swapParameters(0, 1) }
+    }
+
+    fun testOverridesInEnumEntries() {
+        doTest {
+            addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "s", KotlinTypeInfo(false, BUILT_INS.stringType)))
+        }
+    }
+
+    fun testEnumEntriesWithoutSuperCalls() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("1")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "n",
+                    KotlinTypeInfo(false, BUILT_INS.intType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+        }
+    }
+
+    fun testParameterChangeInOverrides() {
+        doTest {
+            newParameters[0].name = "n"
+            newParameters[0].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.intType)
+        }
+    }
+
+    fun testConstructorJavaUsages() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("\"abc\"")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "s",
+                    KotlinTypeInfo(false, BUILT_INS.stringType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+        }
+    }
+
+    fun testFunctionJavaUsagesAndOverridesAddParam() {
+        doTest {
+            val psiFactory = KtPsiFactory(project)
+            val defaultValueForCall1 = psiFactory.createExpression("\"abc\"")
+            val defaultValueForCall2 = psiFactory.createExpression("\"def\"")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "s",
+                    KotlinTypeInfo(false, BUILT_INS.stringType),
+                    null,
+                    defaultValueForCall1
+                )
+            )
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "o",
+                    KotlinTypeInfo(false, BUILT_INS.nullableAnyType),
+                    null,
+                    defaultValueForCall2
+                )
+            )
+        }
+    }
+
+    fun testFunctionJavaUsagesAndOverridesChangeNullability() {
+        doTest {
+            newParameters[1].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.stringType.makeNullable())
+            newParameters[2].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.anyType)
+
+            newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.stringType.makeNullable())
+        }
+    }
+
+    fun testFunctionJavaUsagesAndOverridesChangeTypes() {
+        doTest {
+            newParameters[0].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.stringType.makeNullable())
+            newParameters[1].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.intType)
+            newParameters[2].currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.longType.makeNullable())
+
+            newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.nullableAnyType)
+        }
+    }
+
+    fun testGenericsWithOverrides() {
+        doTest {
+            newParameters[0].currentTypeInfo = KotlinTypeInfo(false, null, "List<C>")
+            newParameters[1].currentTypeInfo = KotlinTypeInfo(false, null, "A?")
+            newParameters[2].currentTypeInfo = KotlinTypeInfo(false, null, "U<B>")
+
+            newReturnTypeInfo = KotlinTypeInfo(true, null, "U<C>?")
+        }
+    }
+
+    fun testAddReceiverToGenericsWithOverrides() {
+        doTest {
+            val parameterInfo = newParameters[0]
+            parameterInfo.currentTypeInfo = KotlinTypeInfo(false, null, "U<A>")
+            receiverParameterInfo = parameterInfo
+        }
+    }
+
+    fun testJavaMethodKotlinUsages() {
+        doJavaTest {
+            newName = "bar"
+            newParameters.removeAt(1)
+        }
+    }
+
+    fun testJavaMethodJvmStaticKotlinUsages() {
+        doJavaTest {
+            val first = newParameters[1]
+            newParameters[1] = newParameters[0]
+            newParameters[0] = first
+        }
+    }
+
+    fun testJavaConstructorKotlinUsages() {
+        doJavaTest { newParameters.removeAt(1) }
+    }
+
+    fun testSAMAddToEmptyParamList() {
+        doJavaTest { newParameters.add(ParameterInfoImpl(-1, "s", stringPsiType)) }
+    }
+
+    fun testSAMAddToSingletonParamList() {
+        doJavaTest { newParameters.add(0, ParameterInfoImpl(-1, "n", PsiType.INT)) }
+    }
+
+    fun testSAMAddToNonEmptyParamList() {
+        doJavaTest { newParameters.add(ParameterInfoImpl(-1, "o", objectPsiType)) }
+    }
+
+    fun testSAMRemoveSingletonParamList() {
+        doJavaTest { newParameters.clear() }
+    }
+
+    fun testSAMRemoveParam() {
+        doJavaTest { newParameters.removeAt(0) }
+    }
+
+    fun testSAMRenameParam() {
+        doJavaTest { newParameters[0].name = "p" }
+    }
+
+    fun testSAMChangeParamType() {
+        doJavaTest { newParameters[0].setType(objectPsiType) }
+    }
+
+    fun testSAMRenameMethod() {
+        doJavaTest { newName = "bar" }
+    }
+
+    fun testSAMChangeMethodReturnType() {
+        doJavaTest { newReturnType = objectPsiType }
+    }
+
+    fun testGenericsWithSAMConstructors() {
+        doJavaTest {
+            newParameters[0].setType(psiFactory.createTypeFromText("java.util.List<X<B>>", method.parameterList))
+            newParameters[1].setType(psiFactory.createTypeFromText("X<java.util.Set<A>>", method.parameterList))
+
+            newReturnType = psiFactory.createTypeFromText("X<java.util.List<A>>", method)
+        }
+    }
+
+    fun testFunctionRenameJavaUsages() {
+        doTest { newName = "bar" }
+    }
+
+    fun testParameterModifiers() {
+        doTest {
+            addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "n", KotlinTypeInfo(false, BUILT_INS.intType)))
+        }
+    }
+
+    fun testFqNameShortening() {
+        doTest {
+            val newParameter =
+                KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "s", KotlinTypeInfo(false, BUILT_INS.anyType)).apply {
+                    currentTypeInfo = KotlinTypeInfo(false, null, "kotlin.String")
+                }
+            addParameter(newParameter)
+        }
+    }
+
+    fun testObjectMember() {
+        doTest { removeParameter(0) }
+    }
+
+    fun testParameterListAddParam() {
+        doTest {
+            addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "l", KotlinTypeInfo(false, BUILT_INS.longType)))
+        }
+    }
+
+    fun testParameterListRemoveParam() {
+        doTest { removeParameter(getNewParametersCount() - 1) }
+    }
+
+    fun testParameterListRemoveAllParams() {
+        doTest { clearParameters() }
+    }
+
+    fun testAddNewReceiver() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("X(0)")
+            receiverParameterInfo = KotlinParameterInfo(
+                originalBaseFunctionDescriptor,
+                -1,
+                "_",
+                KotlinTypeInfo(false, BUILT_INS.anyType),
+                null,
+                defaultValueForCall
+            )
                 .apply { currentTypeInfo = KotlinTypeInfo(false, null, "X") }
+        }
     }
 
-    fun testAddNewReceiverForMember() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("X(0)")
-        receiverParameterInfo = KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "_", KotlinTypeInfo(false, BUILT_INS.anyType), null, defaultValueForCall)
+    fun testAddNewReceiverForMember() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("X(0)")
+            receiverParameterInfo = KotlinParameterInfo(
+                originalBaseFunctionDescriptor,
+                -1,
+                "_",
+                KotlinTypeInfo(false, BUILT_INS.anyType),
+                null,
+                defaultValueForCall
+            )
                 .apply { currentTypeInfo = KotlinTypeInfo(false, null, "X") }
+        }
     }
 
-    fun testAddNewReceiverForMemberConflict() = doTestConflict {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("X(0)")
-        receiverParameterInfo = KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "_", KotlinTypeInfo(false, BUILT_INS.anyType), null, defaultValueForCall)
+    fun testAddNewReceiverForMemberConflict() {
+        doTestConflict {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("X(0)")
+            receiverParameterInfo = KotlinParameterInfo(
+                originalBaseFunctionDescriptor,
+                -1,
+                "_",
+                KotlinTypeInfo(false, BUILT_INS.anyType),
+                null,
+                defaultValueForCall
+            )
                 .apply { currentTypeInfo = KotlinTypeInfo(false, null, "X") }
+        }
     }
 
-    fun testAddNewReceiverConflict() = doTestConflict {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("X(0)")
-        receiverParameterInfo = KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "_", KotlinTypeInfo(false, BUILT_INS.anyType), null, defaultValueForCall)
-                .apply { currentTypeInfo = KotlinTypeInfo(false, null, "X") }
+    fun testAddNewReceiverConflict() {
+        doTestConflict {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("X(0)")
+            receiverParameterInfo = KotlinParameterInfo(
+                originalBaseFunctionDescriptor,
+                -1,
+                "_",
+                KotlinTypeInfo(false, BUILT_INS.anyType),
+                null,
+                defaultValueForCall
+            ).apply { currentTypeInfo = KotlinTypeInfo(false, null, "X") }
+        }
     }
 
-    fun testRemoveReceiver() = doTest { removeParameter(0) }
-
-    fun testRemoveReceiverForMember() = doTest { removeParameter(0) }
-
-    fun testConvertParameterToReceiver1() = doTest { receiverParameterInfo = newParameters[0] }
-
-    fun testConvertParameterToReceiver2() = doTest { receiverParameterInfo = newParameters[1] }
-
-    fun testConvertReceiverToParameter1() = doTest { receiverParameterInfo = null }
-
-    fun testConvertReceiverToParameter2() = doTest {
-        receiverParameterInfo = null
-
-        val newParameters = newParameters
-        setNewParameter(0, newParameters[1])
-        setNewParameter(1, newParameters[0])
+    fun testRemoveReceiver() {
+        doTest { removeParameter(0) }
     }
 
-    fun testConvertParameterToReceiverForMember1() = doTest { receiverParameterInfo = newParameters[0] }
+    fun testRemoveReceiverForMember() {
+        doTest { removeParameter(0) }
+    }
+
+    fun testConvertParameterToReceiver1() {
+        doTest { receiverParameterInfo = newParameters[0] }
+    }
+
+    fun testConvertParameterToReceiver2() {
+        doTest { receiverParameterInfo = newParameters[1] }
+    }
+
+    fun testConvertReceiverToParameter1() {
+        doTest { receiverParameterInfo = null }
+    }
+
+    fun testConvertReceiverToParameter2() {
+        doTest {
+            receiverParameterInfo = null
+
+            val newParameters = newParameters
+            setNewParameter(0, newParameters[1])
+            setNewParameter(1, newParameters[0])
+        }
+    }
+
+    fun testConvertParameterToReceiverForMember1() {
+        doTest { receiverParameterInfo = newParameters[0] }
+    }
 
     fun testConvertParameterToReceiverForMemberUltraLight() {
         doTest { receiverParameterInfo = newParameters[0] }
     }
 
-    fun testConvertParameterToReceiverForMember2() = doTest { receiverParameterInfo = newParameters[1] }
-
-    fun testConvertParameterToReceiverForMemberConflict() = doTestConflict { receiverParameterInfo = newParameters[0] }
-
-    fun testConvertReceiverToParameterForMember1() = doTest { receiverParameterInfo = null }
-
-    fun testConvertReceiverToParameterForMember2() = doTest {
-        receiverParameterInfo = null
-
-        val newParameters = newParameters
-        setNewParameter(0, newParameters[1])
-        setNewParameter(1, newParameters[0])
+    fun testConvertParameterToReceiverForMember2() {
+        doTest { receiverParameterInfo = newParameters[1] }
     }
 
-    fun testConvertReceiverToParameterWithNameClash() = doTest { receiverParameterInfo = null }
-
-    fun testConvertReceiverToParameterAndChangeName() = doTest {
-        receiverParameterInfo = null
-        newParameters[0].name = "abc"
+    fun testConvertParameterToReceiverForMemberConflict() {
+        doTestConflict { receiverParameterInfo = newParameters[0] }
     }
 
-    fun testChangeReceiver() = doTest { receiverParameterInfo = newParameters[1] }
+    fun testConvertReceiverToParameterForMember1() {
+        doTest { receiverParameterInfo = null }
+    }
 
-    fun testChangeReceiverForMember() = doTest { receiverParameterInfo = newParameters[1] }
+    fun testConvertReceiverToParameterForMember2() {
+        doTest {
+            receiverParameterInfo = null
 
-    fun testChangeParameterTypeWithImport() = doTest { newParameters[0].currentTypeInfo = KotlinTypeInfo(false, null, "a.Bar") }
+            val newParameters = newParameters
+            setNewParameter(0, newParameters[1])
+            setNewParameter(1, newParameters[0])
+        }
+    }
 
-    fun testSecondaryConstructor() = doTest {
+    fun testConvertReceiverToParameterWithNameClash() {
+        doTest { receiverParameterInfo = null }
+    }
+
+    fun testConvertReceiverToParameterAndChangeName() {
+        doTest {
+            receiverParameterInfo = null
+            newParameters[0].name = "abc"
+        }
+    }
+
+    fun testChangeReceiver() {
+        doTest { receiverParameterInfo = newParameters[1] }
+    }
+
+    fun testChangeReceiverForMember() {
+        doTest { receiverParameterInfo = newParameters[1] }
+    }
+
+    fun testChangeParameterTypeWithImport() {
+        doTest { newParameters[0].currentTypeInfo = KotlinTypeInfo(false, null, "a.Bar") }
+    }
+
+    fun testSecondaryConstructor() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("\"foo\"")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "s",
+                    KotlinTypeInfo(false, BUILT_INS.stringType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+        }
+    }
+
+    fun testPrimaryConstructorOnConstructorKeyword() = doTest {
         val defaultValueForCall = KtPsiFactory(project).createExpression("\"foo\"")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "s", KotlinTypeInfo(false, BUILT_INS.stringType), null, defaultValueForCall))
+        addParameter(
+            KotlinParameterInfo(
+                originalBaseFunctionDescriptor,
+                -1,
+                "s",
+                KotlinTypeInfo(false, BUILT_INS.stringType),
+                null,
+                defaultValueForCall
+            )
+        )
     }
 
-    fun testJavaConstructorInDelegationCall() = doJavaTest { newParameters.add(ParameterInfoImpl(-1, "s", stringPsiType, "\"foo\"")) }
-
-    fun testPrimaryConstructorByThisRef() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("\"foo\"")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "s", KotlinTypeInfo(false, BUILT_INS.stringType), null, defaultValueForCall))
+    fun testJavaConstructorInDelegationCall() {
+        doJavaTest { newParameters.add(ParameterInfoImpl(-1, "s", stringPsiType, "\"foo\"")) }
     }
 
-    fun testPrimaryConstructorBySuperRef() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("\"foo\"")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "s", KotlinTypeInfo(false, BUILT_INS.stringType), null, defaultValueForCall))
+    fun testPrimaryConstructorByThisRef() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("\"foo\"")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "s",
+                    KotlinTypeInfo(false, BUILT_INS.stringType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+        }
     }
 
-    fun testSecondaryConstructorByThisRef() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("\"foo\"")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "s", KotlinTypeInfo(false, BUILT_INS.stringType), null, defaultValueForCall))
+    fun testPrimaryConstructorBySuperRef() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("\"foo\"")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "s",
+                    KotlinTypeInfo(false, BUILT_INS.stringType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+        }
     }
 
-    fun testSecondaryConstructorBySuperRef() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("\"foo\"")
-        addParameter(KotlinParameterInfo(methodDescriptor.baseDescriptor, -1, "s", KotlinTypeInfo(false, BUILT_INS.stringType), null, defaultValueForCall))
+    fun testSecondaryConstructorByThisRef() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("\"foo\"")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "s",
+                    KotlinTypeInfo(false, BUILT_INS.stringType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+        }
     }
 
-    fun testJavaConstructorBySuperRef() = doJavaTest { newParameters.add(ParameterInfoImpl(-1, "s", stringPsiType, "\"foo\"")) }
-
-    fun testNoConflictWithReceiverName() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("0")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "i", KotlinTypeInfo(false, BUILT_INS.intType), null, defaultValueForCall))
+    fun testSecondaryConstructorBySuperRef() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("\"foo\"")
+            addParameter(
+                KotlinParameterInfo(
+                    methodDescriptor.baseDescriptor,
+                    -1,
+                    "s",
+                    KotlinTypeInfo(false, BUILT_INS.stringType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+        }
     }
 
-    fun testRemoveParameterBeforeLambda() = doTest { removeParameter(1) }
-
-    fun testMoveLambdaParameter() = doTest {
-        val newParameters = newParameters
-        setNewParameter(1, newParameters[2])
-        setNewParameter(2, newParameters[1])
+    fun testJavaConstructorBySuperRef() {
+        doJavaTest { newParameters.add(ParameterInfoImpl(-1, "s", stringPsiType, "\"foo\"")) }
     }
 
-    fun testConvertLambdaParameterToReceiver() = doTest { receiverParameterInfo = newParameters[2] }
-
-    fun testRemoveLambdaParameter() = doTest { removeParameter(2) }
-
-    fun testRemoveEnumConstructorParameter() = doTest { removeParameter(1) }
-
-    fun testRemoveAllEnumConstructorParameters() = doTest { clearParameters() }
-
-    fun testDoNotApplyPrimarySignatureToSecondaryCalls() = doTest {
-        val newParameters = newParameters
-        setNewParameter(0, newParameters[1])
-        setNewParameter(1, newParameters[0])
+    fun testNoConflictWithReceiverName() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("0")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "i",
+                    KotlinTypeInfo(false, BUILT_INS.intType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+        }
     }
 
-    fun testConvertToExtensionAndRename() = doTest {
-        receiverParameterInfo = newParameters[0]
-        newName = "foo1"
+    fun testRemoveParameterBeforeLambda() {
+        doTest { removeParameter(1) }
     }
 
-    fun testRenameExtensionParameter() = doTest { newParameters[1].name = "b" }
-
-    fun testConvertParameterToReceiverAddParens() = doTest { receiverParameterInfo = newParameters[0] }
-
-    fun testThisReplacement() = doTest { receiverParameterInfo = null }
-
-    fun testPrimaryConstructorByRef() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("1")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "n", KotlinTypeInfo(false, BUILT_INS.intType), null, defaultValueForCall))
+    fun testMoveLambdaParameter() {
+        doTest {
+            val newParameters = newParameters
+            setNewParameter(1, newParameters[2])
+            setNewParameter(2, newParameters[1])
+        }
     }
 
-    fun testReceiverToParameterExplicitReceiver() = doTest { receiverParameterInfo = null }
-
-    fun testReceiverToParameterImplicitReceivers() = doTest { receiverParameterInfo = null }
-
-    fun testParameterToReceiverExplicitReceiver() = doTest { receiverParameterInfo = newParameters[0] }
-
-    fun testParameterToReceiverImplicitReceivers() = doTest { receiverParameterInfo = newParameters[0] }
-
-    fun testJavaMethodOverridesReplaceParam() = doJavaTestConflict {
-        newReturnType = stringPsiType
-        newParameters[0] = ParameterInfoImpl(-1, "x", PsiType.INT, "1")
+    fun testConvertLambdaParameterToReceiver() {
+        doTest { receiverParameterInfo = newParameters[2] }
     }
 
-    fun testJavaMethodOverridesChangeParam() = doJavaTest {
-        newReturnType = stringPsiType
-
-        newParameters[0].name = "x"
-        newParameters[0].setType(PsiType.INT)
+    fun testRemoveLambdaParameter() {
+        doTest { removeParameter(2) }
     }
 
-    fun testChangeProperty() = doTest {
-        newName = "s"
-        newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.stringType)
+    fun testRemoveEnumConstructorParameter() {
+        doTest { removeParameter(1) }
     }
 
-    fun testAddPropertyReceiverConflict() = doTestConflict {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("\"\"")
-        receiverParameterInfo = KotlinParameterInfo(originalBaseFunctionDescriptor,
-                                                    -1,
-                                                    "receiver",
-                                                    KotlinTypeInfo(false, BUILT_INS.stringType),
-                                                    null,
-                                                    defaultValueForCall)
+    fun testRemoveAllEnumConstructorParameters() {
+        doTest { clearParameters() }
     }
 
-    fun testAddPropertyReceiver() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("\"\"")
-        receiverParameterInfo = KotlinParameterInfo(originalBaseFunctionDescriptor,
-                                                    -1,
-                                                    "receiver",
-                                                    KotlinTypeInfo(false, BUILT_INS.stringType),
-                                                    null,
-                                                    defaultValueForCall)
+    fun testDoNotApplyPrimarySignatureToSecondaryCalls() {
+        doTest {
+            val newParameters = newParameters
+            setNewParameter(0, newParameters[1])
+            setNewParameter(1, newParameters[0])
+        }
     }
 
-    fun testChangePropertyReceiver() = doTest { receiverParameterInfo!!.currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.intType) }
-
-    fun testRemovePropertyReceiver() = doTest { receiverParameterInfo = null }
-
-    fun testAddTopLevelPropertyReceiver() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("A()")
-        receiverParameterInfo = KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "receiver", KotlinTypeInfo(false), null, defaultValueForCall)
-                .apply { currentTypeInfo = KotlinTypeInfo(false, null, "test.A") }
+    fun testConvertToExtensionAndRename() {
+        doTest {
+            receiverParameterInfo = newParameters[0]
+            newName = "foo1"
+        }
     }
 
-    fun testChangeTopLevelPropertyReceiver() = doTest { receiverParameterInfo!!.currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.stringType) }
-
-    fun testRemoveTopLevelPropertyReceiver() = doTest { receiverParameterInfo = null }
-
-    fun testChangeClassParameter() = doTest {
-        newName = "s"
-        newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.stringType)
+    fun testRenameExtensionParameter() {
+        doTest { newParameters[1].name = "b" }
     }
 
-    fun testParameterPropagation() = doTest {
-        val psiFactory = KtPsiFactory(project)
-
-        val defaultValueForCall1 = psiFactory.createExpression("1")
-        val newParameter1 = KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "n", KotlinTypeInfo(false), null, defaultValueForCall1)
-                .apply { currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.intType) }
-        addParameter(newParameter1)
-
-        val defaultValueForCall2 = psiFactory.createExpression("\"abc\"")
-        val newParameter2 = KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "s", KotlinTypeInfo(false), null, defaultValueForCall2)
-                .apply { currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.stringType) }
-        addParameter(newParameter2)
-
-        val classA = KotlinFullClassNameIndex.getInstance().get("A", project, project.allScope()).first()
-        val functionBar = classA.declarations.first { it is KtNamedFunction && it.name == "bar" }
-        val functionTest = KotlinTopLevelFunctionFqnNameIndex.getInstance().get("test", project, project.allScope()).first()
-
-        primaryPropagationTargets = listOf(functionBar, functionTest)
+    fun testConvertParameterToReceiverAddParents() {
+        doTest { receiverParameterInfo = newParameters[0] }
     }
 
-    fun testJavaParameterPropagation() = doJavaTest {
-        newParameters.add(ParameterInfoImpl(-1, "n", PsiType.INT, "1"))
-        newParameters.add(ParameterInfoImpl(-1, "s", stringPsiType, "\"abc\""))
-
-        val classA = JavaFullClassNameIndex.getInstance().get("A".hashCode(), project, project.allScope()).first { it.name == "A" }
-        val methodBar = classA.methods.first { it.name == "bar" }
-        parameterPropagationTargets.add(methodBar)
-
-        val functionTest = KotlinTopLevelFunctionFqnNameIndex.getInstance().get("test", project, project.allScope()).first()
-        parameterPropagationTargets.add(functionTest.getRepresentativeLightMethod()!!)
+    fun testThisReplacement() {
+        doTest { receiverParameterInfo = null }
     }
 
-    fun testPropagateWithParameterDuplication() = doTestConflict {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("1")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "n", KotlinTypeInfo(false, BUILT_INS.intType), null, defaultValueForCall))
-
-        primaryPropagationTargets = listOf(KotlinTopLevelFunctionFqnNameIndex.getInstance().get("bar", project, project.allScope()).first())
+    fun testPrimaryConstructorByRef() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("1")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "n",
+                    KotlinTypeInfo(false, BUILT_INS.intType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+        }
     }
 
-    fun testPropagateWithVariableDuplication() = doTestConflict {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("1")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "n", KotlinTypeInfo(false, BUILT_INS.intType), null, defaultValueForCall))
-
-        primaryPropagationTargets = listOf(KotlinTopLevelFunctionFqnNameIndex.getInstance().get("bar", project, project.allScope()).first())
+    fun testReceiverToParameterExplicitReceiver() {
+        doTest { receiverParameterInfo = null }
     }
 
-    fun testPropagateWithThisQualificationInClassMember() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("1")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "n", KotlinTypeInfo(false, BUILT_INS.intType), null, defaultValueForCall))
-
-        val classA = KotlinFullClassNameIndex.getInstance().get("A", project, project.allScope()).first()
-        val functionBar = classA.declarations.first { it is KtNamedFunction && it.name == "bar" }
-        primaryPropagationTargets = listOf(functionBar)
+    fun testReceiverToParameterImplicitReceivers() {
+        doTest { receiverParameterInfo = null }
     }
 
-    fun testPropagateWithThisQualificationInExtension() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("1")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "n", KotlinTypeInfo(false, BUILT_INS.intType), null, defaultValueForCall))
-
-        primaryPropagationTargets = listOf(KotlinTopLevelFunctionFqnNameIndex.getInstance().get("bar", project, project.allScope()).first())
+    fun testParameterToReceiverExplicitReceiver() {
+        doTest { receiverParameterInfo = newParameters[0] }
     }
 
-    fun testJavaConstructorParameterPropagation() = doJavaTest {
-        newParameters.add(ParameterInfoImpl(-1, "n", PsiType.INT, "1"))
-        parameterPropagationTargets.addAll(findCallers(method))
+    fun testParameterToReceiverImplicitReceivers() {
+        doTest { receiverParameterInfo = newParameters[0] }
     }
 
-    fun testPrimaryConstructorParameterPropagation() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("1")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "n", KotlinTypeInfo(false, BUILT_INS.intType), null, defaultValueForCall))
-
-        primaryPropagationTargets = findCallers(method.getRepresentativeLightMethod()!!)
+    fun testJavaMethodOverridesReplaceParam() {
+        doJavaTestConflict {
+            newReturnType = stringPsiType
+            newParameters[0] = ParameterInfoImpl(-1, "x", PsiType.INT, "1")
+        }
     }
 
-    fun testSecondaryConstructorParameterPropagation() = doTest {
-        val defaultValueForCall = KtPsiFactory(project).createExpression("1")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "n", KotlinTypeInfo(false, BUILT_INS.intType), null, defaultValueForCall))
+    fun testJavaMethodOverridesChangeParam() {
+        doJavaTest {
+            newReturnType = stringPsiType
 
-        primaryPropagationTargets = findCallers(method.getRepresentativeLightMethod()!!)
+            newParameters[0].name = "x"
+            newParameters[0].setType(PsiType.INT)
+        }
     }
 
-    fun testJavaMethodOverridesOmitUnitType() = doJavaTest {}
-
-    fun testOverrideInAnonymousObjectWithTypeParameters() = doTest { newName = "bar" }
-
-    fun testMakePrimaryConstructorPrivateNoParams() = doTest { newVisibility = Visibilities.PRIVATE }
-
-    fun testMakePrimaryConstructorPublic() = doTest { newVisibility = Visibilities.PUBLIC }
-
-    fun testRenameExtensionParameterWithNamedArgs() = doTest { newParameters[2].name = "bb" }
-
-    fun testImplicitThisToParameterWithChangedType() = doTest {
-        receiverParameterInfo!!.currentTypeInfo = KotlinTypeInfo(false, null, "Older")
-        receiverParameterInfo = null
+    fun testChangeProperty() {
+        doTest {
+            newName = "s"
+            newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.stringType)
+        }
     }
 
-    fun testJvmOverloadedRenameParameter() = doTest { newParameters[0].name = "aa" }
+    fun testAddPropertyReceiverConflict() {
+        doTestConflict {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("\"\"")
+            receiverParameterInfo = KotlinParameterInfo(
+                originalBaseFunctionDescriptor,
+                -1,
+                "receiver",
+                KotlinTypeInfo(false, BUILT_INS.stringType),
+                null,
+                defaultValueForCall
+            )
+        }
+    }
 
-    fun testJvmOverloadedSwapParams1() = doTest { swapParameters(1, 2) }
+    fun testAddPropertyReceiver() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("\"\"")
+            receiverParameterInfo = KotlinParameterInfo(
+                originalBaseFunctionDescriptor,
+                -1,
+                "receiver",
+                KotlinTypeInfo(false, BUILT_INS.stringType),
+                null,
+                defaultValueForCall
+            )
+        }
+    }
 
-    fun testJvmOverloadedSwapParams2() = doTest { swapParameters(0, 2) }
+    fun testChangePropertyReceiver() {
+        doTest { receiverParameterInfo!!.currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.intType) }
+    }
+
+    fun testRemovePropertyReceiver() {
+        doTest { receiverParameterInfo = null }
+    }
+
+    fun testAddTopLevelPropertyReceiver() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("A()")
+            receiverParameterInfo = KotlinParameterInfo(
+                originalBaseFunctionDescriptor,
+                -1,
+                "receiver",
+                KotlinTypeInfo(false),
+                null,
+                defaultValueForCall
+            ).apply { currentTypeInfo = KotlinTypeInfo(false, null, "test.A") }
+        }
+    }
+
+    fun testChangeTopLevelPropertyReceiver() {
+        doTest { receiverParameterInfo!!.currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.stringType) }
+    }
+
+    fun testRemoveTopLevelPropertyReceiver() {
+        doTest { receiverParameterInfo = null }
+    }
+
+    fun testChangeClassParameter() {
+        doTest {
+            newName = "s"
+            newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.stringType)
+        }
+    }
+
+    fun testParameterPropagation() {
+        doTest {
+            val psiFactory = KtPsiFactory(project)
+
+            val defaultValueForCall1 = psiFactory.createExpression("1")
+            val newParameter1 = KotlinParameterInfo(
+                originalBaseFunctionDescriptor,
+                -1,
+                "n",
+                KotlinTypeInfo(false),
+                null,
+                defaultValueForCall1
+            ).apply { currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.intType) }
+            addParameter(newParameter1)
+
+            val defaultValueForCall2 = psiFactory.createExpression("\"abc\"")
+            val newParameter2 = KotlinParameterInfo(
+                originalBaseFunctionDescriptor,
+                -1,
+                "s",
+                KotlinTypeInfo(false),
+                null,
+                defaultValueForCall2
+            ).apply { currentTypeInfo = KotlinTypeInfo(false, BUILT_INS.stringType) }
+            addParameter(newParameter2)
+
+            val classA = KotlinFullClassNameIndex.getInstance().get("A", project, project.allScope()).first()
+            val functionBar = classA.declarations.first { it is KtNamedFunction && it.name == "bar" }
+            val functionTest = KotlinTopLevelFunctionFqnNameIndex.getInstance().get("test", project, project.allScope()).first()
+
+            primaryPropagationTargets = listOf(functionBar, functionTest)
+        }
+    }
+
+    fun testJavaParameterPropagation() {
+        doJavaTest {
+            newParameters.add(ParameterInfoImpl(-1, "n", PsiType.INT, "1"))
+            newParameters.add(ParameterInfoImpl(-1, "s", stringPsiType, "\"abc\""))
+
+            val classA = JavaFullClassNameIndex.getInstance().get("A".hashCode(), project, project.allScope()).first { it.name == "A" }
+            val methodBar = classA.methods.first { it.name == "bar" }
+            parameterPropagationTargets.add(methodBar)
+
+            val functionTest = KotlinTopLevelFunctionFqnNameIndex.getInstance().get("test", project, project.allScope()).first()
+            parameterPropagationTargets.add(functionTest.getRepresentativeLightMethod()!!)
+        }
+    }
+
+    fun testPropagateWithParameterDuplication() {
+        doTestConflict {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("1")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "n",
+                    KotlinTypeInfo(false, BUILT_INS.intType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+
+            primaryPropagationTargets =
+                listOf(KotlinTopLevelFunctionFqnNameIndex.getInstance().get("bar", project, project.allScope()).first())
+        }
+    }
+
+    fun testPropagateWithVariableDuplication() {
+        doTestConflict {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("1")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "n",
+                    KotlinTypeInfo(false, BUILT_INS.intType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+
+            primaryPropagationTargets =
+                listOf(KotlinTopLevelFunctionFqnNameIndex.getInstance().get("bar", project, project.allScope()).first())
+        }
+    }
+
+    fun testPropagateWithThisQualificationInClassMember() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("1")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "n",
+                    KotlinTypeInfo(false, BUILT_INS.intType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+
+            val classA = KotlinFullClassNameIndex.getInstance().get("A", project, project.allScope()).first()
+            val functionBar = classA.declarations.first { it is KtNamedFunction && it.name == "bar" }
+            primaryPropagationTargets = listOf(functionBar)
+        }
+    }
+
+    fun testPropagateWithThisQualificationInExtension() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("1")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "n",
+                    KotlinTypeInfo(false, BUILT_INS.intType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+
+            primaryPropagationTargets =
+                listOf(KotlinTopLevelFunctionFqnNameIndex.getInstance().get("bar", project, project.allScope()).first())
+        }
+    }
+
+    fun testJavaConstructorParameterPropagation() {
+        doJavaTest {
+            newParameters.add(ParameterInfoImpl(-1, "n", PsiType.INT, "1"))
+            parameterPropagationTargets.addAll(findCallers(method))
+        }
+    }
+
+    fun testPrimaryConstructorParameterPropagation() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("1")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "n",
+                    KotlinTypeInfo(false, BUILT_INS.intType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+
+            primaryPropagationTargets = findCallers(method.getRepresentativeLightMethod()!!)
+        }
+    }
+
+    fun testSecondaryConstructorParameterPropagation() {
+        doTest {
+            val defaultValueForCall = KtPsiFactory(project).createExpression("1")
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "n",
+                    KotlinTypeInfo(false, BUILT_INS.intType),
+                    null,
+                    defaultValueForCall
+                )
+            )
+
+            primaryPropagationTargets = findCallers(method.getRepresentativeLightMethod()!!)
+        }
+    }
+
+    fun testJavaMethodOverridesOmitUnitType() {
+        doJavaTest {}
+    }
+
+    fun testOverrideInAnonymousObjectWithTypeParameters() {
+        doTest { newName = "bar" }
+    }
+
+    fun testMakePrimaryConstructorPrivateNoParams() {
+        doTest { newVisibility = DescriptorVisibilities.PRIVATE }
+    }
+
+    fun testMakePrimaryConstructorPublic() {
+        doTest { newVisibility = DescriptorVisibilities.PUBLIC }
+    }
+
+    fun testRenameExtensionParameterWithNamedArgs() {
+        doTest { newParameters[2].name = "bb" }
+    }
+
+    fun testImplicitThisToParameterWithChangedType() {
+        doTest {
+            receiverParameterInfo!!.currentTypeInfo = KotlinTypeInfo(false, null, "Older")
+            receiverParameterInfo = null
+        }
+    }
+
+    fun testJvmOverloadedRenameParameter() {
+        doTest { newParameters[0].name = "aa" }
+    }
+
+    fun testJvmOverloadedSwapParams1() {
+        doTest { swapParameters(1, 2) }
+    }
+
+    fun testJvmOverloadedSwapParams2() {
+        doTest { swapParameters(0, 2) }
+    }
 
     private fun doTestJvmOverloadedAddDefault(index: Int) = doTest {
         val defaultValue = KtPsiFactory(project).createExpression("2")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "n", KotlinTypeInfo(false, BUILT_INS.intType), defaultValue, defaultValue), index)
+        addParameter(
+            KotlinParameterInfo(
+                originalBaseFunctionDescriptor,
+                -1,
+                "n",
+                KotlinTypeInfo(false, BUILT_INS.intType),
+                defaultValue,
+                defaultValue
+            ), index
+        )
     }
 
     private fun doTestJvmOverloadedAddNonDefault(index: Int) = doTest {
         val defaultValue = KtPsiFactory(project).createExpression("2")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "n", KotlinTypeInfo(false, BUILT_INS.intType), null, defaultValue), index)
-    }
-
-    fun testJvmOverloadedAddDefault1() = doTestJvmOverloadedAddDefault(0)
-
-    fun testJvmOverloadedAddDefault2() = doTestJvmOverloadedAddDefault(1)
-
-    fun testJvmOverloadedAddDefault3() = doTestJvmOverloadedAddDefault(-1)
-
-    fun testJvmOverloadedAddNonDefault1() = doTestJvmOverloadedAddNonDefault(0)
-
-    fun testJvmOverloadedAddNonDefault2() = doTestJvmOverloadedAddNonDefault(1)
-
-    fun testJvmOverloadedAddNonDefault3() = doTestJvmOverloadedAddNonDefault(-1)
-
-    fun testJvmOverloadedRemoveDefault1() = doTest { removeParameter(0) }
-
-    fun testJvmOverloadedRemoveDefault2() = doTest { removeParameter(1) }
-
-    fun testJvmOverloadedRemoveDefault3() = doTest { removeParameter(getNewParametersCount() - 1) }
-
-    fun testJvmOverloadedRemoveNonDefault1() = doTest { removeParameter(0) }
-
-    fun testJvmOverloadedRemoveNonDefault2() = doTest { removeParameter(1) }
-
-    fun testJvmOverloadedRemoveNonDefault3() = doTest { removeParameter(getNewParametersCount() - 1) }
-
-    fun testJvmOverloadedConstructorSwapParams() = doTest { swapParameters(1, 2) }
-
-    fun testDefaultAfterLambda() = doTest { swapParameters(0, 1) }
-
-    fun testRemoveDefaultParameterBeforeLambda() = doTest { removeParameter(1) }
-
-    fun testAddParameterKeepFormat() = doTest {
-        val psiFactory = KtPsiFactory(project)
-        val defaultValue1 = psiFactory.createExpression("4")
-        val defaultValue2 = psiFactory.createExpression("5")
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "d", KotlinTypeInfo(false, BUILT_INS.intType), null, defaultValue1), 2)
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "e", KotlinTypeInfo(false, BUILT_INS.intType), null, defaultValue2))
-    }
-
-    fun testRemoveParameterKeepFormat1() = doTest { removeParameter(0) }
-
-    fun testRemoveParameterKeepFormat2() = doTest { removeParameter(1) }
-
-    fun testRemoveParameterKeepFormat3() = doTest { removeParameter(2) }
-
-    fun testSwapParametersKeepFormat() = doTest { swapParameters(0, 2) }
-
-    fun testSetErrorReturnType() = doTest { newReturnTypeInfo = KotlinTypeInfo(true, null, "XYZ") }
-
-    fun testSetErrorReceiverType() = doTest { receiverParameterInfo!!.currentTypeInfo = KotlinTypeInfo(true, null, "XYZ") }
-
-    fun testSetErrorParameterType() = doTest { newParameters[1].currentTypeInfo = KotlinTypeInfo(true, null, "XYZ") }
-
-    fun testSwapDataClassParameters() = doTest {
-        swapParameters(0, 2)
-        swapParameters(1, 2)
-    }
-
-    fun testAddDataClassParameter() = doTest {
-        addParameter(KotlinParameterInfo(originalBaseFunctionDescriptor,
-                                         -1,
-                                         "c",
-                                         KotlinTypeInfo(false, BUILT_INS.intType),
-                                         null,
-                                         KtPsiFactory(project).createExpression("3"),
-                                         KotlinValVar.Val),
-                     1)
-    }
-
-    fun testRemoveDataClassParameter() = doTest { removeParameter(1) }
-
-    fun testRemoveAllOriginalDataClassParameters() = doTest {
-        val psiFactory = KtPsiFactory(project)
-
-        swapParameters(1, 2)
-        setNewParameter(0,
-                        KotlinParameterInfo(originalBaseFunctionDescriptor,
-                                            -1,
-                                            "d",
-                                            KotlinTypeInfo(false, BUILT_INS.intType),
-                                            null,
-                                            psiFactory.createExpression("4"),
-                                            KotlinValVar.Val))
-
-        setNewParameter(2,
-                        KotlinParameterInfo(originalBaseFunctionDescriptor,
-                                            -1,
-                                            "e",
-                                            KotlinTypeInfo(false, BUILT_INS.intType),
-                                            null,
-                                            psiFactory.createExpression("5"),
-                                            KotlinValVar.Val))
-    }
-
-    fun testImplicitReceiverInRecursiveCall() = doTest {
-        receiverParameterInfo = null
-        newParameters[0].name = "a"
-    }
-
-    fun testReceiverInSafeCall() = doTestConflict { receiverParameterInfo = null }
-
-    fun testRemoveParameterKeepOtherComments() = doTest { removeParameter(1) }
-
-    fun testReturnTypeViaCodeFragment() = doTest {
-        newName = "bar"
-        newReturnTypeInfo = resolveType("A<T, U>", true, true)
-    }
-
-    fun testChangeReturnTypeToNonUnit() = doTest {
-        newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.intType)
-    }
-
-    fun testInvokeConventionRemoveParameter() = doTest { removeParameter(0) }
-
-    fun testInvokeConventionAddParameter() = doTest {
         addParameter(
-                KotlinParameterInfo(
-                        originalBaseFunctionDescriptor,
-                        -1,
-                        "b",
-                        KotlinTypeInfo(false, BUILT_INS.booleanType),
-                        defaultValueForCall = KtPsiFactory(project).createExpression("false")
-                )
+            KotlinParameterInfo(
+                originalBaseFunctionDescriptor,
+                -1,
+                "n",
+                KotlinTypeInfo(false, BUILT_INS.intType),
+                null,
+                defaultValue
+            ), index
         )
     }
 
-    fun testInvokeConventionSwapParameters() = doTest { swapParameters(0, 1) }
+    fun testJvmOverloadedAddDefault1() {
+        doTestJvmOverloadedAddDefault(0)
+    }
 
-    fun testInvokeConventionParameterToReceiver() = doTestConflict { receiverParameterInfo = newParameters[0] }
+    fun testJvmOverloadedAddDefault2() {
+        doTestJvmOverloadedAddDefault(1)
+    }
 
-    fun testInvokeConventionReceiverToParameter() = doTest { receiverParameterInfo = null }
+    fun testJvmOverloadedAddDefault3() {
+        doTestJvmOverloadedAddDefault(-1)
+    }
 
-    fun testInvokeConventionRenameToFoo() = doTest { newName = "foo" }
+    fun testJvmOverloadedAddNonDefault1() {
+        doTestJvmOverloadedAddNonDefault(0)
+    }
 
-    fun testInvokeConventionRenameToGet() = doTest { newName = "get" }
+    fun testJvmOverloadedAddNonDefault2() {
+        doTestJvmOverloadedAddNonDefault(1)
+    }
 
-    fun testGetConventionRemoveParameter() = doTest { removeParameter(0) }
+    fun testJvmOverloadedAddNonDefault3() {
+        doTestJvmOverloadedAddNonDefault(-1)
+    }
 
-    fun testGetConventionAddParameter() = doTest {
-        addParameter(
+    fun testJvmOverloadedRemoveDefault1() {
+        doTest { removeParameter(0) }
+    }
+
+    fun testJvmOverloadedRemoveDefault2() {
+        doTest { removeParameter(1) }
+    }
+
+    fun testJvmOverloadedRemoveDefault3() {
+        doTest { removeParameter(getNewParametersCount() - 1) }
+    }
+
+    fun testJvmOverloadedRemoveNonDefault1() {
+        doTest { removeParameter(0) }
+    }
+
+    fun testJvmOverloadedRemoveNonDefault2() {
+        doTest { removeParameter(1) }
+    }
+
+    fun testJvmOverloadedRemoveNonDefault3() {
+        doTest { removeParameter(getNewParametersCount() - 1) }
+    }
+
+    fun testJvmOverloadedConstructorSwapParams() {
+        doTest { swapParameters(1, 2) }
+    }
+
+    fun testDefaultAfterLambda() {
+        doTest { swapParameters(0, 1) }
+    }
+
+    fun testRemoveDefaultParameterBeforeLambda() {
+        doTest { removeParameter(1) }
+    }
+
+    fun testAddParameterKeepFormat() {
+        doTest {
+            val psiFactory = KtPsiFactory(project)
+            val defaultValue1 = psiFactory.createExpression("4")
+            val defaultValue2 = psiFactory.createExpression("5")
+            addParameter(
                 KotlinParameterInfo(
-                        originalBaseFunctionDescriptor,
-                        -1,
-                        "b",
-                        KotlinTypeInfo(false, BUILT_INS.booleanType),
-                        defaultValueForCall = KtPsiFactory(project).createExpression("false")
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "d",
+                    KotlinTypeInfo(false, BUILT_INS.intType),
+                    null,
+                    defaultValue1
+                ), 2
+            )
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "e",
+                    KotlinTypeInfo(false, BUILT_INS.intType),
+                    null,
+                    defaultValue2
                 )
-        )
+            )
+        }
     }
 
-    fun testGetConventionSwapParameters() = doTest { swapParameters(0, 1) }
-
-    fun testGetConventionParameterToReceiver() = doTestConflict { receiverParameterInfo = newParameters[0] }
-
-    fun testGetConventionReceiverToParameter() = doTest { receiverParameterInfo = null }
-
-    fun testGetConventionRenameToFoo() = doTest { newName = "foo" }
-
-    fun testGetConventionRenameToInvoke() = doTest { newName = "invoke" }
-
-    fun testKotlinOverridingJavaWithDifferentParamName() = doJavaTest {
-        newParameters.add(ParameterInfoImpl(-1, "n", PsiType.INT))
+    fun testRemoveParameterKeepFormat1() {
+        doTest { removeParameter(0) }
     }
+
+    fun testRemoveParameterKeepFormat2() {
+        doTest { removeParameter(1) }
+    }
+
+    fun testRemoveParameterKeepFormat3() {
+        doTest { removeParameter(2) }
+    }
+
+    fun testSwapParametersKeepFormat() {
+        doTest { swapParameters(0, 2) }
+    }
+
+    fun testSetErrorReturnType() {
+        doTest { newReturnTypeInfo = KotlinTypeInfo(true, null, "XYZ") }
+    }
+
+    fun testSetErrorReceiverType() {
+        doTest { receiverParameterInfo!!.currentTypeInfo = KotlinTypeInfo(true, null, "XYZ") }
+    }
+
+    fun testSetErrorParameterType() {
+        doTest { newParameters[1].currentTypeInfo = KotlinTypeInfo(true, null, "XYZ") }
+    }
+
+    fun testSwapDataClassParameters() {
+        doTest {
+            swapParameters(0, 2)
+            swapParameters(1, 2)
+        }
+    }
+
+    fun testAddDataClassParameter() {
+        doTest {
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "c",
+                    KotlinTypeInfo(false, BUILT_INS.intType),
+                    null,
+                    KtPsiFactory(project).createExpression("3"),
+                    KotlinValVar.Val
+                ),
+                1
+            )
+        }
+    }
+
+    fun testRemoveDataClassParameter() {
+        doTest { removeParameter(1) }
+    }
+
+    fun testRemoveAllOriginalDataClassParameters() {
+        doTest {
+            val psiFactory = KtPsiFactory(project)
+
+            swapParameters(1, 2)
+            setNewParameter(
+                0,
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "d",
+                    KotlinTypeInfo(false, BUILT_INS.intType),
+                    null,
+                    psiFactory.createExpression("4"),
+                    KotlinValVar.Val
+                )
+            )
+
+            setNewParameter(
+                2,
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "e",
+                    KotlinTypeInfo(false, BUILT_INS.intType),
+                    null,
+                    psiFactory.createExpression("5"),
+                    KotlinValVar.Val
+                )
+            )
+        }
+    }
+
+    fun testImplicitReceiverInRecursiveCall() {
+        doTest {
+            receiverParameterInfo = null
+            newParameters[0].name = "a"
+        }
+    }
+
+    fun testReceiverInSafeCall() {
+        doTestConflict { receiverParameterInfo = null }
+    }
+
+    fun testRemoveParameterKeepOtherComments() {
+        doTest { removeParameter(1) }
+    }
+
+    fun testReturnTypeViaCodeFragment() {
+        doTest {
+            newName = "bar"
+            newReturnTypeInfo = resolveType("A<T, U>", isCovariant = true, forPreview = true)
+        }
+    }
+
+    fun testChangeReturnTypeToNonUnit() {
+        doTest {
+            newReturnTypeInfo = KotlinTypeInfo(true, BUILT_INS.intType)
+        }
+    }
+
+    fun testInvokeConventionRemoveParameter() {
+        doTest { removeParameter(0) }
+    }
+
+    fun testInvokeConventionAddParameter() {
+        doTest {
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "b",
+                    KotlinTypeInfo(false, BUILT_INS.booleanType),
+                    defaultValueForCall = KtPsiFactory(project).createExpression("false")
+                )
+            )
+        }
+    }
+
+    fun testInvokeConventionSwapParameters() {
+        doTest { swapParameters(0, 1) }
+    }
+
+    fun testInvokeConventionParameterToReceiver() {
+        doTestConflict { receiverParameterInfo = newParameters[0] }
+    }
+
+    fun testInvokeConventionReceiverToParameter() {
+        doTest { receiverParameterInfo = null }
+    }
+
+    fun testInvokeConventionRenameToFoo() {
+        doTest { newName = "foo" }
+    }
+
+    fun testInvokeConventionRenameToGet() {
+        doTest { newName = "get" }
+    }
+
+    fun testGetConventionRemoveParameter() {
+        doTest { removeParameter(0) }
+    }
+
+    fun testGetConventionAddParameter() {
+        doTest {
+            addParameter(
+                KotlinParameterInfo(
+                    originalBaseFunctionDescriptor,
+                    -1,
+                    "b",
+                    KotlinTypeInfo(false, BUILT_INS.booleanType),
+                    defaultValueForCall = KtPsiFactory(project).createExpression("false")
+                )
+            )
+        }
+    }
+
+    fun testGetConventionSwapParameters() {
+        doTest { swapParameters(0, 1) }
+    }
+
+    fun testGetConventionParameterToReceiver() {
+        doTestConflict { receiverParameterInfo = newParameters[0] }
+    }
+
+    fun testGetConventionReceiverToParameter() {
+        doTest { receiverParameterInfo = null }
+    }
+
+    fun testGetConventionRenameToFoo() {
+        doTest { newName = "foo" }
+    }
+
+    fun testGetConventionRenameToInvoke() {
+        doTest { newName = "invoke" }
+    }
+
+    fun testKotlinOverridingJavaWithDifferentParamName() {
+        doJavaTest {
+            newParameters.add(ParameterInfoImpl(-1, "n", PsiType.INT))
+        }
+    }
+
+    fun testAddParameterAfterLambdaParameter() {
+        doTest {
+            addParameter(
+                KotlinParameterInfo(
+                    callableDescriptor = originalBaseFunctionDescriptor,
+                    name = "i",
+                    originalTypeInfo = KotlinTypeInfo(false, BUILT_INS.intType),
+                    defaultValueForCall = KtPsiFactory(project).createExpression("0")
+                )
+            )
+        }
+    }
+
+    fun testRemoveLambdaParameter2() {
+        doTest { removeParameter(0) }
+    }
+
+    fun testNewParamValueRefsOtherParam() {
+        doTest {
+            val parameterInfo = KotlinParameterInfo(originalBaseFunctionDescriptor, -1, "p2", KotlinTypeInfo(false, BUILT_INS.intType))
+            val codeFragment = KtPsiFactory(project).createExpressionCodeFragment("p1 * p1", context)
+            parameterInfo.defaultValueForCall = codeFragment.getContentElement()!!
+            addParameter(parameterInfo)
+        }
+    }
+
+    fun testMoveLambdaParameterToLast() = doTest { swapParameters(0, 1) }
 }

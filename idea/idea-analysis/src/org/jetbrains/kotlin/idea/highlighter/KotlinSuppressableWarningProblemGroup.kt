@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.highlighter
@@ -21,6 +10,7 @@ import com.intellij.codeInspection.SuppressableProblemGroup
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.diagnostics.DiagnosticFactory
 import org.jetbrains.kotlin.diagnostics.Severity
+import org.jetbrains.kotlin.idea.KotlinIdeaAnalysisBundle
 import org.jetbrains.kotlin.idea.quickfix.AnnotationHostKind
 import org.jetbrains.kotlin.idea.quickfix.KotlinSuppressIntentionAction
 import org.jetbrains.kotlin.psi.*
@@ -28,11 +18,11 @@ import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 import java.util.*
 
 class KotlinSuppressableWarningProblemGroup(
-        private val diagnosticFactory: DiagnosticFactory<*>
+    private val diagnosticFactory: DiagnosticFactory<*>
 ) : SuppressableProblemGroup {
 
     init {
-        assert (diagnosticFactory.severity == Severity.WARNING)
+        assert(diagnosticFactory.severity == Severity.WARNING)
     }
 
     override fun getProblemName() = diagnosticFactory.name
@@ -47,7 +37,7 @@ class KotlinSuppressableWarningProblemGroup(
 }
 
 fun createSuppressWarningActions(element: PsiElement, diagnosticFactory: DiagnosticFactory<*>): List<SuppressIntentionAction> =
-        createSuppressWarningActions(element, diagnosticFactory.severity, diagnosticFactory.name)
+    createSuppressWarningActions(element, diagnosticFactory.severity, diagnosticFactory.name)
 
 
 fun createSuppressWarningActions(element: PsiElement, severity: Severity, suppressionKey: String): List<SuppressIntentionAction> {
@@ -70,16 +60,34 @@ fun createSuppressWarningActions(element: PsiElement, severity: Severity, suppre
             current is KtExpression && suppressAtStatementAllowed -> {
                 // Add suppress action at first statement
                 if (current.parent is KtBlockExpression || current.parent is KtDestructuringDeclaration) {
-                    val kind = if (current.parent is KtBlockExpression) "statement" else "initializer"
-                    actions.add(KotlinSuppressIntentionAction(current, suppressionKey,
-                                                              AnnotationHostKind(kind, "", true)))
+                    val kind = if (current.parent is KtBlockExpression)
+                        KotlinIdeaAnalysisBundle.message("declaration.kind.statement")
+                    else
+                        KotlinIdeaAnalysisBundle.message("declaration.kind.initializer")
+
+                    actions.add(
+                        KotlinSuppressIntentionAction(
+                            current,
+                            suppressionKey,
+                            AnnotationHostKind(kind, "", true)
+                        )
+                    )
                     suppressAtStatementAllowed = false
                 }
             }
 
             current is KtFile -> {
-                actions.add(KotlinSuppressIntentionAction(current, suppressionKey,
-                                                          AnnotationHostKind("file", current.name, true)))
+                actions.add(
+                    KotlinSuppressIntentionAction(
+                        current,
+                        suppressionKey,
+                        AnnotationHostKind(
+                            KotlinIdeaAnalysisBundle.message("declaration.kind.file"),
+                            current.name,
+                            true
+                        )
+                    )
+                )
                 suppressAtStatementAllowed = false
             }
         }
@@ -95,29 +103,56 @@ private object DeclarationKindDetector : KtVisitor<AnnotationHostKind?, Unit?>()
 
     override fun visitDeclaration(d: KtDeclaration, data: Unit?) = null
 
-    override fun visitClass(d: KtClass, data: Unit?) = detect(d, if (d.isInterface()) "interface" else "class")
+    override fun visitClass(d: KtClass, data: Unit?) = detect(
+        d,
+        if (d.isInterface())
+            KotlinIdeaAnalysisBundle.message("declaration.kind.interface")
+        else
+            KotlinIdeaAnalysisBundle.message("declaration.kind.class")
+    )
 
-    override fun visitNamedFunction(d: KtNamedFunction, data: Unit?) = detect(d, "fun")
+    override fun visitNamedFunction(d: KtNamedFunction, data: Unit?) = detect(d, KotlinIdeaAnalysisBundle.message("declaration.kind.fun"))
 
     override fun visitProperty(d: KtProperty, data: Unit?) = detect(d, d.valOrVarKeyword.text!!)
 
-    override fun visitDestructuringDeclaration(d: KtDestructuringDeclaration, data: Unit?) = detect(d, d.valOrVarKeyword?.text ?: "val",
-                                                                                                    name = d.entries.joinToString(", ", "(", ")") { it.name!! })
+    override fun visitDestructuringDeclaration(d: KtDestructuringDeclaration, data: Unit?) =
+        detect(d, d.valOrVarKeyword?.text ?: "val", name = d.entries.joinToString(", ", "(", ")") { it.name!! })
 
-    override fun visitTypeParameter(d: KtTypeParameter, data: Unit?) = detect(d, "type parameter", newLineNeeded = false)
+    override fun visitTypeParameter(d: KtTypeParameter, data: Unit?) = detect(
+        d,
+        KotlinIdeaAnalysisBundle.message("declaration.kind.type.parameter"), newLineNeeded = false
+    )
 
-    override fun visitEnumEntry(d: KtEnumEntry, data: Unit?) = detect(d, "enum entry")
+    override fun visitEnumEntry(d: KtEnumEntry, data: Unit?) = detect(d, KotlinIdeaAnalysisBundle.message("declaration.kind.enum.entry"))
 
-    override fun visitParameter(d: KtParameter, data: Unit?) = detect(d, "parameter", newLineNeeded = false)
+    override fun visitParameter(d: KtParameter, data: Unit?) = detect(
+        d,
+        KotlinIdeaAnalysisBundle.message("declaration.kind.parameter"),
+        newLineNeeded = false
+    )
 
-    override fun visitSecondaryConstructor(constructor: KtSecondaryConstructor, data: Unit?) = detect(constructor, "secondary constructor of")
+    override fun visitSecondaryConstructor(constructor: KtSecondaryConstructor, data: Unit?) =
+        detect(constructor, KotlinIdeaAnalysisBundle.message("declaration.kind.secondary.constructor.of"))
 
     override fun visitObjectDeclaration(d: KtObjectDeclaration, data: Unit?): AnnotationHostKind? {
-        if (d.isCompanion()) return detect(d, "companion object", name = "${d.name} of ${d.getStrictParentOfType<KtClass>()?.name}")
+        if (d.isCompanion()) return detect(
+            d,
+            KotlinIdeaAnalysisBundle.message("declaration.kind.companion.object"),
+            name = KotlinIdeaAnalysisBundle.message(
+                "declaration.name.0.of.1",
+                d.name.toString(),
+                d.getStrictParentOfType<KtClass>()?.name.toString()
+            )
+        )
+
         if (d.parent is KtObjectLiteralExpression) return null
-        return detect(d, "object")
+        return detect(d, KotlinIdeaAnalysisBundle.message("declaration.kind.object"))
     }
 
-    private fun detect(declaration: KtDeclaration, kind: String, name: String = declaration.name ?: "<anonymous>", newLineNeeded: Boolean = true)
-        = AnnotationHostKind(kind, name, newLineNeeded)
+    private fun detect(
+        declaration: KtDeclaration,
+        kind: String,
+        name: String = declaration.name ?: "<anonymous>",
+        newLineNeeded: Boolean = true
+    ) = AnnotationHostKind(kind, name, newLineNeeded)
 }

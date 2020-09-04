@@ -49,10 +49,7 @@ import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall;
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedValueArgument;
 import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 import static org.jetbrains.kotlin.js.translate.utils.BindingUtils.*;
 import static org.jetbrains.kotlin.js.translate.utils.FunctionBodyTranslator.setDefaultValueForArguments;
@@ -232,26 +229,30 @@ public final class ClassInitializerTranslator extends AbstractTranslator {
                 }
                 else {
                     for (ValueParameterDescriptor parameter : superDescriptor.getValueParameters()) {
-                        JsName parameterName = context.getNameForDescriptor(parameter);
+                        JsName parameterName = JsScope.declareTemporaryName(parameter.getName().asString());
                         arguments.add(parameterName.makeRef());
                         initializer.getParameters().add(new JsParameter(parameterName));
                     }
                 }
 
-                if (superDescriptor.isPrimary()) {
+                if (superDescriptor.isPrimary() || superDescriptor.getConstructedClass().isExternal()) {
                     addCallToSuperMethod(arguments, initializer, superCall.getCall().getCallElement());
                 }
                 else {
-                    int maxValueArgumentIndex = 0;
-                    for (ValueParameterDescriptor arg : superCall.getValueArguments().keySet()) {
-                        ResolvedValueArgument resolvedArg = superCall.getValueArguments().get(arg);
-                        if (!(resolvedArg instanceof DefaultValueArgument)) {
-                            maxValueArgumentIndex = Math.max(maxValueArgumentIndex, arg.getIndex() + 1);
+                    // Add `void 0` for the trailing default arguments
+                    // Anonymous object constructor already has all the parameters proxied, including ones with default values
+                    if (!DescriptorUtils.isAnonymousObject(classDescriptor)) {
+                        int maxValueArgumentIndex = 0;
+                        for (ValueParameterDescriptor arg : superCall.getValueArguments().keySet()) {
+                            ResolvedValueArgument resolvedArg = superCall.getValueArguments().get(arg);
+                            if (!(resolvedArg instanceof DefaultValueArgument)) {
+                                maxValueArgumentIndex = Math.max(maxValueArgumentIndex, arg.getIndex() + 1);
+                            }
                         }
-                    }
-                    int padSize = superDescriptor.getValueParameters().size() - maxValueArgumentIndex;
-                    while (padSize-- > 0) {
-                        arguments.add(Namer.getUndefinedExpression());
+                        int padSize = superDescriptor.getValueParameters().size() - maxValueArgumentIndex;
+                        while (padSize-- > 0) {
+                            arguments.add(Namer.getUndefinedExpression());
+                        }
                     }
                     addCallToSuperSecondaryConstructor(arguments, superDescriptor);
                 }

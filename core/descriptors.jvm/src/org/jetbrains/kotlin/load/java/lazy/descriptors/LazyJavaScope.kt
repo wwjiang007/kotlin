@@ -35,12 +35,12 @@ import org.jetbrains.kotlin.load.java.structure.JavaArrayType
 import org.jetbrains.kotlin.load.java.structure.JavaField
 import org.jetbrains.kotlin.load.java.structure.JavaMethod
 import org.jetbrains.kotlin.load.java.structure.JavaValueParameter
+import org.jetbrains.kotlin.load.java.toDescriptorVisibility
+import org.jetbrains.kotlin.load.kotlin.computeJvmDescriptor
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.resolve.DescriptorFactory
-import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.constants.StringValue
 import org.jetbrains.kotlin.resolve.descriptorUtil.firstArgument
-import org.jetbrains.kotlin.resolve.retainMostSpecificInEachOverridableGroup
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindExclude.NonExtensions
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
@@ -116,11 +116,21 @@ abstract class LazyJavaScope(
     private val functions = c.storageManager.createMemoizedFunction<Name, Collection<SimpleFunctionDescriptor>> { name ->
         val result = LinkedHashSet<SimpleFunctionDescriptor>(declaredFunctions(name))
 
-        result.retainMostSpecificInEachOverridableGroup()
+        result.retainMostSpecificMethods()
 
         computeNonDeclaredFunctions(result, name)
 
         c.components.signatureEnhancement.enhanceSignatures(c, result).toList()
+    }
+
+    private fun MutableSet<SimpleFunctionDescriptor>.retainMostSpecificMethods() {
+        val groups = groupBy { it.computeJvmDescriptor(withReturnType = false) }.values
+        for (group in groups) {
+            if (group.size == 1) continue
+            val mostSpecificMethods = group.selectMostSpecificInEachOverridableGroup { this }
+            removeAll(group)
+            addAll(mostSpecificMethods)
+        }
     }
 
     protected open fun JavaMethodDescriptor.isVisibleAsFunction() = true
@@ -165,7 +175,7 @@ abstract class LazyJavaScope(
             effectiveSignature.valueParameters,
             effectiveSignature.returnType,
             Modality.convertFromFlags(method.isAbstract, !method.isFinal),
-            method.visibility,
+            method.visibility.toDescriptorVisibility(),
             if (effectiveSignature.receiverType != null)
                 mapOf(JavaMethodDescriptor.ORIGINAL_VALUE_PARAMETER_FOR_EXTENSION_RECEIVER to valueParameters.descriptors.first())
             else
@@ -312,7 +322,7 @@ abstract class LazyJavaScope(
         val annotations = c.resolveAnnotations(field)
 
         return JavaPropertyDescriptor.create(
-            ownerDescriptor, annotations, Modality.FINAL, field.visibility, isVar, field.name,
+            ownerDescriptor, annotations, Modality.FINAL, field.visibility.toDescriptorVisibility(), isVar, field.name,
             c.components.sourceElementFactory.source(field), /* isConst = */ field.isFinalStatic
         )
     }

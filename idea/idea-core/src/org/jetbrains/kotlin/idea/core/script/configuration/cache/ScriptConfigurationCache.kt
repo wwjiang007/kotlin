@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.idea.core.script.configuration.utils.getKtFile
 import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.scripting.resolve.ScriptCompilationConfigurationWrapper
+import java.io.Serializable
 import kotlin.script.experimental.api.ScriptDiagnostic
 
 /**
@@ -29,16 +30,17 @@ interface ScriptConfigurationCache {
 
     fun setApplied(file: VirtualFile, configurationSnapshot: ScriptConfigurationSnapshot)
     fun setLoaded(file: VirtualFile, configurationSnapshot: ScriptConfigurationSnapshot)
-    fun markOutOfDate(scope: ScriptConfigurationCacheScope)
+    fun remove(file: VirtualFile): Boolean
 
-    fun allApplied(): Collection<Pair<VirtualFile, ScriptCompilationConfigurationWrapper>>
+    fun allApplied(): List<Pair<VirtualFile, ScriptCompilationConfigurationWrapper>>
     fun clear()
+
+    fun getAnyLoadedScript(): ScriptCompilationConfigurationWrapper?
 }
 
 sealed class ScriptConfigurationCacheScope {
     object All : ScriptConfigurationCacheScope()
     class File(val file: KtFile) : ScriptConfigurationCacheScope()
-    class Except(val file: KtFile) : ScriptConfigurationCacheScope()
 }
 
 data class ScriptConfigurationState(
@@ -55,11 +57,15 @@ data class ScriptConfigurationSnapshot(
     val configuration: ScriptCompilationConfigurationWrapper?
 )
 
-interface CachedConfigurationInputs {
+interface CachedConfigurationInputs: Serializable {
     fun isUpToDate(project: Project, file: VirtualFile, ktFile: KtFile? = null): Boolean
 
     object OutOfDate : CachedConfigurationInputs {
         override fun isUpToDate(project: Project, file: VirtualFile, ktFile: KtFile?): Boolean = false
+    }
+
+    object UpToDate: CachedConfigurationInputs {
+        override fun isUpToDate(project: Project, file: VirtualFile, ktFile: KtFile?): Boolean = true
     }
 
     data class PsiModificationStamp(

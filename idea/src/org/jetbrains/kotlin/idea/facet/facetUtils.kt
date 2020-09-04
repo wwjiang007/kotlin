@@ -1,21 +1,11 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.facet
 
+import com.intellij.facet.FacetManager
 import com.intellij.openapi.externalSystem.service.project.IdeModifiableModelsProvider
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.projectRoots.JavaSdk
@@ -42,8 +32,8 @@ import org.jetbrains.kotlin.idea.util.getProjectJdkTableSafe
 import org.jetbrains.kotlin.platform.*
 import org.jetbrains.kotlin.platform.compat.toNewPlatform
 import org.jetbrains.kotlin.platform.impl.JvmIdePlatformKind
-import org.jetbrains.kotlin.psi.NotNullableUserDataProperty
 import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
+import org.jetbrains.kotlin.psi.NotNullableUserDataProperty
 import kotlin.reflect.KProperty1
 
 var Module.hasExternalSdkConfiguration: Boolean
@@ -95,7 +85,7 @@ fun KotlinFacetSettings.initializeIfNeeded(
 
     if (shouldInferLanguageLevel) {
         languageLevel = (if (useProjectSettings) LanguageVersion.fromVersionString(commonArguments.languageVersion) else null)
-                ?: getDefaultLanguageLevel(module, compilerVersion, coerceRuntimeLibraryVersionToReleased = compilerVersion == null)
+            ?: getDefaultLanguageLevel(module, compilerVersion, coerceRuntimeLibraryVersionToReleased = compilerVersion == null)
     }
 
     if (shouldInferAPILevel) {
@@ -130,11 +120,11 @@ fun Module.getOrCreateFacet(
     val facetModel = modelsProvider.getModifiableFacetModel(this)
 
     val facet = facetModel.findFacet(KotlinFacetType.TYPE_ID, KotlinFacetType.INSTANCE.defaultFacetName)
-            ?: with(KotlinFacetType.INSTANCE) { createFacet(this@getOrCreateFacet, defaultFacetName, createDefaultConfiguration(), null) }
-                .apply {
-                    val externalSource = externalSystemId?.let { ExternalProjectSystemRegistry.getInstance().getSourceById(it) }
-                    facetModel.addFacet(this, externalSource)
-                }
+        ?: with(KotlinFacetType.INSTANCE) { createFacet(this@getOrCreateFacet, defaultFacetName, createDefaultConfiguration(), null) }
+            .apply {
+                val externalSource = externalSystemId?.let { ExternalProjectSystemRegistry.getInstance().getSourceById(it) }
+                facetModel.addFacet(this, externalSource)
+            }
     facet.configuration.settings.useProjectSettings = useProjectSettings
     if (commitModel) {
         runWriteAction {
@@ -142,6 +132,22 @@ fun Module.getOrCreateFacet(
         }
     }
     return facet
+}
+
+fun Module.hasKotlinFacet() = FacetManager.getInstance(this).getFacetByType(KotlinFacetType.TYPE_ID) != null
+
+fun Module.removeKotlinFacet(
+    modelsProvider: IdeModifiableModelsProvider,
+    commitModel: Boolean = false
+) {
+    val facetModel = modelsProvider.getModifiableFacetModel(this)
+    val facet = facetModel.findFacet(KotlinFacetType.TYPE_ID, KotlinFacetType.INSTANCE.defaultFacetName) ?: return
+    facetModel.removeFacet(facet)
+    if (commitModel) {
+        runWriteAction {
+            facetModel.commit()
+        }
+    }
 }
 
 //method used for non-mpp modules
@@ -188,10 +194,13 @@ fun KotlinFacet.configureFacet(
     module.externalCompilerVersion = compilerVersion
 }
 
-fun Module.externalSystemTestTasks(): List<ExternalSystemTestTask> {
+private fun Module.externalSystemRunTasks(): List<ExternalSystemRunTask> {
     val settingsProvider = KotlinFacetSettingsProvider.getInstance(project) ?: return emptyList()
-    return settingsProvider.getInitializedSettings(this).externalSystemTestTasks
+    return settingsProvider.getInitializedSettings(this).externalSystemRunTasks
 }
+
+fun Module.externalSystemTestRunTasks() = externalSystemRunTasks().filterIsInstance<ExternalSystemTestRunTask>()
+fun Module.externalSystemNativeMainRunTasks() = externalSystemRunTasks().filterIsInstance<ExternalSystemNativeMainRunTask>()
 
 @Suppress("DEPRECATION_ERROR", "DeprecatedCallableAddReplaceWith")
 @Deprecated(
@@ -369,7 +378,7 @@ fun applyCompilerArgumentsToFacet(
             }
         }
         compilerSettings?.additionalArguments =
-                if (additionalArgumentsString.isNotEmpty()) additionalArgumentsString else CompilerSettings.DEFAULT_ADDITIONAL_ARGUMENTS
+            if (additionalArgumentsString.isNotEmpty()) additionalArgumentsString else CompilerSettings.DEFAULT_ADDITIONAL_ARGUMENTS
 
         with(compilerArguments::class.java.newInstance()) {
             copyFieldsSatisfying(this, compilerArguments) { exposeAsAdditionalArgument(it) || it.name in ignoredFields }

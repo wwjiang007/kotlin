@@ -11,10 +11,12 @@ import kotlin.annotation.AnnotationTarget.*
  * with the future versions of the standard library.
  *
  * Any usage of a declaration annotated with `@ExperimentalStdlibApi` must be accepted either by
- * annotating that usage with the [UseExperimental] annotation, e.g. `@UseExperimental(ExperimentalStdlibApi::class)`,
- * or by using the compiler argument `-Xuse-experimental=kotlin.ExperimentalStdlibApi`.
+ * annotating that usage with the [OptIn] annotation, e.g. `@OptIn(ExperimentalStdlibApi::class)`,
+ * or by using the compiler argument `-Xopt-in=kotlin.ExperimentalStdlibApi`.
  */
+@Suppress("DEPRECATION")
 @Experimental(level = Experimental.Level.ERROR)
+@RequiresOptIn(level = RequiresOptIn.Level.ERROR)
 @Retention(AnnotationRetention.BINARY)
 @Target(
     CLASS,
@@ -30,6 +32,5 @@ import kotlin.annotation.AnnotationTarget.*
     TYPEALIAS
 )
 @MustBeDocumented
-@ExperimentalStdlibApi
-@SinceKotlin("1.3")  // TODO: Remove experimental status from itself and advance SinceKotlin to 1.4
+@SinceKotlin("1.3")
 public annotation class ExperimentalStdlibApi

@@ -42,10 +42,12 @@ import org.jetbrains.kotlin.samWithReceiver.SamWithReceiverCommandLineProcessor.
 import org.jetbrains.kotlin.test.JUnit3WithIdeaConfigurationRunner
 import org.jetbrains.kotlin.test.MockLibraryUtil
 import org.jetbrains.kotlin.test.TestJdkKind.FULL_JDK
+import org.jetbrains.kotlin.test.WithMutedInDatabaseRunTest
 import org.jetbrains.kotlin.test.runTest
 import org.junit.Assert.assertNotEquals
 import org.junit.runner.RunWith
 
+@WithMutedInDatabaseRunTest
 @RunWith(JUnit3WithIdeaConfigurationRunner::class)
 open class MultiModuleHighlightingTest : AbstractMultiModuleHighlightingTest() {
     override fun getTestDataPath() = PluginTestCaseBase.getTestDataPathBase() + "/multiModuleHighlighting/"
@@ -143,7 +145,7 @@ open class MultiModuleHighlightingTest : AbstractMultiModuleHighlightingTest() {
             val m1 = m2ContentRoot.findChild("m1.kt")!!
             val m1doc = FileDocumentManager.getInstance().getDocument(m1)!!
             project.executeWriteCommand("a") {
-                m1doc.insertString(m1doc.textLength , "fun foo() = 1")
+                m1doc.insertString(m1doc.textLength, "fun foo() = 1")
                 PsiDocumentManager.getInstance(myProject).commitAllDocuments()
             }
 
@@ -158,7 +160,7 @@ open class MultiModuleHighlightingTest : AbstractMultiModuleHighlightingTest() {
             val m2 = m1ContentRoot.findChild("m2.kt")!!
             val m2doc = FileDocumentManager.getInstance().getDocument(m2)!!
             project.executeWriteCommand("a") {
-                m2doc.insertString(m2doc.textLength , "fun foo() = 1")
+                m2doc.insertString(m2doc.textLength, "fun foo() = 1")
                 PsiDocumentManager.getInstance(myProject).commitAllDocuments()
             }
 
@@ -234,7 +236,7 @@ open class MultiModuleHighlightingTest : AbstractMultiModuleHighlightingTest() {
         val lib = MockLibraryUtil.compileJvmLibraryToJar(
             testDataPath + "${getTestName(true)}/lib", "lib",
             extraOptions = listOf(
-                "-Xuse-experimental=kotlin.Experimental",
+                "-Xopt-in=kotlin.RequiresOptIn",
                 "-Xexperimental=lib.ExperimentalAPI"
             )
         )
@@ -247,7 +249,7 @@ open class MultiModuleHighlightingTest : AbstractMultiModuleHighlightingTest() {
         val lib = MockLibraryUtil.compileJsLibraryToJar(
             testDataPath + "${getTestName(true)}/lib", "lib", false,
             extraOptions = listOf(
-                "-Xuse-experimental=kotlin.Experimental",
+                "-Xopt-in=kotlin.RequiresOptIn",
                 "-Xexperimental=lib.ExperimentalAPI"
             )
         )

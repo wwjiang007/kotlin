@@ -1,7 +1,8 @@
 public final class SmartSet <T> extends kotlin.collections.AbstractSet<T> implements java.util.Set<T>, kotlin.collections.MutableSet<T>, kotlin.jvm.internal.markers.KMutableSet {
     private java.lang.Object data;
     private int size;
-    private static final int ARRAY_THRESHOLD = 5;
+    private static final int ARRAY_THRESHOLD;
+    @org.jetbrains.annotations.NotNull
     public static final SmartSet.Companion Companion;
 
     public int getSize() { /* compiled code */ }

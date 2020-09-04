@@ -48,7 +48,7 @@ object PsiElementChecker {
 
         with(element) {
             try {
-                Assert.assertEquals("Number of methods has changed. Please update test.", 55, PsiElement::class.java.methods.size)
+                Assert.assertEquals("Number of methods has changed. Please update test.", 56, PsiElement::class.java.methods.size)
 
                 project
                 Assert.assertTrue(language == KotlinLanguage.INSTANCE)
@@ -95,6 +95,7 @@ object PsiElementChecker {
 
                 Assert.assertTrue(isValid)
                 isWritable
+                @Suppress("UnstableApiUsage") ownReferences
                 reference
                 references
                 putCopyableUserData(TEST_DATA_KEY, 12)
@@ -111,8 +112,7 @@ object PsiElementChecker {
                 node
                 toString()
                 Assert.assertTrue(isEquivalentTo(this))
-            }
-            catch (t: Throwable) {
+            } catch (t: Throwable) {
                 throw AssertionErrorWithCause("Failed for ${this::class.java} ${this}", t)
             }
         }

@@ -63,6 +63,10 @@ abstract class AbstractOverrideImplementTest : KotlinLightCodeInsightFixtureTest
         doDirectoryTest(OverrideMembersHandler(), memberToImplement)
     }
 
+    protected fun doMultiImplementDirectoryTest() {
+        doMultiDirectoryTest(ImplementMembersHandler())
+    }
+
     protected fun doMultiOverrideDirectoryTest() {
         doMultiDirectoryTest(OverrideMembersHandler())
     }
@@ -74,10 +78,10 @@ abstract class AbstractOverrideImplementTest : KotlinLightCodeInsightFixtureTest
         val project = myFixture.project
 
         val aClass = JavaPsiFacade.getInstance(project).findClass(className, GlobalSearchScope.allScope(project))
-                     ?: error("Can't find class: $className")
+            ?: error("Can't find class: $className")
 
         val method = aClass.findMethodsByName(methodName, false)[0]
-                     ?: error("Can't find method '$methodName' in class $className")
+            ?: error("Can't find method '$methodName' in class $className")
 
         generateImplementation(method)
 
@@ -113,7 +117,7 @@ abstract class AbstractOverrideImplementTest : KotlinLightCodeInsightFixtureTest
     private fun doOverrideImplement(handler: OverrideImplementMembersHandler, memberToOverride: String?) {
         val elementAtCaret = myFixture.file.findElementAt(myFixture.editor.caretModel.offset)
         val classOrObject = PsiTreeUtil.getParentOfType(elementAtCaret, KtClassOrObject::class.java)
-                            ?: error("Caret should be inside class or object")
+            ?: error("Caret should be inside class or object")
 
         val chooserObjects = handler.collectMembersToGenerate(classOrObject)
 
@@ -125,10 +129,8 @@ abstract class AbstractOverrideImplementTest : KotlinLightCodeInsightFixtureTest
             }
             assertEquals(1, filtered.size, "Invalid number of available chooserObjects for override")
             filtered.single()
-        }
-        else {
-            chooserObjects.single {
-                chooserObject ->
+        } else {
+            chooserObjects.single { chooserObject ->
                 chooserObject.descriptor.name.asString() == memberToOverride
             }
         }
@@ -139,9 +141,10 @@ abstract class AbstractOverrideImplementTest : KotlinLightCodeInsightFixtureTest
     private fun doMultiOverrideImplement(handler: OverrideImplementMembersHandler) {
         val elementAtCaret = myFixture.file.findElementAt(myFixture.editor.caretModel.offset)
         val classOrObject = PsiTreeUtil.getParentOfType(elementAtCaret, KtClassOrObject::class.java)
-                            ?: error("Caret should be inside class or object")
+            ?: error("Caret should be inside class or object")
 
-        val chooserObjects = handler.collectMembersToGenerate(classOrObject).sortedBy { it.descriptor.name.asString() + " in " + it.immediateSuper.containingDeclaration.name.asString() }
+        val chooserObjects = handler.collectMembersToGenerate(classOrObject)
+            .sortedBy { it.descriptor.name.asString() + " in " + it.immediateSuper.containingDeclaration.name.asString() }
         performGenerateCommand(classOrObject, chooserObjects)
     }
 
@@ -158,15 +161,15 @@ abstract class AbstractOverrideImplementTest : KotlinLightCodeInsightFixtureTest
     }
 
     private fun performGenerateCommand(
-            classOrObject: KtClassOrObject,
-            selectedElements: List<OverrideMemberChooserObject>) {
+        classOrObject: KtClassOrObject,
+        selectedElements: List<OverrideMemberChooserObject>
+    ) {
         try {
             val copyDoc = InTextDirectivesUtils.isDirectiveDefined(classOrObject.containingFile.text, "// COPY_DOC")
             myFixture.project.executeWriteCommand("") {
                 OverrideImplementMembersHandler.generateMembers(myFixture.editor, classOrObject, selectedElements, copyDoc)
             }
-        }
-        catch (throwable: Throwable) {
+        } catch (throwable: Throwable) {
             throw rethrow(throwable)
         }
 
@@ -182,8 +185,7 @@ abstract class AbstractOverrideImplementTest : KotlinLightCodeInsightFixtureTest
                 document.replaceString(0, document.textLength, file.dumpTextWithErrors())
             }
             myFixture.checkResultByFile(fileName)
-        }
-        catch (error: AssertionError) {
+        } catch (error: AssertionError) {
             KotlinTestUtils.assertEqualsToFile(expectedFile, TagsTestDataUtil.generateTextWithCaretAndSelection(myFixture.editor))
         }
     }

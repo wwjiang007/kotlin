@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -11,6 +11,7 @@ import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.Errors
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToCall
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.getReturnTypeReference
 import org.jetbrains.kotlin.idea.references.mainReference
@@ -25,7 +26,7 @@ class ChangeSuperTypeListEntryTypeArgumentFix(
     private val typeArgumentIndex: Int
 ) : KotlinQuickFixAction<KtSuperTypeListEntry>(element) {
 
-    override fun getText() = "Change type argument to $type"
+    override fun getText() = KotlinBundle.message("fix.change.type.argument", type)
 
     override fun getFamilyName() = text
 
@@ -81,7 +82,8 @@ class ChangeSuperTypeListEntryTypeArgumentFix(
                         (it.typeAsUserType?.referenceExpression?.mainReference?.resolve() as? KtClass)?.descriptor == superClassDescriptor
                     }
                     is KtSuperTypeCallEntry -> {
-                        it.calleeExpression.resolveToCall()?.resultingDescriptor?.returnType?.constructor?.declarationDescriptor == superClassDescriptor
+                        it.calleeExpression.resolveToCall()?.resultingDescriptor?.returnType?.constructor
+                            ?.declarationDescriptor == superClassDescriptor
                     }
                     else -> false
                 }

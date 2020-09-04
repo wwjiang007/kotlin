@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.compilerRunner
 
 import org.gradle.api.Project
+import org.gradle.api.logging.Logger
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.config.Services
@@ -32,12 +33,15 @@ import javax.inject.Inject
 internal class ProjectFilesForCompilation(
     val projectRootFile: File,
     val clientIsAliveFlagFile: File,
-    val sessionFlagFile: File
+    val sessionFlagFile: File,
+    val buildDir: File
 ) : Serializable {
-    constructor(project: Project) : this(
-        projectRootFile = project.rootProject.projectDir,
-        clientIsAliveFlagFile = GradleCompilerRunner.getOrCreateClientFlagFile(project),
-        sessionFlagFile = GradleCompilerRunner.getOrCreateSessionFlagFile(project)
+    //TODO
+    constructor(logger: Logger, projectDir:File, buildDir: File, prjectName: String, projectRootDir: File, sessionDir: File) : this(
+        projectRootFile = projectDir,
+        clientIsAliveFlagFile = GradleCompilerRunner.getOrCreateClientFlagFile(logger, prjectName),
+        sessionFlagFile = GradleCompilerRunner.getOrCreateSessionFlagFile(logger, sessionDir, projectRootDir),
+        buildDir = buildDir
     )
 
     companion object {
@@ -56,7 +60,8 @@ internal class GradleKotlinCompilerWorkArguments(
     val outputFiles: List<File>,
     val taskPath: String,
     val buildReportMode: BuildReportMode?,
-    val kotlinScriptExtensions: Array<String>
+    val kotlinScriptExtensions: Array<String>,
+    val allWarningsAsErrors: Boolean
 ) : Serializable {
     companion object {
         const val serialVersionUID: Long = 0
@@ -95,6 +100,8 @@ internal class GradleKotlinCompilerWork @Inject constructor(
     private val taskPath = config.taskPath
     private val buildReportMode = config.buildReportMode
     private val kotlinScriptExtensions = config.kotlinScriptExtensions
+    private val allWarningsAsErrors = config.allWarningsAsErrors
+    private val buildDir = config.projectFiles.buildDir
 
     private val log: KotlinLogger =
         TaskLoggers.get(taskPath)?.let { GradleKotlinLogger(it).apply { debug("Using '$taskPath' logger") } }
@@ -113,7 +120,7 @@ internal class GradleKotlinCompilerWork @Inject constructor(
         get() = incrementalCompilationEnvironment != null
 
     override fun run() {
-        val messageCollector = GradlePrintingMessageCollector(log)
+        val messageCollector = GradlePrintingMessageCollector(log, allWarningsAsErrors)
         val exitCode = compileWithDaemonOrFallbackImpl(messageCollector)
         if (incrementalCompilationEnvironment?.disableMultiModuleIC == true) {
             incrementalCompilationEnvironment.multiModuleICSettings.buildHistoryFile.delete()
@@ -126,7 +133,7 @@ internal class GradleKotlinCompilerWork @Inject constructor(
         with(log) {
             kotlinDebug { "Kotlin compiler class: ${compilerClassName}" }
             kotlinDebug { "Kotlin compiler classpath: ${compilerFullClasspath.joinToString { it.canonicalPath }}" }
-            kotlinDebug { "Kotlin compiler args: ${compilerArgs.joinToString(" ")}" }
+            kotlinDebug { "$taskPath Kotlin compiler args: ${compilerArgs.joinToString(" ")}" }
         }
 
         val executionStrategy = kotlinCompilerExecutionStrategy()
@@ -295,7 +302,7 @@ internal class GradleKotlinCompilerWork @Inject constructor(
         clearLocalState(outputFiles, log, reason = "out-of-process execution strategy is non-incremental")
 
         return try {
-            runToolInSeparateProcess(compilerArgs, compilerClassName, compilerFullClasspath, log)
+            runToolInSeparateProcess(compilerArgs, compilerClassName, compilerFullClasspath, log, buildDir)
         } finally {
             reportExecutionResultIfNeeded {
                 TaskExecutionResult(

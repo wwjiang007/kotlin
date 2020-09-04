@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.codeInsight
@@ -20,6 +9,7 @@ import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.idea.FrontendInternals
 import org.jetbrains.kotlin.idea.resolve.ResolutionFacade
 import org.jetbrains.kotlin.idea.resolve.frontendService
 import org.jetbrains.kotlin.idea.util.*
@@ -51,6 +41,7 @@ import org.jetbrains.kotlin.types.expressions.DoubleColonLHS
 import org.jetbrains.kotlin.types.typeUtil.isUnit
 import java.util.*
 
+@OptIn(FrontendInternals::class)
 class ReferenceVariantsHelper(
     private val bindingContext: BindingContext,
     private val resolutionFacade: ResolutionFacade,
@@ -241,9 +232,10 @@ class ReferenceVariantsHelper(
 
         if (callType == CallType.SUPER_MEMBERS) { // we need to unwrap fake overrides in case of "super." because ShadowedDeclarationsFilter does not work correctly
             return descriptors.flatMapTo(LinkedHashSet<DeclarationDescriptor>()) {
-                if (it is CallableMemberDescriptor && it.kind == CallableMemberDescriptor.Kind.FAKE_OVERRIDE) it.overriddenDescriptors else listOf(
-                    it
-                )
+                if (it is CallableMemberDescriptor && it.kind == CallableMemberDescriptor.Kind.FAKE_OVERRIDE)
+                    it.overriddenDescriptors
+                else
+                    listOf(it)
             }
         }
 
@@ -473,13 +465,17 @@ private fun MemberScope.collectStaticMembers(
     )
 }
 
+@OptIn(FrontendInternals::class)
 fun ResolutionScope.collectSyntheticStaticMembersAndConstructors(
     resolutionFacade: ResolutionFacade,
     kindFilter: DescriptorKindFilter,
     nameFilter: (Name) -> Boolean
 ): List<FunctionDescriptor> {
     val syntheticScopes = resolutionFacade.getFrontendService(SyntheticScopes::class.java)
-    return (syntheticScopes.forceEnableSamAdapters().collectSyntheticStaticFunctions(this) + syntheticScopes.collectSyntheticConstructors(this))
+    val functionDescriptors = getContributedDescriptors(DescriptorKindFilter.FUNCTIONS)
+    val classifierDescriptors = getContributedDescriptors(DescriptorKindFilter.CLASSIFIERS)
+    return (syntheticScopes.forceEnableSamAdapters().collectSyntheticStaticFunctions(functionDescriptors) +
+            syntheticScopes.collectSyntheticConstructors(classifierDescriptors))
         .filter { kindFilter.accepts(it) && nameFilter(it.name) }
 }
 

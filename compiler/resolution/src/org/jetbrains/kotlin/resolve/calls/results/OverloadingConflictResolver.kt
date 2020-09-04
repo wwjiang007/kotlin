@@ -19,6 +19,7 @@ package org.jetbrains.kotlin.resolve.calls.results
 import gnu.trove.THashSet
 import gnu.trove.TObjectHashingStrategy
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.builtins.UnsignedTypes
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.synthetic.SyntheticMemberDescriptor
@@ -29,20 +30,25 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.isTypeRefinementEnabled
 import org.jetbrains.kotlin.resolve.descriptorUtil.varargParameterPosition
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.TypeUtils
-import org.jetbrains.kotlin.types.checker.requireOrDescribe
+import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner
 import org.jetbrains.kotlin.types.model.KotlinTypeMarker
+import org.jetbrains.kotlin.types.model.requireOrDescribe
+import org.jetbrains.kotlin.util.CancellationChecker
 import java.util.*
 
 open class OverloadingConflictResolver<C : Any>(
     private val builtIns: KotlinBuiltIns,
     private val module: ModuleDescriptor,
     private val specificityComparator: TypeSpecificityComparator,
+    private val platformOverloadsSpecificityComparator: PlatformOverloadsSpecificityComparator,
+    private val cancellationChecker: CancellationChecker,
     private val getResultingDescriptor: (C) -> CallableDescriptor,
     private val createEmptyConstraintSystem: () -> SimpleConstraintSystem,
     private val createFlatSignature: (C) -> FlatSignature<C>,
     private val getVariableCandidates: (C) -> C?, // for variable WithInvoke
     private val isFromSources: (CallableDescriptor) -> Boolean,
-    private val hasSAMConversion: ((C) -> Boolean)?
+    private val hasSAMConversion: ((C) -> Boolean)?,
+    private val kotlinTypeRefiner: KotlinTypeRefiner,
 ) {
 
     private val isTypeRefinementEnabled by lazy { module.isTypeRefinementEnabled() }
@@ -77,7 +83,8 @@ open class OverloadingConflictResolver<C : Any>(
         val noEquivalentCalls = filterOutEquivalentCalls(fixedCandidates)
         val noOverrides = OverridingUtil.filterOverrides(
             noEquivalentCalls,
-            isTypeRefinementEnabled
+            isTypeRefinementEnabled,
+            cancellationChecker::check
         ) { a, b ->
             val aDescriptor = a.resultingDescriptor
             val bDescriptor = b.resultingDescriptor
@@ -123,6 +130,7 @@ open class OverloadingConflictResolver<C : Any>(
 
         val result = LinkedHashSet<C>()
         outerLoop@ for (meD in fromSourcesGoesFirst) {
+            cancellationChecker.check()
             for (otherD in result) {
                 val me = meD.resultingDescriptor.originalIfTypeRefinementEnabled
                 val other = otherD.resultingDescriptor.originalIfTypeRefinementEnabled
@@ -130,8 +138,9 @@ open class OverloadingConflictResolver<C : Any>(
                 if (DescriptorEquivalenceForOverrides.areCallableDescriptorsEquivalent(
                         me,
                         other,
-                        isTypeRefinementEnabled,
-                        ignoreReturnType
+                        allowCopiesFromTheSameDeclaration = isTypeRefinementEnabled,
+                        ignoreReturnType = ignoreReturnType,
+                        kotlinTypeRefiner = kotlinTypeRefiner
                     )
                 ) {
                     continue@outerLoop
@@ -208,6 +217,7 @@ open class OverloadingConflictResolver<C : Any>(
         }
 
         val bestCandidatesByParameterTypes = conflictingCandidates.filter { candidate ->
+            cancellationChecker.check()
             isMostSpecific(candidate, conflictingCandidates) { call1, call2 ->
                 isNotLessSpecificCallWithArgumentMapping(call1, call2, discriminateGenerics)
             }
@@ -303,10 +313,10 @@ open class OverloadingConflictResolver<C : Any>(
             val isGeneralUnsigned = UnsignedTypes.isUnsignedType(general)
             return when {
                 isSpecificUnsigned && isGeneralUnsigned -> {
-                    val uLong = module.findClassAcrossModuleDependencies(KotlinBuiltIns.FQ_NAMES.uLong)?.defaultType ?: return false
-                    val uInt = module.findClassAcrossModuleDependencies(KotlinBuiltIns.FQ_NAMES.uInt)?.defaultType ?: return false
-                    val uByte = module.findClassAcrossModuleDependencies(KotlinBuiltIns.FQ_NAMES.uByte)?.defaultType ?: return false
-                    val uShort = module.findClassAcrossModuleDependencies(KotlinBuiltIns.FQ_NAMES.uShort)?.defaultType ?: return false
+                    val uLong = module.findClassAcrossModuleDependencies(StandardNames.FqNames.uLong)?.defaultType ?: return false
+                    val uInt = module.findClassAcrossModuleDependencies(StandardNames.FqNames.uInt)?.defaultType ?: return false
+                    val uByte = module.findClassAcrossModuleDependencies(StandardNames.FqNames.uByte)?.defaultType ?: return false
+                    val uShort = module.findClassAcrossModuleDependencies(StandardNames.FqNames.uShort)?.defaultType ?: return false
 
                     isNonSubtypeNotLessSpecific(specific, general, _double, _float, uLong, uInt, uByte, uShort)
                 }
@@ -364,6 +374,10 @@ open class OverloadingConflictResolver<C : Any>(
             return false
         }
 
+        if (platformOverloadsSpecificityComparator.isMoreSpecificShape(call2.candidateDescriptor(), call1.candidateDescriptor())) {
+            return false
+        }
+
         return true
     }
 
@@ -409,6 +423,10 @@ open class OverloadingConflictResolver<C : Any>(
         if (f is CallableMemberDescriptor && g is CallableMemberDescriptor) {
             if (!f.isExpect && g.isExpect) return true
             if (f.isExpect && !g.isExpect) return false
+        }
+
+        if (platformOverloadsSpecificityComparator.isMoreSpecificShape(g, f)) {
+            return false
         }
 
         return true

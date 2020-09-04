@@ -20,12 +20,14 @@ import org.jetbrains.kotlin.builtins.*
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.resolve.calls.inference.ConstraintSystemBuilder
 import org.jetbrains.kotlin.resolve.calls.inference.components.NewTypeSubstitutor
-import org.jetbrains.kotlin.resolve.calls.inference.model.ArgumentConstraintPosition
-import org.jetbrains.kotlin.resolve.calls.inference.model.LHSArgumentConstraintPosition
-import org.jetbrains.kotlin.resolve.calls.inference.model.TypeVariableForLambdaReturnType
+import org.jetbrains.kotlin.resolve.calls.inference.model.*
 import org.jetbrains.kotlin.resolve.calls.model.*
+import org.jetbrains.kotlin.types.AbstractTypeChecker
+import org.jetbrains.kotlin.types.ErrorUtils
+import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.UnwrappedType
-import org.jetbrains.kotlin.types.Variance
+import org.jetbrains.kotlin.types.model.TypeVariance
+import org.jetbrains.kotlin.types.model.convertVariance
 import org.jetbrains.kotlin.types.typeUtil.builtIns
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
@@ -34,13 +36,15 @@ fun resolveKtPrimitive(
     argument: KotlinCallArgument,
     expectedType: UnwrappedType?,
     diagnosticsHolder: KotlinDiagnosticsHolder,
-    isReceiver: Boolean
+    receiverInfo: ReceiverInfo,
+    convertedType: UnwrappedType?,
+    inferenceSession: InferenceSession?
 ): ResolvedAtom = when (argument) {
     is SimpleKotlinCallArgument ->
-        checkSimpleArgument(csBuilder, argument, expectedType, diagnosticsHolder, isReceiver)
+        checkSimpleArgument(csBuilder, argument, expectedType, diagnosticsHolder, receiverInfo, convertedType, inferenceSession)
 
     is LambdaKotlinCallArgument ->
-        preprocessLambdaArgument(csBuilder, argument, expectedType)
+        preprocessLambdaArgument(csBuilder, argument, expectedType, diagnosticsHolder)
 
     is CallableReferenceKotlinCallArgument ->
         preprocessCallableReference(csBuilder, argument, expectedType, diagnosticsHolder)
@@ -57,20 +61,35 @@ private fun preprocessLambdaArgument(
     csBuilder: ConstraintSystemBuilder,
     argument: LambdaKotlinCallArgument,
     expectedType: UnwrappedType?,
-    forceResolution: Boolean = false
+    diagnosticsHolder: KotlinDiagnosticsHolder,
+    forceResolution: Boolean = false,
+    returnTypeVariable: TypeVariableForLambdaReturnType? = null
 ): ResolvedAtom {
-    if (expectedType != null && !forceResolution && csBuilder.isTypeVariable(expectedType)) {
-        return LambdaWithTypeVariableAsExpectedTypeAtom(argument, expectedType)
+
+    if (expectedType != null && !forceResolution) {
+        // postpone lambda processing if expected type is a type variable that could be fixed into something non-trivial
+        val expectedTypeVariableWithConstraints = csBuilder.currentStorage().notFixedTypeVariables[expectedType.constructor]
+
+        if (expectedTypeVariableWithConstraints != null) {
+            val explicitTypeArgument = expectedTypeVariableWithConstraints.constraints.find {
+                it.kind == ConstraintKind.EQUALITY && it.position.from is ExplicitTypeParameterConstraintPosition<*>
+            }?.type as? KotlinType
+
+            if (explicitTypeArgument == null || explicitTypeArgument.arguments.isNotEmpty()) {
+                return LambdaWithTypeVariableAsExpectedTypeAtom(argument, expectedType)
+            }
+        }
     }
 
-    val resolvedArgument = extractLambdaInfoFromFunctionalType(expectedType, argument) ?: extraLambdaInfo(expectedType, argument, csBuilder)
+    val resolvedArgument = extractLambdaInfoFromFunctionalType(expectedType, argument, returnTypeVariable)
+        ?: extraLambdaInfo(expectedType, argument, csBuilder, diagnosticsHolder)
 
     if (expectedType != null) {
         val lambdaType = createFunctionType(
             csBuilder.builtIns, Annotations.EMPTY, resolvedArgument.receiver,
             resolvedArgument.parameters, null, resolvedArgument.returnType, resolvedArgument.isSuspend
         )
-        csBuilder.addSubtypeConstraint(lambdaType, expectedType, ArgumentConstraintPosition(argument))
+        csBuilder.addSubtypeConstraint(lambdaType, expectedType, ArgumentConstraintPositionImpl(argument))
     }
 
     return resolvedArgument
@@ -79,7 +98,8 @@ private fun preprocessLambdaArgument(
 private fun extraLambdaInfo(
     expectedType: UnwrappedType?,
     argument: LambdaKotlinCallArgument,
-    csBuilder: ConstraintSystemBuilder
+    csBuilder: ConstraintSystemBuilder,
+    diagnosticsHolder: KotlinDiagnosticsHolder
 ): ResolvedLambdaAtom {
     val builtIns = csBuilder.builtIns
     val isSuspend = expectedType?.isSuspendFunctionType ?: false
@@ -87,14 +107,21 @@ private fun extraLambdaInfo(
     val isFunctionSupertype = expectedType != null && KotlinBuiltIns.isNotNullOrNullableFunctionSupertype(expectedType)
     val argumentAsFunctionExpression = argument.safeAs<FunctionExpression>()
 
-    val typeVariable = TypeVariableForLambdaReturnType(argument, builtIns, "_L")
+    val typeVariable = TypeVariableForLambdaReturnType(builtIns, "_L")
 
     val receiverType = argumentAsFunctionExpression?.receiverType
     val returnType =
         argumentAsFunctionExpression?.returnType ?: expectedType?.arguments?.singleOrNull()?.type?.unwrap()?.takeIf { isFunctionSupertype }
         ?: typeVariable.defaultType
 
-    val parameters = argument.parametersTypes?.map { it ?: builtIns.nothingType } ?: emptyList()
+    val parameters = argument.parametersTypes?.mapIndexed { index, parameterType ->
+        if (parameterType != null) {
+            parameterType
+        } else {
+            diagnosticsHolder.addDiagnostic(NotEnoughInformationForLambdaParameter(argument, index))
+            ErrorUtils.createErrorType("<Unknown lambda parameter type>")
+        }
+    } ?: emptyList()
 
     val newTypeVariableUsed = returnType == typeVariable.defaultType
     if (newTypeVariableUsed) csBuilder.registerVariable(typeVariable)
@@ -110,44 +137,107 @@ private fun extraLambdaInfo(
     )
 }
 
-private fun extractLambdaInfoFromFunctionalType(expectedType: UnwrappedType?, argument: LambdaKotlinCallArgument): ResolvedLambdaAtom? {
+private fun extractLambdaInfoFromFunctionalType(
+    expectedType: UnwrappedType?,
+    argument: LambdaKotlinCallArgument,
+    returnTypeVariable: TypeVariableForLambdaReturnType? = null
+): ResolvedLambdaAtom? {
     if (expectedType == null || !expectedType.isBuiltinFunctionalType) return null
-    val parameters = extractLambdaParameters(expectedType, argument)
-
+    val parametersTypes = argument.parametersTypes
+    val expectedParameters = expectedType.getValueParameterTypesFromFunctionType()
+    val expectedReceiver = expectedType.getReceiverTypeFromFunctionType()?.unwrap()
     val argumentAsFunctionExpression = argument.safeAs<FunctionExpression>()
-    val receiverType = argumentAsFunctionExpression?.receiverType ?: expectedType.getReceiverTypeFromFunctionType()?.unwrap()
+
+    val receiverFromExpected = argumentAsFunctionExpression?.receiverType == null && expectedReceiver != null
+
+    fun UnwrappedType?.orExpected(index: Int) =
+        this ?: expectedParameters.getOrNull(index)?.type?.unwrap() ?: expectedType.builtIns.nullableAnyType
+
+    // Extracting parameters and receiver type, taking into account the actual lambda definition and expected lambda type
+    val (parameters, receiver) = when {
+        argumentAsFunctionExpression != null -> {
+            // lambda has explicit functional type - use types from it if available
+            (parametersTypes?.mapIndexed { index, type ->
+                type.orExpected(index)
+            } ?: emptyList()) to argumentAsFunctionExpression.receiverType
+        }
+
+        (parametersTypes?.size ?: 0) == expectedParameters.size && receiverFromExpected -> {
+            // expected type has receiver, but arguments sizes are the same in actual and expected, so assuming missing (maybe unused) receiver in lambda
+            // TODO: in case of implicit parameters in lambda ("this" and "it") this case assumes "this", probably we should generate two possible overloads and choose among them later
+            (parametersTypes?.mapIndexed { index, type ->
+                type.orExpected(index)
+            } ?: expectedParameters.map { it.type.unwrap() }) to expectedReceiver
+        }
+
+        (parametersTypes?.size ?: 0) - expectedParameters.size == 1 && receiverFromExpected -> {
+            // one "missing" parameter in the expected parameters - first lambda parameter should be mapped to expected receiver
+            // TODO: same "this" or "it" case from above could be applicable here as well
+
+            (parametersTypes?.mapIndexed { index, type ->
+                type ?: run {
+                    expectedParameters.getOrNull(index)?.type?.unwrap()
+                } ?: expectedType.builtIns.nullableAnyType
+            } ?: expectedParameters.map { it.type.unwrap() }) to expectedReceiver?.unwrap()
+        }
+
+        else ->
+            (parametersTypes?.mapIndexed { index, type ->
+                type.orExpected(index)
+            } ?: expectedParameters.map { it.type.unwrap() }) to (if (receiverFromExpected) expectedReceiver else null)
+    }
+
     val returnType = argumentAsFunctionExpression?.returnType ?: expectedType.getReturnTypeFromFunctionType().unwrap()
 
     return ResolvedLambdaAtom(
         argument,
         expectedType.isSuspendFunctionType,
-        receiverType,
+        receiver,
         parameters,
         returnType,
-        typeVariableForLambdaReturnType = null,
+        typeVariableForLambdaReturnType = returnTypeVariable,
         expectedType = expectedType
     )
 }
 
-private fun extractLambdaParameters(expectedType: UnwrappedType, argument: LambdaKotlinCallArgument): List<UnwrappedType> {
-    val parametersTypes = argument.parametersTypes
-    val expectedParameters = expectedType.getValueParameterTypesFromFunctionType()
-    if (parametersTypes == null) {
-        return expectedParameters.map { it.type.unwrap() }
-    }
-
-    return parametersTypes.mapIndexed { index, type ->
-        type ?: expectedParameters.getOrNull(index)?.type?.unwrap() ?: expectedType.builtIns.nullableAnyType
-    }
-}
-
-fun LambdaWithTypeVariableAsExpectedTypeAtom.transformToResolvedLambda(csBuilder: ConstraintSystemBuilder): ResolvedLambdaAtom {
-    val fixedExpectedType = (csBuilder.buildCurrentSubstitutor() as NewTypeSubstitutor).safeSubstitute(expectedType)
-    val resolvedLambdaAtom = preprocessLambdaArgument(csBuilder, atom, fixedExpectedType, forceResolution = true) as ResolvedLambdaAtom
+fun LambdaWithTypeVariableAsExpectedTypeAtom.transformToResolvedLambda(
+    csBuilder: ConstraintSystemBuilder,
+    diagnosticsHolder: KotlinDiagnosticsHolder,
+    expectedType: UnwrappedType? = null,
+    returnTypeVariable: TypeVariableForLambdaReturnType? = null
+): ResolvedLambdaAtom {
+    val fixedExpectedType = (csBuilder.buildCurrentSubstitutor() as NewTypeSubstitutor)
+        .safeSubstitute(expectedType ?: this.expectedType)
+    val resolvedLambdaAtom = preprocessLambdaArgument(
+        csBuilder,
+        atom,
+        fixedExpectedType,
+        diagnosticsHolder,
+        forceResolution = true,
+        returnTypeVariable = returnTypeVariable
+    ) as ResolvedLambdaAtom
 
     setAnalyzed(resolvedLambdaAtom)
 
     return resolvedLambdaAtom
+}
+
+fun ResolvedLambdaAtom.transformToResolvedLambda(
+    csBuilder: ConstraintSystemBuilder,
+    diagnosticsHolder: KotlinDiagnosticsHolder,
+    expectedType: UnwrappedType,
+    returnTypeVariable: TypeVariableForLambdaReturnType? = null
+): ResolvedLambdaAtom {
+    return preprocessLambdaArgument(
+        csBuilder,
+        atom,
+        expectedType,
+        diagnosticsHolder,
+        forceResolution = true,
+        returnTypeVariable = returnTypeVariable
+    ).also {
+        this.setAnalyzedResults(null, listOf(it))
+    } as ResolvedLambdaAtom
 }
 
 private fun preprocessCallableReference(
@@ -162,7 +252,7 @@ private fun preprocessCallableReference(
 
     val lhsResult = argument.lhsResult
     if (lhsResult is LHSResult.Type) {
-        csBuilder.addConstraintFromLHS(lhsResult, expectedType)
+        csBuilder.addConstraintFromLHS(argument, lhsResult, expectedType)
     }
 
     val notCallableTypeConstructor =
@@ -181,18 +271,27 @@ private fun preprocessCallableReference(
     return result
 }
 
-private fun ConstraintSystemBuilder.addConstraintFromLHS(lhsResult: LHSResult.Type, expectedType: UnwrappedType) {
+private fun ConstraintSystemBuilder.addConstraintFromLHS(
+    argument: CallableReferenceKotlinCallArgument,
+    lhsResult: LHSResult.Type,
+    expectedType: UnwrappedType
+) {
     if (!ReflectionTypes.isNumberedTypeWithOneOrMoreNumber(expectedType)) return
 
     val lhsType = lhsResult.unboundDetailedReceiver.stableType
     val expectedTypeProjectionForLHS = expectedType.arguments.first()
     val expectedTypeForLHS = expectedTypeProjectionForLHS.type
-    val constraintPosition = LHSArgumentConstraintPosition(lhsResult.qualifier ?: lhsResult.unboundDetailedReceiver)
+    val constraintPosition = LHSArgumentConstraintPositionImpl(argument, lhsResult.qualifier ?: lhsResult.unboundDetailedReceiver)
+    val expectedTypeVariance = expectedTypeProjectionForLHS.projectionKind.convertVariance()
+    val effectiveVariance = AbstractTypeChecker.effectiveVariance(
+        expectedType.constructor.parameters.first().variance.convertVariance(),
+        expectedTypeVariance
+    ) ?: expectedTypeVariance
 
-    when (expectedTypeProjectionForLHS.projectionKind) {
-        Variance.INVARIANT -> addEqualityConstraint(lhsType, expectedTypeForLHS, constraintPosition)
-        Variance.IN_VARIANCE -> addSubtypeConstraint(expectedType, lhsType, constraintPosition)
-        Variance.OUT_VARIANCE -> addSubtypeConstraint(lhsType, expectedType, constraintPosition)
+    when (effectiveVariance) {
+        TypeVariance.INV -> addEqualityConstraint(lhsType, expectedTypeForLHS, constraintPosition)
+        TypeVariance.IN -> addSubtypeConstraint(expectedTypeForLHS, lhsType, constraintPosition)
+        TypeVariance.OUT -> addSubtypeConstraint(lhsType, expectedTypeForLHS, constraintPosition)
     }
 }
 

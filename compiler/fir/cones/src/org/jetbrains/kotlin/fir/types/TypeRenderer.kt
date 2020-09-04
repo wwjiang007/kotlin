@@ -5,7 +5,7 @@
 
 package org.jetbrains.kotlin.fir.types
 
-import org.jetbrains.kotlin.builtins.functions.FunctionClassDescriptor
+import org.jetbrains.kotlin.builtins.functions.FunctionClassKind
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.contract
 
@@ -13,9 +13,9 @@ fun ConeKotlinType.render(): String {
     val nullabilitySuffix = if (this !is ConeKotlinErrorType && this !is ConeClassErrorType) nullability.suffix else ""
     return when (this) {
         is ConeTypeVariableType -> "TypeVariable(${this.lookupTag.name})"
-        is ConeDefinitelyNotNullType -> "${original.render()}!"
-        is ConeClassErrorType -> "class error: $reason"
-        is ConeCapturedType -> "captured type: lowerType = ${lowerType?.render()}"
+        is ConeDefinitelyNotNullType -> "${original.render()}!!"
+        is ConeClassErrorType -> "ERROR CLASS: ${diagnostic.reason}"
+        is ConeCapturedType -> "CapturedType(${constructor.projection.render()})"
         is ConeClassLikeType -> {
             buildString {
                 append(lookupTag.classId.asString())
@@ -45,11 +45,12 @@ fun ConeKotlinType.render(): String {
                 postfix = ")"
             )
         }
-        is ConeStubType -> "stub type: $variable"
+        is ConeStubType -> "Stub: $variable"
+        is ConeIntegerLiteralType -> "ILT: $value"
     } + nullabilitySuffix
 }
 
-private fun ConeKotlinTypeProjection.render(): String {
+private fun ConeTypeProjection.render(): String {
     return when (this) {
         ConeStarProjection -> "*"
         is ConeKotlinTypeProjectionIn -> "in ${type.render()}"
@@ -58,10 +59,10 @@ private fun ConeKotlinTypeProjection.render(): String {
     }
 }
 
-fun ConeKotlinType.renderFunctionType(kind: FunctionClassDescriptor.Kind?, isExtension: Boolean): String {
+fun ConeKotlinType.renderFunctionType(kind: FunctionClassKind?, isExtension: Boolean): String {
     if (!kind.withPrettyRender()) return render()
     return buildString {
-        if (kind == FunctionClassDescriptor.Kind.SuspendFunction) {
+        if (kind == FunctionClassKind.SuspendFunction) {
             append("suspend ")
         }
         val (receiver, otherTypeArguments) = if (isExtension && typeArguments.first() != ConeStarProjection) {
@@ -81,10 +82,10 @@ fun ConeKotlinType.renderFunctionType(kind: FunctionClassDescriptor.Kind?, isExt
     }
 }
 
-@UseExperimental(ExperimentalContracts::class)
-fun FunctionClassDescriptor.Kind?.withPrettyRender(): Boolean {
+@OptIn(ExperimentalContracts::class)
+fun FunctionClassKind?.withPrettyRender(): Boolean {
     contract {
         returns(true) implies (this@withPrettyRender != null)
     }
-    return this != null && this != FunctionClassDescriptor.Kind.KSuspendFunction && this != FunctionClassDescriptor.Kind.KFunction
+    return this != null && this != FunctionClassKind.KSuspendFunction && this != FunctionClassKind.KFunction
 }

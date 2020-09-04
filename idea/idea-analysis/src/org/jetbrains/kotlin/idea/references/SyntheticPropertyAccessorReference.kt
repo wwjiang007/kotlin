@@ -1,24 +1,11 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.references
 
-import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiMethod
 import com.intellij.util.SmartList
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
@@ -33,14 +20,22 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.*
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.bindingContextUtil.getReferenceTargets
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
 import org.jetbrains.kotlin.types.expressions.OperatorConventions
 import org.jetbrains.kotlin.utils.addIfNotNull
 
-sealed class SyntheticPropertyAccessorReference(expression: KtNameReferenceExpression, private val getter: Boolean) :
-        KtSimpleReference<KtNameReferenceExpression>(expression) {
+class SyntheticPropertyAccessorReferenceDescriptorImpl(
+    expression: KtNameReferenceExpression,
+    getter: Boolean
+) : SyntheticPropertyAccessorReference(expression, getter), KtDescriptorsBasedReference {
+    override fun isReferenceTo(element: PsiElement): Boolean =
+        super<SyntheticPropertyAccessorReference>.isReferenceTo(element)
+
+    override fun additionalIsReferenceToChecker(element: PsiElement): Boolean = matchesTarget(element)
+
     override fun getTargetDescriptors(context: BindingContext): Collection<DeclarationDescriptor> {
-        val descriptors = super.getTargetDescriptors(context)
+        val descriptors = expression.getReferenceTargets(context)
         if (descriptors.none { it is SyntheticJavaPropertyDescriptor }) return emptyList()
 
         val result = SmartList<FunctionDescriptor>()
@@ -55,23 +50,6 @@ sealed class SyntheticPropertyAccessorReference(expression: KtNameReferenceExpre
         }
         return result
     }
-
-    override fun isReferenceTo(element: PsiElement): Boolean {
-        if (element !is PsiMethod || !isAccessorName(element.name)) return false
-        if (!getter && expression.readWriteAccess(true) == ReferenceAccess.READ) return false
-        return super.isReferenceTo(element)
-    }
-
-    private fun isAccessorName(name: String): Boolean {
-        if (getter) {
-            return name.startsWith("get") || name.startsWith("is")
-        }
-        return name.startsWith("set")
-    }
-
-    override fun getRangeInElement() = TextRange(0, expression.textLength)
-
-    override fun canRename() = true
 
     private fun renameByPropertyName(newName: String): PsiElement? {
         val nameIdentifier = KtPsiFactory(expression).createNameIdentifier(newName)
@@ -115,10 +93,10 @@ sealed class SyntheticPropertyAccessorReference(expression: KtNameReferenceExpre
             //TODO: it's not correct
             //TODO: setIsY -> setIsIsY bug
             SyntheticJavaPropertyDescriptor.propertyNameBySetMethodName(
-                    newNameAsName,
-                    withIsPrefix = expression.getReferencedNameAsName().asString().startsWith(
-                            "is"
-                    )
+                newNameAsName,
+                withIsPrefix = expression.getReferencedNameAsName().asString().startsWith(
+                    "is"
+                )
             )
         }
         // get/set becomes ordinary method
@@ -162,16 +140,16 @@ sealed class SyntheticPropertyAccessorReference(expression: KtNameReferenceExpre
                 } else {
                     val anchor = parent.parentsWithSelf.firstOrNull { it.parent == context }
                     val validator = NewDeclarationNameValidator(
-                            context,
-                            anchor,
-                            NewDeclarationNameValidator.Target.VARIABLES
+                        context,
+                        anchor,
+                        NewDeclarationNameValidator.Target.VARIABLES
                     )
                     val varName = KotlinNameSuggester.suggestNamesByExpressionAndType(
-                            unaryExpr,
-                            null,
-                            unaryExpr.analyze(),
-                            validator,
-                            "p"
+                        unaryExpr,
+                        null,
+                        unaryExpr.analyze(),
+                        validator,
+                        "p"
                     ).first()
                     val isPrefix = unaryExpr is KtPrefixExpression
                     val varInitializer = if (isPrefix) incDecValue else originalValue
@@ -194,7 +172,4 @@ sealed class SyntheticPropertyAccessorReference(expression: KtNameReferenceExpre
 
     override val resolvesByNames: Collection<Name>
         get() = listOf(element.getReferencedNameAsName())
-
-    class Getter(expression: KtNameReferenceExpression) : SyntheticPropertyAccessorReference(expression, true)
-    class Setter(expression: KtNameReferenceExpression) : SyntheticPropertyAccessorReference(expression, false)
 }

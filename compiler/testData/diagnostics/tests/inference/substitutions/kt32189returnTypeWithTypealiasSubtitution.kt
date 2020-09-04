@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 // !LANGUAGE: +NewInference
 // !DIAGNOSTICS: -UNUSED_VARIABLE -UNUSED_PARAMETER
 
@@ -19,4 +20,19 @@ fun buildB() {
     B.Builder().a1()
     B.Builder().a2()
     B.Builder().a3()
+}
+
+// additional example from #KT-34820
+
+class R
+class P
+
+typealias F = R.(P) -> Unit
+
+fun guess(): F? = TODO()
+fun consume(f: F) {}
+
+fun problem() {
+    val p = guess()
+    consume(p ?: {})
 }

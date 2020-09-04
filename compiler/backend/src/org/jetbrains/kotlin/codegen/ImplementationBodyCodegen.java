@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -62,13 +62,15 @@ import org.jetbrains.org.objectweb.asm.commons.Method;
 
 import java.util.*;
 
+import static org.jetbrains.kotlin.builtins.StandardNames.ENUM_VALUES;
+import static org.jetbrains.kotlin.builtins.StandardNames.ENUM_VALUE_OF;
 import static org.jetbrains.kotlin.codegen.AsmUtil.*;
 import static org.jetbrains.kotlin.codegen.CodegenUtilKt.isGenericToArray;
 import static org.jetbrains.kotlin.codegen.CodegenUtilKt.isNonGenericToArray;
 import static org.jetbrains.kotlin.codegen.JvmCodegenUtil.*;
 import static org.jetbrains.kotlin.codegen.binding.CodegenBinding.enumEntryNeedSubclass;
 import static org.jetbrains.kotlin.codegen.binding.CodegenBinding.getDelegatedLocalVariableMetadata;
-import static org.jetbrains.kotlin.codegen.inline.InlineCodegenUtilsKt.initDefaultSourceMappingIfNeeded;
+import static org.jetbrains.kotlin.load.java.DescriptorsJvmAbiUtil.*;
 import static org.jetbrains.kotlin.load.java.JvmAbi.*;
 import static org.jetbrains.kotlin.resolve.BindingContext.INDEXED_LVALUE_GET;
 import static org.jetbrains.kotlin.resolve.BindingContext.INDEXED_LVALUE_SET;
@@ -83,7 +85,7 @@ import static org.jetbrains.org.objectweb.asm.Opcodes.*;
 import static org.jetbrains.org.objectweb.asm.Type.getObjectType;
 
 public class ImplementationBodyCodegen extends ClassBodyCodegen {
-    private static final String ENUM_VALUES_FIELD_NAME = "$VALUES";
+    public static final String ENUM_VALUES_FIELD_NAME = "$VALUES";
     private Type superClassAsmType;
     @NotNull
     private SuperClassInfo superClassInfo;
@@ -228,11 +230,11 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
 
         v.visitSource(myClass.getContainingKtFile().getName(), null);
 
-        initDefaultSourceMappingIfNeeded(context, this, state);
+        initDefaultSourceMappingIfNeeded();
 
         writeEnclosingMethod();
 
-        AnnotationCodegen.forClass(v.getVisitor(), this, state).genAnnotations(descriptor, null);
+        AnnotationCodegen.forClass(v.getVisitor(), this, state).genAnnotations(descriptor, null, null);
 
         generateEnumEntries();
     }
@@ -772,10 +774,12 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
 
         if (isNonCompanionObject(descriptor)) {
             StackValue.Field field = StackValue.createSingletonViaInstance(descriptor, typeMapper, INSTANCE_FIELD);
-            v.newField(JvmDeclarationOriginKt.OtherOriginFromPure(myClass),
-                       ACC_PUBLIC | ACC_STATIC | ACC_FINAL,
-                       field.name, field.type.getDescriptor(), null, null);
-
+            FieldVisitor fv = v.newField(
+                    JvmDeclarationOriginKt.OtherOriginFromPure(myClass),
+                    ACC_PUBLIC | ACC_STATIC | ACC_FINAL,
+                    field.name, field.type.getDescriptor(), null, null
+            );
+            AnnotationCodegen.forField(fv, this, state).visitAnnotation(Type.getDescriptor(NotNull.class), false).visitEnd();
             return;
         }
 
@@ -813,14 +817,17 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
         }
         if (properVisibilityForCompanionObjectInstanceField &&
             JvmCodegenUtil.isCompanionObjectInInterfaceNotIntrinsic(companionObjectDescriptor) &&
-            Visibilities.isPrivate(companionObjectDescriptor.getVisibility())) {
+            DescriptorVisibilities.isPrivate(companionObjectDescriptor.getVisibility())) {
             fieldAccessFlags |= ACC_SYNTHETIC;
         }
         StackValue.Field field = StackValue.singleton(companionObjectDescriptor, typeMapper);
-        FieldVisitor fv = v.newField(JvmDeclarationOriginKt.OtherOrigin(companionObject == null ? myClass.getPsiOrParent() : companionObject),
-                                     fieldAccessFlags, field.name, field.type.getDescriptor(), null, null);
+        FieldVisitor fv = v.newField(
+                JvmDeclarationOriginKt.OtherOrigin(companionObject == null ? myClass.getPsiOrParent() : companionObject),
+                fieldAccessFlags, field.name, field.type.getDescriptor(), null, null
+        );
+        AnnotationCodegen.forField(fv, this, state).visitAnnotation(Type.getDescriptor(NotNull.class), false).visitEnd();
         if (fieldShouldBeDeprecated) {
-            AnnotationCodegen.forField(fv, this, state).visitAnnotation("Ljava/lang/Deprecated;", true).visitEnd();
+            AnnotationCodegen.forField(fv, this, state).visitAnnotation(Type.getDescriptor(Deprecated.class), true).visitEnd();
         }
     }
 
@@ -905,7 +912,7 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
                                          type.getDescriptor(), typeMapper.mapFieldSignature(property.getType(), property),
                                          info.defaultValue);
 
-            AnnotationCodegen.forField(fv, this, state).genAnnotations(property, type);
+            AnnotationCodegen.forField(fv, this, state).genAnnotations(property, type, null);
 
             //This field are always static and final so if it has constant initializer don't do anything in clinit,
             //field would be initialized via default value in v.newField(...) - see JVM SPEC Ch.4
@@ -1087,7 +1094,7 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
             int isDeprecated = KotlinBuiltIns.isDeprecated(descriptor) ? ACC_DEPRECATED : 0;
             FieldVisitor fv = v.newField(JvmDeclarationOriginKt.OtherOrigin(enumEntry, descriptor), ACC_PUBLIC | ACC_ENUM | ACC_STATIC | ACC_FINAL | isDeprecated,
                                          descriptor.getName().asString(), classAsmType.getDescriptor(), null, null);
-            AnnotationCodegen.forField(fv, this, state).genAnnotations(descriptor, null);
+            AnnotationCodegen.forField(fv, this, state).genAnnotations(descriptor, null, null);
         }
 
         initializeEnumConstants(enumEntries);
@@ -1176,7 +1183,7 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
         if (!fieldInfo.generateField) return;
 
         v.newField(JvmDeclarationOrigin.NO_ORIGIN, ACC_PRIVATE | ACC_FINAL | ACC_SYNTHETIC,
-                   fieldInfo.name, fieldInfo.type.getDescriptor(), /*TODO*/null, null);
+                   fieldInfo.name, fieldInfo.type.getDescriptor(), fieldInfo.genericSignature, null);
     }
 
     private void generateDelegates(

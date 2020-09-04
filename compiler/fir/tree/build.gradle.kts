@@ -1,20 +1,14 @@
 import org.jetbrains.kotlin.ideaExt.idea
 
-/*
- * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
- * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
- */
-
 plugins {
     kotlin("jvm")
     id("jps-compatible")
 }
 
 dependencies {
-    compile(project(":compiler:frontend.common"))
-    compile(project(":core:descriptors"))
-    compile(project(":compiler:fir:cones"))
-    compile(project(":compiler:ir.tree"))
+    api(project(":compiler:frontend.common"))
+    api(project(":compiler:fir:cones"))
+
     // Necessary only to store bound PsiElement inside FirElement
     compileOnly(intellijCoreDep()) { includeJars("intellij-core") }
 }

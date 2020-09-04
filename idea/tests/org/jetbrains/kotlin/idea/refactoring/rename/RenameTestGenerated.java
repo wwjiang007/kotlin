@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -25,7 +25,7 @@ public class RenameTestGenerated extends AbstractRenameTest {
     }
 
     public void testAllFilesPresentInRename() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentInSingleGeneratedClass(this.getClass(), new File("idea/testData/refactoring/rename"), Pattern.compile("^(.+)\\.test$"));
+        KotlinTestUtils.assertAllTestsPresentInSingleGeneratedClassWithExcluded(this.getClass(), new File("idea/testData/refactoring/rename"), Pattern.compile("^(.+)\\.test$"), null);
     }
 
     @TestMetadata("ambiguousClassFunImportRenameClass/ambiguousClassFunImportRenameClass.test")
@@ -483,6 +483,11 @@ public class RenameTestGenerated extends AbstractRenameTest {
         runTest("idea/testData/refactoring/rename/propertyAccidentalOverrideSuperclass/propertyAccidentalOverrideSuperclass.test");
     }
 
+    @TestMetadata("propertyImportAliasByRef/propertyImportAliasByRef.test")
+    public void testPropertyImportAliasByRef_PropertyImportAliasByRef() throws Exception {
+        runTest("idea/testData/refactoring/rename/propertyImportAliasByRef/propertyImportAliasByRef.test");
+    }
+
     @TestMetadata("propertyParameterAccidentalOverrideSubclass/propertyParameterAccidentalOverrideSubclass.test")
     public void testPropertyParameterAccidentalOverrideSubclass_PropertyParameterAccidentalOverrideSubclass() throws Exception {
         runTest("idea/testData/refactoring/rename/propertyParameterAccidentalOverrideSubclass/propertyParameterAccidentalOverrideSubclass.test");
@@ -698,6 +703,11 @@ public class RenameTestGenerated extends AbstractRenameTest {
         runTest("idea/testData/refactoring/rename/renameKotlinBaseMethod/kotlinBaseFunction.test");
     }
 
+    @TestMetadata("renameKotlinBaseMethodWithBinaryBase/kotlinBaseFunction.test")
+    public void testRenameKotlinBaseMethodWithBinaryBase_KotlinBaseFunction() throws Exception {
+        runTest("idea/testData/refactoring/rename/renameKotlinBaseMethodWithBinaryBase/kotlinBaseFunction.test");
+    }
+
     @TestMetadata("renameKotlinClass/javaWrapperForKotlinClass.test")
     public void testRenameKotlinClass_JavaWrapperForKotlinClass() throws Exception {
         runTest("idea/testData/refactoring/rename/renameKotlinClass/javaWrapperForKotlinClass.test");
@@ -731,6 +741,11 @@ public class RenameTestGenerated extends AbstractRenameTest {
     @TestMetadata("renameKotlinClassWithFile/kotlinClass.test")
     public void testRenameKotlinClassWithFile_KotlinClass() throws Exception {
         runTest("idea/testData/refactoring/rename/renameKotlinClassWithFile/kotlinClass.test");
+    }
+
+    @TestMetadata("renameKotlinConstructorParameterWithByNameUsages/renameKotlinConstructorParameterWithByNameUsages.test")
+    public void testRenameKotlinConstructorParameterWithByNameUsages_RenameKotlinConstructorParameterWithByNameUsages() throws Exception {
+        runTest("idea/testData/refactoring/rename/renameKotlinConstructorParameterWithByNameUsages/renameKotlinConstructorParameterWithByNameUsages.test");
     }
 
     @TestMetadata("renameKotlinDataClassParameter/renameKotlinDataClassParameter.test")
@@ -803,6 +818,21 @@ public class RenameTestGenerated extends AbstractRenameTest {
         runTest("idea/testData/refactoring/rename/renameKotlinFunctionInEnum/renameKotlinFunctionInEnumFromSubclass.test");
     }
 
+    @TestMetadata("renameKotlinFunctionInGenericClass/renameKotlinFunctionInGenericClass.test")
+    public void testRenameKotlinFunctionInGenericClass_RenameKotlinFunctionInGenericClass() throws Exception {
+        runTest("idea/testData/refactoring/rename/renameKotlinFunctionInGenericClass/renameKotlinFunctionInGenericClass.test");
+    }
+
+    @TestMetadata("renameKotlinFunctionInGenericClass/renameKotlinFunctionInGenericClassFromSubclass.test")
+    public void testRenameKotlinFunctionInGenericClass_RenameKotlinFunctionInGenericClassFromSubclass() throws Exception {
+        runTest("idea/testData/refactoring/rename/renameKotlinFunctionInGenericClass/renameKotlinFunctionInGenericClassFromSubclass.test");
+    }
+
+    @TestMetadata("renameKotlinFunctionParameterWithByNameUsages/renameKotlinFunctionParameterWithByNameUsages.test")
+    public void testRenameKotlinFunctionParameterWithByNameUsages_RenameKotlinFunctionParameterWithByNameUsages() throws Exception {
+        runTest("idea/testData/refactoring/rename/renameKotlinFunctionParameterWithByNameUsages/renameKotlinFunctionParameterWithByNameUsages.test");
+    }
+
     @TestMetadata("renameKotlinFunWithJvmName/renameKotlinFunWithJvmName.test")
     public void testRenameKotlinFunWithJvmName_RenameKotlinFunWithJvmName() throws Exception {
         runTest("idea/testData/refactoring/rename/renameKotlinFunWithJvmName/renameKotlinFunWithJvmName.test");
@@ -856,6 +886,11 @@ public class RenameTestGenerated extends AbstractRenameTest {
     @TestMetadata("renameKotlinPackageFunctionFromJavaNewFacade/renameKotlinPackageFunctionFromJava.test")
     public void testRenameKotlinPackageFunctionFromJavaNewFacade_RenameKotlinPackageFunctionFromJava() throws Exception {
         runTest("idea/testData/refactoring/rename/renameKotlinPackageFunctionFromJavaNewFacade/renameKotlinPackageFunctionFromJava.test");
+    }
+
+    @TestMetadata("renameKotlinPackageWithLongType/renameKotlinPackageWithLongType.test")
+    public void testRenameKotlinPackageWithLongType_RenameKotlinPackageWithLongType() throws Exception {
+        runTest("idea/testData/refactoring/rename/renameKotlinPackageWithLongType/renameKotlinPackageWithLongType.test");
     }
 
     @TestMetadata("renameKotlinParameterWithGetterJvmName/renameKotlinParameterWithGetterJvmName.test")
@@ -1121,6 +1156,11 @@ public class RenameTestGenerated extends AbstractRenameTest {
     @TestMetadata("renamePropertyInEnumCompanionWithEntryConflict/renameKotlinPropertyInEnumCompanionWithEntryConflict.test")
     public void testRenamePropertyInEnumCompanionWithEntryConflict_RenameKotlinPropertyInEnumCompanionWithEntryConflict() throws Exception {
         runTest("idea/testData/refactoring/rename/renamePropertyInEnumCompanionWithEntryConflict/renameKotlinPropertyInEnumCompanionWithEntryConflict.test");
+    }
+
+    @TestMetadata("renameReferencedResourceFile/renameReferencedResourceFile.test")
+    public void testRenameReferencedResourceFile_RenameReferencedResourceFile() throws Exception {
+        runTest("idea/testData/refactoring/rename/renameReferencedResourceFile/renameReferencedResourceFile.test");
     }
 
     @TestMetadata("renameSet/set.test")

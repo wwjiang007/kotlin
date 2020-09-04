@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.intentions
@@ -20,25 +9,30 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
 import org.jetbrains.kotlin.descriptors.annotations.KotlinTarget
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.containingClass
 import org.jetbrains.kotlin.psi.psiUtil.isPropertyParameter
 import org.jetbrains.kotlin.resolve.AnnotationChecker
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 
-
-class MovePropertyToClassBodyIntention : SelfTargetingIntention<KtParameter>(KtParameter::class.java, "Move to class body") {
+class MovePropertyToClassBodyIntention : SelfTargetingIntention<KtParameter>(
+    KtParameter::class.java,
+    KotlinBundle.lazyMessage("move.to.class.body")
+) {
     override fun isApplicableTo(element: KtParameter, caretOffset: Int): Boolean {
-        return element.isPropertyParameter() && (element.ownerFunction as KtPrimaryConstructor).isNotContainedInAnnotation()
+        if (!element.isPropertyParameter()) return false
+        val containingClass = element.containingClass() ?: return false
+        return !containingClass.isAnnotation() && !containingClass.isData()
     }
 
     override fun applyTo(element: KtParameter, editor: Editor?) {
         val parentClass = PsiTreeUtil.getParentOfType(element, KtClass::class.java) ?: return
 
-        val propertyDeclaration = KtPsiFactory(element)
-                .createProperty("${element.valOrVarKeyword?.text} ${element.name} = ${element.name}")
+        val propertyDeclaration = KtPsiFactory(element).createProperty("${element.valOrVarKeyword?.text} ${element.name} = ${element.name}")
 
         val firstProperty = parentClass.getProperties().firstOrNull()
         parentClass.addDeclarationBefore(propertyDeclaration, firstProperty).apply {
@@ -48,8 +42,7 @@ class MovePropertyToClassBodyIntention : SelfTargetingIntention<KtParameter>(KtP
             modifierList?.annotationEntries?.forEach {
                 if (!it.isAppliedToProperty()) {
                     it.delete()
-                }
-                else if (it.useSiteTarget?.getAnnotationUseSiteTarget() == AnnotationUseSiteTarget.PROPERTY) {
+                } else if (it.useSiteTarget?.getAnnotationUseSiteTarget() == AnnotationUseSiteTarget.PROPERTY) {
                     it.useSiteTarget?.removeWithColon()
                 }
             }
@@ -57,27 +50,27 @@ class MovePropertyToClassBodyIntention : SelfTargetingIntention<KtParameter>(KtP
 
         element.valOrVarKeyword?.delete()
         val parameterAnnotationsText = element.modifierList?.annotationEntries
-                ?.filter { it.isAppliedToConstructorParameter() }
-                ?.takeIf { it.isNotEmpty() }
-                ?.joinToString(separator = " ") { it.textWithoutUseSite() }
+            ?.filter { it.isAppliedToConstructorParameter() }
+            ?.takeIf { it.isNotEmpty() }
+            ?.joinToString(separator = " ") { it.textWithoutUseSite() }
 
         val hasVararg = element.hasModifier(KtTokens.VARARG_KEYWORD)
         if (parameterAnnotationsText != null) {
             element.modifierList?.replace(KtPsiFactory(element).createModifierList(parameterAnnotationsText))
-        }
-        else {
+        } else {
             element.modifierList?.delete()
         }
+
         if (hasVararg) element.addModifier(KtTokens.VARARG_KEYWORD)
     }
 
     private fun KtAnnotationEntry.isAppliedToProperty(): Boolean {
         useSiteTarget?.getAnnotationUseSiteTarget()?.let {
             return it == AnnotationUseSiteTarget.FIELD
-                   || it == AnnotationUseSiteTarget.PROPERTY
-                   || it == AnnotationUseSiteTarget.PROPERTY_GETTER
-                   || it == AnnotationUseSiteTarget.PROPERTY_SETTER
-                   || it == AnnotationUseSiteTarget.SETTER_PARAMETER
+                    || it == AnnotationUseSiteTarget.PROPERTY
+                    || it == AnnotationUseSiteTarget.PROPERTY_GETTER
+                    || it == AnnotationUseSiteTarget.PROPERTY_SETTER
+                    || it == AnnotationUseSiteTarget.SETTER_PARAMETER
         }
 
         return !isApplicableToConstructorParameter()
@@ -104,6 +97,4 @@ class MovePropertyToClassBodyIntention : SelfTargetingIntention<KtParameter>(KtP
         nextSibling?.delete() // ':' symbol after use site
         delete()
     }
-
-    private fun KtPrimaryConstructor.isNotContainedInAnnotation() = !getContainingClassOrObject().isAnnotation()
 }

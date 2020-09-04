@@ -16,14 +16,18 @@ import com.intellij.psi.impl.compiled.ClsTypeElementImpl
 import com.intellij.psi.impl.compiled.SignatureParsing
 import com.intellij.psi.impl.compiled.StubBuildingVisitor
 import com.intellij.psi.impl.light.*
+import com.intellij.psi.util.TypeConversionUtil
 import com.intellij.util.BitUtil.isSet
+import com.intellij.util.IncorrectOperationException
 import com.intellij.util.containers.ContainerUtil
 import org.jetbrains.kotlin.asJava.LightClassGenerationSupport
 import org.jetbrains.kotlin.asJava.UltraLightClassModifierExtension
 import org.jetbrains.kotlin.asJava.builder.LightMemberOriginForDeclaration
 import org.jetbrains.kotlin.asJava.elements.KotlinLightTypeParameterListBuilder
 import org.jetbrains.kotlin.asJava.elements.KtLightMethod
+import org.jetbrains.kotlin.asJava.elements.psiType
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMap
 import org.jetbrains.kotlin.codegen.AsmUtil
 import org.jetbrains.kotlin.codegen.JvmCodegenUtil
@@ -32,8 +36,8 @@ import org.jetbrains.kotlin.codegen.signature.BothSignatureWriter
 import org.jetbrains.kotlin.codegen.signature.JvmSignatureWriter
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.load.kotlin.TypeMappingMode
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.load.kotlin.TypeMappingMode
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.psi.*
@@ -41,7 +45,7 @@ import org.jetbrains.kotlin.resolve.DescriptorToSourceUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.annotations.JVM_STATIC_ANNOTATION_FQ_NAME
 import org.jetbrains.kotlin.resolve.annotations.argumentValue
-import org.jetbrains.kotlin.resolve.constants.EnumValue
+import org.jetbrains.kotlin.resolve.constants.*
 import org.jetbrains.kotlin.resolve.descriptorUtil.classId
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOriginKind
@@ -246,7 +250,12 @@ private fun KtUltraLightClass.lightMethod(
     val name = if (descriptor is ConstructorDescriptor) name else support.typeMapper.mapFunctionName(descriptor, OwnerKind.IMPLEMENTATION)
 
     val accessFlags: Int by lazyPub {
-        val asmFlags = AsmUtil.getMethodAsmFlags(descriptor, OwnerKind.IMPLEMENTATION, support.deprecationResolver)
+        val asmFlags = AsmUtil.getMethodAsmFlags(
+            descriptor,
+            OwnerKind.IMPLEMENTATION,
+            support.deprecationResolver,
+            support.typeMapper.jvmDefaultMode,
+        )
         packMethodFlags(asmFlags, JvmCodegenUtil.isJvmInterface(kotlinOrigin.resolve() as? ClassDescriptor))
     }
 
@@ -303,11 +312,41 @@ private fun packMethodFlags(access: Int, isInterface: Boolean): Int {
 }
 
 internal fun KtModifierListOwner.isHiddenByDeprecation(support: KtUltraLightSupport): Boolean {
-    val jetModifierList = this.modifierList ?: return false
-    if (jetModifierList.annotationEntries.isEmpty()) return false
+    if (annotationEntries.isEmpty()) return false
+    val annotations = annotationEntries.filter { annotation ->
+        annotation.looksLikeDeprecated()
+    }
+    if (annotations.isNotEmpty()) { // some candidates found
+        val deprecated = support.findAnnotation(this, StandardNames.FqNames.deprecated)?.second
+        return (deprecated?.argumentValue("level") as? EnumValue)?.enumEntryName?.asString() == "HIDDEN"
+    } else {
+        return false
+    }
+}
 
-    val deprecated = support.findAnnotation(this, KotlinBuiltIns.FQ_NAMES.deprecated)?.second
-    return (deprecated?.argumentValue("level") as? EnumValue)?.enumEntryName?.asString() == "HIDDEN"
+fun KtAnnotationEntry.looksLikeDeprecated(): Boolean {
+    val arguments = valueArguments.filterIsInstance<KtValueArgument>().filterIndexed { index, valueArgument ->
+        index == 2 || valueArgument.looksLikeLevelArgument() // for named/not named arguments
+    }
+    for (argument in arguments) {
+        val hiddenByDotQualifiedCandidates = argument.children.filterIsInstance<KtDotQualifiedExpression>().filter {
+            val lastChild = it.children.last()
+            if (lastChild is KtNameReferenceExpression)
+                lastChild.getReferencedName() == "HIDDEN"
+            else
+                false
+        }
+        val hiddenByNameReferenceExpressionCandidates = argument.children.filterIsInstance<KtNameReferenceExpression>().filter {
+            it.getReferencedName() == "HIDDEN"
+        }
+        if (hiddenByDotQualifiedCandidates.isNotEmpty() || hiddenByNameReferenceExpressionCandidates.isNotEmpty())
+            return true
+    }
+    return false
+}
+
+fun KtValueArgument.looksLikeLevelArgument(): Boolean {
+    return children.filterIsInstance<KtValueArgumentName>().any { it.asName.asString() == "level" }
 }
 
 internal fun KtAnnotated.isJvmStatic(support: KtUltraLightSupport): Boolean =
@@ -320,25 +359,23 @@ internal fun KtDeclaration.simpleVisibility(): String = when {
 }
 
 internal fun KtModifierListOwner.isDeprecated(support: KtUltraLightSupport? = null): Boolean {
-    val jetModifierList = this.modifierList ?: return false
-    if (jetModifierList.annotationEntries.isEmpty()) return false
+    val modifierList = this.modifierList ?: return false
+    if (modifierList.annotationEntries.isEmpty()) return false
 
-    val deprecatedFqName = KotlinBuiltIns.FQ_NAMES.deprecated
+    val deprecatedFqName = StandardNames.FqNames.deprecated
     val deprecatedName = deprecatedFqName.shortName().asString()
 
-    for (annotationEntry in jetModifierList.annotationEntries) {
-        val typeReference = annotationEntry.typeReference ?: continue
-
-        val typeElement = typeReference.typeElement as? KtUserType ?: continue
-        // If it's not a user type, it's definitely not a ref to deprecated
+    for (annotationEntry in modifierList.annotationEntries) {
+        // If it's not a user type, it's definitely not a reference to deprecated
+        val typeElement = annotationEntry.typeReference?.typeElement as? KtUserType ?: continue
 
         val fqName = toQualifiedName(typeElement) ?: continue
 
-        if (deprecatedFqName == fqName) return true
-        if (deprecatedName == fqName.asString()) return true
+        if (fqName == deprecatedFqName) return true
+        if (fqName.asString() == deprecatedName) return true
     }
 
-    return support?.findAnnotation(this, KotlinBuiltIns.FQ_NAMES.deprecated) !== null
+    return support?.findAnnotation(this, StandardNames.FqNames.deprecated) !== null
 }
 
 private fun toQualifiedName(userType: KtUserType): FqName? {
@@ -354,6 +391,53 @@ private fun toQualifiedName(userType: KtUserType): FqName? {
 
     return FqName.fromSegments(ContainerUtil.reverse(reversedNames))
 }
+
+internal fun ConstantValue<*>.createPsiLiteral(parent: PsiElement): PsiExpression? {
+    val asString = asStringForPsiLiteral(parent)
+    val instance = PsiElementFactory.getInstance(parent.project)
+    return try {
+        instance.createExpressionFromText(asString, parent)
+    } catch (_: IncorrectOperationException) {
+        null
+    }
+}
+
+private fun escapeString(str: String): String = buildString {
+    str.forEach { char ->
+        val escaped = when (char) {
+            '\n' -> "\\n"
+            '\r' -> "\\r"
+            '\t' -> "\\t"
+            '\"' -> "\\\""
+            '\\' -> "\\\\"
+            else -> "$char"
+        }
+        append(escaped)
+    }
+}
+
+private fun ConstantValue<*>.asStringForPsiLiteral(parent: PsiElement): String =
+    when (this) {
+        is NullValue -> "null"
+        is StringValue -> "\"${escapeString(value)}\""
+        is KClassValue -> {
+            val value = (value as KClassValue.Value.NormalClass).value
+            val arrayPart = "[]".repeat(value.arrayNestedness)
+            val fqName = value.classId.asSingleFqName()
+            val canonicalText = psiType(
+                fqName.asString(), parent, boxPrimitiveType = value.arrayNestedness > 0
+            ).let(TypeConversionUtil::erasure).getCanonicalText(false)
+
+            "$canonicalText$arrayPart.class"
+        }
+        is EnumValue -> "${enumClassId.asSingleFqName().asString()}.$enumEntryName"
+        else -> when (value) {
+            is Long -> "${value}L"
+            is Float -> "${value}f"
+            else -> value.toString()
+        }
+    }
+
 
 /***
  * @see org.jetbrains.kotlin.codegen.ImplementationBodyCodegen
@@ -387,8 +471,11 @@ inline fun <T> runReadAction(crossinline runnable: () -> T): T {
     return ApplicationManager.getApplication().runReadAction(Computable { runnable() })
 }
 
+@Suppress("NOTHING_TO_INLINE")
 inline fun KtClassOrObject.safeIsLocal(): Boolean = runReadAction { this.isLocal }
 
+@Suppress("NOTHING_TO_INLINE")
 inline fun KtFile.safeIsScript() = runReadAction { this.isScript() }
 
+@Suppress("NOTHING_TO_INLINE")
 inline fun KtFile.safeScript() = runReadAction { this.script }

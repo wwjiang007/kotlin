@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.quickfix
@@ -25,9 +14,10 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.refactoring.RefactoringFactory
 import com.intellij.refactoring.rename.RenameHandlerRegistry
+import org.jetbrains.kotlin.idea.KotlinBundle
 
 open class RenameIdentifierFix : LocalQuickFix {
-    override fun getName() = "Rename"
+    override fun getName() = KotlinBundle.message("rename.identifier.fix.text")
     override fun getFamilyName() = name
 
     override fun startInWriteAction(): Boolean = false
@@ -44,8 +34,7 @@ open class RenameIdentifierFix : LocalQuickFix {
         val editor = editorManager.selectedTextEditor
         if (editor != null) {
             renameHandler?.invoke(project, editor, file, dataContext)
-        }
-        else {
+        } else {
             val elementToRename = getElementToRename(element) ?: return
             renameHandler?.invoke(project, arrayOf(elementToRename), dataContext)
         }

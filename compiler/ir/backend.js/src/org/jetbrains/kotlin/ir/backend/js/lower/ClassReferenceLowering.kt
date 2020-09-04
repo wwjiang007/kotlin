@@ -1,27 +1,29 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.ir.backend.js.lower
 
-import org.jetbrains.kotlin.backend.common.FileLoweringPass
+import org.jetbrains.kotlin.backend.common.BodyLoweringPass
+import org.jetbrains.kotlin.backend.common.IrElementTransformerVoidWithContext
+import org.jetbrains.kotlin.backend.common.ir.Symbols
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
 import org.jetbrains.kotlin.ir.backend.js.ir.JsIrBuilder
-import org.jetbrains.kotlin.ir.declarations.IrFile
-import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
-import org.jetbrains.kotlin.ir.expressions.IrCall
-import org.jetbrains.kotlin.ir.expressions.IrClassReference
-import org.jetbrains.kotlin.ir.expressions.IrExpression
-import org.jetbrains.kotlin.ir.expressions.IrGetClass
+import org.jetbrains.kotlin.ir.backend.js.utils.toJsArrayLiteral
+import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.symbols.IrClassifierSymbol
+import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
+import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.isFunction
 import org.jetbrains.kotlin.ir.util.isThrowable
-import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.types.*
 
-class ClassReferenceLowering(val context: JsIrBackendContext) : FileLoweringPass {
+class ClassReferenceLowering(val context: JsIrBackendContext) : BodyLoweringPass {
     private val intrinsics = context.intrinsics
 
     private val primitiveClassesObject = context.primitiveClassesObject
@@ -108,23 +110,127 @@ class ClassReferenceLowering(val context: JsIrBackendContext) : FileLoweringPass
         return null
     }
 
-    private fun callGetKClass(returnType: IrType, typeArgument: IrType): IrCall {
+    private fun callGetKClass(
+        returnType: IrType = intrinsics.jsGetKClass.owner.returnType,
+        typeArgument: IrType
+    ): IrCall {
         val primitiveKClass =
             getFinalPrimitiveKClass(returnType, typeArgument) ?: getOpenPrimitiveKClass(returnType, typeArgument)
 
         if (primitiveKClass != null)
             return primitiveKClass
 
-        return JsIrBuilder.buildCall(intrinsics.jsGetKClass, returnType, listOf(typeArgument)).apply {
-            putValueArgument(0, callJsClass(typeArgument))
-        }
+        return JsIrBuilder.buildCall(intrinsics.jsGetKClass, returnType, listOf(typeArgument))
+            .apply {
+                putValueArgument(0, callJsClass(typeArgument))
+            }
     }
 
     private fun callJsClass(type: IrType) =
         JsIrBuilder.buildCall(intrinsics.jsClass, typeArguments = listOf(type))
 
-    override fun lower(irFile: IrFile) {
-        irFile.transformChildrenVoid(object : IrElementTransformerVoid() {
+    private fun buildCall(name: IrSimpleFunctionSymbol, vararg args: IrExpression): IrExpression =
+        JsIrBuilder.buildCall(name).apply {
+            args.forEachIndexed { index, irExpression ->
+                putValueArgument(index, irExpression)
+            }
+        }
+
+    private fun createKType(type: IrType, visitedTypeParams: MutableSet<IrTypeParameter>): IrExpression {
+
+        if (type is IrSimpleType)
+            return createSimpleKType(type, visitedTypeParams)
+        if (type is IrDynamicType)
+            return createDynamicType()
+        error("Unexpected type $type")
+    }
+
+    private fun createDynamicType(): IrExpression {
+        return buildCall(context.intrinsics.createDynamicKType!!)
+    }
+
+    private fun createSimpleKType(type: IrSimpleType, visitedTypeParams: MutableSet<IrTypeParameter>): IrExpression {
+        val classifier: IrClassifierSymbol = type.classifier
+
+        // TODO: Check why do we have un-substituted reified parameters
+        // if (classifier is IrTypeParameterSymbol && classifier.owner.isReified) {
+        //     error("Fail")
+        // }
+
+        val kClassifier = createKClassifier(classifier, visitedTypeParams)
+        // TODO: Use static array types
+        val arguments = type.arguments.map { createKTypeProjection(it, visitedTypeParams) }.toJsArrayLiteral(
+            context,
+            context.dynamicType,
+            context.dynamicType
+        )
+        val isMarkedNullable = JsIrBuilder.buildBoolean(context.irBuiltIns.booleanType, type.isMarkedNullable())
+        return buildCall(
+            context.intrinsics.createKType!!,
+            kClassifier,
+            arguments,
+            isMarkedNullable
+        )
+    }
+
+    private fun createKTypeProjection(tp: IrTypeArgument, visitedTypeParams: MutableSet<IrTypeParameter>): IrExpression {
+        if (tp !is IrTypeProjection) {
+            return buildCall(context.intrinsics.getStarKTypeProjection!!)
+        }
+
+        val factoryName = when (tp.variance) {
+            Variance.INVARIANT -> context.intrinsics.createInvariantKTypeProjection!!
+            Variance.IN_VARIANCE -> context.intrinsics.createContravariantKTypeProjection!!
+            Variance.OUT_VARIANCE -> context.intrinsics.createCovariantKTypeProjection!!
+        }
+
+        val kType = createKType(tp.type, visitedTypeParams)
+        return buildCall(factoryName, kType)
+
+    }
+
+    private fun createKClassifier(classifier: IrClassifierSymbol, visitedTypeParams: MutableSet<IrTypeParameter>): IrExpression =
+        when (classifier) {
+            is IrTypeParameterSymbol -> createKTypeParameter(classifier.owner, visitedTypeParams)
+            else -> callGetKClass(typeArgument = classifier.defaultType)
+        }
+
+    private fun createKTypeParameter(typeParameter: IrTypeParameter, visitedTypeParams: MutableSet<IrTypeParameter>): IrExpression {
+        // See KT-40173
+        if (typeParameter in visitedTypeParams) TODO("Non-reified type parameters with recursive bounds are not supported yet")
+
+        visitedTypeParams.add(typeParameter)
+
+        val name = JsIrBuilder.buildString(context.irBuiltIns.stringType, typeParameter.name.asString())
+        val upperBounds = typeParameter.superTypes.map { createKType(it, visitedTypeParams) }.toJsArrayLiteral(
+            context,
+            context.dynamicType,
+            context.dynamicType
+        )
+
+        val variance = when (typeParameter.variance) {
+            Variance.INVARIANT -> JsIrBuilder.buildString(context.irBuiltIns.stringType, "invariant")
+            Variance.IN_VARIANCE -> JsIrBuilder.buildString(context.irBuiltIns.stringType, "in")
+            Variance.OUT_VARIANCE -> JsIrBuilder.buildString(context.irBuiltIns.stringType, "out")
+        }
+
+        // TODO: Check why do we have non-inlined reified parameters
+        // if (typeParameter.isReified) {
+        //     error("Reified parameter")
+        // }
+
+        return buildCall(
+            context.intrinsics.createKTypeParameter!!,
+            name,
+            upperBounds,
+            variance
+        ).also {
+            visitedTypeParams.remove(typeParameter)
+        }
+    }
+
+    override fun lower(irBody: IrBody, container: IrDeclaration) {
+        irBody.transformChildrenVoid(object : IrElementTransformerVoidWithContext() {
             override fun visitGetClass(expression: IrGetClass) =
                 callGetKClassFromExpression(
                     returnType = expression.type,
@@ -137,6 +243,13 @@ class ClassReferenceLowering(val context: JsIrBackendContext) : FileLoweringPass
                     returnType = expression.type,
                     typeArgument = expression.classType.makeNotNull()
                 )
+
+            override fun visitCall(expression: IrCall): IrExpression =
+                if (Symbols.isTypeOfIntrinsic(expression.symbol)) {
+                    createKType(expression.getTypeArgument(0)!!, hashSetOf())
+                } else {
+                    super.visitCall(expression)
+                }
         })
     }
 }

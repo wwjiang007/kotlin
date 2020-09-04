@@ -29,7 +29,6 @@ import org.jetbrains.kotlin.ir.types.classifierOrFail
 import org.jetbrains.kotlin.ir.types.classifierOrNull
 import org.jetbrains.kotlin.ir.types.impl.originalKotlinType
 import org.jetbrains.kotlin.ir.types.makeNotNull
-import org.jetbrains.kotlin.ir.util.referenceFunction
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
@@ -40,14 +39,13 @@ import org.jetbrains.kotlin.psi2ir.findSingleFunction
 import org.jetbrains.kotlin.psi2ir.intermediate.safeCallOnDispatchReceiver
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.NewCommonSuperTypeCalculator
+import org.jetbrains.kotlin.resolve.calls.commonSuperType
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.checkers.PrimitiveNumericComparisonInfo
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.checker.intersectTypes
-import org.jetbrains.kotlin.types.typeUtil.isPrimitiveNumberType
-import org.jetbrains.kotlin.types.typeUtil.makeNotNullable
-import org.jetbrains.kotlin.types.typeUtil.makeNullable
+import org.jetbrains.kotlin.types.typeUtil.*
 
 
 class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : StatementGeneratorExtension(statementGenerator) {
@@ -62,9 +60,8 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
 
     fun generatePrefixExpression(expression: KtPrefixExpression): IrExpression {
         val ktOperator = expression.operationReference.getReferencedNameElementType()
-        val irOperator = getPrefixOperator(ktOperator)
 
-        return when (irOperator) {
+        return when (val irOperator = getPrefixOperator(ktOperator)) {
             null -> throw AssertionError("Unexpected prefix operator: $ktOperator")
 
             in INCREMENT_DECREMENT_OPERATORS ->
@@ -78,9 +75,8 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
 
     fun generatePostfixExpression(expression: KtPostfixExpression): IrExpression {
         val ktOperator = expression.operationReference.getReferencedNameElementType()
-        val irOperator = getPostfixOperator(ktOperator)
 
-        return when (irOperator) {
+        return when (val irOperator = getPostfixOperator(ktOperator)) {
             null -> throw AssertionError("Unexpected postfix operator: $ktOperator")
 
             in INCREMENT_DECREMENT_OPERATORS ->
@@ -130,9 +126,7 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
             return generateBinaryOperatorAsCall(expression, null)
         }
 
-        val irOperator = getInfixOperator(ktOperator)
-
-        return when (irOperator) {
+        return when (val irOperator = getInfixOperator(ktOperator)) {
             null -> throw AssertionError("Unexpected infix operator: $ktOperator")
             IrStatementOrigin.EQ -> AssignmentGenerator(statementGenerator).generateAssignment(expression)
             in AUGMENTED_ASSIGNMENTS -> AssignmentGenerator(statementGenerator).generateAugmentedAssignment(expression, irOperator)
@@ -319,15 +313,17 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
         val comparisonInfo = getPrimitiveNumericComparisonInfo(expression)
         val comparisonType = comparisonInfo?.comparisonType
 
-        val eqeqSymbol = context.irBuiltIns.ieee754equalsFunByOperandType[kotlinTypeToIrType(comparisonType)?.classifierOrNull] ?: context.irBuiltIns.eqeqSymbol
+        val eqeqSymbol =
+            context.irBuiltIns.ieee754equalsFunByOperandType[kotlinTypeToIrType(comparisonType)?.classifierOrNull]
+                ?: context.irBuiltIns.eqeqSymbol
 
         val irEquals = primitiveOp2(
             expression.startOffsetSkippingComments, expression.endOffset,
             eqeqSymbol,
             context.irBuiltIns.booleanType,
             irOperator,
-            expression.left!!.generateAsPrimitiveNumericComparisonOperand(comparisonInfo?.leftType, comparisonType),
-            expression.right!!.generateAsPrimitiveNumericComparisonOperand(comparisonInfo?.rightType, comparisonType)
+            expression.left!!.generateAsPrimitiveNumericComparisonOperand(comparisonInfo?.leftPrimitiveType, comparisonType),
+            expression.right!!.generateAsPrimitiveNumericComparisonOperand(comparisonInfo?.rightPrimitiveType, comparisonType)
         )
 
         return when (irOperator) {
@@ -357,14 +353,15 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
         if (comparisonInfo != null) {
             val comparisonType = comparisonInfo.comparisonType
             val eqeqSymbol =
-                context.irBuiltIns.ieee754equalsFunByOperandType[kotlinTypeToIrType(comparisonType)?.classifierOrNull] ?: context.irBuiltIns.eqeqSymbol
+                context.irBuiltIns.ieee754equalsFunByOperandType[kotlinTypeToIrType(comparisonType)?.classifierOrNull] ?: context.irBuiltIns
+                    .eqeqSymbol
             primitiveOp2(
                 startOffset, endOffset,
                 eqeqSymbol,
                 context.irBuiltIns.booleanType,
                 irOperator,
-                arg1.promoteToPrimitiveNumericType(comparisonInfo.leftType, comparisonType),
-                arg2.promoteToPrimitiveNumericType(comparisonInfo.rightType, comparisonType)
+                arg1.promoteToPrimitiveNumericType(comparisonInfo.leftPrimitiveType, comparisonType),
+                arg2.promoteToPrimitiveNumericType(comparisonInfo.rightPrimitiveType, comparisonType)
             )
         } else {
             primitiveOp2(
@@ -416,7 +413,7 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
         functionDescriptor: FunctionDescriptor,
         receiver: IrExpression
     ): IrExpression {
-        val originalSymbol = context.symbolTable.referenceFunction(functionDescriptor.original)
+        val originalSymbol = context.symbolTable.referenceSimpleFunction(functionDescriptor.original)
         return IrCallImpl(
             startOffset,
             endOffset,
@@ -453,11 +450,14 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
             val comparisonType = comparisonInfo.comparisonType
             primitiveOp2(
                 startOffset, endOffset,
-                getComparisonOperatorSymbol(origin, kotlinTypeToIrType(comparisonType) ?: error("$comparisonType expected to be primitive")),
+                getComparisonOperatorSymbol(
+                    origin,
+                    kotlinTypeToIrType(comparisonType) ?: error("$comparisonType expected to be primitive")
+                ),
                 context.irBuiltIns.booleanType,
                 origin,
-                ktLeft.generateAsPrimitiveNumericComparisonOperand(comparisonInfo.leftType, comparisonInfo.comparisonType),
-                ktRight.generateAsPrimitiveNumericComparisonOperand(comparisonInfo.rightType, comparisonInfo.comparisonType)
+                ktLeft.generateAsPrimitiveNumericComparisonOperand(comparisonInfo.leftPrimitiveType, comparisonInfo.comparisonType),
+                ktRight.generateAsPrimitiveNumericComparisonOperand(comparisonInfo.rightPrimitiveType, comparisonInfo.comparisonType)
             )
         } else {
             val resolvedCall = getResolvedCall(ktExpression)
@@ -491,7 +491,7 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
         }[primitiveNumericType.classifierOrFail]!!
 
     private fun generateExclExclOperator(expression: KtPostfixExpression, origin: IrStatementOrigin): IrExpression {
-        val ktArgument = expression.baseExpression!!
+        val ktArgument = KtPsiUtil.deparenthesize(expression.baseExpression!!)!!
         val irArgument = ktArgument.genExpr()
         val ktOperator = expression.operationReference
 
@@ -499,7 +499,7 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
             ?: throw AssertionError("No type for !! argument")
         val expressionType = argumentType.makeNotNullable()
 
-        val checkNotNull = context.irBuiltIns.checkNotNull
+        val checkNotNull = context.irBuiltIns.checkNotNullSymbol.descriptor
         val checkNotNullSubstituted =
             checkNotNull.substitute(
                 TypeSubstitutor.create(

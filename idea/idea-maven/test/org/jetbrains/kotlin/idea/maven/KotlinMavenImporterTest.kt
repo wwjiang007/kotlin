@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.maven
@@ -23,6 +12,7 @@ import com.intellij.openapi.projectRoots.JavaSdk
 import com.intellij.openapi.roots.CompilerModuleExtension
 import com.intellij.openapi.roots.LibraryOrderEntry
 import com.intellij.openapi.roots.ModuleRootManager
+import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.roots.impl.libraries.LibraryEx
 import com.intellij.util.PathUtil
 import junit.framework.TestCase
@@ -45,15 +35,15 @@ import org.jetbrains.kotlin.idea.framework.JSLibraryKind
 import org.jetbrains.kotlin.idea.framework.KotlinSdkType
 import org.jetbrains.kotlin.idea.project.languageVersionSettings
 import org.jetbrains.kotlin.idea.util.getProjectJdkTableSafe
-import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.test.JUnit3WithIdeaConfigurationRunner
 import org.jetbrains.kotlin.platform.CommonPlatforms
 import org.jetbrains.kotlin.platform.TargetPlatform
 import org.jetbrains.kotlin.platform.isCommon
-import org.jetbrains.kotlin.platform.js.isJs
-import org.jetbrains.kotlin.platform.oldFashionedDescription
 import org.jetbrains.kotlin.platform.js.JsPlatforms
+import org.jetbrains.kotlin.platform.js.isJs
 import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
+import org.jetbrains.kotlin.platform.oldFashionedDescription
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.test.JUnit3WithIdeaConfigurationRunner
 import org.junit.Assert
 import org.junit.runner.RunWith
 import java.io.File
@@ -655,7 +645,7 @@ class KotlinMavenImporterTest : MavenImportingTestCase() {
         createProjectSubDirs("src/main/kotlin")
 
         importProject(
-                """
+            """
             <groupId>test</groupId>
             <artifactId>project</artifactId>
             <version>1.0.0</version>
@@ -858,7 +848,7 @@ class KotlinMavenImporterTest : MavenImportingTestCase() {
     fun testJsCustomOutputPaths() {
         createProjectSubDirs("src/main/kotlin", "src/test/kotlin")
         importProject(
-                """
+            """
             <groupId>test</groupId>
             <artifactId>project</artifactId>
             <version>1.0.0</version>
@@ -918,7 +908,7 @@ class KotlinMavenImporterTest : MavenImportingTestCase() {
             Assert.assertEquals("$projectBasePath/test/test.js", PathUtil.toSystemIndependentName(testOutputPath))
         }
 
-        with (CompilerModuleExtension.getInstance(getModule("project"))!!) {
+        with(CompilerModuleExtension.getInstance(getModule("project"))!!) {
             Assert.assertEquals("$projectBasePath/prod", PathUtil.toSystemIndependentName(compilerOutputUrl))
             Assert.assertEquals("$projectBasePath/test", PathUtil.toSystemIndependentName(compilerOutputUrlForTests))
         }
@@ -2035,8 +2025,8 @@ class KotlinMavenImporterTest : MavenImportingTestCase() {
 
         with(facetSettings) {
             Assert.assertEquals("JVM 1.8", targetPlatform!!.oldFashionedDescription)
-            Assert.assertEquals("1.1", languageLevel!!.description)
-            Assert.assertEquals("1.1", apiLevel!!.description)
+            Assert.assertEquals(LanguageVersion.KOTLIN_1_1.description, languageLevel!!.description)
+            Assert.assertEquals(LanguageVersion.KOTLIN_1_1.description, apiLevel!!.description)
             Assert.assertEquals("1.8", (compilerArguments as K2JVMCompilerArguments).jvmTarget)
         }
     }
@@ -2258,8 +2248,8 @@ class KotlinMavenImporterTest : MavenImportingTestCase() {
 
         with(facetSettings("myModule1")) {
             Assert.assertEquals("JVM 1.8", targetPlatform!!.oldFashionedDescription)
-            Assert.assertEquals("1.1", languageLevel!!.description)
-            Assert.assertEquals("1.0", apiLevel!!.description)
+            Assert.assertEquals(LanguageVersion.KOTLIN_1_1, languageLevel!!)
+            Assert.assertEquals(LanguageVersion.KOTLIN_1_0, apiLevel!!)
             Assert.assertEquals("1.8", (compilerArguments as K2JVMCompilerArguments).jvmTarget)
             Assert.assertEquals(
                 listOf("-Xdump-declarations-to=dumpDir2"),
@@ -2269,8 +2259,8 @@ class KotlinMavenImporterTest : MavenImportingTestCase() {
 
         with(facetSettings("myModule2")) {
             Assert.assertEquals("JVM 1.8", targetPlatform!!.oldFashionedDescription)
-            Assert.assertEquals("1.1", languageLevel!!.description)
-            Assert.assertEquals("1.0", apiLevel!!.description)
+            Assert.assertEquals(LanguageVersion.KOTLIN_1_1, languageLevel!!)
+            Assert.assertEquals(LanguageVersion.KOTLIN_1_0, apiLevel!!)
             Assert.assertEquals("1.8", (compilerArguments as K2JVMCompilerArguments).jvmTarget)
             Assert.assertEquals(
                 listOf("-Xdump-declarations-to=dumpDir", "-java-parameters", "-kotlin-home", "temp2"),
@@ -2369,8 +2359,8 @@ class KotlinMavenImporterTest : MavenImportingTestCase() {
         )
 
         val commonModule2 = createModulePom(
-                "my-common-module2",
-                """
+            "my-common-module2",
+            """
 
                 <parent>
                     <groupId>test</groupId>
@@ -2537,10 +2527,12 @@ class KotlinMavenImporterTest : MavenImportingTestCase() {
     }
 
     fun testJDKImport() {
+        val mockJdkPath = "compiler/testData/mockJDK"
         object : WriteAction<Unit>() {
             override fun run(result: Result<Unit>) {
-                val jdk = JavaSdk.getInstance().createJdk("myJDK", "my/path/to/jdk")
+                val jdk = JavaSdk.getInstance().createJdk("myJDK", mockJdkPath)
                 getProjectJdkTableSafe().addJdk(jdk)
+                ProjectRootManager.getInstance(myProject).projectSdk = jdk
             }
         }.execute()
 
@@ -2579,7 +2571,7 @@ class KotlinMavenImporterTest : MavenImportingTestCase() {
                                 </execution>
                             </executions>
                             <configuration>
-                                <jdkHome>my/path/to/jdk</jdkHome>
+                                <jdkHome>${mockJdkPath}</jdkHome>
                             </configuration>
                         </plugin>
                     </plugins>
@@ -2593,12 +2585,13 @@ class KotlinMavenImporterTest : MavenImportingTestCase() {
             val moduleSDK = ModuleRootManager.getInstance(getModule("project")).sdk!!
             Assert.assertTrue(moduleSDK.sdkType is JavaSdk)
             Assert.assertEquals("myJDK", moduleSDK.name)
-            Assert.assertEquals("my/path/to/jdk", moduleSDK.homePath)
+            Assert.assertEquals(mockJdkPath, moduleSDK.homePath)
         } finally {
             object : WriteAction<Unit>() {
                 override fun run(result: Result<Unit>) {
                     val jdkTable = getProjectJdkTableSafe()
                     jdkTable.removeJdk(jdkTable.findJdk("myJDK")!!)
+                    ProjectRootManager.getInstance(myProject).projectSdk = null
                 }
             }.execute()
         }
@@ -3047,7 +3040,7 @@ class KotlinMavenImporterTest : MavenImportingTestCase() {
     }
 
     private fun assertImporterStatePresent() {
-        assertNotNull("Kotlin importer component is not present", myTestFixture.module.getComponent(KotlinImporterComponent::class.java))
+        assertNotNull("Kotlin importer component is not present", myTestFixture.module.kotlinImporterComponent)
     }
 
     private fun facetSettings(moduleName: String) = KotlinFacet.get(getModule(moduleName))!!.configuration.settings

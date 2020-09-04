@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.ir.types
 
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrTypeParameter
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
@@ -43,6 +44,8 @@ val IrType.classifierOrNull: IrClassifierSymbol?
 val IrType.classOrNull: IrClassSymbol?
     get() = classifierOrNull as? IrClassSymbol
 
+val IrTypeArgument.typeOrNull: IrType? get() = (this as? IrTypeProjection)?.type
+
 fun IrType.makeNotNull() =
     if (this is IrSimpleType && this.hasQuestionMark) {
         buildSimpleType {
@@ -61,6 +64,7 @@ fun IrType.makeNullable() =
     else
         this
 
+@ObsoleteDescriptorBasedAPI
 fun IrType.toKotlinType(): KotlinType {
     originalKotlinType?.let {
         return it
@@ -83,6 +87,7 @@ fun IrClassSymbol.createType(hasQuestionMark: Boolean, arguments: List<IrTypeArg
         emptyList()
     )
 
+@ObsoleteDescriptorBasedAPI
 private fun makeKotlinType(
     classifier: IrClassifierSymbol,
     arguments: List<IrTypeArgument>,

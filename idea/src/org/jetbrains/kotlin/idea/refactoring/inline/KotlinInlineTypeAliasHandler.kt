@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.refactoring.inline
@@ -36,6 +25,7 @@ import org.jetbrains.kotlin.idea.caches.resolve.unsafeResolveToDescriptor
 import org.jetbrains.kotlin.idea.core.ShortenReferences
 import org.jetbrains.kotlin.idea.core.replaced
 import org.jetbrains.kotlin.idea.imports.importableFqName
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.references.KtSimpleNameReference
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
@@ -50,7 +40,7 @@ import org.jetbrains.kotlin.types.Variance
 
 class KotlinInlineTypeAliasHandler : InlineActionHandler() {
     companion object {
-        val REFACTORING_NAME = "Inline Type Alias"
+        val REFACTORING_NAME get() = KotlinBundle.message("name.inline.type.alias")
     }
 
     private fun showErrorHint(project: Project, editor: Editor?, message: String) {
@@ -77,7 +67,11 @@ class KotlinInlineTypeAliasHandler : InlineActionHandler() {
                 ?: refElement.getNonStrictParentOfType<KtSimpleNameExpression>()
         }
 
-        if (usages.isEmpty()) return showErrorHint(project, editor, "Type alias '$name' is never used")
+        if (usages.isEmpty()) return showErrorHint(
+            project,
+            editor,
+            KotlinBundle.message("message.text.type.alias.0.is.never.used", name)
+        )
 
         val usagesInOriginalFile = usages.filter { it.containingFile == file }
         val isHighlighting = usagesInOriginalFile.isNotEmpty()
@@ -87,12 +81,15 @@ class KotlinInlineTypeAliasHandler : InlineActionHandler() {
             preProcessInternalUsages(aliasBody, usages)
         }
 
-        if (!showDialog(project,
-                        name,
-                        REFACTORING_NAME,
-                        typeAlias,
-                        usages,
-                        HelpID.INLINE_VARIABLE)) {
+        if (!showDialog(
+                project,
+                name,
+                REFACTORING_NAME,
+                typeAlias,
+                usages,
+                HelpID.INLINE_VARIABLE
+            )
+        ) {
             if (isHighlighting) {
                 val statusBar = WindowManager.getInstance().getStatusBar(project)
                 statusBar?.info = RefactoringBundle.message("press.escape.to.remove.the.highlighting")
@@ -120,8 +117,7 @@ class KotlinInlineTypeAliasHandler : InlineActionHandler() {
             val expandedType = substitutor.substitute(typeToInline, Variance.INVARIANT) ?: return null
             val expandedTypeText = IdeDescriptorRenderers.SOURCE_CODE.renderType(expandedType)
             val needParentheses =
-                    (expandedType.isFunctionType && usage.parent is KtNullableType) ||
-                    (expandedType.isExtensionFunctionType && usage.getParentOfTypeAndBranch<KtFunctionType> { receiverTypeReference } != null)
+                (expandedType.isFunctionType && usage.parent is KtNullableType) || (expandedType.isExtensionFunctionType && usage.getParentOfTypeAndBranch<KtFunctionType> { receiverTypeReference } != null)
             val expandedTypeReference = psiFactory.createType(expandedTypeText)
             return usage.replaced(expandedTypeReference.typeElement!!).apply {
                 if (needParentheses) {
@@ -147,8 +143,8 @@ class KotlinInlineTypeAliasHandler : InlineActionHandler() {
             val resolvedCall = usage.resolveToCall() ?: return null
             val callElement = resolvedCall.call.callElement as? KtCallElement ?: return null
             val substitution = resolvedCall.typeArguments
-                    .mapKeys { it.key.typeConstructor }
-                    .mapValues { TypeProjectionImpl(it.value) }
+                .mapKeys { it.key.typeConstructor }
+                .mapValues { TypeProjectionImpl(it.value) }
             if (substitution.size != typeConstructorsToInline.size) return null
             val substitutor = TypeSubstitutor.create(substitution)
             val expandedType = substitutor.substitute(typeToInline, Variance.INVARIANT) ?: return null
@@ -156,22 +152,23 @@ class KotlinInlineTypeAliasHandler : InlineActionHandler() {
 
             if (expandedType.arguments.isNotEmpty()) {
                 val expandedTypeArgumentList = psiFactory.createTypeArguments(
-                        expandedType.arguments.joinToString(prefix = "<",
-                                                            postfix = ">") { IdeDescriptorRenderers.SOURCE_CODE.renderType(it.type) }
+                    expandedType.arguments.joinToString(
+                        prefix = "<",
+                        postfix = ">"
+                    ) { IdeDescriptorRenderers.SOURCE_CODE.renderType(it.type) }
                 )
 
                 val originalTypeArgumentList = callElement.typeArgumentList
                 if (originalTypeArgumentList != null) {
                     originalTypeArgumentList.replaced(expandedTypeArgumentList)
-                }
-                else {
+                } else {
                     callElement.addAfter(expandedTypeArgumentList, callElement.calleeExpression)
                 }
             }
 
             val newCallElement = ((usage.mainReference as KtSimpleNameReference).bindToFqName(
-                    expandedTypeFqName,
-                    KtSimpleNameReference.ShorteningMode.NO_SHORTENING
+                expandedTypeFqName,
+                KtSimpleNameReference.ShorteningMode.NO_SHORTENING
             ) as KtExpression).getNonStrictParentOfType<KtCallElement>()
             return newCallElement?.getQualifiedExpressionForSelector() ?: newCallElement
         }
@@ -179,10 +176,10 @@ class KotlinInlineTypeAliasHandler : InlineActionHandler() {
         project.executeWriteCommand(RefactoringBundle.message("inline.command", name)) {
             val inlinedElements = usages.mapNotNull {
                 val inlinedElement = when (it) {
-                                         is KtUserType -> inlineIntoType(it)
-                                         is KtReferenceExpression -> inlineIntoCall(it)
-                                         else -> null
-                                     } ?: return@mapNotNull null
+                    is KtUserType -> inlineIntoType(it)
+                    is KtReferenceExpression -> inlineIntoCall(it)
+                    else -> null
+                } ?: return@mapNotNull null
 
                 postProcessInternalReferences(inlinedElement)
             }

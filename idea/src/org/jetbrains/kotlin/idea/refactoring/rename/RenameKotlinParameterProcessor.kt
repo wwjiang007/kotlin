@@ -1,26 +1,18 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.refactoring.rename
 
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.idea.refactoring.KotlinRefactoringSettings
+import com.intellij.psi.PsiReference
+import com.intellij.psi.search.SearchScope
 import com.intellij.refactoring.listeners.RefactoringElementListener
 import com.intellij.usageView.UsageInfo
 import org.jetbrains.kotlin.asJava.namedUnwrappedElement
+import org.jetbrains.kotlin.idea.refactoring.KotlinRefactoringSettings
+import org.jetbrains.kotlin.idea.search.or
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtParameter
@@ -36,10 +28,10 @@ class RenameKotlinParameterProcessor : RenameKotlinPsiProcessor() {
     }
 
     override fun findCollisions(
-            element: PsiElement,
-            newName: String,
-            allRenames: MutableMap<out PsiElement, String>,
-            result: MutableList<UsageInfo>
+        element: PsiElement,
+        newName: String,
+        allRenames: MutableMap<out PsiElement, String>,
+        result: MutableList<UsageInfo>
     ) {
         val declaration = element.namedUnwrappedElement as? KtNamedDeclaration ?: return
 
@@ -48,6 +40,18 @@ class RenameKotlinParameterProcessor : RenameKotlinPsiProcessor() {
         checkOriginalUsagesRetargeting(declaration, newName, result, collisions)
         checkNewNameUsagesRetargeting(declaration, newName, collisions)
         result += collisions
+    }
+
+    override fun findReferences(
+        element: PsiElement,
+        searchScope: SearchScope,
+        searchInCommentsAndStrings: Boolean
+    ): Collection<PsiReference> {
+        if (element !is KtParameter) return super.findReferences(element, searchScope, searchInCommentsAndStrings)
+        val ownerFunction = element.ownerFunction
+            ?: return super.findReferences(element, searchScope, searchInCommentsAndStrings)
+        val newScope = searchScope or ownerFunction.useScope
+        return super.findReferences(element, newScope, searchInCommentsAndStrings)
     }
 
     override fun renameElement(element: PsiElement, newName: String, usages: Array<UsageInfo>, listener: RefactoringElementListener?) {

@@ -8,14 +8,15 @@ dependencies {
 
     compileOnly(project(":idea"))
     compileOnly(project(":idea:idea-jvm"))
-    compileOnly(project(":idea:idea-native")) { isTransitive = false }
+    compileOnly(project(":idea:idea-native"))
     compile(project(":idea:kotlin-gradle-tooling"))
-    compile(project(":idea:idea-gradle-tooling-api"))
 
     compile(project(":compiler:frontend"))
     compile(project(":compiler:frontend.java"))
 
     compile(project(":js:js.frontend"))
+
+    compile(project(":native:frontend.native"))
 
     compileOnly(intellijDep())
     compileOnly(intellijPluginDep("gradle"))
@@ -25,6 +26,9 @@ dependencies {
     compileOnly(intellijPluginDep("Groovy"))
     compileOnly(intellijPluginDep("junit"))
     compileOnly(intellijPluginDep("testng"))
+    runtimeOnly(project(":kotlin-coroutines-experimental-compat"))
+
+    compileOnly(project(":kotlin-gradle-statistics"))
 
     Platform[192].orHigher {
         compileOnly(intellijPluginDep("java"))
@@ -44,9 +48,11 @@ dependencies {
 
     testCompile(project(":idea:idea-native")) { isTransitive = false }
     testCompile(project(":idea:idea-gradle-native")) { isTransitive = false }
-    testRuntime(project(":kotlin-native:kotlin-native-library-reader")) { isTransitive = false }
-    testRuntime(project(":kotlin-native:kotlin-native-utils")) { isTransitive = false }
+    if (Ide.IJ()) {
+        testRuntime(project(":idea:idea-new-project-wizard"))
+    }
 
+    testRuntimeOnly(toolsJar())
     testRuntime(project(":kotlin-reflect"))
     testRuntime(project(":idea:idea-jvm"))
     testRuntime(project(":idea:idea-android"))
@@ -58,6 +64,7 @@ dependencies {
     testRuntime(project(":noarg-ide-plugin"))
     testRuntime(project(":kotlin-scripting-idea"))
     testRuntime(project(":kotlinx-serialization-ide-plugin"))
+    testRuntime(project(":kotlin-gradle-statistics"))
     // TODO: the order of the plugins matters here, consider avoiding order-dependency
     testRuntime(intellijPluginDep("junit"))
     testRuntime(intellijPluginDep("testng"))
@@ -70,13 +77,20 @@ dependencies {
     testRuntime(intellijPluginDep("coverage"))
     if (Ide.IJ()) {
         testRuntime(intellijPluginDep("maven"))
+
+        if (Ide.IJ201.orHigher()) {
+            testRuntime(intellijPluginDep("repository-search"))
+        }
     }
     testRuntime(intellijPluginDep("android"))
     testRuntime(intellijPluginDep("smali"))
 
+    if (Ide.AS41.orHigher()) {
+         testRuntime(intellijPluginDep("platform-images"))
+    }
+
     if (Ide.AS36.orHigher()) {
         testRuntime(intellijPluginDep("android-layoutlib"))
-        testRuntime(intellijPluginDep("android-wizardTemplate-plugin"))
     }
 }
 
@@ -90,7 +104,12 @@ sourceSets {
 
 testsJar()
 
-projectTest(parallel = true) {
+projectTest(parallel = false) {
+    dependsOn(":dist")
+    dependsOnKotlinPluginInstall()
+    if (!Ide.AS41.orHigher()) {
+        systemProperty("android.studio.sdk.manager.disabled", "true")
+    }
     workingDir = rootDir
     useAndroidSdk()
 
@@ -108,3 +127,9 @@ projectTest(parallel = true) {
 }
 
 configureFormInstrumentation()
+
+if (Ide.AS41.orHigher()) {
+    getOrCreateTask<Test>("test") {
+        setExcludes(listOf("**"))
+    }
+}

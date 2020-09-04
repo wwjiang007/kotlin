@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.builtins.ReflectionTypes
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.CallableDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.resolve.calls.components.*
 import org.jetbrains.kotlin.resolve.calls.inference.addSubsystemFromArgument
 import org.jetbrains.kotlin.resolve.calls.inference.components.ConstraintInjector
@@ -28,6 +29,8 @@ import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintStorage
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
 import org.jetbrains.kotlin.resolve.calls.tower.*
 import org.jetbrains.kotlin.resolve.descriptorUtil.hasDynamicExtensionAnnotation
+import org.jetbrains.kotlin.resolve.sam.SamConversionOracle
+import org.jetbrains.kotlin.resolve.sam.SamConversionResolver
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValueWithSmartCastInfo
 import org.jetbrains.kotlin.types.ErrorUtils
 import org.jetbrains.kotlin.types.TypeSubstitutor
@@ -43,8 +46,10 @@ class KotlinCallComponents(
     val reflectionTypes: ReflectionTypes,
     val builtIns: KotlinBuiltIns,
     val languageVersionSettings: LanguageVersionSettings,
-    val samConversionTransformer: SamConversionTransformer,
-    val kotlinTypeChecker: NewKotlinTypeChecker
+    val samConversionOracle: SamConversionOracle,
+    val samConversionResolver: SamConversionResolver,
+    val kotlinTypeChecker: NewKotlinTypeChecker,
+    val lookupTracker: LookupTracker
 )
 
 class SimpleCandidateFactory(
@@ -60,8 +65,10 @@ class SimpleCandidateFactory(
 
     init {
         val baseSystem = NewConstraintSystemImpl(callComponents.constraintInjector, callComponents.builtIns)
-        baseSystem.addSubsystemFromArgument(kotlinCall.explicitReceiver)
-        baseSystem.addSubsystemFromArgument(kotlinCall.dispatchReceiverForInvokeExtension)
+        if (!inferenceSession.resolveReceiverIndependently()) {
+            baseSystem.addSubsystemFromArgument(kotlinCall.explicitReceiver)
+            baseSystem.addSubsystemFromArgument(kotlinCall.dispatchReceiverForInvokeExtension)
+        }
         for (argument in kotlinCall.argumentsInParenthesis) {
             baseSystem.addSubsystemFromArgument(argument)
         }
@@ -141,6 +148,7 @@ class SimpleCandidateFactory(
         if (ErrorUtils.isError(descriptor)) {
             return KotlinResolutionCandidate(
                 callComponents,
+                resolutionCallbacks,
                 callableReferenceResolver,
                 scopeTower,
                 baseSystem,
@@ -151,7 +159,7 @@ class SimpleCandidateFactory(
         }
 
         val candidate = KotlinResolutionCandidate(
-            callComponents, callableReferenceResolver, scopeTower, baseSystem, resolvedKtCall, knownSubstitutor
+            callComponents, resolutionCallbacks, callableReferenceResolver, scopeTower, baseSystem, resolvedKtCall, knownSubstitutor
         )
 
         initialDiagnostics.forEach(candidate::addDiagnostic)
@@ -200,12 +208,12 @@ enum class KotlinCallKind(vararg resolutionPart: ResolutionPart) {
         NoTypeArguments,
         NoArguments,
         CreateFreshVariablesSubstitutor,
+        CollectionTypeVariableUsagesInfo,
         CheckExplicitReceiverKindConsistency,
         CheckReceivers,
         PostponedVariablesInitializerResolutionPart
     ),
     FUNCTION(
-        CheckInstantiationOfAbstractClass,
         CheckVisibility,
         CheckInfixResolutionPart,
         CheckOperatorResolutionPart,
@@ -214,11 +222,14 @@ enum class KotlinCallKind(vararg resolutionPart: ResolutionPart) {
         MapArguments,
         ArgumentsToCandidateParameterDescriptor,
         CreateFreshVariablesSubstitutor,
+        CollectionTypeVariableUsagesInfo,
         CheckExplicitReceiverKindConsistency,
         CheckReceivers,
         CheckArgumentsInParenthesis,
         CheckExternalArgument,
         EagerResolveOfCallableReferences,
+        CompatibilityOfTypeVariableAsIntersectionTypePart,
+        CompatibilityOfPartiallyApplicableSamConversion,
         PostponedVariablesInitializerResolutionPart
     ),
     INVOKE(*FUNCTION.resolutionSequence.toTypedArray()),

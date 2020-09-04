@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -25,7 +25,7 @@ public class DiagnosticsWithUnsignedTypesGenerated extends AbstractDiagnosticsWi
     }
 
     public void testAllFilesPresentInTestsWithUnsignedTypes() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithUnsignedTypes"), Pattern.compile("^(.+)\\.kt$"), true);
+        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/diagnostics/testsWithUnsignedTypes"), Pattern.compile("^(.+)\\.kt$"), null, true);
     }
 
     @TestMetadata("allowedVarargsOfUnsignedTypes.kt")
@@ -97,7 +97,7 @@ public class DiagnosticsWithUnsignedTypesGenerated extends AbstractDiagnosticsWi
         }
 
         public void testAllFilesPresentInConversions() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/diagnostics/testsWithUnsignedTypes/conversions"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/diagnostics/testsWithUnsignedTypes/conversions"), Pattern.compile("^(.+)\\.kt$"), null, true);
         }
 
         @TestMetadata("conversionOfSignedToUnsigned.kt")
@@ -108,6 +108,11 @@ public class DiagnosticsWithUnsignedTypesGenerated extends AbstractDiagnosticsWi
         @TestMetadata("inferenceForSignedAndUnsignedTypes.kt")
         public void testInferenceForSignedAndUnsignedTypes() throws Exception {
             runTest("compiler/testData/diagnostics/testsWithUnsignedTypes/conversions/inferenceForSignedAndUnsignedTypes.kt");
+        }
+
+        @TestMetadata("noConversionForUnsignedTypesOnReceiver.kt")
+        public void testNoConversionForUnsignedTypesOnReceiver() throws Exception {
+            runTest("compiler/testData/diagnostics/testsWithUnsignedTypes/conversions/noConversionForUnsignedTypesOnReceiver.kt");
         }
 
         @TestMetadata("overloadResolutionForSignedAndUnsignedTypes.kt")

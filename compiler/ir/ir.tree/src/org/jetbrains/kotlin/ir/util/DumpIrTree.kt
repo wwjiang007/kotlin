@@ -28,9 +28,13 @@ import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import org.jetbrains.kotlin.utils.Printer
 
 fun IrElement.dump(normalizeNames: Boolean = false): String =
-    StringBuilder().also { sb ->
-        accept(DumpIrTreeVisitor(sb, normalizeNames), "")
-    }.toString()
+    try {
+        StringBuilder().also { sb ->
+            accept(DumpIrTreeVisitor(sb, normalizeNames), "")
+        }.toString()
+    } catch (e: Exception) {
+        "(Full dump is not available: ${e.message})\n" + render()
+    }
 
 fun IrFile.dumpTreesFromLineNumber(lineNumber: Int, normalizeNames: Boolean = false): String {
     val sb = StringBuilder()
@@ -141,9 +145,6 @@ class DumpIrTreeVisitor(
     override fun visitField(declaration: IrField, data: String) {
         declaration.dumpLabeledElementWith(data) {
             dumpAnnotations(declaration)
-            declaration.overriddenSymbols.dumpItems("overridden") {
-                it.dump()
-            }
             declaration.initializer?.accept(this, "")
         }
     }
@@ -167,7 +168,7 @@ class DumpIrTreeVisitor(
         }
     }
 
-    override fun visitMemberAccess(expression: IrMemberAccessExpression, data: String) {
+    override fun visitMemberAccess(expression: IrMemberAccessExpression<*>, data: String) {
         expression.dumpLabeledElementWith(data) {
             dumpTypeArguments(expression)
             expression.dispatchReceiver?.accept(this, "\$this")
@@ -194,7 +195,7 @@ class DumpIrTreeVisitor(
         }
     }
 
-    private fun dumpTypeArguments(expression: IrMemberAccessExpression) {
+    private fun dumpTypeArguments(expression: IrMemberAccessExpression<*>) {
         val typeParameterNames = expression.getTypeParameterNames(expression.typeArgumentsCount)
         for (index in 0 until expression.typeArgumentsCount) {
             printer.println("<${typeParameterNames[index]}>: ${expression.renderTypeArgument(index)}")
@@ -214,8 +215,8 @@ class DumpIrTreeVisitor(
         }
     }
 
-    private fun IrMemberAccessExpression.getTypeParameterNames(expectedCount: Int): List<String> =
-        if (this is IrDeclarationReference && symbol.isBound)
+    private fun IrMemberAccessExpression<*>.getTypeParameterNames(expectedCount: Int): List<String> =
+        if (symbol.isBound)
             symbol.owner.getTypeParameterNames(expectedCount)
         else
             getPlaceholderParameterNames(expectedCount)
@@ -242,7 +243,7 @@ class DumpIrTreeVisitor(
         return parentClass.typeParameters + typeParameters
     }
 
-    private fun IrMemberAccessExpression.renderTypeArgument(index: Int): String =
+    private fun IrMemberAccessExpression<*>.renderTypeArgument(index: Int): String =
         getTypeArgument(index)?.render() ?: "<none>"
 
     override fun visitGetField(expression: IrGetField, data: String) {
@@ -371,22 +372,20 @@ class DumpTreeFromSourceLineVisitor(
     }
 }
 
-internal fun IrMemberAccessExpression.getValueParameterNamesForDebug(): List<String> {
+internal fun IrMemberAccessExpression<*>.getValueParameterNamesForDebug(): List<String> {
     val expectedCount = valueArgumentsCount
-    return if (this is IrDeclarationReference && symbol.isBound) {
+    if (symbol.isBound) {
         val owner = symbol.owner
         if (owner is IrFunction) {
-            (0 until expectedCount).map {
+            return (0 until expectedCount).map {
                 if (it < owner.valueParameters.size)
                     owner.valueParameters[it].name.asString()
                 else
                     "${it + 1}"
             }
-        } else {
-            getPlaceholderParameterNames(expectedCount)
         }
-    } else
-        getPlaceholderParameterNames(expectedCount)
+    }
+    return getPlaceholderParameterNames(expectedCount)
 }
 
 internal fun getPlaceholderParameterNames(expectedCount: Int) =

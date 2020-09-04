@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.quickfix.createFromUsage.createCallable
@@ -30,6 +19,7 @@ import org.jetbrains.kotlin.idea.caches.resolve.analyzeAndGetResult
 import org.jetbrains.kotlin.idea.caches.resolve.unsafeResolveToDescriptor
 import org.jetbrains.kotlin.idea.codeInsight.DescriptorToSourceUtilsIde
 import org.jetbrains.kotlin.idea.quickfix.createFromUsage.callableBuilder.*
+import org.jetbrains.kotlin.idea.util.getDataFlowAwareTypes
 import org.jetbrains.kotlin.idea.refactoring.canRefactor
 import org.jetbrains.kotlin.idea.refactoring.getExtractionContainers
 import org.jetbrains.kotlin.idea.refactoring.isInterfaceClass
@@ -130,7 +120,11 @@ sealed class CreateCallableFromCallActionFactory<E : KtExpression>(
             is ReceiverValue -> {
                 val originalType = receiver.type
                 val finalType = if (receiver is ExpressionReceiver) {
-                    getDataFlowAwareTypes(receiver.expression, context, originalType).firstOrNull() ?: originalType
+                    getDataFlowAwareTypes(
+                        receiver.expression,
+                        context,
+                        originalType
+                    ).firstOrNull() ?: originalType
                 } else originalType
                 TypeInfo(finalType, Variance.IN_VARIANCE)
             }
@@ -154,13 +148,21 @@ sealed class CreateCallableFromCallActionFactory<E : KtExpression>(
             receiverTypeInfo = TypeInfo(receiverType, Variance.IN_VARIANCE).ofThis()
         }
 
-        if (!receiverType.isAbstract() && TypeUtils.getAllSupertypes(receiverType).all { !it.isAbstract() }) return null
+        val project = originalExpression.project
+        if (!receiverType.isAbstract() && TypeUtils.getAllSupertypes(receiverType).none { it.isAbstract() && it.canRefactor(project) }) {
+            return null
+        }
 
         return mainCallable.copy(
             receiverTypeInfo = receiverTypeInfo,
             possibleContainers = emptyList(),
             modifierList = KtPsiFactory(originalExpression).createModifierList(KtTokens.ABSTRACT_KEYWORD)
         )
+    }
+
+    private fun KotlinType.canRefactor(project: Project): Boolean {
+        val declarationDescriptor = constructor.declarationDescriptor ?: return false
+        return DescriptorToSourceUtilsIde.getAnyDeclaration(project, declarationDescriptor)?.canRefactor() == true
     }
 
     protected fun getCallableWithReceiverInsideExtension(
@@ -202,7 +204,8 @@ sealed class CreateCallableFromCallActionFactory<E : KtExpression>(
             val canBeLateinit =
                 varExpected
                         && returnTypes.any { !it.isMarkedNullable && !KotlinBuiltIns.isPrimitiveType(it) }
-                        && fullCallExpr.parents.firstOrNull { it is KtDeclarationWithBody || it is KtClassInitializer } is KtDeclarationWithBody
+                        && fullCallExpr.parents
+                    .firstOrNull { it is KtDeclarationWithBody || it is KtClassInitializer } is KtDeclarationWithBody
             return PropertyInfo(name, receiverType, returnTypeInfo, varExpected, possibleContainers, isLateinitPreferred = canBeLateinit)
         }
 

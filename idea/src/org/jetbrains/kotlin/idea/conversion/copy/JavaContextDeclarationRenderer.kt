@@ -6,7 +6,7 @@
 package org.jetbrains.kotlin.idea.conversion.copy
 
 import com.intellij.psi.util.parents
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMap
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
@@ -64,7 +64,7 @@ class JavaContextDeclarationRenderer {
         buildString {
             for (member in this@render) {
                 renderJavaDeclaration(member)
-                appendln()
+                appendLine()
             }
         }
 
@@ -107,7 +107,11 @@ class JavaContextDeclarationRenderer {
         if (!type?.arguments.isNullOrEmpty()) {
             append("<")
             for (typeArgument in type!!.arguments) {
-                renderType(typeArgument.type)
+                if (typeArgument.isStarProjection) {
+                    append("?")
+                } else {
+                    renderType(typeArgument.type)
+                }
             }
             append(">")
         }
@@ -115,7 +119,7 @@ class JavaContextDeclarationRenderer {
 
     private fun StringBuilder.renderFqName(fqName: FqNameUnsafe) {
         val stringFqName = when (fqName) {
-            KotlinBuiltIns.FQ_NAMES.unit -> "void"
+            StandardNames.FqNames.unit -> "void"
             else -> JavaToKotlinClassMap.mapKotlinToJava(fqName)?.asSingleFqName() ?: fqName.asString()
         }
         append(stringFqName)

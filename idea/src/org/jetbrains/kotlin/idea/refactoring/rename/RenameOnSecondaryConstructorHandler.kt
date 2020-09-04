@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.refactoring.rename
@@ -23,7 +12,9 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.refactoring.RefactoringBundle
 import com.intellij.refactoring.rename.RenameHandler
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.core.util.CodeInsightUtils
 import org.jetbrains.kotlin.psi.*
 
@@ -34,8 +25,14 @@ class RenameOnSecondaryConstructorHandler : RenameHandler {
         val file = CommonDataKeys.PSI_FILE.getData(dataContext) ?: return false
 
         val element = PsiTreeUtil.findElementOfClassAtOffsetWithStopSet(
-                file, editor.caretModel.offset, KtSecondaryConstructor::class.java, false,
-                KtBlockExpression::class.java, KtValueArgumentList::class.java, KtParameterList::class.java, KtConstructorDelegationCall::class.java
+            file,
+            editor.caretModel.offset,
+            KtSecondaryConstructor::class.java,
+            false,
+            KtBlockExpression::class.java,
+            KtValueArgumentList::class.java,
+            KtParameterList::class.java,
+            KtConstructorDelegationCall::class.java
         )
         return element != null
     }
@@ -43,7 +40,13 @@ class RenameOnSecondaryConstructorHandler : RenameHandler {
     override fun isRenaming(dataContext: DataContext): Boolean = isAvailableOnDataContext(dataContext)
 
     override fun invoke(project: Project, editor: Editor, file: PsiFile, dataContext: DataContext?) {
-        CodeInsightUtils.showErrorHint(project, editor, "Rename is not applicable to secondary constructors", "Rename", null)
+        CodeInsightUtils.showErrorHint(
+            project,
+            editor,
+            KotlinBundle.message("text.rename.is.not.applicable.to.secondary.constructors"),
+            RefactoringBundle.message("rename.title"),
+            null
+        )
     }
 
     override fun invoke(project: Project, elements: Array<out PsiElement>, dataContext: DataContext?) {

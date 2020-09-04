@@ -13,7 +13,10 @@ import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtModifierListOwner
 import org.jetbrains.kotlin.psi.KtTypeAlias
 import org.jetbrains.kotlin.psi.psiUtil.hasActualModifier
+import org.jetbrains.kotlin.test.JUnit3WithIdeaConfigurationRunner
+import org.junit.runner.RunWith
 
+@RunWith(JUnit3WithIdeaConfigurationRunner::class)
 class LightNavigateToStdlibSourceTest : KotlinLightCodeInsightFixtureTestCase() {
     @ProjectDescriptorKind(JDK_AND_MULTIPLATFORM_STDLIB_WITH_SOURCES)
     fun testNavigateToCommonDeclarationWhenPlatformSpecificOverloadAvailable() {
@@ -64,7 +67,8 @@ class LightNavigateToStdlibSourceTest : KotlinLightCodeInsightFixtureTestCase() 
     fun testRefToPrintlnWithJVM() {
         doTest(
             "fun foo() { <caret>println() }",
-            "Console.kt")
+            "Console.kt"
+        )
     }
 
     @ProjectDescriptorKind(KOTLIN_JAVASCRIPT)
@@ -79,14 +83,16 @@ class LightNavigateToStdlibSourceTest : KotlinLightCodeInsightFixtureTestCase() 
     fun testRefToPrintlnWithJVMAndJS() {
         doTest(
             "fun foo() { <caret>println() }",
-            "Console.kt")
+            "Console.kt"
+        )
     }
 
     @ProjectDescriptorKind(KOTLIN_JAVASCRIPT_WITH_ADDITIONAL_JVM_WITH_STDLIB)
     fun testRefToPrintlnWithJSAndJVM() {
         doTest(
             "fun foo() { <caret>println() }",
-            "console.kt")
+            "console.kt"
+        )
     }
 
     override fun getProjectDescriptor() = getProjectDescriptorFromAnnotation()

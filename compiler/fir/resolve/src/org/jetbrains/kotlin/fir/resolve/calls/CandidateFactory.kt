@@ -5,50 +5,125 @@
 
 package org.jetbrains.kotlin.fir.resolve.calls
 
+import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
+import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
+import org.jetbrains.kotlin.fir.declarations.builder.buildErrorFunction
+import org.jetbrains.kotlin.fir.declarations.builder.buildErrorProperty
+import org.jetbrains.kotlin.fir.diagnostics.ConeDiagnostic
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.resolve.BodyResolveComponents
 import org.jetbrains.kotlin.fir.returnExpressions
 import org.jetbrains.kotlin.fir.symbols.AbstractFirBasedSymbol
-import org.jetbrains.kotlin.resolve.calls.components.PostponedArgumentsAnalyzer
+import org.jetbrains.kotlin.fir.symbols.impl.FirErrorFunctionSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirErrorPropertySymbol
+import org.jetbrains.kotlin.resolve.calls.components.PostponedArgumentsAnalyzerContext
 import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintStorage
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
 
-class CandidateFactory(
+class CandidateFactory private constructor(
     val bodyResolveComponents: BodyResolveComponents,
-    private val callInfo: CallInfo
+    val callInfo: CallInfo,
+    private val baseSystem: ConstraintStorage
 ) {
 
-    private val baseSystem: ConstraintStorage
-
-    init {
-        val system = bodyResolveComponents.inferenceComponents.createConstraintSystem()
-        callInfo.arguments.forEach {
-            system.addSubsystemFromExpression(it)
+    companion object {
+        private fun buildBaseSystem(bodyResolveComponents: BodyResolveComponents, callInfo: CallInfo): ConstraintStorage {
+            val system = bodyResolveComponents.inferenceComponents.createConstraintSystem()
+            callInfo.arguments.forEach {
+                system.addSubsystemFromExpression(it)
+            }
+            system.addOtherSystem(bodyResolveComponents.inferenceComponents.inferenceSession.currentConstraintSystem)
+            return system.asReadOnlyStorage()
         }
-        baseSystem = system.asReadOnlyStorage()
+    }
+
+    constructor(bodyResolveComponents: BodyResolveComponents, callInfo: CallInfo) :
+            this(bodyResolveComponents, callInfo, buildBaseSystem(bodyResolveComponents, callInfo))
+
+    fun replaceCallInfo(callInfo: CallInfo): CandidateFactory {
+        if (this.callInfo.arguments.size != callInfo.arguments.size) {
+            throw AssertionError("Incorrect replacement of call info in CandidateFactory")
+        }
+        return CandidateFactory(bodyResolveComponents, callInfo, baseSystem)
     }
 
     fun createCandidate(
         symbol: AbstractFirBasedSymbol<*>,
-        dispatchReceiverValue: ClassDispatchReceiverValue?,
-        implicitExtensionReceiverValue: ImplicitReceiverValue<*>?,
-        explicitReceiverKind: ExplicitReceiverKind
+        explicitReceiverKind: ExplicitReceiverKind,
+        dispatchReceiverValue: ReceiverValue? = null,
+        implicitExtensionReceiverValue: ImplicitReceiverValue<*>? = null,
+        builtInExtensionFunctionReceiverValue: ReceiverValue? = null
     ): Candidate {
-        val candidate = Candidate(
+        return Candidate(
             symbol, dispatchReceiverValue, implicitExtensionReceiverValue,
-            explicitReceiverKind, bodyResolveComponents, baseSystem, callInfo
+            explicitReceiverKind, bodyResolveComponents, baseSystem,
+            builtInExtensionFunctionReceiverValue?.receiverExpression?.let {
+                callInfo.withReceiverAsArgument(it)
+            } ?: callInfo
         )
-        return candidate
+    }
+
+    fun createErrorCandidate(diagnostic: ConeDiagnostic): Candidate {
+        val symbol: AbstractFirBasedSymbol<*> = when (callInfo.callKind) {
+            is CallKind.VariableAccess -> createErrorPropertySymbol(diagnostic)
+            is CallKind.Function,
+            is CallKind.DelegatingConstructorCall,
+            is CallKind.CallableReference -> createErrorFunctionSymbol(diagnostic)
+            is CallKind.SyntheticSelect -> throw IllegalStateException()
+            is CallKind.SyntheticIdForCallableReferencesResolution -> throw IllegalStateException()
+            is CallKind.CustomForIde -> throw IllegalStateException()
+        }
+        return Candidate(
+            symbol,
+            dispatchReceiverValue = null,
+            implicitExtensionReceiverValue = null,
+            explicitReceiverKind = ExplicitReceiverKind.NO_EXPLICIT_RECEIVER,
+            bodyResolveComponents,
+            baseSystem,
+            callInfo
+        )
+    }
+
+    private fun createErrorFunctionSymbol(diagnostic: ConeDiagnostic): FirErrorFunctionSymbol {
+        return FirErrorFunctionSymbol().also {
+            buildErrorFunction {
+                session = this@CandidateFactory.bodyResolveComponents.session
+                resolvePhase = FirResolvePhase.BODY_RESOLVE
+                origin = FirDeclarationOrigin.Synthetic
+                this.diagnostic = diagnostic
+                symbol = it
+            }
+        }
+    }
+
+    private fun createErrorPropertySymbol(diagnostic: ConeDiagnostic): FirErrorPropertySymbol {
+        return FirErrorPropertySymbol(diagnostic).also {
+            buildErrorProperty {
+                session = this@CandidateFactory.bodyResolveComponents.session
+                resolvePhase = FirResolvePhase.BODY_RESOLVE
+                origin = FirDeclarationOrigin.Synthetic
+                name = FirErrorPropertySymbol.NAME
+                this.diagnostic = diagnostic
+                symbol = it
+            }
+        }
     }
 }
 
-fun PostponedArgumentsAnalyzer.Context.addSubsystemFromExpression(statement: FirStatement) {
+fun PostponedArgumentsAnalyzerContext.addSubsystemFromExpression(statement: FirStatement) {
     when (statement) {
-        is FirFunctionCall, is FirQualifiedAccessExpression, is FirWhenExpression, is FirTryExpression, is FirCallableReferenceAccess ->
-            (statement as FirResolvable).candidate()?.let { addOtherSystem(it.system.asReadOnlyStorage()) }
+        is FirFunctionCall,
+        is FirQualifiedAccessExpression,
+        is FirWhenExpression,
+        is FirTryExpression,
+        is FirCheckNotNullCall,
+        is FirCallableReferenceAccess,
+        is FirElvisExpression
+        -> (statement as FirResolvable).candidate()?.let { addOtherSystem(it.system.asReadOnlyStorage()) }
+
+        is FirSafeCallExpression -> addSubsystemFromExpression(statement.regularQualifiedAccess)
         is FirWrappedArgumentExpression -> addSubsystemFromExpression(statement.expression)
         is FirBlock -> statement.returnExpressions().forEach { addSubsystemFromExpression(it) }
-        else -> {}
     }
 }
 

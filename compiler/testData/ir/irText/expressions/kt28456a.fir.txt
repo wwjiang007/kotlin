@@ -20,13 +20,13 @@ FILE fqName:<root> fileName:/kt28456a.kt
       $this: VALUE_PARAMETER name:<this> type:kotlin.Any
   FUN name:set visibility:public modality:FINAL <> ($receiver:<root>.A, i:kotlin.IntArray, v:kotlin.Int) returnType:kotlin.Unit [operator]
     $receiver: VALUE_PARAMETER name:<this> type:<root>.A
-    VALUE_PARAMETER name:i index:0 type:kotlin.IntArray
+    VALUE_PARAMETER name:i index:0 type:kotlin.IntArray varargElementType:kotlin.Int [vararg]
     VALUE_PARAMETER name:v index:1 type:kotlin.Int
     BLOCK_BODY
   FUN name:testSimpleAssignment visibility:public modality:FINAL <> (a:<root>.A) returnType:kotlin.Unit
     VALUE_PARAMETER name:a index:0 type:<root>.A
     BLOCK_BODY
-      ERROR_CALL 'Unresolved reference: <Inapplicable(PARAMETER_MAPPING_ERROR): [/set]>#' type=IrErrorType
+      ERROR_CALL 'Unresolved reference: <Inapplicable(PARAMETER_MAPPING_ERROR): /set>#' type=kotlin.Unit
         CONST Int type=kotlin.Int value=1
         CONST Int type=kotlin.Int value=2
         CONST Int type=kotlin.Int value=3

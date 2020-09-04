@@ -17,10 +17,13 @@ import org.jetbrains.kotlin.idea.test.PluginTestCaseBase
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
+import org.jetbrains.kotlin.test.JUnit3WithIdeaConfigurationRunner
 import org.junit.Assert
+import org.junit.runner.RunWith
 import java.io.File
 
-class KotlinReferencesSearchTest(): AbstractSearcherTest() {
+@RunWith(JUnit3WithIdeaConfigurationRunner::class)
+class KotlinReferencesSearchTest() : AbstractSearcherTest() {
     override fun getTestDataPath(): String {
         return File(PluginTestCaseBase.getTestDataPathBase(), "/search/references").path + File.separator
     }
@@ -58,7 +61,7 @@ class KotlinReferencesSearchTest(): AbstractSearcherTest() {
     // workaround for KT-9788 AssertionError from backand when we read field from inline function
     private val myFixtureProxy: JavaCodeInsightTestFixture get() = myFixture
 
-    private inline fun <reified T: PsiElement> doTest(): List<PsiReference> {
+    private inline fun <reified T : PsiElement> doTest(): List<PsiReference> {
         val psiFile = myFixtureProxy.configureByFile(fileName)
         val func = myFixtureProxy.elementAtCaret.getParentOfType<T>(false)!!
         val refs = ReferencesSearch.search(func).findAll().sortedBy { it.element.textRange.startOffset }
@@ -68,8 +71,7 @@ class KotlinReferencesSearchTest(): AbstractSearcherTest() {
             ExpressionsOfTypeProcessor.mode = ExpressionsOfTypeProcessor.Mode.PLAIN_WHEN_NEEDED
             val localRefs = ReferencesSearch.search(func, LocalSearchScope(psiFile)).findAll()
             Assert.assertEquals(refs.size, localRefs.size)
-        }
-        finally {
+        } finally {
             ExpressionsOfTypeProcessor.mode = ExpressionsOfTypeProcessor.Mode.ALWAYS_SMART
         }
 

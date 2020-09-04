@@ -14,6 +14,7 @@ import org.gradle.api.tasks.testing.AbstractTestTask
 import org.gradle.process.internal.ExecHandleFactory
 import org.jetbrains.kotlin.gradle.internal.testing.KotlinTestRunnerListener
 import org.jetbrains.kotlin.gradle.internal.testing.TCServiceMessagesTestExecutor
+import org.jetbrains.kotlin.gradle.plugin.PropertiesProvider
 import org.jetbrains.kotlin.gradle.utils.injected
 import javax.inject.Inject
 
@@ -22,7 +23,8 @@ abstract class KotlinTest : AbstractTestTask() {
     @Optional
     var targetName: String? = null
 
-    @Input
+    @Internal // Taken into account by excludePatterns.
+    @Deprecated("Use filter.excludePatterns instead.", ReplaceWith("filter.excludePatterns"))
     var excludes = mutableSetOf<String>()
 
     protected val filterExt: DefaultTestFilter
@@ -33,10 +35,11 @@ abstract class KotlinTest : AbstractTestTask() {
     }
 
     val includePatterns: Set<String>
-        @Internal get() = filterExt.includePatterns + filterExt.commandLineIncludePatterns
+        @Input get() = filterExt.includePatterns + filterExt.commandLineIncludePatterns
 
+    @Suppress("DEPRECATION")
     val excludePatterns: Set<String>
-        @Internal get() = excludes
+        @Input get() = excludes + filterExt.excludePatterns
 
     @get:Inject
     open val fileResolver: FileResolver
@@ -59,6 +62,7 @@ abstract class KotlinTest : AbstractTestTask() {
         execHandleFactory,
         buildOperationExecutor,
         runListeners,
+        PropertiesProvider(project).ignoreTcsmOverflow,
         ignoreRunFailures
     )
 }

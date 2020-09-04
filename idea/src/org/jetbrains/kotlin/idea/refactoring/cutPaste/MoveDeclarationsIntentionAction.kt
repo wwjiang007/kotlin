@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2017 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.refactoring.cutPaste
@@ -28,19 +17,21 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiModificationTracker
 import com.intellij.refactoring.BaseRefactoringIntentionAction
 import org.jetbrains.kotlin.idea.core.util.range
+import org.jetbrains.kotlin.idea.KotlinBundle
 
 class MoveDeclarationsIntentionAction(
-        private val processor: MoveDeclarationsProcessor,
-        private val bounds: RangeMarker,
-        private val modificationCount: Long
+    private val processor: MoveDeclarationsProcessor,
+    private val bounds: RangeMarker,
+    private val modificationCount: Long
 ) : BaseRefactoringIntentionAction(), HintAction {
-
-    private val isSingleDeclaration = processor.pastedDeclarations.size == 1
 
     override fun startInWriteAction() = false
 
-    override fun getText() = "Update usages to reflect declaration${if (isSingleDeclaration) "s" else ""} move"
-    override fun getFamilyName() = "Update usages on declarations cut/paste"
+    override fun getText() = KotlinBundle.message("text.update.usages.to.reflect.declaration.0.move",
+        processor.pastedDeclarations.size
+    )
+
+    override fun getFamilyName() = KotlinBundle.message("family.name.update.usages.on.declarations.cut.paste")
 
     override fun isAvailable(project: Project, editor: Editor, element: PsiElement): Boolean {
         return PsiModificationTracker.SERVICE.getInstance(processor.project).modificationCount == modificationCount
@@ -56,7 +47,9 @@ class MoveDeclarationsIntentionAction(
 
         if (PsiModificationTracker.SERVICE.getInstance(processor.project).modificationCount != modificationCount) return false
 
-        val hintText = "$text? ${KeymapUtil.getFirstKeyboardShortcutText(ActionManager.getInstance().getAction(IdeActions.ACTION_SHOW_INTENTION_ACTIONS))}"
+        val hintText = "$text? ${KeymapUtil.getFirstKeyboardShortcutText(
+            ActionManager.getInstance().getAction(IdeActions.ACTION_SHOW_INTENTION_ACTIONS)
+        )}"
         HintManager.getInstance().showQuestionHint(editor, hintText, range.endOffset, range.endOffset) {
             processor.performRefactoring()
             true

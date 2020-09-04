@@ -6,9 +6,9 @@
 package org.jetbrains.kotlin.fir.declarations.impl
 
 import org.jetbrains.kotlin.descriptors.Modality
-import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.fir.FirPureAbstractElement
 import org.jetbrains.kotlin.fir.FirSourceElement
+import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationStatus
 import org.jetbrains.kotlin.fir.declarations.impl.FirDeclarationStatusImpl.Modifier.*
 import org.jetbrains.kotlin.fir.visitors.FirTransformer
@@ -121,6 +121,24 @@ open class FirDeclarationStatusImpl(
             this[STATIC] = value
         }
 
+    override var isFromSealedClass: Boolean
+        get() = this[FROM_SEALED]
+        set(value) {
+            this[FROM_SEALED] = value
+        }
+
+    override var isFromEnumClass: Boolean
+        get() = this[FROM_ENUM]
+        set(value) {
+            this[FROM_ENUM] = value
+        }
+
+    override var isFun: Boolean
+        get() = this[FUN]
+        set(value) {
+            this[FUN] = value
+        }
+
     private enum class Modifier(val mask: Int) {
         EXPECT(0x1),
         ACTUAL(0x2),
@@ -136,7 +154,10 @@ open class FirDeclarationStatusImpl(
         COMPANION(0x800),
         DATA(0x1000),
         SUSPEND(0x2000),
-        STATIC(0x4000)
+        STATIC(0x4000),
+        FROM_SEALED(0x8000),
+        FROM_ENUM(0x10000),
+        FUN(0x20000)
     }
 
     override fun <R, D> acceptChildren(visitor: FirVisitor<R, D>, data: D) {}

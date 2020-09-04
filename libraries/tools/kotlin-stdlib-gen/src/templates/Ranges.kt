@@ -159,7 +159,8 @@ object RangeOps : TemplateGroupBase() {
 
         check(rangeType.isNumeric() == itemType.isNumeric()) { "Required rangeType and itemType both to be numeric or both not, got: $rangeType, $itemType" }
         if (rangeType.isIntegral() != itemType.isIntegral()) {
-            deprecate(Deprecation("This `contains` operation mixing integer and floating point arguments has ambiguous semantics and is going to be removed.", level = DeprecationLevel.WARNING))
+            val message = "This `contains` operation mixing integer and floating point arguments has ambiguous semantics and is going to be removed."
+            deprecate(Deprecation(message, warningSince = "1.3", errorSince = "1.4"))
         }
 
         platformName("${rangeType.name.decapitalize()}RangeContains")
@@ -220,8 +221,12 @@ object RangeOps : TemplateGroupBase() {
 
         signature("to${toType}ExactOrNull()")
         returns("$toType?")
+
+        val isConversionDeprecated = fromType.isFloatingPoint() && toType in listOf(PrimitiveType.Byte, PrimitiveType.Short)
+        val conversion = if (isConversionDeprecated) "toInt().to$toType" else "to$toType"
+
         body {
-            "return if (this in $toType.MIN_VALUE.to$fromType()..$toType.MAX_VALUE.to$fromType()) this.to$toType() else null"
+            "return if (this in $toType.MIN_VALUE.to$fromType()..$toType.MAX_VALUE.to$fromType()) this.$conversion() else null"
         }
     }
 }

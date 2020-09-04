@@ -5,10 +5,12 @@ plugins {
 
 dependencies {
     testCompileOnly(intellijDep())
+    testCompileOnly(project(":kotlin-reflect-api"))
 
     testCompile(project(":idea:jvm-debugger:jvm-debugger-core"))
     testCompile(project(":idea:jvm-debugger:jvm-debugger-evaluation"))
     testCompile(project(":idea:jvm-debugger:jvm-debugger-sequence"))
+    testCompile(project(":idea:jvm-debugger:jvm-debugger-coroutine"))
     testCompile(project(":compiler:backend"))
     testCompile(files("${System.getProperty("java.home")}/../lib/tools.jar"))
     testCompile(project(":kotlin-test:kotlin-test-junit"))
@@ -17,10 +19,6 @@ dependencies {
     testCompile(commonDep("junit:junit"))
 
     testCompile(intellijPluginDep("stream-debugger"))
-
-    Platform[191].orLower {
-        testCompileOnly(intellijDep()) { includeJars("java-api", "java-impl") }
-    }
 
     Platform[192].orHigher {
         testCompileOnly(intellijPluginDep("java")) { includeJars("java-api", "java-impl", "aether-dependency-resolver") }
@@ -31,8 +29,7 @@ dependencies {
     testRuntime(project(":idea:idea-jvm"))
     testRuntime(project(":idea:idea-native")) { isTransitive = false }
     testRuntime(project(":idea:idea-gradle-native")) { isTransitive = false }
-    testRuntime(project(":kotlin-native:kotlin-native-library-reader")) { isTransitive = false }
-    testRuntime(project(":kotlin-native:kotlin-native-utils")) { isTransitive = false }
+    testRuntime(project(":native:frontend.native"))
 
     testRuntime(project(":kotlin-reflect"))
     testRuntime(project(":sam-with-receiver-ide-plugin"))

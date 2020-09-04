@@ -10,15 +10,19 @@ import com.intellij.psi.*
 import com.intellij.psi.impl.light.LightFieldBuilder
 import com.intellij.psi.util.TypeConversionUtil
 import org.jetbrains.annotations.NonNls
+import org.jetbrains.annotations.NotNull
 import org.jetbrains.kotlin.asJava.LightClassGenerationSupport
 import org.jetbrains.kotlin.asJava.builder.LightMemberOriginForDeclaration
-import org.jetbrains.kotlin.asJava.elements.*
+import org.jetbrains.kotlin.asJava.elements.KtLightElement
+import org.jetbrains.kotlin.asJava.elements.KtLightField
+import org.jetbrains.kotlin.asJava.elements.KtLightFieldForSourceDeclarationSupport
+import org.jetbrains.kotlin.asJava.elements.KtUltraLightSimpleModifierList
 import org.jetbrains.kotlin.codegen.PropertyCodegen
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
-import org.jetbrains.kotlin.descriptors.VariableDescriptor
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
 import org.jetbrains.kotlin.idea.KotlinLanguage
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.load.kotlin.TypeMappingMode
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.*
@@ -73,7 +77,8 @@ internal open class KtUltraLightFieldImpl protected constructor(
         KtUltraLightSimpleModifierListField(support, declaration, this, modifiers)
     }
 
-    override fun isEquivalentTo(another: PsiElement?): Boolean = kotlinOrigin == another
+    override fun isEquivalentTo(another: PsiElement?): Boolean =
+        kotlinOrigin == another || (another as? KtLightField)?.kotlinOrigin == kotlinOrigin
 
     override fun getModifierList(): PsiModifierList = modifierList
 
@@ -102,11 +107,12 @@ internal open class KtUltraLightFieldImpl protected constructor(
         }
 
     override val qualifiedNameForNullabilityAnnotation: String?
-        get() {
-            // We don't generate nullability annotations for non-backing fields in backend
-            val typeForAnnotation = kotlinType?.takeUnless { declaration is KtEnumEntry || declaration is KtObjectDeclaration }
-            return computeQualifiedNameForNullabilityAnnotation(typeForAnnotation)
-        }
+        get() =
+            when (declaration) {
+                is KtObjectDeclaration -> NotNull::class.java.name
+                is KtEnumEntry -> null
+                else -> computeQualifiedNameForNullabilityAnnotation(kotlinType)
+            }
 
     override val psiTypeForNullabilityAnnotation: PsiType?
         get() = type
@@ -135,12 +141,24 @@ internal open class KtUltraLightFieldImpl protected constructor(
     override fun getContainingClass() = containingClass
     override fun getContainingFile(): PsiFile? = containingClass.containingFile
 
-    override fun computeConstantValue(): Any? =
-        if (hasModifierProperty(PsiModifier.FINAL) &&
-            (TypeConversionUtil.isPrimitiveAndNotNull(_type) || _type.equalsToText(CommonClassNames.JAVA_LANG_STRING))
-        )
-            (declaration.resolve() as? VariableDescriptor)?.compileTimeInitializer?.value
-        else null
+    private val _initializer by lazyPub {
+        _constantInitializer?.createPsiLiteral(declaration)
+    }
+
+    override fun getInitializer(): PsiExpression? = _initializer
+
+    override fun hasInitializer(): Boolean = initializer !== null
+
+    private val _constantInitializer by lazyPub {
+        if (declaration !is KtProperty) return@lazyPub null
+        if (!declaration.hasModifier(KtTokens.CONST_KEYWORD)) return@lazyPub null
+        if (!declaration.hasInitializer()) return@lazyPub null
+        if (!hasModifierProperty(PsiModifier.FINAL)) return@lazyPub null
+        if (!TypeConversionUtil.isPrimitiveAndNotNull(_type) && !_type.equalsToText(CommonClassNames.JAVA_LANG_STRING)) return@lazyPub null
+        propertyDescriptor?.compileTimeInitializer
+    }
+
+    override fun computeConstantValue(): Any? = _constantInitializer?.value
 
     override fun computeConstantValue(visitedVars: MutableSet<PsiVariable>?): Any? = computeConstantValue()
 

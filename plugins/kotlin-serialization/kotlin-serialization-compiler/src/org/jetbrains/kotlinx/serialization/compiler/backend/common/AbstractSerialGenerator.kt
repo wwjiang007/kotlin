@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -7,12 +7,15 @@ package org.jetbrains.kotlinx.serialization.compiler.backend.common
 
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.translate.utils.AnnotationsUtils
 import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.constants.KClassValue
 import org.jetbrains.kotlin.resolve.descriptorUtil.firstArgument
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
+import org.jetbrains.kotlin.resolve.scopes.getDescriptorsFiltered
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.typeUtil.supertypes
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerializationAnnotations
@@ -35,6 +38,11 @@ abstract class AbstractSerialGenerator(val bindingContext: BindingContext, val c
         getKClassListFromFileAnnotation(
             SerializationAnnotations.contextualFqName,
             currentDeclaration
+        ).plus(
+            getKClassListFromFileAnnotation(
+                SerializationAnnotations.contextualOnFileFqName,
+                currentDeclaration
+            )
         ).toSet()
     }
 
@@ -48,4 +56,7 @@ abstract class AbstractSerialGenerator(val bindingContext: BindingContext, val c
                 { it.toClassDescriptor!! }
             )
     }
+
+    protected fun ClassDescriptor.getFuncDesc(funcName: String): Sequence<FunctionDescriptor> =
+        unsubstitutedMemberScope.getDescriptorsFiltered { it == Name.identifier(funcName) }.asSequence().filterIsInstance<FunctionDescriptor>()
 }

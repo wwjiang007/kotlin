@@ -1,6 +1,7 @@
-// TARGET_BACKEND: JS_IR
 // CHECK_TYPESCRIPT_DECLARATIONS
 // RUN_PLAIN_BOX_FUNCTION
+// SKIP_MINIFICATION
+// SKIP_NODE_JS
 
 @file:JsExport
 
@@ -82,3 +83,14 @@ class A4 {
         get() = field * 10
         set(value) { field = value * 10 }
 }
+
+
+object O0
+
+object O {
+    val x = 10
+    fun foo() = 20
+}
+
+fun takesO(o: O): Int =
+    O.x + O.foo()

@@ -1,5 +1,3 @@
-// IGNORE_BACKEND: JVM_IR
-// TODO: Handle Sequences by extending DefaultIterableHandler.
 val xs = listOf("a", "b", "c", "d").asSequence()
 
 fun box(): String {

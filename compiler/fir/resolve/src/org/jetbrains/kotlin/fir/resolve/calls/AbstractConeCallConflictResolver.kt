@@ -6,25 +6,20 @@
 package org.jetbrains.kotlin.fir.resolve.calls
 
 import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.resolve.inference.InferenceComponents
+import org.jetbrains.kotlin.fir.symbols.StandardClassIds
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.arrayElementType
-import org.jetbrains.kotlin.fir.types.coneTypeUnsafe
-import org.jetbrains.kotlin.resolve.OverloadabilitySpecificityCallbacks
-import org.jetbrains.kotlin.resolve.calls.results.FlatSignature
-import org.jetbrains.kotlin.resolve.calls.results.SimpleConstraintSystem
-import org.jetbrains.kotlin.resolve.calls.results.TypeSpecificityComparator
-import org.jetbrains.kotlin.resolve.calls.results.isSignatureNotLessSpecific
+import org.jetbrains.kotlin.fir.types.classId
+import org.jetbrains.kotlin.fir.types.coneType
+import org.jetbrains.kotlin.resolve.calls.results.*
+import org.jetbrains.kotlin.types.model.KotlinTypeMarker
+import org.jetbrains.kotlin.types.model.requireOrDescribe
 
 abstract class AbstractConeCallConflictResolver(
     private val specificityComparator: TypeSpecificityComparator,
     protected val inferenceComponents: InferenceComponents
-) : ConeCallConflictResolver {
-    protected fun Collection<Candidate>.setIfOneOrEmpty(): Set<Candidate>? = when (size) {
-        0 -> emptySet()
-        1 -> setOf(single())
-        else -> null
-    }
-
+) : ConeCallConflictResolver() {
     /**
      * Returns `true` if [call1] is definitely more or equally specific [call2],
      * `false` otherwise.
@@ -50,9 +45,57 @@ abstract class AbstractConeCallConflictResolver(
         return createEmptyConstraintSystem().isSignatureNotLessSpecific(
             call1,
             call2,
-            OverloadabilitySpecificityCallbacks,
+            SpecificityComparisonWithNumerics,
             specificityComparator
         )
+    }
+
+    @Suppress("PrivatePropertyName")
+    private val SpecificityComparisonWithNumerics = object : SpecificityComparisonCallbacks {
+        override fun isNonSubtypeNotLessSpecific(specific: KotlinTypeMarker, general: KotlinTypeMarker): Boolean {
+            requireOrDescribe(specific is ConeKotlinType, specific)
+            requireOrDescribe(general is ConeKotlinType, general)
+
+            // TODO: support unsigned types
+            // see OverloadingConflictResolver.kt:294
+
+            val int = StandardClassIds.Int
+            val long = StandardClassIds.Long
+            val byte = StandardClassIds.Byte
+            val short = StandardClassIds.Short
+
+            val uInt = StandardClassIds.UInt
+            val uLong = StandardClassIds.ULong
+            val uByte = StandardClassIds.UByte
+            val uShort = StandardClassIds.UShort
+
+            val specificClassId = specific.classId ?: return false
+            val generalClassId = general.classId ?: return false
+
+
+            // int >= long, int >= short, short >= byte
+
+            when {
+                //TypeUtils.equalTypes(specific, _double) && TypeUtils.equalTypes(general, _float) -> return true
+                specificClassId == int -> {
+                    when (generalClassId) {
+                        long -> return true
+                        byte -> return true
+                        short -> return true
+                    }
+                }
+                specificClassId == short && generalClassId == byte -> return true
+                specificClassId == uInt -> {
+                    when (generalClassId) {
+                        uLong -> return true
+                        uByte -> return true
+                        uShort -> return true
+                    }
+                }
+                specificClassId == uShort && generalClassId == uByte -> return true
+            }
+            return false
+        }
     }
 
     protected fun createFlatSignature(call: Candidate): FlatSignature<Candidate> {
@@ -68,8 +111,8 @@ abstract class AbstractConeCallConflictResolver(
     protected fun createFlatSignature(call: Candidate, variable: FirVariable<*>): FlatSignature<Candidate> {
         return FlatSignature(
             call,
-            (variable as? FirProperty)?.typeParameters?.map { it.symbol }.orEmpty(),
-            listOfNotNull<ConeKotlinType>(variable.receiverTypeRef?.coneTypeUnsafe()),
+            (variable as? FirProperty)?.typeParameters?.map { it.symbol.toLookupTag() }.orEmpty(),
+            listOfNotNull(variable.receiverTypeRef?.coneType),
             variable.receiverTypeRef != null,
             false,
             0,
@@ -81,7 +124,7 @@ abstract class AbstractConeCallConflictResolver(
     protected fun createFlatSignature(call: Candidate, constructor: FirConstructor): FlatSignature<Candidate> {
         return FlatSignature(
             call,
-            constructor.typeParameters.map { it.symbol },
+            constructor.typeParameters.map { it.symbol.toLookupTag() },
             computeParameterTypes(call, constructor),
             //constructor.receiverTypeRef != null,
             false,
@@ -95,7 +138,7 @@ abstract class AbstractConeCallConflictResolver(
     protected fun createFlatSignature(call: Candidate, function: FirSimpleFunction): FlatSignature<Candidate> {
         return FlatSignature(
             call,
-            function.typeParameters.map { it.symbol },
+            function.typeParameters.map { it.symbol.toLookupTag() },
             computeParameterTypes(call, function),
             function.receiverTypeRef != null,
             function.valueParameters.any { it.isVararg },
@@ -106,8 +149,8 @@ abstract class AbstractConeCallConflictResolver(
     }
 
     private fun FirValueParameter.argumentType(): ConeKotlinType {
-        val type = returnTypeRef.coneTypeUnsafe<ConeKotlinType>()
-        if (isVararg) return type.arrayElementType(inferenceComponents.session)!!
+        val type = returnTypeRef.coneType
+        if (isVararg) return type.arrayElementType()!!
         return type
     }
 
@@ -115,15 +158,15 @@ abstract class AbstractConeCallConflictResolver(
         call: Candidate,
         function: FirFunction<*>
     ): List<ConeKotlinType> {
-        return (call.resultingTypeForCallableReference?.typeArguments?.map { it as ConeKotlinType }
-            ?: (listOfNotNull(function.receiverTypeRef?.coneTypeUnsafe()) +
-                    call.argumentMapping?.map { it.value.argumentType() }.orEmpty()))
+        return listOfNotNull(function.receiverTypeRef?.coneType) +
+                (call.resultingTypeForCallableReference?.typeArguments?.map { it as ConeKotlinType }
+                    ?: call.argumentMapping?.map { it.value.argumentType() }.orEmpty())
     }
 
     private fun createFlatSignature(call: Candidate, klass: FirClass<*>): FlatSignature<Candidate> {
         return FlatSignature(
             call,
-            (klass as? FirRegularClass)?.typeParameters?.map { it.symbol }.orEmpty(),
+            (klass as? FirRegularClass)?.typeParameters?.map { it.symbol.toLookupTag() }.orEmpty(),
             valueParameterTypes = emptyList(),
             hasExtensionReceiver = false,
             hasVarargs = false,

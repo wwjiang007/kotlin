@@ -13,7 +13,7 @@ object Generators : TemplateGroupBase() {
     init {
         defaultBuilder {
             specialFor(ArraysOfUnsigned) {
-                since("1.3")
+                sinceAtLeast("1.3")
                 annotation("@ExperimentalUnsignedTypes")
             }
         }
@@ -580,6 +580,12 @@ object Generators : TemplateGroupBase() {
             while *second* list contains elements for which [predicate] yielded `false`.
             """
         }
+        sample(when (family) {
+                CharSequences, Strings -> "samples.text.Strings.partition"
+                ArraysOfObjects, ArraysOfPrimitives -> "samples.collections.Arrays.Transformations.partitionArrayOfPrimitives"
+                Sequences -> "samples.collections.Sequences.Transformations.partition"
+                else -> "samples.collections.Iterables.Operations.partition"
+        })
         sequenceClassification(terminal)
         returns("Pair<List<T>, List<T>>")
         body {
@@ -868,7 +874,8 @@ object Generators : TemplateGroupBase() {
             @param size the number of elements to take in each ${f.snapshotResult}, must be positive and can be greater than the number of elements in this ${f.collection}.
             """
         }
-        sample("samples.collections.Collections.Transformations.chunked")
+        specialFor(Iterables, Sequences) { sample("samples.collections.Collections.Transformations.chunked") }
+        specialFor(CharSequences) { sample("samples.text.Strings.chunked") }
         specialFor(Iterables) { returns("List<List<T>>") }
         specialFor(Sequences) { returns("Sequence<List<T>>") }
         specialFor(CharSequences) { returns("List<String>") }
@@ -959,7 +966,7 @@ object Generators : TemplateGroupBase() {
         }
         body(CharSequences) {
             """
-            val size = ${if (f == CharSequences) "length" else "size" } - 1
+            val size = ${f.code.size} - 1
             if (size < 1) return emptyList()
             val result = ArrayList<R>(size)
             for (index in 0 until size) {

@@ -7,10 +7,11 @@ package org.jetbrains.kotlin.j2k
 
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Computable
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.codeStyle.CodeStyleManager
-import com.intellij.testFramework.LightPlatformTestCase
+import com.intellij.psi.impl.source.PostprocessReformattingAspect
 import org.jetbrains.kotlin.idea.j2k.IdeaJavaToKotlinServices
 import org.jetbrains.kotlin.idea.j2k.J2kPostProcessor
 import org.jetbrains.kotlin.idea.test.KotlinWithJdkAndRuntimeLightProjectDescriptor
@@ -38,25 +39,32 @@ abstract class AbstractJavaToKotlinConverterSingleFileTest : AbstractJavaToKotli
 
         val settings = ConverterSettings.defaultSettings.copy()
         val directives = KotlinTestUtils.parseDirectives(javaCode)
-        for ((name, value) in directives) {
-            when (name) {
-                "forceNotNullTypes" -> settings.forceNotNullTypes = value.toBoolean()
-                "specifyLocalVariableTypeByDefault" -> settings.specifyLocalVariableTypeByDefault = value.toBoolean()
-                "specifyFieldTypeByDefault" -> settings.specifyFieldTypeByDefault = value.toBoolean()
-                "openByDefault" -> settings.openByDefault = value.toBoolean()
-                else -> throw IllegalArgumentException("Unknown option: $name")
-            }
+        directives["FORCE_NOT_NULL_TYPES"]?.let {
+            settings.forceNotNullTypes = it.toBoolean()
+        }
+        directives["SPECIFY_LOCAL_VARIABLE_TYPE_BY_DEFAULT"]?.let {
+            settings.specifyLocalVariableTypeByDefault = it.toBoolean()
+        }
+        directives["SPECIFY_FIELD_TYPE_BY_DEFAULT"]?.let {
+            settings.specifyFieldTypeByDefault = it.toBoolean()
+        }
+        directives["OPEN_BY_DEFAULT"]?.let {
+            settings.openByDefault = it.toBoolean()
         }
 
-        val rawConverted = when (prefix) {
-            "expression" -> expressionToKotlin(javaCode, settings, project)
-            "statement" -> statementToKotlin(javaCode, settings, project)
-            "method" -> methodToKotlin(javaCode, settings, project)
-            "class" -> fileToKotlin(javaCode, settings, project)
-            "file" -> fileToKotlin(javaCode, settings, project)
-            else -> throw IllegalStateException("Specify what is it: file, class, method, statement or expression " +
-                                                "using the first line of test data file")
-        }
+        val rawConverted = WriteCommandAction.runWriteCommandAction(project, Computable {
+            PostprocessReformattingAspect.getInstance(project).doPostponedFormatting()
+            return@Computable when (prefix) {
+                "expression" -> expressionToKotlin(javaCode, settings, project)
+                "statement" -> statementToKotlin(javaCode, settings, project)
+                "method" -> methodToKotlin(javaCode, settings, project)
+                "class" -> fileToKotlin(javaCode, settings, project)
+                "file" -> fileToKotlin(javaCode, settings, project)
+                else -> throw IllegalStateException(
+                    "Specify what is it: file, class, method, statement or expression using the first line of test data file"
+                )
+            }
+        })
 
         val reformatInFun = prefix in setOf("element", "expression", "statement")
 

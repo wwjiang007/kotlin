@@ -1,10 +1,16 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.roots
 
+import com.intellij.openapi.externalSystem.model.DataNode
+import com.intellij.openapi.externalSystem.model.ProjectKeys
+import com.intellij.openapi.externalSystem.model.project.ContentRootData
+import com.intellij.openapi.externalSystem.model.project.ExternalSystemSourceType
+import com.intellij.openapi.externalSystem.service.project.manage.SourceFolderManager
+import com.intellij.openapi.externalSystem.util.ExternalSystemApiUtil
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
@@ -13,25 +19,33 @@ import com.intellij.openapi.roots.ModifiableRootModel
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.roots.SourceFolder
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.NonPhysicalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.psi.PsiCodeFragment
 import com.intellij.psi.PsiFile
 import com.intellij.util.containers.ContainerUtil
+import com.intellij.util.io.URLUtil
 import org.jetbrains.jps.model.JpsElement
 import org.jetbrains.jps.model.ex.JpsElementBase
-import org.jetbrains.jps.model.java.*
+import org.jetbrains.jps.model.java.JavaModuleSourceRootTypes
+import org.jetbrains.jps.model.java.JavaResourceRootType
+import org.jetbrains.jps.model.java.JavaSourceRootProperties
+import org.jetbrains.jps.model.java.JavaSourceRootType
 import org.jetbrains.jps.model.module.JpsModuleSourceRoot
 import org.jetbrains.jps.model.module.JpsModuleSourceRootType
 import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.idea.framework.KotlinSdkType
-import java.util.ArrayList
+import org.jetbrains.plugins.gradle.model.data.GradleSourceSetData
+import java.util.*
 
 private fun JpsModuleSourceRoot.getOrCreateProperties() =
     getProperties(rootType)?.also { (it as? JpsElementBase<*>)?.setParent(null) } ?: rootType.createDefaultProperties()
 
 fun JpsModuleSourceRoot.getMigratedSourceRootTypeWithProperties(): Pair<JpsModuleSourceRootType<JpsElement>, JpsElement>? {
     val currentRootType = rootType
+
     @Suppress("UNCHECKED_CAST")
     val newSourceRootType: JpsModuleSourceRootType<JpsElement> = when (currentRootType) {
         JavaSourceRootType.SOURCE -> SourceKotlinRootType as JpsModuleSourceRootType<JpsElement>
@@ -55,6 +69,29 @@ fun migrateNonJvmSourceFolders(modifiableRootModel: ModifiableRootModel) {
     KotlinSdkType.setUpIfNeeded()
 }
 
+private val ContentRootData.SourceRoot.pathAsUrl
+    get() = VirtualFileManager.constructUrl(URLUtil.FILE_PROTOCOL, FileUtil.toSystemIndependentName(path))
+
+fun populateNonJvmSourceRootTypes(sourceSetNode: DataNode<GradleSourceSetData>, module: Module) {
+    val sourceFolderManager = SourceFolderManager.getInstance(module.project)
+    val contentRootDataNodes = ExternalSystemApiUtil.findAll(sourceSetNode, ProjectKeys.CONTENT_ROOT)
+    val contentRootDataList = contentRootDataNodes.mapNotNull { it.data }
+    if (contentRootDataList.isEmpty()) return
+
+    val externalToKotlinSourceTypes = mapOf(
+        ExternalSystemSourceType.SOURCE to SourceKotlinRootType,
+        ExternalSystemSourceType.TEST to TestSourceKotlinRootType
+    )
+    externalToKotlinSourceTypes.forEach { (externalType, kotlinType) ->
+        val sourcesRoots = contentRootDataList.flatMap { it.getPaths(externalType) }
+        sourcesRoots.forEach {
+            if (!FileUtil.exists(it.path)) {
+                sourceFolderManager.addSourceFolder(module, it.pathAsUrl, kotlinType)
+            }
+        }
+    }
+}
+
 fun getKotlinAwareDestinationSourceRoots(project: Project): List<VirtualFile> {
     return ModuleManager.getInstance(project).modules.flatMap { it.collectKotlinAwareDestinationSourceRoots() }
 }
@@ -72,7 +109,7 @@ private fun Module.collectKotlinAwareDestinationSourceRoots(): List<VirtualFile>
         .toList()
 }
 
-fun isOutsideSourceRootSet(psiFile : PsiFile?, sourceRootTypes: Set<JpsModuleSourceRootType<*>>): Boolean {
+fun isOutsideSourceRootSet(psiFile: PsiFile?, sourceRootTypes: Set<JpsModuleSourceRootType<*>>): Boolean {
     if (psiFile == null || psiFile is PsiCodeFragment) return false
     val file = psiFile.virtualFile ?: return false
     if (file.fileSystem is NonPhysicalFileSystem) return false
@@ -80,7 +117,7 @@ fun isOutsideSourceRootSet(psiFile : PsiFile?, sourceRootTypes: Set<JpsModuleSou
     return !projectFileIndex.isUnderSourceRootOfType(file, sourceRootTypes) && !projectFileIndex.isInLibrary(file)
 }
 
-fun isOutsideKotlinAwareSourceRoot(psiFile : PsiFile?) = isOutsideSourceRootSet(psiFile, KOTLIN_AWARE_SOURCE_ROOT_TYPES)
+fun isOutsideKotlinAwareSourceRoot(psiFile: PsiFile?) = isOutsideSourceRootSet(psiFile, KOTLIN_AWARE_SOURCE_ROOT_TYPES)
 
 /**
  * @return list of all java source roots in the project which can be suggested as a target directory for a class created by user

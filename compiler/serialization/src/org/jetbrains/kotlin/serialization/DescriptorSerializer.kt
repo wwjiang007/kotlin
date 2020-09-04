@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -25,9 +25,8 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils.isEnumEntry
 import org.jetbrains.kotlin.resolve.MemberComparator
-import org.jetbrains.kotlin.resolve.RequireKotlinNames
+import org.jetbrains.kotlin.resolve.RequireKotlinConstants
 import org.jetbrains.kotlin.resolve.calls.components.isActualParameterWithAnyExpectedDefault
-import org.jetbrains.kotlin.resolve.checkers.KotlinVersionStringAnnotationValueChecker
 import org.jetbrains.kotlin.resolve.constants.EnumValue
 import org.jetbrains.kotlin.resolve.constants.IntValue
 import org.jetbrains.kotlin.resolve.constants.NullValue
@@ -46,7 +45,8 @@ class DescriptorSerializer private constructor(
     private val extension: SerializerExtension,
     val typeTable: MutableTypeTable,
     private val versionRequirementTable: MutableVersionRequirementTable?,
-    private val serializeTypeTableToFunction: Boolean
+    private val serializeTypeTableToFunction: Boolean,
+    val plugins: List<DescriptorSerializerPlugin> = emptyList()
 ) {
     private val contractSerializer = ContractSerializer()
 
@@ -69,7 +69,8 @@ class DescriptorSerializer private constructor(
             ProtoEnumFlags.visibility(normalizeVisibility(classDescriptor)),
             ProtoEnumFlags.modality(classDescriptor.modality),
             ProtoEnumFlags.classKind(classDescriptor.kind, classDescriptor.isCompanionObject),
-            classDescriptor.isInner, classDescriptor.isData, classDescriptor.isExternal, classDescriptor.isExpect, classDescriptor.isInline
+            classDescriptor.isInner, classDescriptor.isData, classDescriptor.isExternal, classDescriptor.isExpect,
+            classDescriptor.isInline, classDescriptor.isFun
         )
         if (flags != builder.flags) {
             builder.flags = flags
@@ -151,6 +152,8 @@ class DescriptorSerializer private constructor(
         builder.addAllVersionRequirement(versionRequirementTable.serializeVersionRequirements(classDescriptor))
 
         extension.serializeClass(classDescriptor, builder, versionRequirementTable, this)
+
+        plugins.forEach { it.afterClass(classDescriptor, builder, versionRequirementTable, this, extension) }
 
         writeVersionRequirementForInlineClasses(classDescriptor, builder, versionRequirementTable)
 
@@ -237,7 +240,7 @@ class DescriptorSerializer private constructor(
             ProtoEnumFlags.modality(descriptor.modality),
             ProtoEnumFlags.memberKind(descriptor.kind),
             descriptor.isVar, hasGetter, hasSetter, hasConstant, descriptor.isConst, descriptor.isLateInit, descriptor.isExternal,
-            @Suppress("DEPRECATION") descriptor.isDelegated, descriptor.isExpect
+            descriptor.isDelegated, descriptor.isExpect
         )
         if (flags != builder.flags) {
             builder.flags = flags
@@ -288,6 +291,14 @@ class DescriptorSerializer private constructor(
         else
             descriptor.visibility
 
+    private fun shouldSerializeHasStableParameterNames(descriptor: CallableMemberDescriptor): Boolean {
+        return when {
+            descriptor.hasStableParameterNames() -> true
+            descriptor.kind == CallableMemberDescriptor.Kind.DELEGATION -> true // remove this line to fix KT-4758
+            else -> false
+        }
+    }
+
     fun functionProto(descriptor: FunctionDescriptor): ProtoBuf.Function.Builder? {
         if (!extension.shouldSerializeFunction(descriptor)) return null
 
@@ -301,7 +312,7 @@ class DescriptorSerializer private constructor(
             ProtoEnumFlags.modality(descriptor.modality),
             ProtoEnumFlags.memberKind(descriptor.kind),
             descriptor.isOperator, descriptor.isInfix, descriptor.isInline, descriptor.isTailrec, descriptor.isExternal,
-            descriptor.isSuspend, descriptor.isExpect
+            descriptor.isSuspend, descriptor.isExpect, shouldSerializeHasStableParameterNames(descriptor)
         )
         if (flags != builder.flags) {
             builder.flags = flags
@@ -364,7 +375,8 @@ class DescriptorSerializer private constructor(
         val local = createChildSerializer(descriptor)
 
         val flags = Flags.getConstructorFlags(
-            hasAnnotations(descriptor), ProtoEnumFlags.visibility(normalizeVisibility(descriptor)), !descriptor.isPrimary
+            hasAnnotations(descriptor), ProtoEnumFlags.visibility(normalizeVisibility(descriptor)), !descriptor.isPrimary,
+            shouldSerializeHasStableParameterNames(descriptor)
         )
         if (flags != builder.flags) {
             builder.flags = flags
@@ -449,7 +461,7 @@ class DescriptorSerializer private constructor(
         }
 
         for (annotation in descriptor.nonSourceAnnotations) {
-            builder.addAnnotation(extension.annotationSerializer.serializeAnnotation(annotation))
+            builder.addAnnotation(extension.annotationSerializer.serializeAnnotation(annotation)!!)
         }
 
         extension.serializeTypeAlias(descriptor, builder)
@@ -671,15 +683,15 @@ class DescriptorSerializer private constructor(
     // Returns a list of indices into versionRequirementTable, or empty list if there's no @RequireKotlin on the descriptor
     private fun MutableVersionRequirementTable.serializeVersionRequirements(descriptor: DeclarationDescriptor): List<Int> =
         descriptor.annotations
-            .filter { it.fqName == RequireKotlinNames.FQ_NAME }
+            .filter { it.fqName == RequireKotlinConstants.FQ_NAME }
             .mapNotNull(::serializeVersionRequirementFromRequireKotlin)
             .map(::get)
 
     private fun serializeVersionRequirementFromRequireKotlin(annotation: AnnotationDescriptor): ProtoBuf.VersionRequirement.Builder? {
         val args = annotation.allValueArguments
 
-        val versionString = (args[RequireKotlinNames.VERSION] as? StringValue)?.value ?: return null
-        val matchResult = KotlinVersionStringAnnotationValueChecker.VERSION_REGEX.matchEntire(versionString) ?: return null
+        val versionString = (args[RequireKotlinConstants.VERSION] as? StringValue)?.value ?: return null
+        val matchResult = RequireKotlinConstants.VERSION_REGEX.matchEntire(versionString) ?: return null
 
         val major = matchResult.groupValues.getOrNull(1)?.toIntOrNull() ?: return null
         val minor = matchResult.groupValues.getOrNull(2)?.toIntOrNull() ?: 0
@@ -691,12 +703,12 @@ class DescriptorSerializer private constructor(
             writeVersionFull = { proto.versionFull = it }
         )
 
-        val message = (args[RequireKotlinNames.MESSAGE] as? StringValue)?.value
+        val message = (args[RequireKotlinConstants.MESSAGE] as? StringValue)?.value
         if (message != null) {
             proto.message = stringTable.getStringIndex(message)
         }
 
-        when ((args[RequireKotlinNames.LEVEL] as? EnumValue)?.enumEntryName?.asString()) {
+        when ((args[RequireKotlinConstants.LEVEL] as? EnumValue)?.enumEntryName?.asString()) {
             DeprecationLevel.ERROR.name -> {
                 // ERROR is the default level
             }
@@ -704,7 +716,7 @@ class DescriptorSerializer private constructor(
             DeprecationLevel.HIDDEN.name -> proto.level = ProtoBuf.VersionRequirement.Level.HIDDEN
         }
 
-        when ((args[RequireKotlinNames.VERSION_KIND] as? EnumValue)?.enumEntryName?.asString()) {
+        when ((args[RequireKotlinConstants.VERSION_KIND] as? EnumValue)?.enumEntryName?.asString()) {
             ProtoBuf.VersionRequirement.VersionKind.LANGUAGE_VERSION.name -> {
                 // LANGUAGE_VERSION is the default kind
             }
@@ -714,7 +726,7 @@ class DescriptorSerializer private constructor(
                 proto.versionKind = ProtoBuf.VersionRequirement.VersionKind.API_VERSION
         }
 
-        val errorCode = (args[RequireKotlinNames.ERROR_CODE] as? IntValue)?.value
+        val errorCode = (args[RequireKotlinConstants.ERROR_CODE] as? IntValue)?.value
         if (errorCode != null && errorCode != -1) {
             proto.errorCode = errorCode
         }
@@ -741,6 +753,13 @@ class DescriptorSerializer private constructor(
     )
 
     companion object {
+        private val plugins: MutableSet<DescriptorSerializerPlugin> = mutableSetOf()
+
+        @JvmStatic
+        fun registerSerializerPlugin(plugin: DescriptorSerializerPlugin) {
+            plugins.add(plugin)
+        }
+
         @JvmStatic
         fun createTopLevel(extension: SerializerExtension): DescriptorSerializer =
             DescriptorSerializer(
@@ -775,7 +794,8 @@ class DescriptorSerializer private constructor(
                 MutableTypeTable(),
                 if (container is ClassDescriptor && !isVersionRequirementTableWrittenCorrectly(extension.metadataVersion))
                     parent.versionRequirementTable else MutableVersionRequirementTable(),
-                serializeTypeTableToFunction = false
+                serializeTypeTableToFunction = false,
+                plugins.toList()
             )
             for (typeParameter in descriptor.declaredTypeParameters) {
                 serializer.typeParameters.intern(typeParameter)

@@ -50,6 +50,9 @@ import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.ErrorsJvm.*
+import org.jetbrains.kotlin.resolve.konan.diagnostics.ErrorsNative.INCOMPATIBLE_THROWS_OVERRIDE
+import org.jetbrains.kotlin.resolve.konan.diagnostics.ErrorsNative.MISSING_EXCEPTION_IN_THROWS_ON_SUSPEND
+import org.jetbrains.kotlin.resolve.konan.diagnostics.ErrorsNative.THROWS_LIST_EMPTY
 
 class QuickFixRegistrar : QuickFixContributor {
     override fun registerQuickFixes(quickFixes: QuickFixes) {
@@ -160,6 +163,7 @@ class QuickFixRegistrar : QuickFixContributor {
         UNRESOLVED_REFERENCE.registerFactory(ImportFix)
         UNRESOLVED_REFERENCE.registerFactory(ImportConstructorReferenceFix)
         DEPRECATED_ACCESS_BY_SHORT_NAME.registerFactory(AddExplicitImportForDeprecatedVisibilityFix.Factory)
+        TYPE_INFERENCE_CANDIDATE_WITH_SAM_AND_VARARG.registerFactory(AddSpreadOperatorForArrayAsVarargAfterSamFixFactory)
 
         TOO_MANY_ARGUMENTS.registerFactory(ImportForMismatchingArgumentsFix)
         NO_VALUE_FOR_PARAMETER.registerFactory(ImportForMismatchingArgumentsFix)
@@ -213,6 +217,7 @@ class QuickFixRegistrar : QuickFixContributor {
         ABSTRACT_MEMBER_NOT_IMPLEMENTED.registerActions(implementMembersHandler, implementMembersAsParametersHandler)
         ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED.registerActions(implementMembersHandler, implementMembersAsParametersHandler)
         MANY_INTERFACES_MEMBER_NOT_IMPLEMENTED.registerActions(implementMembersHandler, implementMembersAsParametersHandler)
+        MANY_IMPL_MEMBER_NOT_IMPLEMENTED.registerActions(implementMembersHandler)
 
         VAL_WITH_SETTER.registerFactory(ChangeVariableMutabilityFix.VAL_WITH_SETTER_FACTORY)
         VAL_REASSIGNMENT.registerFactory(
@@ -449,6 +454,7 @@ class QuickFixRegistrar : QuickFixContributor {
             MigrateExternalExtensionFix
         )
         PROTECTED_CALL_FROM_PUBLIC_INLINE.registerFactory(ReplaceProtectedToPublishedApiCallFix)
+        PROTECTED_CALL_FROM_PUBLIC_INLINE_ERROR.registerFactory(ReplaceProtectedToPublishedApiCallFix)
 
         POSITIONED_VALUE_ARGUMENT_FOR_JAVA_ANNOTATION.registerFactory(ReplaceJavaAnnotationPositionedArgumentsFix)
 
@@ -578,6 +584,7 @@ class QuickFixRegistrar : QuickFixContributor {
         ASSIGNING_SINGLE_ELEMENT_TO_VARARG_IN_NAMED_FORM_FUNCTION_ERROR.registerFactory(SurroundWithArrayOfWithSpreadOperatorInFunctionFix)
 
         REDUNDANT_SPREAD_OPERATOR_IN_NAMED_FORM_IN_ANNOTATION.registerFactory(ReplaceWithArrayCallInAnnotationFix)
+        REDUNDANT_SPREAD_OPERATOR_IN_NAMED_FORM_IN_FUNCTION.registerFactory(RemoveRedundantSpreadOperatorFix)
 
         JAVA_MODULE_DOES_NOT_DEPEND_ON_MODULE.registerFactory(KotlinAddRequiredModuleFix)
 
@@ -625,8 +632,31 @@ class QuickFixRegistrar : QuickFixContributor {
         CONSTRUCTOR_IN_OBJECT.registerFactory(ChangeObjectToClassFix)
 
         REDUNDANT_LABEL_WARNING.registerFactory(RemoveRedundantLabelFix)
+        NOT_A_FUNCTION_LABEL.registerFactory(RemoveReturnLabelFix)
+        NOT_A_FUNCTION_LABEL_WARNING.registerFactory(RemoveReturnLabelFix)
+
+        ANNOTATION_ON_SUPERCLASS.registerFactory(RemoveAnnotationFix)
+        ANNOTATION_ON_SUPERCLASS_WARNING.registerFactory(RemoveAnnotationFix)
+
+        REPEATED_ANNOTATION.registerFactory(RemoveAnnotationFix)
+        REPEATED_ANNOTATION_WARNING.registerFactory(RemoveAnnotationFix)
 
         ACCIDENTAL_OVERRIDE.registerFactory(MakePrivateAndOverrideMemberFix.AccidentalOverrideFactory)
 
+        MUST_BE_INITIALIZED.registerFactory(ChangeVariableMutabilityFix.MUST_BE_INITIALIZED_FACTORY)
+
+        TOO_MANY_ARGUMENTS.registerFactory(RemoveArgumentFix)
+
+        AMBIGUOUS_SUPER.registerFactory(SpecifySuperTypeFix)
+
+        FUN_INTERFACE_WRONG_COUNT_OF_ABSTRACT_MEMBERS.registerFactory(RemoveModifierFix.createRemoveFunFromInterfaceFactory())
+
+        TOPLEVEL_TYPEALIASES_ONLY.registerFactory(MoveTypeAliasToTopLevelFix)
+
+        CONFLICTING_JVM_DECLARATIONS.registerFactory(AddJvmNameAnnotationFix)
+
+        MISSING_EXCEPTION_IN_THROWS_ON_SUSPEND.registerFactory(AddExceptionToThrowsFix)
+        THROWS_LIST_EMPTY.registerFactory(RemoveAnnotationFix)
+        INCOMPATIBLE_THROWS_OVERRIDE.registerFactory(RemoveAnnotationFix)
     }
 }

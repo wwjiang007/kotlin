@@ -1,5 +1,3 @@
-// IGNORE_BACKEND: JVM_IR
-// TODO: Handle Sequences by extending DefaultIterableHandler.
 // FULL_JDK
 
 val xsl = arrayListOf("a", "b", "c", "d")

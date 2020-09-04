@@ -1,25 +1,12 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.refactoring.rename
 
-import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.command.impl.StartMarkAction
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiMember
@@ -29,17 +16,15 @@ import com.intellij.refactoring.rename.inplace.MemberInplaceRenamer
 import org.jetbrains.kotlin.asJava.unwrapped
 import org.jetbrains.kotlin.idea.references.SyntheticPropertyAccessorReference
 import org.jetbrains.kotlin.idea.references.mainReference
-import org.jetbrains.kotlin.idea.statistics.FUSEventGroups
-import org.jetbrains.kotlin.idea.statistics.KotlinFUSLogger
 import org.jetbrains.kotlin.psi.KtPsiUtil
 import org.jetbrains.kotlin.psi.KtSimpleNameExpression
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
 
 class JavaMemberByKotlinReferenceInplaceRenameHandler : MemberInplaceRenameHandler() {
     class Renamer(
-            elementToRename: PsiNameIdentifierOwner,
-            element: PsiElement,
-            editor: Editor
+        elementToRename: PsiNameIdentifierOwner,
+        element: PsiElement,
+        editor: Editor
     ) : MemberInplaceRenamer(elementToRename, element, editor) {
         override fun performRefactoringRename(newName: String, markAction: StartMarkAction) {
             super.performRefactoringRename(KtPsiUtil.unquoteIdentifier(newName), markAction)
@@ -58,15 +43,4 @@ class JavaMemberByKotlinReferenceInplaceRenameHandler : MemberInplaceRenameHandl
     override fun createMemberRenamer(element: PsiElement, elementToRename: PsiNameIdentifierOwner, editor: Editor): MemberInplaceRenamer {
         return Renamer(elementToRename, element, editor)
     }
-
-    override fun invoke(project: Project, elements: Array<out PsiElement>, dataContext: DataContext) {
-        super.invoke(project, elements, dataContext)
-        KotlinFUSLogger.log(FUSEventGroups.Refactoring, this::class.java.name)
-    }
-
-    override fun invoke(project: Project, editor: Editor?, file: PsiFile?, dataContext: DataContext?) {
-        super.invoke(project, editor, file, dataContext)
-        KotlinFUSLogger.log(FUSEventGroups.Refactoring, this::class.java.name)
-    }
-
 }

@@ -6,55 +6,61 @@
 package org.jetbrains.kotlin.ir.backend.js.lower.serialization.ir
 
 import org.jetbrains.kotlin.backend.common.LoggingContext
+import org.jetbrains.kotlin.backend.common.overrides.FakeOverrideBuilder
+import org.jetbrains.kotlin.backend.common.overrides.FakeOverrideControl
 import org.jetbrains.kotlin.backend.common.serialization.*
-import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
-import org.jetbrains.kotlin.descriptors.DeclarationDescriptorWithVisibility
+import org.jetbrains.kotlin.backend.common.serialization.signature.IdSignatureSerializer
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.descriptors.Visibilities
-import org.jetbrains.kotlin.descriptors.konan.kotlinLibrary
+import org.jetbrains.kotlin.ir.builders.TranslationPluginContext
+import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import org.jetbrains.kotlin.ir.descriptors.IrAbstractFunctionFactory
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
-import org.jetbrains.kotlin.ir.util.KotlinMangler
+import org.jetbrains.kotlin.ir.util.ReferenceSymbolTable
 import org.jetbrains.kotlin.ir.util.SymbolTable
-import org.jetbrains.kotlin.ir.util.UniqId
-import org.jetbrains.kotlin.resolve.descriptorUtil.isPublishedApi
+import org.jetbrains.kotlin.ir.util.TypeTranslator
+import org.jetbrains.kotlin.library.IrLibrary
+import org.jetbrains.kotlin.library.SerializedIrFile
+import org.jetbrains.kotlin.resolve.BindingContext
 
 class JsIrLinker(
-    currentModule: ModuleDescriptor,
-    mangler: KotlinMangler,
-    logger: LoggingContext,
-    builtIns: IrBuiltIns,
-    symbolTable: SymbolTable
-) : KotlinIrLinker(logger, builtIns, symbolTable, emptyList(), null, mangler),
-    DescriptorUniqIdAware by DeserializedDescriptorUniqIdAware {
+    private val currentModule: ModuleDescriptor?, logger: LoggingContext, builtIns: IrBuiltIns, symbolTable: SymbolTable,
+    override val functionalInterfaceFactory: IrAbstractFunctionFactory,
+    override val translationPluginContext: TranslationPluginContext?,
+    private val icData: List<SerializedIrFile>? = null,
+    deserializeFakeOverrides: Boolean = FakeOverrideControl.deserializeFakeOverrides
+) : KotlinIrLinker(currentModule, logger, builtIns, symbolTable, emptyList(), deserializeFakeOverrides) {
 
-    override val descriptorReferenceDeserializer =
-        JsDescriptorReferenceDeserializer(currentModule, mangler, builtIns)
+    override val fakeOverrideBuilder = FakeOverrideBuilder(symbolTable, IdSignatureSerializer(JsManglerIr), builtIns)
 
-    override fun reader(moduleDescriptor: ModuleDescriptor, fileIndex: Int, uniqId: UniqId) =
-        moduleDescriptor.kotlinLibrary.irDeclaration(uniqId.index, fileIndex)
+    override fun isBuiltInModule(moduleDescriptor: ModuleDescriptor): Boolean =
+        moduleDescriptor === moduleDescriptor.builtIns.builtInsModule
 
-    override fun readSymbol(moduleDescriptor: ModuleDescriptor, fileIndex: Int, symbolIndex: Int) =
-        moduleDescriptor.kotlinLibrary.symbol(symbolIndex, fileIndex)
+    override fun createModuleDeserializer(moduleDescriptor: ModuleDescriptor, klib: IrLibrary?, strategy: DeserializationStrategy): IrModuleDeserializer =
+        JsModuleDeserializer(moduleDescriptor, klib ?: error("Expecting kotlin library"), strategy)
 
-    override fun readType(moduleDescriptor: ModuleDescriptor, fileIndex: Int, typeIndex: Int) =
-        moduleDescriptor.kotlinLibrary.type(typeIndex, fileIndex)
+    private inner class JsModuleDeserializer(moduleDescriptor: ModuleDescriptor, klib: IrLibrary, strategy: DeserializationStrategy) :
+        KotlinIrLinker.BasicIrModuleDeserializer(moduleDescriptor, klib, strategy)
 
-    override fun readString(moduleDescriptor: ModuleDescriptor, fileIndex: Int, stringIndex: Int) =
-        moduleDescriptor.kotlinLibrary.string(stringIndex, fileIndex)
-
-    override fun readBody(moduleDescriptor: ModuleDescriptor, fileIndex: Int, bodyIndex: Int) =
-        moduleDescriptor.kotlinLibrary.body(bodyIndex, fileIndex)
-
-    override fun readFile(moduleDescriptor: ModuleDescriptor, fileIndex: Int) =
-        moduleDescriptor.kotlinLibrary.file(fileIndex)
-
-    override fun readFileCount(moduleDescriptor: ModuleDescriptor) =
-        moduleDescriptor.kotlinLibrary.fileCount()
-
-    override fun checkAccessibility(declarationDescriptor: DeclarationDescriptor): Boolean {
-        require(declarationDescriptor is DeclarationDescriptorWithVisibility)
-        return declarationDescriptor.isPublishedApi() || declarationDescriptor.visibility.let { it.isPublicAPI || it == Visibilities.INTERNAL }
+    override fun createCurrentModuleDeserializer(moduleFragment: IrModuleFragment, dependencies: Collection<IrModuleDeserializer>): IrModuleDeserializer {
+        val currentModuleDeserializer = super.createCurrentModuleDeserializer(moduleFragment, dependencies)
+        icData?.let {
+            return CurrentModuleWithICDeserializer(currentModuleDeserializer, symbolTable, builtIns, it) { lib ->
+                JsModuleDeserializer(currentModuleDeserializer.moduleDescriptor, lib, currentModuleDeserializer.strategy)
+            }
+        }
+        return currentModuleDeserializer
     }
 
-    private val ModuleDescriptor.userName get() = kotlinLibrary.libraryFile.absolutePath
+    val modules
+        get() = deserializersForModules.values
+            .map { it.moduleFragment }
+            .filter { it.descriptor !== currentModule }
+
+    class JsFePluginContext(
+        override val moduleDescriptor: ModuleDescriptor,
+        override val bindingContext: BindingContext,
+        override val symbolTable: ReferenceSymbolTable,
+        override val typeTranslator: TypeTranslator,
+        override val irBuiltIns: IrBuiltIns,
+    ) : TranslationPluginContext
 }

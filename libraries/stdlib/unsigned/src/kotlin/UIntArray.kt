@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -50,6 +50,7 @@ internal constructor(@PublishedApi internal val storage: IntArray) : Collection<
     override fun contains(element: UInt): Boolean {
         // TODO: Eliminate this check after KT-30016 gets fixed.
         // Currently JS BE does not generate special bridge method for this method.
+        @Suppress("USELESS_CAST")
         if ((element as Any?) !is UInt) return false
 
         return storage.contains(element.toInt())

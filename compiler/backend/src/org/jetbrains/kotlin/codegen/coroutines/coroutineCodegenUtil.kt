@@ -8,7 +8,8 @@ package org.jetbrains.kotlin.codegen.coroutines
 import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.backend.common.COROUTINE_SUSPENDED_NAME
 import org.jetbrains.kotlin.backend.common.isBuiltInSuspendCoroutineUninterceptedOrReturn
-import org.jetbrains.kotlin.builtins.isBuiltinFunctionalType
+import org.jetbrains.kotlin.builtins.StandardNames
+import org.jetbrains.kotlin.builtins.isBuiltinFunctionalClassDescriptor
 import org.jetbrains.kotlin.codegen.*
 import org.jetbrains.kotlin.codegen.binding.CodegenBinding
 import org.jetbrains.kotlin.codegen.inline.addFakeContinuationMarker
@@ -218,15 +219,18 @@ private fun NewResolvedCallImpl<VariableDescriptor>.asDummyOldResolvedCall(bindi
     )
 }
 
-fun ResolvedCall<*>.isSuspendNoInlineCall(codegen: ExpressionCodegen, languageVersionSettings: LanguageVersionSettings): Boolean {
+enum class SuspensionPointKind { NEVER, NOT_INLINE, ALWAYS }
+
+fun ResolvedCall<*>.isSuspensionPoint(codegen: ExpressionCodegen, languageVersionSettings: LanguageVersionSettings): SuspensionPointKind {
+    val functionDescriptor = resultingDescriptor as? FunctionDescriptor ?: return SuspensionPointKind.NEVER
+    if (!functionDescriptor.unwrapInitialDescriptorForSuspendFunction().isSuspend) return SuspensionPointKind.NEVER
+    if (functionDescriptor.isBuiltInSuspendCoroutineUninterceptedOrReturnInJvm(languageVersionSettings)) return SuspensionPointKind.ALWAYS
+    if (functionDescriptor.isInline) return SuspensionPointKind.NEVER
+
     val isInlineLambda = this.safeAs<VariableAsFunctionResolvedCall>()
         ?.variableCall?.resultingDescriptor?.safeAs<ValueParameterDescriptor>()
         ?.let { it.isCrossinline || (!it.isNoinline && codegen.context.functionDescriptor.isInline) } == true
-
-    val functionDescriptor = resultingDescriptor as? FunctionDescriptor ?: return false
-    if (!functionDescriptor.unwrapInitialDescriptorForSuspendFunction().isSuspend) return false
-    if (functionDescriptor.isBuiltInSuspendCoroutineUninterceptedOrReturnInJvm(languageVersionSettings)) return true
-    return !(functionDescriptor.isInline || isInlineLambda)
+    return if (isInlineLambda) SuspensionPointKind.NOT_INLINE else SuspensionPointKind.ALWAYS
 }
 
 fun CallableDescriptor.isSuspendFunctionNotSuspensionView(): Boolean {
@@ -263,7 +267,7 @@ fun <D : FunctionDescriptor> getOrCreateJvmSuspendFunctionView(
         annotations = Annotations.EMPTY,
         name = CONTINUATION_PARAMETER_NAME,
         // Add j.l.Object to invoke(), because that is the type of parameters we have in FunctionN+1
-        outType = if (function.containingDeclaration.safeAs<ClassDescriptor>()?.defaultType?.isBuiltinFunctionalType == true)
+        outType = if (function.containingDeclaration.safeAs<ClassDescriptor>()?.isBuiltinFunctionalClassDescriptor == true)
             function.builtIns.nullableAnyType
         else
             function.getContinuationParameterTypeOfSuspendFunction(isReleaseCoroutines),
@@ -308,7 +312,7 @@ private fun FunctionDescriptor.getContinuationParameterTypeOfSuspendFunction(isR
 
 fun ModuleDescriptor.getResult(kotlinType: KotlinType) =
     module.resolveTopLevelClass(
-        DescriptorUtils.RESULT_FQ_NAME,
+        StandardNames.RESULT_FQ_NAME,
         NoLookupLocation.FROM_BACKEND
     )?.defaultType?.let {
         KotlinTypeFactory.simpleType(
@@ -490,14 +494,14 @@ fun Method.getImplForOpenMethod(ownerInternalName: String) =
 
 fun FunctionDescriptor.isSuspendLambdaOrLocalFunction() = this.isSuspend && when (this) {
     is AnonymousFunctionDescriptor -> this.isSuspendLambda
-    is SimpleFunctionDescriptor -> this.visibility == Visibilities.LOCAL
+    is SimpleFunctionDescriptor -> this.visibility == DescriptorVisibilities.LOCAL
     else -> false
 }
 
 fun FunctionDescriptor.isLocalSuspendFunctionNotSuspendLambda() = isSuspendLambdaOrLocalFunction() && this !is AnonymousFunctionDescriptor
 
 @JvmField
-val EXPERIMENTAL_CONTINUATION_ASM_TYPE = DescriptorUtils.CONTINUATION_INTERFACE_FQ_NAME_EXPERIMENTAL.topLevelClassAsmType()
+val EXPERIMENTAL_CONTINUATION_ASM_TYPE = StandardNames.CONTINUATION_INTERFACE_FQ_NAME_EXPERIMENTAL.topLevelClassAsmType()
 
 @JvmField
-val RELEASE_CONTINUATION_ASM_TYPE = DescriptorUtils.CONTINUATION_INTERFACE_FQ_NAME_RELEASE.topLevelClassAsmType()
+val RELEASE_CONTINUATION_ASM_TYPE = StandardNames.CONTINUATION_INTERFACE_FQ_NAME_RELEASE.topLevelClassAsmType()

@@ -37,7 +37,7 @@ class MultiplesRequiredTypesTest : AbstractKotlinUastTest() {
                 if (uElement != null) {
                     builder.append("    ".repeat(level))
                     builder.append(uElement.asLogString())
-                    builder.appendln()
+                    builder.appendLine()
                 }
                 if (uElement != null) level++
                 element.acceptChildren(this)
@@ -48,6 +48,6 @@ class MultiplesRequiredTypesTest : AbstractKotlinUastTest() {
     }
 
     private fun getTestFile(testName: String, ext: String) =
-        File(File(AbstractKotlinUastTest.TEST_KOTLIN_MODEL_DIR, testName).canonicalPath + '.' + ext)
+        File(File(TEST_KOTLIN_MODEL_DIR, testName).canonicalPath + '.' + ext)
 
 }

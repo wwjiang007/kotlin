@@ -1,5 +1,4 @@
 // !LANGUAGE: +NewInference
-// IGNORE_BACKEND_FIR: JVM_IR
 // IGNORE_BACKEND: NATIVE
 // WITH_RUNTIME
 // WITH_COROUTINES
@@ -16,7 +15,7 @@ fun myLaunch(
     block: suspend MyCoroutineScope.() -> Unit
 ) {}
 
-@UseExperimental(kotlin.experimental.ExperimentalTypeInference::class)
+@OptIn(kotlin.experimental.ExperimentalTypeInference::class)
 public fun <E> myProduce(@BuilderInference block: suspend MyProducerScope<E>.() -> Unit) {}
 
 fun <T> MyReceiveChannel<T>.debounce(period: Long) {

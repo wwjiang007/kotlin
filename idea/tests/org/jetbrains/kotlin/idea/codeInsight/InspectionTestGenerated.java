@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -27,7 +27,7 @@ public class InspectionTestGenerated extends AbstractInspectionTest {
         }
 
         public void testAllFilesPresentInIntentions() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentInSingleGeneratedClass(this.getClass(), new File("idea/testData/intentions"), Pattern.compile("^(inspections\\.test)$"));
+            KotlinTestUtils.assertAllTestsPresentInSingleGeneratedClassWithExcluded(this.getClass(), new File("idea/testData/intentions"), Pattern.compile("^(inspections\\.test)$"), null);
         }
 
         @TestMetadata("convertToStringTemplate/inspectionData/inspections.test")
@@ -75,7 +75,7 @@ public class InspectionTestGenerated extends AbstractInspectionTest {
         }
 
         public void testAllFilesPresentInInspections() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentInSingleGeneratedClass(this.getClass(), new File("idea/testData/inspections"), Pattern.compile("^(inspections\\.test)$"));
+            KotlinTestUtils.assertAllTestsPresentInSingleGeneratedClassWithExcluded(this.getClass(), new File("idea/testData/inspections"), Pattern.compile("^(inspections\\.test)$"), null);
         }
 
         @TestMetadata("allOpenSimple/inspectionData/inspections.test")
@@ -373,6 +373,16 @@ public class InspectionTestGenerated extends AbstractInspectionTest {
             runTest("idea/testData/inspections/suspiciousEqualsCombination/inspectionData/inspections.test");
         }
 
+        @TestMetadata("trailingCommaOff/inspectionData/inspections.test")
+        public void testTrailingCommaOff_inspectionData_Inspections_test() throws Exception {
+            runTest("idea/testData/inspections/trailingCommaOff/inspectionData/inspections.test");
+        }
+
+        @TestMetadata("trailingCommaOn/inspectionData/inspections.test")
+        public void testTrailingCommaOn_inspectionData_Inspections_test() throws Exception {
+            runTest("idea/testData/inspections/trailingCommaOn/inspectionData/inspections.test");
+        }
+
         @TestMetadata("twoSetOfTypeparameters/inspectionData/inspections.test")
         public void testTwoSetOfTypeparameters_inspectionData_Inspections_test() throws Exception {
             runTest("idea/testData/inspections/twoSetOfTypeparameters/inspectionData/inspections.test");
@@ -463,7 +473,7 @@ public class InspectionTestGenerated extends AbstractInspectionTest {
         }
 
         public void testAllFilesPresentInInspectionsLocal() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentInSingleGeneratedClass(this.getClass(), new File("idea/testData/inspectionsLocal"), Pattern.compile("^(inspections\\.test)$"));
+            KotlinTestUtils.assertAllTestsPresentInSingleGeneratedClassWithExcluded(this.getClass(), new File("idea/testData/inspectionsLocal"), Pattern.compile("^(inspections\\.test)$"), null);
         }
 
         @TestMetadata("branched/ifThenToElvis/inspectionData/inspections.test")

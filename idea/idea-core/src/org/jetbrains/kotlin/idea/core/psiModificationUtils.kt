@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.core
@@ -26,11 +15,13 @@ import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.extensions.DeclarationAttributeAltererExtension
+import org.jetbrains.kotlin.idea.FrontendInternals
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.idea.resolve.frontendService
+import org.jetbrains.kotlin.idea.resolve.getLanguageVersionSettings
 import org.jetbrains.kotlin.idea.util.IdeDescriptorRenderers
 import org.jetbrains.kotlin.idea.util.hasJvmFieldAnnotation
 import org.jetbrains.kotlin.idea.util.isExpectDeclaration
@@ -45,22 +36,16 @@ import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.OverridingUtil
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
 import org.jetbrains.kotlin.resolve.calls.callUtil.getValueArgumentsInParentheses
-import org.jetbrains.kotlin.resolve.calls.components.SamConversionTransformer
 import org.jetbrains.kotlin.resolve.calls.model.ArgumentMatch
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
+import org.jetbrains.kotlin.resolve.sam.SamConversionOracle
+import org.jetbrains.kotlin.resolve.sam.SamConversionResolver
+import org.jetbrains.kotlin.resolve.sam.getFunctionTypeForPossibleSamType
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.types.typeUtil.isTypeParameter
 import org.jetbrains.kotlin.utils.KotlinExceptionWithAttachments
 import org.jetbrains.kotlin.utils.SmartList
-
-inline fun <reified T : PsiElement> PsiElement.replaced(newElement: T): T {
-    val result = replace(newElement)
-    return result as? T ?: (result as KtParenthesizedExpression).expression as T
-}
-
-@Suppress("UNCHECKED_CAST")
-fun <T : PsiElement> T.copied(): T = copy() as T
 
 fun KtLambdaArgument.moveInsideParentheses(bindingContext: BindingContext): KtCallExpression {
     val ktExpression = this.getArgumentExpression()
@@ -83,18 +68,20 @@ fun KtLambdaArgument.getLambdaArgumentName(bindingContext: BindingContext): Name
 
 fun KtLambdaArgument.moveInsideParenthesesAndReplaceWith(
     replacement: KtExpression,
-    functionLiteralArgumentName: Name?
+    functionLiteralArgumentName: Name?,
+    withNameCheck: Boolean = true,
 ): KtCallExpression {
     val oldCallExpression = parent as KtCallExpression
     val newCallExpression = oldCallExpression.copy() as KtCallExpression
 
     val psiFactory = KtPsiFactory(project)
 
-    val argument = if (shouldLambdaParameterBeNamed(newCallExpression.getValueArgumentsInParentheses(), oldCallExpression)) {
-        psiFactory.createArgument(replacement, functionLiteralArgumentName)
-    } else {
-        psiFactory.createArgument(replacement)
-    }
+    val argument =
+        if (withNameCheck && shouldLambdaParameterBeNamed(newCallExpression.getValueArgumentsInParentheses(), oldCallExpression)) {
+            psiFactory.createArgument(replacement, functionLiteralArgumentName)
+        } else {
+            psiFactory.createArgument(replacement)
+        }
 
     val functionLiteralArgument = newCallExpression.lambdaArguments.firstOrNull()!!
     val valueArgumentList = newCallExpression.valueArgumentList ?: psiFactory.createCallArguments("()")
@@ -128,6 +115,7 @@ fun KtCallExpression.getLastLambdaExpression(): KtLambdaExpression? {
     return valueArguments.lastOrNull()?.getArgumentExpression()?.unpackFunctionLiteral()
 }
 
+@OptIn(FrontendInternals::class)
 fun KtCallExpression.canMoveLambdaOutsideParentheses(): Boolean {
     if (getStrictParentOfType<KtDelegatedSuperTypeEntry>() != null) return false
     if (getLastLambdaExpression() == null) return false
@@ -138,8 +126,9 @@ fun KtCallExpression.canMoveLambdaOutsideParentheses(): Boolean {
         val referenceArgumentCount = valueArguments.count { it.getArgumentExpression() is KtCallableReferenceExpression }
 
         val resolutionFacade = getResolutionFacade()
-        val samConversionTransformer = resolutionFacade.frontendService<SamConversionTransformer>()
-        val languageVersionSettings = resolutionFacade.frontendService<LanguageVersionSettings>()
+        val samConversionTransformer = resolutionFacade.frontendService<SamConversionResolver>()
+        val samConversionOracle = resolutionFacade.frontendService<SamConversionOracle>()
+        val languageVersionSettings = resolutionFacade.getLanguageVersionSettings()
 
         val bindingContext = analyze(resolutionFacade, BodyResolveMode.PARTIAL)
         val targets = bindingContext[BindingContext.REFERENCE_TARGET, callee]?.let { listOf(it) }
@@ -153,6 +142,7 @@ fun KtCallExpression.canMoveLambdaOutsideParentheses(): Boolean {
             it.allowsMoveOfLastParameterOutsideParentheses(
                 lambdaArgumentCount + referenceArgumentCount,
                 samConversionTransformer,
+                samConversionOracle,
                 languageVersionSettings.supportsFeature(LanguageFeature.NewInference)
             )
         }
@@ -165,7 +155,8 @@ fun KtCallExpression.canMoveLambdaOutsideParentheses(): Boolean {
 
 private fun FunctionDescriptor.allowsMoveOfLastParameterOutsideParentheses(
     lambdaAndCallableReferencesInOriginalCallCount: Int,
-    samConversionTransformer: SamConversionTransformer,
+    samConversionTransformer: SamConversionResolver,
+    samConversionOracle: SamConversionOracle,
     newInferenceEnabled: Boolean
 ): Boolean {
     fun KotlinType.allowsMoveOutsideParentheses(): Boolean {
@@ -177,7 +168,7 @@ private fun FunctionDescriptor.allowsMoveOfLastParameterOutsideParentheses(
         // converted types, but in NI it is performed by conversions, so we check it explicitly
         // Also note that 'newInferenceEnabled' is essentially a micro-optimization, as there are no
         // harm in just calling 'samConversionTransformer' on all candidates.
-        return newInferenceEnabled && samConversionTransformer.getFunctionTypeForPossibleSamType(this.unwrap()) != null
+        return newInferenceEnabled && samConversionTransformer.getFunctionTypeForPossibleSamType(this.unwrap(), samConversionOracle) != null
     }
 
     val params = valueParameters
@@ -189,8 +180,6 @@ private fun FunctionDescriptor.allowsMoveOfLastParameterOutsideParentheses(
     return movableParametersOfCandidateCount == lambdaAndCallableReferencesInOriginalCallCount
 }
 
-
-
 fun KtCallExpression.moveFunctionLiteralOutsideParentheses() {
     assert(lambdaArguments.isEmpty())
     val argumentList = valueArgumentList!!
@@ -198,8 +187,9 @@ fun KtCallExpression.moveFunctionLiteralOutsideParentheses() {
     val expression = argument.getArgumentExpression()!!
     assert(expression.unpackFunctionLiteral() != null)
 
-    val dummyCall = KtPsiFactory(this).createExpressionByPattern("foo()$0:'{}'", expression) as KtCallExpression
+    val dummyCall = KtPsiFactory(project).createExpression("foo() {}") as KtCallExpression
     val functionLiteralArgument = dummyCall.lambdaArguments.single()
+    functionLiteralArgument.getArgumentExpression()?.replace(expression)
     this.add(functionLiteralArgument)
     /* we should not remove empty parenthesis when callee is a call too - it won't parse */
     if (argumentList.arguments.size == 1 && calleeExpression !is KtCallExpression) {
@@ -555,8 +545,11 @@ fun KtModifierList.normalize(): KtModifierList {
     }
 }
 
-fun KtBlockStringTemplateEntry.canDropBraces() =
-    (expression is KtNameReferenceExpression || expression is KtThisExpression) && canPlaceAfterSimpleNameEntry(nextSibling)
+fun KtBlockStringTemplateEntry.canDropBraces(): Boolean {
+    val expression = this.expression
+    return (expression is KtNameReferenceExpression || (expression is KtThisExpression && expression.labelQualifier == null))
+            && canPlaceAfterSimpleNameEntry(nextSibling)
+}
 
 fun KtBlockStringTemplateEntry.dropBraces(): KtSimpleNameStringTemplateEntry {
     val name = if (expression is KtThisExpression) {

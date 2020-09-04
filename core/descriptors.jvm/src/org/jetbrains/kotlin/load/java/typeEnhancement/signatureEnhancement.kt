@@ -17,8 +17,12 @@
 package org.jetbrains.kotlin.load.java.typeEnhancement
 
 import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMap
+import org.jetbrains.kotlin.builtins.jvm.JavaToKotlinClassMapper
 import org.jetbrains.kotlin.descriptors.*
-import org.jetbrains.kotlin.descriptors.annotations.*
+import org.jetbrains.kotlin.descriptors.annotations.Annotated
+import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptor
+import org.jetbrains.kotlin.descriptors.annotations.Annotations
+import org.jetbrains.kotlin.descriptors.annotations.composeAnnotations
 import org.jetbrains.kotlin.load.java.*
 import org.jetbrains.kotlin.load.java.descriptors.*
 import org.jetbrains.kotlin.load.java.lazy.LazyJavaResolverContext
@@ -26,12 +30,12 @@ import org.jetbrains.kotlin.load.java.lazy.copyWithNewDefaultTypeQualifiers
 import org.jetbrains.kotlin.load.java.lazy.descriptors.isJavaField
 import org.jetbrains.kotlin.load.kotlin.SignatureBuildingComponents
 import org.jetbrains.kotlin.load.kotlin.computeJvmDescriptor
+import org.jetbrains.kotlin.load.kotlin.signature
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.resolve.constants.EnumValue
 import org.jetbrains.kotlin.resolve.deprecation.DEPRECATED_FUNCTION_KEY
 import org.jetbrains.kotlin.resolve.descriptorUtil.firstArgument
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameOrNull
-import org.jetbrains.kotlin.resolve.descriptorUtil.isSourceAnnotation
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
 import org.jetbrains.kotlin.types.typeUtil.isTypeParameter
@@ -46,7 +50,8 @@ data class NullabilityQualifierWithMigrationStatus(
 
 class SignatureEnhancement(
     private val annotationTypeQualifierResolver: AnnotationTypeQualifierResolver,
-    private val jsr305State: Jsr305State
+    private val jsr305State: Jsr305State,
+    private val typeEnhancement: JavaTypeEnhancement
 ) {
 
     private fun AnnotationDescriptor.extractNullabilityTypeFromArgument(): NullabilityQualifierWithMigrationStatus? {
@@ -241,9 +246,11 @@ class SignatureEnhancement(
                         classifier.fqNameOrNull() == JavaToKotlinClassMap.FUNCTION_N_FQ_NAME
             }
 
-            return fromOverride.enhance(qualifiersWithPredefined ?: qualifiers)?.let { enhanced ->
-                PartEnhancementResult(enhanced, wereChanges = true, containsFunctionN = containsFunctionN)
-            } ?: PartEnhancementResult(fromOverride, wereChanges = false, containsFunctionN = containsFunctionN)
+            return with(typeEnhancement) {
+                fromOverride.enhance(qualifiersWithPredefined ?: qualifiers)?.let { enhanced ->
+                    PartEnhancementResult(enhanced, wereChanges = true, containsFunctionN = containsFunctionN)
+                } ?: PartEnhancementResult(fromOverride, wereChanges = false, containsFunctionN = containsFunctionN)
+            }
         }
 
         private fun KotlinType.extractQualifiers(): JavaTypeQualifiers {
@@ -252,7 +259,7 @@ class SignatureEnhancement(
                     asFlexibleType().let { Pair(it.lowerBound, it.upperBound) }
                 else Pair(this, this)
 
-            val mapping = JavaToKotlinClassMap
+            val mapper = JavaToKotlinClassMapper
             return JavaTypeQualifiers(
                 when {
                     lower.isMarkedNullable -> NullabilityQualifier.NULLABLE
@@ -260,8 +267,8 @@ class SignatureEnhancement(
                     else -> null
                 },
                 when {
-                    mapping.isReadOnly(lower) -> MutabilityQualifier.READ_ONLY
-                    mapping.isMutable(upper) -> MutabilityQualifier.MUTABLE
+                    mapper.isReadOnly(lower) -> MutabilityQualifier.READ_ONLY
+                    mapper.isMutable(upper) -> MutabilityQualifier.MUTABLE
                     else -> null
                 },
                 isNotNullTypeParameter = unwrap() is NotNullTypeParameter

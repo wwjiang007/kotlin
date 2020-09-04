@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2000-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -9,6 +9,7 @@ import com.intellij.codeInspection.*
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementVisitor
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.intentions.loopToCallChain.isFalseConstant
 import org.jetbrains.kotlin.idea.intentions.loopToCallChain.isTrueConstant
@@ -24,16 +25,18 @@ class SimplifyWhenWithBooleanConstantConditionInspection : AbstractKotlinInspect
             if (expression.subjectExpression != null) return
             if (expression.entries.none { it.isTrueConstantCondition() || it.isFalseConstantCondition() }) return
 
-            holder.registerProblem(expression.whenKeyword,
-                                   "This 'when' is simplifiable",
-                                   ProblemHighlightType.GENERIC_ERROR_OR_WARNING,
-                                   SimplifyWhenFix())
+            holder.registerProblem(
+                expression.whenKeyword,
+                KotlinBundle.message("this.when.is.simplifiable"),
+                ProblemHighlightType.GENERIC_ERROR_OR_WARNING,
+                SimplifyWhenFix()
+            )
         })
     }
 }
 
 private class SimplifyWhenFix : LocalQuickFix {
-    override fun getName() = "Simplify 'when'"
+    override fun getName() = KotlinBundle.message("simplify.when.fix.text")
 
     override fun getFamilyName() = name
 
@@ -57,8 +60,7 @@ private fun KtWhenExpression.deleteFalseEntries(usedAsExpression: Boolean) {
     val entries = entries
     if (entries.isEmpty() && !usedAsExpression) {
         delete()
-    }
-    else if (entries.singleOrNull()?.isElse == true) {
+    } else if (entries.singleOrNull()?.isElse == true) {
         elseExpression?.let { replaceWithBranch(it, usedAsExpression) }
     }
 }
@@ -72,8 +74,7 @@ private fun KtWhenExpression.replaceTrueEntry(usedAsExpression: Boolean, closeBr
 
     if (trueIndex == 0) {
         replaceWithBranch(expression, usedAsExpression)
-    }
-    else {
+    } else {
         val elseEntry = factory.createWhenEntry("else -> ${expression.text}")
         for (entry in entries.subList(trueIndex, entries.size)) {
             entry.delete()
@@ -83,7 +84,7 @@ private fun KtWhenExpression.replaceTrueEntry(usedAsExpression: Boolean, closeBr
 }
 
 private fun KtWhenEntry.isTrueConstantCondition(): Boolean =
-        (conditions.singleOrNull() as? KtWhenConditionWithExpression)?.expression.isTrueConstant()
+    (conditions.singleOrNull() as? KtWhenConditionWithExpression)?.expression.isTrueConstant()
 
 private fun KtWhenEntry.isFalseConstantCondition(): Boolean =
-        (conditions.singleOrNull() as? KtWhenConditionWithExpression)?.expression.isFalseConstant()
+    (conditions.singleOrNull() as? KtWhenConditionWithExpression)?.expression.isFalseConstant()

@@ -9,24 +9,20 @@ import org.jetbrains.kotlin.backend.common.FileLoweringPass
 import org.jetbrains.kotlin.backend.common.lower.IrBuildingTransformer
 import org.jetbrains.kotlin.backend.common.lower.at
 import org.jetbrains.kotlin.backend.common.lower.irNot
-import org.jetbrains.kotlin.backend.common.lower.irThrow
 import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.backend.jvm.codegen.fileParent
 import org.jetbrains.kotlin.backend.jvm.ir.erasedUpperBound
-import org.jetbrains.kotlin.config.ApiVersion
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.declarations.IrFile
-import org.jetbrains.kotlin.ir.expressions.IrExpression
-import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
-import org.jetbrains.kotlin.ir.expressions.IrTypeOperator
-import org.jetbrains.kotlin.ir.expressions.IrTypeOperatorCall
+import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrCompositeImpl
-import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
+import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
+import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.render
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
@@ -62,13 +58,15 @@ private class TypeOperatorLowering(private val context: JvmBackendContext) : Fil
             type.isReifiedTypeParameter ->
                 irIs(argument, type)
             argument.type.isNullable() && type.isNullable() -> {
-                irLetS(argument) { valueSymbol ->
+                irLetS(argument, irType = context.irBuiltIns.anyNType) { valueSymbol ->
                     context.oror(
                         irEqualsNull(irGet(valueSymbol.owner)),
                         irIs(irGet(valueSymbol.owner), type.makeNotNull())
                     )
                 }
             }
+            argument.type.isNullable() && !type.isNullable() && argument.type.erasedUpperBound == type.erasedUpperBound ->
+                irNotEquals(argument, irNull())
             else -> irIs(argument, type.makeNotNull())
         }
     }
@@ -78,13 +76,13 @@ private class TypeOperatorLowering(private val context: JvmBackendContext) : Fil
             builder.irAs(argument, type)
         argument.type.isNullable() && !type.isNullable() ->
             with(builder) {
-                irLetS(argument) { valueSymbol ->
+                irLetS(argument, irType = context.irBuiltIns.anyNType) { valueSymbol ->
                     irIfNull(
                         type,
                         irGet(valueSymbol.owner),
-                        irThrow(irCall(typeCastException).apply {
+                        irCall(throwTypeCastException).apply {
                             putValueArgument(0, irString("null cannot be cast to non-null type ${type.render()}"))
-                        }),
+                        },
                         lowerCast(irGet(valueSymbol.owner), type.makeNullable())
                     )
                 }
@@ -120,7 +118,11 @@ private class TypeOperatorLowering(private val context: JvmBackendContext) : Fil
                     expression.transformChildrenVoid()
                     expression
                 } else {
-                    irLetS(expression.argument.transformVoid(), IrStatementOrigin.SAFE_CALL) { valueSymbol ->
+                    irLetS(
+                        expression.argument.transformVoid(),
+                        IrStatementOrigin.SAFE_CALL,
+                        irType = context.irBuiltIns.anyNType
+                    ) { valueSymbol ->
                         irIfThenElse(
                             expression.type,
                             lowerInstanceOf(irGet(valueSymbol.owner), expression.typeOperand.makeNotNull()),
@@ -140,7 +142,7 @@ private class TypeOperatorLowering(private val context: JvmBackendContext) : Fil
                 val (startOffset, endOffset) = expression.extents()
                 val source = sourceViewFor(parent as IrDeclaration).subSequence(startOffset, endOffset).toString()
 
-                irLetS(expression.argument.transformVoid()) { valueSymbol ->
+                irLetS(expression.argument.transformVoid(), irType = context.irBuiltIns.anyNType) { valueSymbol ->
                     irComposite(resultType = expression.type) {
                         +irCall(checkExpressionValueIsNotNull).apply {
                             putValueArgument(0, irGet(valueSymbol.owner))
@@ -176,18 +178,14 @@ private class TypeOperatorLowering(private val context: JvmBackendContext) : Fil
     private fun sourceViewFor(declaration: IrDeclaration) =
         context.psiSourceManager.getKtFile(declaration.fileParent)!!.viewProvider.contents
 
-    // Since Kotlin 1.4 we throw NullPointerExceptions instead of more specialized exception classes.
-    private val useNullPointerExceptions: Boolean
-        get() = context.state.languageVersionSettings.apiVersion >= ApiVersion.KOTLIN_1_4
-
-    private val typeCastException: IrFunctionSymbol =
-        if (useNullPointerExceptions)
-            context.ir.symbols.ThrowNullPointerException
+    private val throwTypeCastException: IrSimpleFunctionSymbol =
+        if (context.state.unifiedNullChecks)
+            context.ir.symbols.throwNullPointerException
         else
-            context.ir.symbols.ThrowTypeCastException
+            context.ir.symbols.throwTypeCastException
 
-    private val checkExpressionValueIsNotNull: IrFunctionSymbol =
-        if (useNullPointerExceptions)
+    private val checkExpressionValueIsNotNull: IrSimpleFunctionSymbol =
+        if (context.state.unifiedNullChecks)
             context.ir.symbols.checkNotNullExpressionValue
         else
             context.ir.symbols.checkExpressionValueIsNotNull

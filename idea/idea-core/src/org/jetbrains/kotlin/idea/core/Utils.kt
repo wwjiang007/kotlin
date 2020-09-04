@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -7,13 +7,17 @@ package org.jetbrains.kotlin.idea.core
 
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.idea.FrontendInternals
 import org.jetbrains.kotlin.idea.analysis.computeTypeInContext
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.caches.resolve.unsafeResolveToDescriptor
 import org.jetbrains.kotlin.idea.references.mainReference
+import org.jetbrains.kotlin.idea.references.resolveToDescriptors
 import org.jetbrains.kotlin.idea.resolve.ResolutionFacade
 import org.jetbrains.kotlin.idea.resolve.frontendService
+import org.jetbrains.kotlin.idea.resolve.getDataFlowValueFactory
+import org.jetbrains.kotlin.idea.resolve.getLanguageVersionSettings
 import org.jetbrains.kotlin.idea.util.getImplicitReceiversWithInstanceToExpression
 import org.jetbrains.kotlin.idea.util.getResolutionScope
 import org.jetbrains.kotlin.name.FqName
@@ -25,6 +29,7 @@ import org.jetbrains.kotlin.resolve.DelegatingBindingTrace
 import org.jetbrains.kotlin.resolve.QualifiedExpressionResolver
 import org.jetbrains.kotlin.resolve.bindingContextUtil.getDataFlowInfoBefore
 import org.jetbrains.kotlin.resolve.calls.CallResolver
+import org.jetbrains.kotlin.resolve.calls.components.isVararg
 import org.jetbrains.kotlin.resolve.calls.context.BasicCallResolutionContext
 import org.jetbrains.kotlin.resolve.calls.context.CheckArgumentTypesMode
 import org.jetbrains.kotlin.resolve.calls.context.ContextDependency
@@ -39,12 +44,15 @@ import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
 import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
 import java.util.*
 
+/**
+ * See `ArgumentsToParametersMapper` class in the compiler.
+ */
 fun Call.mapArgumentsToParameters(targetDescriptor: CallableDescriptor): Map<ValueArgument, ValueParameterDescriptor> {
     val parameters = targetDescriptor.valueParameters
     if (parameters.isEmpty()) return emptyMap()
 
     val map = HashMap<ValueArgument, ValueParameterDescriptor>()
-    val parametersByName = parameters.associateBy { it.name }
+    val parametersByName = if (targetDescriptor.hasStableParameterNames()) parameters.associateBy { it.name } else emptyMap()
 
     var positionalArgumentIndex: Int? = 0
 
@@ -55,10 +63,12 @@ fun Call.mapArgumentsToParameters(targetDescriptor: CallableDescriptor): Map<Val
             val argumentName = argument.getArgumentName()?.asName
 
             if (argumentName != null) {
-                if (targetDescriptor.hasStableParameterNames()) {
-                    val parameter = parametersByName[argumentName]
-                    if (parameter != null) {
-                        map[argument] = parameter
+                val parameter = parametersByName[argumentName]
+                if (parameter != null) {
+                    map[argument] = parameter
+                    if (parameter.index == positionalArgumentIndex) {
+                        positionalArgumentIndex++
+                        continue
                     }
                 }
                 positionalArgumentIndex = null
@@ -67,7 +77,7 @@ fun Call.mapArgumentsToParameters(targetDescriptor: CallableDescriptor): Map<Val
                     val parameter = parameters[positionalArgumentIndex]
                     map[argument] = parameter
 
-                    if (parameter.varargElementType == null) {
+                    if (!parameter.isVararg) {
                         positionalArgumentIndex++
                     }
                 }
@@ -108,9 +118,11 @@ fun Call.resolveCandidates(
     val callResolutionContext = BasicCallResolutionContext.create(
         bindingTrace, resolutionScope, this, expectedType, dataFlowInfo,
         ContextDependency.INDEPENDENT, CheckArgumentTypesMode.CHECK_VALUE_ARGUMENTS,
-        false, resolutionFacade.frontendService(),
-        resolutionFacade.frontendService()
+        false, resolutionFacade.getLanguageVersionSettings(),
+        resolutionFacade.getDataFlowValueFactory()
     ).replaceCollectAllCandidates(true)
+
+    @OptIn(FrontendInternals::class)
     val callResolver = resolutionFacade.frontendService<CallResolver>()
 
     val results = callResolver.resolveFunctionCall(callResolutionContext)
@@ -130,7 +142,7 @@ fun Call.resolveCandidates(
 
     if (filterOutByVisibility) {
         candidates = candidates.filter {
-            Visibilities.isVisible(it.getDispatchReceiverWithSmartCast(), it.resultingDescriptor, inDescriptor)
+            DescriptorVisibilities.isVisible(it.getDispatchReceiverWithSmartCast(), it.resultingDescriptor, inDescriptor)
         }
     }
 
@@ -151,8 +163,6 @@ fun KtCallableDeclaration.canOmitDeclaredType(initializerOrBodyExpression: KtExp
     if (KotlinTypeChecker.DEFAULT.equalTypes(expressionType, declaredType)) return true
     return canChangeTypeToSubtype && expressionType.isSubtypeOf(declaredType)
 }
-
-fun String.unquote(): String = KtPsiUtil.unquoteIdentifier(this)
 
 fun FqName.quoteSegmentsIfNeeded(): String {
     return pathSegments().joinToString(".") { it.asString().quoteIfNeeded() }

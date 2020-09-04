@@ -12,15 +12,16 @@ import org.jetbrains.kotlin.fir.declarations.FirValueParameter
 import org.jetbrains.kotlin.fir.expressions.FirAnnotationCall
 import org.jetbrains.kotlin.fir.expressions.classId
 import org.jetbrains.kotlin.fir.java.JavaTypeParameterStack
-import org.jetbrains.kotlin.fir.java.toConeKotlinTypeWithNullability
+import org.jetbrains.kotlin.fir.java.toConeKotlinTypeWithoutEnhancement
 import org.jetbrains.kotlin.fir.java.toFirJavaTypeRef
-import org.jetbrains.kotlin.fir.java.toNotNullConeKotlinType
-import org.jetbrains.kotlin.fir.types.jvm.FirJavaTypeRef
 import org.jetbrains.kotlin.fir.symbols.ConeClassLikeLookupTag
 import org.jetbrains.kotlin.fir.types.*
+import org.jetbrains.kotlin.fir.types.jvm.FirJavaTypeRef
 import org.jetbrains.kotlin.load.java.AnnotationTypeQualifierResolver
 import org.jetbrains.kotlin.load.java.MUTABLE_ANNOTATIONS
 import org.jetbrains.kotlin.load.java.READ_ONLY_ANNOTATIONS
+import org.jetbrains.kotlin.load.java.structure.JavaClassifierType
+import org.jetbrains.kotlin.load.java.structure.JavaTypeParameter
 import org.jetbrains.kotlin.load.java.structure.JavaWildcardType
 import org.jetbrains.kotlin.load.java.typeEnhancement.*
 import org.jetbrains.kotlin.name.ClassId
@@ -46,7 +47,8 @@ internal class EnhancementSignatureParts(
     internal fun enhance(
         session: FirSession,
         jsr305State: Jsr305State,
-        predefined: TypeEnhancementInfo? = null
+        predefined: TypeEnhancementInfo? = null,
+        forAnnotationValueParameter: Boolean = false
     ): PartEnhancementResult {
         val qualifiers = computeIndexedQualifiersForOverride(session, jsr305State)
 
@@ -56,7 +58,12 @@ internal class EnhancementSignatureParts(
             }
         }
 
-        val containsFunctionN = current.toNotNullConeKotlinType(session, javaTypeParameterStack).contains {
+        val typeWithoutEnhancement = current.type.toConeKotlinTypeWithoutEnhancement(
+            session,
+            javaTypeParameterStack,
+            forAnnotationValueParameter
+        )
+        val containsFunctionN = typeWithoutEnhancement.contains {
             if (it is ConeClassErrorType) false
             else {
                 val classId = it.lookupTag.classId
@@ -65,7 +72,10 @@ internal class EnhancementSignatureParts(
             }
         }
 
-        val enhancedCurrent = current.enhance(session, javaTypeParameterStack, qualifiersWithPredefined ?: qualifiers)
+        val enhancedCurrent = current.enhance(
+            session, qualifiersWithPredefined ?: qualifiers,
+            typeWithoutEnhancement
+        )
         return PartEnhancementResult(
             enhancedCurrent, wereChanges = true, containsFunctionN = containsFunctionN
         )
@@ -133,7 +143,7 @@ internal class EnhancementSignatureParts(
                 mapping.isMutable(upper.toFqNameUnsafe()) -> MutabilityQualifier.MUTABLE
                 else -> null
             },
-            isNotNullTypeParameter = false //TODO: unwrap() is NotNullTypeParameter
+            isNotNullTypeParameter = lower is ConeDefinitelyNotNullType
         )
     }
 
@@ -148,10 +158,10 @@ internal class EnhancementSignatureParts(
                 }
             }
             is FirJavaTypeRef -> {
+                val convertedType = type.toConeKotlinTypeWithoutEnhancement(session, javaTypeParameterStack)
                 Pair(
-                    // TODO: optimize
-                    type.toConeKotlinTypeWithNullability(session, javaTypeParameterStack, isNullable = false),
-                    type.toConeKotlinTypeWithNullability(session, javaTypeParameterStack, isNullable = true)
+                    convertedType.lowerBoundIfFlexible(),
+                    convertedType.upperBoundIfFlexible()
                 )
             }
             else -> return JavaTypeQualifiers.NONE
@@ -212,10 +222,13 @@ internal class EnhancementSignatureParts(
                     MutabilityQualifier.MUTABLE
                 )
             ),
-            isNotNullTypeParameter = nullabilityInfo?.qualifier == NullabilityQualifier.NOT_NULL && true, /* TODO: isTypeParameter()*/
+            isNotNullTypeParameter = nullabilityInfo?.qualifier == NullabilityQualifier.NOT_NULL && this.isTypeParameterBasedType(),
             isNullabilityQualifierForWarning = nullabilityInfo?.isForWarningOnly == true
         )
     }
+
+    private fun FirTypeRef?.isTypeParameterBasedType() =
+        ((this as? FirJavaTypeRef)?.type as? JavaClassifierType)?.classifier is JavaTypeParameter
 
     private fun FirTypeRef?.computeQualifiersForOverride(
         session: FirSession,

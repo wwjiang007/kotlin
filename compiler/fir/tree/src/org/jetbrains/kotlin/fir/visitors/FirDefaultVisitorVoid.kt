@@ -5,18 +5,12 @@
 
 package org.jetbrains.kotlin.fir.visitors
 
-import org.jetbrains.kotlin.fir.declarations.FirEnumEntry
 import org.jetbrains.kotlin.fir.declarations.FirErrorFunction
-import org.jetbrains.kotlin.fir.declarations.FirSealedClass
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.references.FirErrorNamedReference
 import org.jetbrains.kotlin.fir.types.*
 
 abstract class FirDefaultVisitorVoid : FirVisitorVoid() {
-    override fun visitDelegatedTypeRef(delegatedTypeRef: FirDelegatedTypeRef) {
-        return visitTypeRef(delegatedTypeRef)
-    }
-
     override fun visitImplicitTypeRef(implicitTypeRef: FirImplicitTypeRef) {
         return visitTypeRef(implicitTypeRef)
     }
@@ -69,9 +63,6 @@ abstract class FirDefaultVisitorVoid : FirVisitorVoid() {
         return visitJump(breakExpression)
     }
 
-    override fun visitEnumEntry(enumEntry: FirEnumEntry) {
-        return visitRegularClass(enumEntry)
-    }
 
     override fun visitLambdaArgumentExpression(lambdaArgumentExpression: FirLambdaArgumentExpression) {
         return visitWrappedArgumentExpression(lambdaArgumentExpression)
@@ -83,10 +74,6 @@ abstract class FirDefaultVisitorVoid : FirVisitorVoid() {
 
     override fun visitNamedArgumentExpression(namedArgumentExpression: FirNamedArgumentExpression) {
         return visitWrappedArgumentExpression(namedArgumentExpression)
-    }
-
-    override fun visitSealedClass(sealedClass: FirSealedClass) {
-        return visitRegularClass(sealedClass)
     }
 
     override fun visitErrorExpression(errorExpression: FirErrorExpression) {
@@ -103,5 +90,9 @@ abstract class FirDefaultVisitorVoid : FirVisitorVoid() {
 
     override fun visitErrorFunction(errorFunction: FirErrorFunction) {
         return visitFunction(errorFunction)
+    }
+
+    override fun visitErrorResolvedQualifier(errorResolvedQualifier: FirErrorResolvedQualifier) {
+        return visitResolvedQualifier(errorResolvedQualifier)
     }
 }

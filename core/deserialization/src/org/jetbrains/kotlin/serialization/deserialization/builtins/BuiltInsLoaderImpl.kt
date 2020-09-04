@@ -6,7 +6,7 @@
 package org.jetbrains.kotlin.serialization.deserialization.builtins
 
 import org.jetbrains.kotlin.builtins.BuiltInsLoader
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.NotFoundClasses
 import org.jetbrains.kotlin.descriptors.PackageFragmentProvider
@@ -16,6 +16,7 @@ import org.jetbrains.kotlin.descriptors.deserialization.ClassDescriptorFactory
 import org.jetbrains.kotlin.descriptors.deserialization.PlatformDependentDeclarationFilter
 import org.jetbrains.kotlin.incremental.components.LookupTracker
 import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.resolve.sam.SamConversionResolverImpl
 import org.jetbrains.kotlin.serialization.deserialization.*
 import org.jetbrains.kotlin.storage.StorageManager
 import java.io.InputStream
@@ -34,7 +35,7 @@ class BuiltInsLoaderImpl : BuiltInsLoader {
         return createBuiltInPackageFragmentProvider(
             storageManager,
             builtInsModule,
-            KotlinBuiltIns.BUILT_INS_PACKAGE_FQ_NAMES,
+            StandardNames.BUILT_INS_PACKAGE_FQ_NAMES,
             classDescriptorFactories,
             platformDependentDeclarationFilter,
             additionalClassPartsProvider,
@@ -78,7 +79,8 @@ class BuiltInsLoaderImpl : BuiltInsLoader {
             ContractDeserializer.DEFAULT,
             additionalClassPartsProvider,
             platformDependentDeclarationFilter,
-            BuiltInSerializerProtocol.extensionRegistry
+            BuiltInSerializerProtocol.extensionRegistry,
+            samConversionResolver = SamConversionResolverImpl(storageManager, samWithReceiverResolvers = emptyList())
         )
 
         for (packageFragment in packageFragments) {

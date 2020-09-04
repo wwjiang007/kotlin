@@ -17,36 +17,35 @@
 package org.jetbrains.kotlin.backend.common
 
 import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
-import org.jetbrains.kotlin.descriptors.Visibilities
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
 import org.jetbrains.kotlin.ir.types.*
-import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.ir.util.getInlineClassUnderlyingType
+import org.jetbrains.kotlin.ir.util.getInlinedClass
+import org.jetbrains.kotlin.ir.util.isAnnotationClass
+import org.jetbrains.kotlin.ir.util.render
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
-import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyExternal
 
 typealias ReportError = (element: IrElement, message: String) -> Unit
 
+@OptIn(ObsoleteDescriptorBasedAPI::class)
 class CheckIrElementVisitor(
     val irBuiltIns: IrBuiltIns,
     val reportError: ReportError,
     val config: IrValidatorConfig
 ) : IrElementVisitorVoid {
-
-    val set = mutableSetOf<IrElement>()
-    val checkedTypes = mutableSetOf<IrType>()
+    private val visitedElements = hashSetOf<IrElement>()
 
     override fun visitElement(element: IrElement) {
-        if (config.ensureAllNodesAreDifferent) {
-            if (set.contains(element))
-                reportError(element, "Duplicate IR node")
-            set.add(element)
+        if (config.ensureAllNodesAreDifferent && !visitedElements.add(element)) {
+            reportError(element, "Duplicate IR node: ${element.render()}")
         }
-        // Nothing to do.
     }
 
     private fun IrExpression.ensureTypesEqual(actualType: IrType, expectedType: IrType) {
@@ -72,7 +71,20 @@ class CheckIrElementVisitor(
 
     private fun IrSymbol.ensureBound(expression: IrExpression) {
         if (!this.isBound && expression.type !is IrDynamicType) {
-            reportError(expression, "Unbound symbol ${this}")
+            reportError(expression, "Unbound symbol $this")
+        }
+    }
+
+    private fun IrElement.checkFunction(function: IrFunction) {
+        if (function is IrSimpleFunction && config.checkProperties) {
+            val property = function.correspondingPropertySymbol?.owner
+            if (property != null && property.getter != function && property.setter != function) {
+                reportError(this, "Orphaned property getter/setter ${function.render()}")
+            }
+        }
+
+        if (function.dispatchReceiverParameter?.type is IrDynamicType) {
+            reportError(this, "Dispatch receivers with 'dynamic' type are not allowed")
         }
     }
 
@@ -135,8 +147,8 @@ class CheckIrElementVisitor(
         val fieldType = expression.symbol.owner.type
         // TODO: We don't have the proper type substitution yet, so skip generics for now.
         if (fieldType is IrSimpleType &&
-                fieldType.classifier is IrClassSymbol &&
-                fieldType.arguments.isEmpty()
+            fieldType.classifier is IrClassSymbol &&
+            fieldType.arguments.isEmpty()
         ) {
             expression.ensureTypeIs(fieldType)
         }
@@ -152,10 +164,8 @@ class CheckIrElementVisitor(
         super.visitCall(expression)
 
         val function = expression.symbol.owner
+        expression.checkFunction(function)
 
-        if (function.dispatchReceiverParameter?.type is IrDynamicType) {
-            reportError(expression, "Dispatch receivers with 'dynamic' type are not allowed")
-        }
         // TODO: Why don't we check parameters as well?
 
         val returnType = expression.symbol.owner.returnType
@@ -173,12 +183,6 @@ class CheckIrElementVisitor(
 
     override fun visitDelegatingConstructorCall(expression: IrDelegatingConstructorCall) {
         super.visitDelegatingConstructorCall(expression)
-
-        expression.ensureTypeIs(irBuiltIns.unitType)
-    }
-
-    override fun visitEnumConstructorCall(expression: IrEnumConstructorCall) {
-        super.visitEnumConstructorCall(expression)
 
         expression.ensureTypeIs(irBuiltIns.unitType)
     }
@@ -273,10 +277,7 @@ class CheckIrElementVisitor(
 
     override fun visitFunction(declaration: IrFunction) {
         super.visitFunction(declaration)
-
-        if (declaration.dispatchReceiverParameter?.type is IrDynamicType) {
-            reportError(declaration, "Dispatch receivers with 'dynamic' type are not allowed")
-        }
+        declaration.checkFunction(declaration)
 
         for ((i, p) in declaration.valueParameters.withIndex()) {
             if (p.index != i) {
@@ -294,10 +295,6 @@ class CheckIrElementVisitor(
     override fun visitDeclarationReference(expression: IrDeclarationReference) {
         super.visitDeclarationReference(expression)
 
-        // TODO: Fix unbound external declarations
-        if (expression.symbol.descriptor.isEffectivelyExternal())
-            return
-
         // TODO: Fix unbound dynamic filed declarations
         if (expression is IrFieldAccessExpression) {
             val receiverType = expression.receiver?.type
@@ -308,13 +305,13 @@ class CheckIrElementVisitor(
         expression.symbol.ensureBound(expression)
     }
 
-    override fun visitDeclaration(declaration: IrDeclaration) {
+    override fun visitDeclaration(declaration: IrDeclarationBase) {
         super.visitDeclaration(declaration)
 
         if (declaration is IrOverridableDeclaration<*>) {
             for (overriddenSymbol in declaration.overriddenSymbols) {
                 val overriddenDeclaration = overriddenSymbol.owner as? IrDeclarationWithVisibility ?: continue
-                if (overriddenDeclaration.visibility == Visibilities.PRIVATE) {
+                if (overriddenDeclaration.visibility == DescriptorVisibilities.PRIVATE) {
                     reportError(declaration, "Overrides private declaration $overriddenDeclaration")
                 }
             }
@@ -329,7 +326,7 @@ class CheckIrElementVisitor(
 
     override fun visitFunctionReference(expression: IrFunctionReference) {
         super.visitFunctionReference(expression)
-
+        expression.checkFunction(expression.symbol.owner)
         expression.symbol.ensureBound(expression)
     }
 
@@ -355,9 +352,6 @@ class CheckIrElementVisitor(
     }
 
     private fun checkType(type: IrType, element: IrElement) {
-        if (type in checkedTypes)
-            return
-
         when (type) {
             is IrSimpleType -> {
                 if (!type.classifier.isBound) {
@@ -365,7 +359,5 @@ class CheckIrElementVisitor(
                 }
             }
         }
-
-        checkedTypes.add(type)
     }
 }

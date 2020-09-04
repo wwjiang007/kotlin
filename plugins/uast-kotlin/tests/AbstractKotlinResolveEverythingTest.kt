@@ -6,33 +6,50 @@
 package org.jetbrains.uast.test.kotlin
 
 import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.psi.KtBlockExpression
-import org.jetbrains.uast.UFile
-import org.jetbrains.uast.UReferenceExpression
+import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.utils.addToStdlib.cast
+import org.jetbrains.kotlin.utils.addToStdlib.safeAs
+import org.jetbrains.uast.*
 import org.jetbrains.uast.test.common.kotlin.IndentedPrintingVisitor
 import org.jetbrains.uast.test.common.kotlin.visitUFileAndGetResult
 import org.jetbrains.uast.test.env.kotlin.assertEqualsToFile
-import org.jetbrains.uast.toUElementOfType
 import java.io.File
 
 
 abstract class AbstractKotlinResolveEverythingTest : AbstractKotlinUastTest() {
 
     private fun getTestFile(testName: String, ext: String) =
-        File(File(AbstractKotlinUastTest.TEST_KOTLIN_MODEL_DIR, testName).canonicalPath + '.' + ext)
+        File(File(TEST_KOTLIN_MODEL_DIR, testName).canonicalPath + '.' + ext)
 
 
     private fun UFile.resolvableWithTargets() = object : IndentedPrintingVisitor(KtBlockExpression::class) {
-        override fun render(element: PsiElement) = element.toUElementOfType<UReferenceExpression>()?.let { ref ->
-            StringBuilder().apply {
-                val parent = ref.uastParent
-                append(parent?.asLogString())
-                append(" -> ")
-                append(ref.asLogString())
-                append(" -> ")
-                append(ref.resolve())
-                append(": ")
-                append(ref.resolvedName)
+        override fun render(element: PsiElement) =
+            UastFacade.convertToAlternatives<UExpression>(element, arrayOf(UReferenceExpression::class.java, UCallExpression::class.java))
+                .filter {
+                    when (it) {
+                        is UCallExpression -> it.sourcePsi.safeAs<KtCallElement>()?.calleeExpression !is KtSimpleNameExpression
+                        else -> true
+                    }
+                }.takeIf { it.any() }
+                ?.joinTo(StringBuilder(), "\n") { ref ->
+                    StringBuilder().apply {
+                        val parent = ref.uastParent
+                        append(parent?.asLogString())
+                        if (parent is UCallExpression) {
+                            append("(resolves to ${parent.resolve()})")
+                        }
+                        append(" -> ")
+                        append(ref.asLogString())
+                        append(" -> ")
+                        append(ref.cast<UResolvable>().resolve())
+                        append(": ")
+                        append(
+                            when (ref) {
+                                is UReferenceExpression -> ref.resolvedName
+                                is UCallExpression -> ""
+                                else -> "<none>"
+                            }
+                        )
             }
         }
     }.visitUFileAndGetResult(this)

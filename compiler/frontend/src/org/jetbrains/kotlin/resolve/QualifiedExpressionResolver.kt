@@ -45,6 +45,7 @@ import org.jetbrains.kotlin.resolve.scopes.utils.memberScopeAsImportingScope
 import org.jetbrains.kotlin.resolve.source.KotlinSourceElement
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingContext
 import org.jetbrains.kotlin.types.expressions.isWithoutValueArguments
+import org.jetbrains.kotlin.utils.CallOnceFunction
 
 class QualifiedExpressionResolver(val languageVersionSettings: LanguageVersionSettings) {
     fun resolvePackageHeader(
@@ -248,7 +249,7 @@ class QualifiedExpressionResolver(val languageVersionSettings: LanguageVersionSe
                 return null
             }
 
-            return AllUnderImportScope(packageOrClassDescriptor, excludedImportNames)
+            return AllUnderImportScope.create(packageOrClassDescriptor, excludedImportNames)
         } else {
             return processSingleImport(moduleDescriptor, trace, importDirective, path, lastPart, packageFragmentForCheck)
         }
@@ -310,22 +311,22 @@ class QualifiedExpressionResolver(val languageVersionSettings: LanguageVersionSe
             packageOrClassDescriptor,
             packageFragmentForVisibilityCheck,
             lastPart.name,
-            aliasName
-        ) { candidates ->
-
-            if (candidates.isNotEmpty()) {
-                storeResult(
-                    trace,
-                    lastPart.expression,
-                    candidates,
-                    packageFragmentForVisibilityCheck,
-                    position = QualifierPosition.IMPORT,
-                    isQualifier = false
-                )
-            } else {
-                tryResolveDescriptorsWhichCannotBeImported(trace, moduleDescriptor, packageOrClassDescriptor, lastPart)
+            aliasName,
+            CallOnceFunction(Unit) { candidates ->
+                if (candidates.isNotEmpty()) {
+                    storeResult(
+                        trace,
+                        lastPart.expression,
+                        candidates,
+                        packageFragmentForVisibilityCheck,
+                        position = QualifierPosition.IMPORT,
+                        isQualifier = false
+                    )
+                } else {
+                    tryResolveDescriptorsWhichCannotBeImported(trace, moduleDescriptor, packageOrClassDescriptor, lastPart)
+                }
             }
-        }
+        )
     }
 
     private fun tryResolveDescriptorsWhichCannotBeImported(
@@ -810,10 +811,10 @@ internal fun isVisible(
 
     val visibility = descriptor.visibility
     if (position == QualifierPosition.IMPORT) {
-        if (Visibilities.isPrivate(visibility)) return Visibilities.inSameFile(descriptor, shouldBeVisibleFrom)
+        if (DescriptorVisibilities.isPrivate(visibility)) return DescriptorVisibilities.inSameFile(descriptor, shouldBeVisibleFrom)
         if (!visibility.mustCheckInImports()) return true
     }
-    return Visibilities.isVisibleIgnoringReceiver(descriptor, shouldBeVisibleFrom)
+    return DescriptorVisibilities.isVisibleIgnoringReceiver(descriptor, shouldBeVisibleFrom)
 }
 
 internal enum class QualifierPosition {

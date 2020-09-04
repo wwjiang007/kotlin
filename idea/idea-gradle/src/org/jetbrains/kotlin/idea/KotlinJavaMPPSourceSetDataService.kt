@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -15,9 +15,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.LibraryOrderEntry
 import com.intellij.openapi.roots.ModuleOrderEntry
 import com.intellij.openapi.roots.OrderRootType
-import com.intellij.openapi.roots.impl.ModuleOrderEntryImpl
 import com.intellij.openapi.vfs.VfsUtil
-import org.jetbrains.kotlin.idea.caches.project.isTestModule
 import org.jetbrains.kotlin.idea.configuration.KotlinTargetData
 import org.jetbrains.kotlin.idea.configuration.kotlinSourceSet
 import org.jetbrains.plugins.gradle.model.data.GradleSourceSetData
@@ -48,8 +46,8 @@ class KotlinJavaMPPSourceSetDataService : AbstractProjectDataService<GradleSourc
             val rootModel = modelsProvider.getModifiableRootModel(module)
 
             val moduleEntries = rootModel.orderEntries.filterIsInstance<ModuleOrderEntry>()
-            moduleEntries.filter { isTestModuleById(it.moduleName, toImport) }.forEach {moduleOrderEntry ->
-                (moduleOrderEntry as? ModuleOrderEntryImpl)?.isProductionOnTestDependency = true
+            moduleEntries.filter { isTestModuleById(it.moduleName, toImport) }.forEach { moduleOrderEntry ->
+                moduleOrderEntry.isProductionOnTestDependency = true
             }
             val libraryEntries = rootModel.orderEntries.filterIsInstance<LibraryOrderEntry>()
             libraryEntries.forEach { libraryEntry ->

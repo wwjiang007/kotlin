@@ -5,19 +5,13 @@
 
 package org.jetbrains.kotlin.fir.visitors
 
-import org.jetbrains.kotlin.fir.declarations.FirEnumEntry
 import org.jetbrains.kotlin.fir.declarations.FirErrorFunction
-import org.jetbrains.kotlin.fir.declarations.FirSealedClass
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.references.FirErrorNamedReference
 import org.jetbrains.kotlin.fir.references.FirReference
 import org.jetbrains.kotlin.fir.types.*
 
 abstract class FirDefaultTransformer<D> : FirTransformer<D>() {
-    override fun transformDelegatedTypeRef(delegatedTypeRef: FirDelegatedTypeRef, data: D): CompositeTransformResult<FirTypeRef> {
-        return transformTypeRef(delegatedTypeRef, data)
-    }
-
     override fun transformImplicitTypeRef(implicitTypeRef: FirImplicitTypeRef, data: D): CompositeTransformResult<FirTypeRef> {
         return transformTypeRef(implicitTypeRef, data)
     }
@@ -73,9 +67,6 @@ abstract class FirDefaultTransformer<D> : FirTransformer<D>() {
         return transformJump(breakExpression, data)
     }
 
-    override fun transformEnumEntry(enumEntry: FirEnumEntry, data: D): CompositeTransformResult<FirStatement> {
-        return transformRegularClass(enumEntry, data)
-    }
 
     override fun transformLambdaArgumentExpression(lambdaArgumentExpression: FirLambdaArgumentExpression, data: D): CompositeTransformResult<FirStatement> {
         return transformWrappedArgumentExpression(lambdaArgumentExpression, data)
@@ -87,10 +78,6 @@ abstract class FirDefaultTransformer<D> : FirTransformer<D>() {
 
     override fun transformNamedArgumentExpression(namedArgumentExpression: FirNamedArgumentExpression, data: D): CompositeTransformResult<FirStatement> {
         return transformWrappedArgumentExpression(namedArgumentExpression, data)
-    }
-
-    override fun transformSealedClass(sealedClass: FirSealedClass, data: D): CompositeTransformResult<FirStatement> {
-        return transformRegularClass(sealedClass, data)
     }
 
     override fun transformErrorExpression(errorExpression: FirErrorExpression, data: D): CompositeTransformResult<FirStatement> {
@@ -107,6 +94,13 @@ abstract class FirDefaultTransformer<D> : FirTransformer<D>() {
 
     override fun transformErrorFunction(errorFunction: FirErrorFunction, data: D): CompositeTransformResult<FirStatement> {
         return transformFunction(errorFunction, data)
+    }
+
+    override fun transformErrorResolvedQualifier(
+        errorResolvedQualifier: FirErrorResolvedQualifier,
+        data: D
+    ): CompositeTransformResult<FirStatement> {
+        return transformResolvedQualifier(errorResolvedQualifier, data)
     }
 }
 

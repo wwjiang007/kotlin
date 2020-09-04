@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.quickfix
@@ -19,8 +8,10 @@ package org.jetbrains.kotlin.idea.quickfix
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.codegen.ExpressionCodegen
 import org.jetbrains.kotlin.config.LanguageFeature
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.core.replaced
 import org.jetbrains.kotlin.idea.project.languageVersionSettings
@@ -36,10 +27,10 @@ import org.jetbrains.kotlin.types.typeUtil.isUnsignedNumberType
 import kotlin.math.floor
 
 private val valueRanges = mapOf(
-        KotlinBuiltIns.FQ_NAMES._byte to Byte.MIN_VALUE.toLong()..Byte.MAX_VALUE.toLong(),
-        KotlinBuiltIns.FQ_NAMES._short to Short.MIN_VALUE.toLong()..Short.MAX_VALUE.toLong(),
-        KotlinBuiltIns.FQ_NAMES._int to Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong(),
-        KotlinBuiltIns.FQ_NAMES._long to Long.MIN_VALUE..Long.MAX_VALUE
+    StandardNames.FqNames._byte to Byte.MIN_VALUE.toLong()..Byte.MAX_VALUE.toLong(),
+    StandardNames.FqNames._short to Short.MIN_VALUE.toLong()..Short.MAX_VALUE.toLong(),
+    StandardNames.FqNames._int to Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong(),
+    StandardNames.FqNames._long to Long.MIN_VALUE..Long.MAX_VALUE
 )
 
 class WrongPrimitiveLiteralFix(element: KtConstantExpression, type: KotlinType) : KotlinQuickFixAction<KtExpression>(element) {
@@ -93,8 +84,8 @@ class WrongPrimitiveLiteralFix(element: KtConstantExpression, type: KotlinType) 
         return constValue.toLong() in valueRanges[typeName] ?: return false
     }
 
-    override fun getFamilyName() = "Change to correct primitive type"
-    override fun getText() = "Change to '$fixedExpression'"
+    override fun getFamilyName() = KotlinBundle.message("change.to.correct.primitive.type")
+    override fun getText() = KotlinBundle.message("change.to.0", fixedExpression)
 
     override fun invoke(project: Project, editor: Editor?, file: KtFile) {
         val element = element ?: return

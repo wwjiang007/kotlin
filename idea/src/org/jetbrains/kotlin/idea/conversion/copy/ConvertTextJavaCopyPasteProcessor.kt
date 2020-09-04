@@ -17,8 +17,10 @@
 package org.jetbrains.kotlin.idea.conversion.copy
 
 import com.intellij.codeInsight.editorActions.CopyPastePostProcessor
+import com.intellij.codeInsight.editorActions.TextBlockTransferable
 import com.intellij.codeInsight.editorActions.TextBlockTransferableData
 import com.intellij.ide.highlighter.JavaFileType
+import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.RangeMarker
@@ -27,7 +29,6 @@ import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Ref
-import com.intellij.openapi.util.TextRange
 import com.intellij.psi.*
 import com.intellij.util.LocalTimeCounter
 import org.jetbrains.annotations.TestOnly
@@ -90,6 +91,7 @@ class ConvertTextJavaCopyPasteProcessor : CopyPastePostProcessor<TextBlockTransf
                 return listOf(MyTransferableData(text))
             }
         } catch (e: Throwable) {
+            if (e is ControlFlowException) throw e
             LOG.error(e)
         }
         return emptyList()
@@ -106,7 +108,7 @@ class ConvertTextJavaCopyPasteProcessor : CopyPastePostProcessor<TextBlockTransf
         if (DumbService.getInstance(project).isDumb) return
         if (!KotlinEditorOptions.getInstance().isEnableJavaToKotlinConversion) return //TODO: use another option?
 
-        val text = (values.single() as MyTransferableData).text
+        val text = TextBlockTransferable.convertLineSeparators(editor, (values.single() as MyTransferableData).text, values)
 
         val psiDocumentManager = PsiDocumentManager.getInstance(project)
         val targetFile = psiDocumentManager.getPsiFile(editor.document) as? KtFile ?: return

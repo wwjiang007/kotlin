@@ -17,11 +17,10 @@
 package org.jetbrains.kotlin.backend.jvm.intrinsics
 
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns.COLLECTIONS_PACKAGE_FQ_NAME
+import org.jetbrains.kotlin.builtins.StandardNames.COLLECTIONS_PACKAGE_FQ_NAME
 import org.jetbrains.kotlin.codegen.AsmUtil
 import org.jetbrains.kotlin.fileClasses.internalNameWithoutInnerClasses
 import org.jetbrains.kotlin.ir.expressions.IrFunctionAccessExpression
-import org.jetbrains.kotlin.ir.expressions.IrMemberAccessExpression
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.jvm.AsmTypes
 import org.jetbrains.kotlin.resolve.jvm.JvmPrimitiveType
@@ -31,7 +30,8 @@ import org.jetbrains.org.objectweb.asm.Type
 object IteratorNext : IntrinsicMethod() {
 
     override fun toCallable(expression: IrFunctionAccessExpression, signature: JvmMethodSignature, context: JvmBackendContext): IrIntrinsicFunction {
-        val type = AsmUtil.unboxType(signature.returnType)
+        // If the array element type is unboxed primitive, do not unbox. Otherwise AsmUtil.unbox throws exception
+        val type = if (AsmUtil.isBoxedPrimitiveType(signature.returnType)) AsmUtil.unboxType(signature.returnType) else signature.returnType
         val newSignature = signature.newReturnType(type)
         return IrIntrinsicFunction.create(expression, newSignature, context, AsmTypes.OBJECT_TYPE) {
             val primitiveClassName = getKotlinPrimitiveClassName(type)

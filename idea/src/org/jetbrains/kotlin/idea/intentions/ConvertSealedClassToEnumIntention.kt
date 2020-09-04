@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.intentions
@@ -25,6 +14,7 @@ import com.intellij.psi.codeStyle.CodeStyleManager
 import com.intellij.refactoring.util.CommonRefactoringUtil
 import com.intellij.refactoring.util.RefactoringDescriptionLocation
 import org.jetbrains.kotlin.asJava.unwrapped
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.core.util.runSynchronouslyWithProgress
 import org.jetbrains.kotlin.idea.search.declarationsSearch.HierarchySearchRequest
@@ -40,7 +30,10 @@ import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperClassNotAny
 
-class ConvertSealedClassToEnumIntention : SelfTargetingRangeIntention<KtClass>(KtClass::class.java, "Convert to enum class") {
+class ConvertSealedClassToEnumIntention : SelfTargetingRangeIntention<KtClass>(
+    KtClass::class.java,
+    KotlinBundle.lazyMessage("convert.to.enum.class")
+) {
     override fun applicabilityRange(element: KtClass): TextRange? {
         val nameIdentifier = element.nameIdentifier ?: return null
         val sealedKeyword = element.modifierList?.getModifier(KtTokens.SEALED_KEYWORD) ?: return null
@@ -56,7 +49,7 @@ class ConvertSealedClassToEnumIntention : SelfTargetingRangeIntention<KtClass>(K
 
         val klass = element.liftToExpected() as? KtClass ?: element
 
-        val subclasses = project.runSynchronouslyWithProgress("Searching inheritors...", true) {
+        val subclasses = project.runSynchronouslyWithProgress(KotlinBundle.message("searching.inheritors"), true) {
             HierarchySearchRequest(klass, klass.useScope, false).searchInheritors().mapNotNull { it.unwrapped }
         } ?: return
 
@@ -71,23 +64,27 @@ class ConvertSealedClassToEnumIntention : SelfTargetingRangeIntention<KtClass>(K
         val inconvertibleSubclasses = subclassesByContainer[null] ?: emptyList()
         if (inconvertibleSubclasses.isNotEmpty()) {
             return showError(
-                    "All inheritors must be nested objects of the class itself and may not inherit from other classes or interfaces.\n",
-                    inconvertibleSubclasses,
-                    project,
-                    editor
+                KotlinBundle.message("all.inheritors.must.be.nested.objects.of.the.class.itself.and.may.not.inherit.from.other.classes.or.interfaces"),
+                inconvertibleSubclasses,
+                project,
+                editor
             )
         }
 
         @Suppress("UNCHECKED_CAST")
         val nonSealedClasses = (subclassesByContainer.keys as Set<KtClass>).filter { !it.isSealed() }
         if (nonSealedClasses.isNotEmpty()) {
-            return showError("All expected and actual classes must be sealed classes.\n", nonSealedClasses, project, editor)
+            return showError(
+                KotlinBundle.message("all.expected.and.actual.classes.must.be.sealed.classes"),
+                nonSealedClasses,
+                project,
+                editor
+            )
         }
 
         if (subclassesByContainer.isNotEmpty()) {
-            subclassesByContainer.forEach { currentClass, currentSubclasses -> processClass(currentClass!!, currentSubclasses, project) }
-        }
-        else {
+            subclassesByContainer.forEach { (currentClass, currentSubclasses) -> processClass(currentClass!!, currentSubclasses, project) }
+        } else {
             processClass(klass, emptyList(), project)
         }
     }
@@ -95,7 +92,7 @@ class ConvertSealedClassToEnumIntention : SelfTargetingRangeIntention<KtClass>(K
     private fun showError(message: String, elements: List<PsiElement>, project: Project, editor: Editor?) {
         val errorText = buildString {
             append(message)
-            append("Following problems are found:\n")
+            append(KotlinBundle.message("following.problems.are.found"))
             elements.joinTo(this) { ElementDescriptionUtil.getElementDescription(it, RefactoringDescriptionLocation.WITHOUT_PARENT) }
         }
         return CommonRefactoringUtil.showErrorHint(project, editor, errorText, text, null)
@@ -119,14 +116,13 @@ class ConvertSealedClassToEnumIntention : SelfTargetingRangeIntention<KtClass>(K
                     append((subclass.superTypeListEntries.firstOrNull() as? KtSuperTypeCallEntry)?.valueArgumentList?.text ?: "()")
                 }
             }
-            val entry = psiFactory.createEnumEntry(entryText)
 
-            subclass.getBody()?.let { body -> entry.add(body) }
+            val entry = psiFactory.createEnumEntry(entryText)
+            subclass.body?.let { body -> entry.add(body) }
 
             if (i < subclasses.lastIndex) {
                 entry.add(comma)
-            }
-            else if (needSemicolon) {
+            } else if (needSemicolon) {
                 entry.add(semicolon)
             }
 
@@ -143,11 +139,10 @@ class ConvertSealedClassToEnumIntention : SelfTargetingRangeIntention<KtClass>(K
                 .reversed()
                 .asSequence()
                 .map { klass.addDeclarationBefore(it, null) }
-                    .last()
+                .last()
             // TODO: Add formatter rule
             firstEntry.parent.addBefore(psiFactory.createNewLine(), firstEntry)
-        }
-        else if (needSemicolon) {
+        } else if (needSemicolon) {
             klass.declarations.firstOrNull()?.let { anchor ->
                 val delimiter = anchor.parent.addBefore(semicolon, anchor)
                 CodeStyleManager.getInstance(project).reformat(delimiter)

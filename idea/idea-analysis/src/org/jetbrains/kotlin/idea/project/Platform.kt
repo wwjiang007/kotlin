@@ -119,11 +119,15 @@ fun Project.getLanguageVersionSettings(
     jsr305State: Jsr305State? = null,
     isReleaseCoroutines: Boolean? = null
 ): LanguageVersionSettings {
-    val arguments = KotlinCommonCompilerArgumentsHolder.getInstance(this).settings
+    val kotlinFacetSettings = contextModule?.let {
+        KotlinFacetSettingsProvider.getInstance(this)?.getInitializedSettings(it)
+    }
+
+    val arguments = kotlinFacetSettings?.compilerArguments ?: KotlinCommonCompilerArgumentsHolder.getInstance(this).settings
     val languageVersion =
-        LanguageVersion.fromVersionString(arguments.languageVersion)
-            ?: contextModule?.getAndCacheLanguageLevelByDependencies()
-            ?: VersionView.RELEASED_VERSION
+        kotlinFacetSettings?.languageLevel ?: LanguageVersion.fromVersionString(arguments.languageVersion)
+        ?: contextModule?.getAndCacheLanguageLevelByDependencies()
+        ?: VersionView.RELEASED_VERSION
     val apiVersion = ApiVersion.createByLanguageVersion(LanguageVersion.fromVersionString(arguments.apiVersion) ?: languageVersion)
     val compilerSettings = KotlinCompilerSettings.getInstance(this).settings
 
@@ -137,7 +141,6 @@ fun Project.getLanguageVersionSettings(
             CoroutineSupport.byCompilerArguments(KotlinCommonCompilerArgumentsHolder.getInstance(this@getLanguageVersionSettings).settings),
             languageVersion
         )
-        configureNewInferenceSupportInIDE(this@getLanguageVersionSettings)
         if (isReleaseCoroutines != null) {
             put(
                 LanguageFeature.ReleaseCoroutines,
@@ -169,16 +172,27 @@ val Module.languageVersionSettings: LanguageVersionSettings
         return cachedValue.value
     }
 
-@TestOnly // public for tests
-fun Module.setLanguageVersionSettings(value: LanguageVersionSettings) =
-    putUserData(
-        LANGUAGE_VERSION_SETTINGS,
-        CachedValuesManager.getManager(project).createCachedValue({
-                                                                      CachedValueProvider.Result(
-                                                                          value, ProjectRootModificationTracker.getInstance(project)
-                                                                      )
-                                                                  }, false)
-    )
+@TestOnly
+fun Module.withLanguageVersionSettings(value: LanguageVersionSettings, body: () -> Unit) {
+    val previousLanguageVersionSettings = getUserData(LANGUAGE_VERSION_SETTINGS)
+    try {
+        putUserData(
+            LANGUAGE_VERSION_SETTINGS,
+            CachedValuesManager.getManager(project).createCachedValue(
+                {
+                    CachedValueProvider.Result(
+                        value, ProjectRootModificationTracker.getInstance(project)
+                    )
+                },
+                false
+            )
+        )
+
+        body()
+    } finally {
+        putUserData(LANGUAGE_VERSION_SETTINGS, previousLanguageVersionSettings)
+    }
+}
 
 private fun Module.createCachedValueForLanguageVersionSettings(): CachedValue<LanguageVersionSettings> {
     return CachedValuesManager.getManager(project).createCachedValue({
@@ -216,7 +230,6 @@ private fun Module.computeLanguageVersionSettings(): LanguageVersionSettings {
     val languageFeatures = facetSettings?.mergedCompilerArguments?.configureLanguageFeatures(MessageCollector.NONE)?.apply {
         configureCoroutinesSupport(facetSettings.coroutineSupport, languageVersion)
         configureMultiplatformSupport(facetSettings.targetPlatform?.idePlatformKind, this@computeLanguageVersionSettings)
-        configureNewInferenceSupportInIDE(project)
     }.orEmpty()
 
     val analysisFlags = facetSettings
@@ -283,14 +296,6 @@ fun MutableMap<LanguageFeature, LanguageFeature.State>.configureMultiplatformSup
 ) {
     if (platformKind.isCommon || module?.implementsCommonModule == true) {
         put(LanguageFeature.MultiPlatformProjects, LanguageFeature.State.ENABLED)
-    }
-}
-
-fun MutableMap<LanguageFeature, LanguageFeature.State>.configureNewInferenceSupportInIDE(
-    project: Project
-) {
-    if (NewInferenceForIDEAnalysisComponent.isEnabled(project)) {
-        putIfAbsent(LanguageFeature.NewInference, LanguageFeature.State.ENABLED)
     }
 }
 

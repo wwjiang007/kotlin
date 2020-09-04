@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -55,6 +55,7 @@ interface KotlinSourceSet : KotlinModule {
     val resourceDirs: Set<File>
     val dependsOnSourceSets: Set<String>
     val actualPlatforms: KotlinPlatformContainer
+
     @Deprecated("Returns single target platform", ReplaceWith("actualPlatforms.actualPlatforms"), DeprecationLevel.ERROR)
     val platform: KotlinPlatform
         get() = actualPlatforms.getSinglePlatform()
@@ -78,6 +79,7 @@ interface KotlinLanguageSettings : Serializable {
     val experimentalAnnotationsInUse: Set<String>
     val compilerPluginArguments: Array<String>
     val compilerPluginClasspath: Set<File>
+    val freeCompilerArgs: Array<String>
 }
 
 interface KotlinCompilationOutput : Serializable {
@@ -92,7 +94,7 @@ interface KotlinCompilationArguments : Serializable {
 }
 
 interface KotlinNativeCompilationExtensions : Serializable {
-    val konanTarget: String?
+    val konanTarget: String // represents org.jetbrains.kotlin.konan.target.KonanTarget
 }
 
 interface KotlinCompilation : KotlinModule {
@@ -103,7 +105,7 @@ interface KotlinCompilation : KotlinModule {
     val disambiguationClassifier: String?
     val platform: KotlinPlatform
     val kotlinTaskProperties: KotlinTaskProperties
-    val nativeExtensions: KotlinNativeCompilationExtensions
+    val nativeExtensions: KotlinNativeCompilationExtensions?
 
     companion object {
         const val MAIN_COMPILATION_NAME = "main"
@@ -144,7 +146,8 @@ interface KotlinTarget : Serializable {
     val disambiguationClassifier: String?
     val platform: KotlinPlatform
     val compilations: Collection<KotlinCompilation>
-    val testTasks: Collection<KotlinTestTask>
+    val testRunTasks: Collection<KotlinTestRunTask>
+    val nativeMainRunTasks: Collection<KotlinNativeMainRunTask>
     val jar: KotlinTargetJar?
     val konanArtifacts: List<KonanArtifactModel>
 
@@ -153,9 +156,16 @@ interface KotlinTarget : Serializable {
     }
 }
 
-interface KotlinTestTask : Serializable {
+interface KotlinRunTask : Serializable {
     val taskName: String
     val compilationName: String
+}
+
+interface KotlinTestRunTask : KotlinRunTask
+
+interface KotlinNativeMainRunTask : KotlinRunTask {
+    val entryPoint: String
+    val debuggable: Boolean
 }
 
 interface ExtraFeatures : Serializable {
@@ -177,11 +187,11 @@ interface KotlinMPPGradleModel : Serializable {
 }
 
 interface KonanArtifactModel : Serializable {
-    val targetName: String
-    val executableName: String
-    val type: String // represents org.jetbrains.kotlin.konan.target.CompilerOutputKind
-    val targetPlatform: String
-    val file: File
+    val targetName: String // represents org.jetbrains.kotlin.gradle.plugin.KotlinTarget.name, ex: "iosX64", "iosArm64"
+    val executableName: String // a base name for the output binary file
+    val type: String // represents org.jetbrains.kotlin.konan.target.CompilerOutputKind.name, ex: "PROGRAM", "FRAMEWORK"
+    val targetPlatform: String // represents org.jetbrains.kotlin.konan.target.KonanTarget.name
+    val file: File // the output binary file
     val buildTaskPath: String
     val runConfiguration: KonanRunConfigurationModel
     val isTests: Boolean

@@ -6,10 +6,8 @@
 package org.jetbrains.kotlin.fir
 
 import com.intellij.openapi.util.Disposer
-import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys.CONTENT_ROOTS
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY
-import org.jetbrains.kotlin.cli.common.config.KotlinSourceRoot
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
@@ -17,9 +15,6 @@ import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinToJVMBytecodeCompiler
 import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.fir.scopes.ProcessorAction
-import org.jetbrains.kotlin.test.ConfigurationKind
-import org.jetbrains.kotlin.test.KotlinTestUtils
-import org.jetbrains.kotlin.test.TestJdkKind
 import java.io.FileOutputStream
 import java.io.PrintStream
 import kotlin.system.measureNanoTime
@@ -37,7 +32,7 @@ class NonFirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
 
         val time = measureNanoTime {
             try {
-                KotlinToJVMBytecodeCompiler.analyze(environment, null)
+                KotlinToJVMBytecodeCompiler.analyze(environment)
             } catch (e: Throwable) {
                 var exception: Throwable? = e
                 while (exception != null && exception != exception.cause) {
@@ -64,27 +59,20 @@ class NonFirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
     }
 
     override fun processModule(moduleData: ModuleData): ProcessorAction {
-        val configurationKind = ConfigurationKind.ALL
-        val testJdkKind = TestJdkKind.FULL_JDK
-
-
         val disposable = Disposer.newDisposable()
 
 
-        val configuration =
-            KotlinTestUtils.newConfiguration(configurationKind, testJdkKind, moduleData.classpath, moduleData.javaSourceRoots)
-        configuration.addAll(
-            CONTENT_ROOTS,
-            moduleData.sources.filter { it.extension == "kt" }.map { KotlinSourceRoot(it.absolutePath, false) })
+        val configuration = createDefaultConfiguration(moduleData)
 
-        if (USE_NI) {
-            configuration.languageVersionSettings =
-                LanguageVersionSettingsImpl(
-                    LanguageVersion.KOTLIN_1_4, ApiVersion.KOTLIN_1_3, specificFeatures = mapOf(
-                        LanguageFeature.NewInference to LanguageFeature.State.ENABLED
-                    )
+
+        configuration.languageVersionSettings =
+            LanguageVersionSettingsImpl(
+                configuration.languageVersionSettings.languageVersion,
+                configuration.languageVersionSettings.apiVersion,
+                specificFeatures = mapOf(
+                    LanguageFeature.NewInference to if (USE_NI) LanguageFeature.State.ENABLED else LanguageFeature.State.DISABLED
                 )
-        }
+            )
 
         System.getProperty("fir.bench.oldfe.jvm_target")?.let {
             configuration.put(JVMConfigurationKeys.JVM_TARGET, JvmTarget.fromString(it) ?: error("Unknown JvmTarget"))
@@ -94,7 +82,7 @@ class NonFirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
 
             }
 
-            override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageLocation?) {
+            override fun report(severity: CompilerMessageSeverity, message: String, location: CompilerMessageSourceLocation?) {
                 if (location != null)
                     print(location.toString())
                 print(":")
@@ -118,7 +106,7 @@ class NonFirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
 
 
     override fun afterPass(pass: Int) {}
-    override fun beforePass() {}
+    override fun beforePass(pass: Int) {}
 
     fun testTotalKotlin() {
         writeMessageToLog("use_ni: $USE_NI")
@@ -130,7 +118,7 @@ class NonFirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
             totalTime = 0L
         }
 
-        val bestTime = times.min()!!
+        val bestTime = times.minOrNull()!!
         val bestPass = times.indexOf(bestTime)
         dumpTime("Best pass: $bestPass", bestTime)
     }

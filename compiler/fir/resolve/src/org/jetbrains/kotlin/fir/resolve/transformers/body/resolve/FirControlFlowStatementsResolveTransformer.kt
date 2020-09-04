@@ -6,8 +6,8 @@
 package org.jetbrains.kotlin.fir.resolve.transformers.body.resolve
 
 import org.jetbrains.kotlin.fir.FirTargetElement
+import org.jetbrains.kotlin.fir.diagnostics.ConeSimpleDiagnostic
 import org.jetbrains.kotlin.fir.diagnostics.DiagnosticKind
-import org.jetbrains.kotlin.fir.diagnostics.FirSimpleDiagnostic
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.expressions.impl.FirElseIfTrueCondition
 import org.jetbrains.kotlin.fir.expressions.impl.FirEmptyExpressionBlock
@@ -16,9 +16,9 @@ import org.jetbrains.kotlin.fir.resolve.ResolutionMode
 import org.jetbrains.kotlin.fir.resolve.transformers.FirSyntheticCallGenerator
 import org.jetbrains.kotlin.fir.resolve.transformers.FirWhenExhaustivenessTransformer
 import org.jetbrains.kotlin.fir.resolvedTypeFromPrototype
-import org.jetbrains.kotlin.fir.scopes.impl.FirLocalScope
 import org.jetbrains.kotlin.fir.types.FirImplicitTypeRef
-import org.jetbrains.kotlin.fir.types.impl.FirErrorTypeRefImpl
+import org.jetbrains.kotlin.fir.types.builder.buildErrorTypeRef
+import org.jetbrains.kotlin.fir.types.coneTypeSafe
 import org.jetbrains.kotlin.fir.visitors.CompositeTransformResult
 import org.jetbrains.kotlin.fir.visitors.compose
 import org.jetbrains.kotlin.fir.visitors.transformSingle
@@ -33,17 +33,26 @@ class FirControlFlowStatementsResolveTransformer(transformer: FirBodyResolveTran
     // ------------------------------- Loops -------------------------------
 
     override fun transformWhileLoop(whileLoop: FirWhileLoop, data: ResolutionMode): CompositeTransformResult<FirStatement> {
+        val context = ResolutionMode.ContextIndependent
         return whileLoop.also(dataFlowAnalyzer::enterWhileLoop)
-            .transformCondition(transformer, data).also(dataFlowAnalyzer::exitWhileLoopCondition)
-            .transformBlock(transformer, data).also(dataFlowAnalyzer::exitWhileLoop)
-            .transformOtherChildren(transformer, data).compose()
+            .transformCondition(transformer, context).also(dataFlowAnalyzer::exitWhileLoopCondition)
+            .transformBlock(transformer, context).also(dataFlowAnalyzer::exitWhileLoop)
+            .transformOtherChildren(transformer, context).compose()
     }
 
     override fun transformDoWhileLoop(doWhileLoop: FirDoWhileLoop, data: ResolutionMode): CompositeTransformResult<FirStatement> {
-        return doWhileLoop.also(dataFlowAnalyzer::enterDoWhileLoop)
-            .transformBlock(transformer, data).also(dataFlowAnalyzer::enterDoWhileLoopCondition)
-            .transformCondition(transformer, data).also(dataFlowAnalyzer::exitDoWhileLoop)
-            .transformOtherChildren(transformer, data).compose()
+        val context = ResolutionMode.ContextIndependent
+        // Do-while has a specific scope structure (its block and condition effectively share the scope)
+        return withNewLocalScope {
+            doWhileLoop.also(dataFlowAnalyzer::enterDoWhileLoop)
+                .apply {
+                    transformer.expressionsTransformer.transformBlockInCurrentScope(block, context)
+                    dataFlowAnalyzer
+                }
+                .also(dataFlowAnalyzer::enterDoWhileLoopCondition).transformCondition(transformer, context)
+                .also(dataFlowAnalyzer::exitDoWhileLoop)
+                .transformOtherChildren(transformer, context).compose()
+        }
     }
 
     // ------------------------------- When expressions -------------------------------
@@ -54,16 +63,15 @@ class FirControlFlowStatementsResolveTransformer(transformer: FirBodyResolveTran
         }
         whenExpression.annotations.forEach { it.accept(this, data) }
         dataFlowAnalyzer.enterWhenExpression(whenExpression)
-        return withScopeCleanup(localScopes) with@{
+        return withLocalScopeCleanup with@{
             if (whenExpression.subjectVariable != null) {
-                localScopes += FirLocalScope()
+                addNewLocalScope()
             }
             @Suppress("NAME_SHADOWING")
             var whenExpression = whenExpression.transformSubject(transformer, ResolutionMode.ContextIndependent)
 
             when {
-                whenExpression.branches.isEmpty() -> {
-                }
+                whenExpression.branches.isEmpty() -> {}
                 whenExpression.isOneBranch() -> {
                     whenExpression = whenExpression.transformBranches(transformer, ResolutionMode.ContextIndependent)
                     whenExpression.resultType = whenExpression.branches.first().result.resultType
@@ -74,12 +82,15 @@ class FirControlFlowStatementsResolveTransformer(transformer: FirBodyResolveTran
                     whenExpression = syntheticCallGenerator.generateCalleeForWhenExpression(whenExpression) ?: run {
                         whenExpression = whenExpression.transformSingle(whenExhaustivenessTransformer, null)
                         dataFlowAnalyzer.exitWhenExpression(whenExpression)
-                        whenExpression.resultType = FirErrorTypeRefImpl(null, FirSimpleDiagnostic("Can't resolve when expression", DiagnosticKind.InferenceError))
+                        whenExpression.resultType = buildErrorTypeRef {
+                            diagnostic = ConeSimpleDiagnostic("Can't resolve when expression", DiagnosticKind.InferenceError)
+                        }
                         return@with whenExpression.compose()
                     }
 
                     val expectedTypeRef = data.expectedType
-                    whenExpression = callCompleter.completeCall(whenExpression, expectedTypeRef)
+                    val completionResult = callCompleter.completeCall(whenExpression, expectedTypeRef)
+                    whenExpression = completionResult.result
                 }
             }
             whenExpression = whenExpression.transformSingle(whenExhaustivenessTransformer, null)
@@ -100,7 +111,7 @@ class FirControlFlowStatementsResolveTransformer(transformer: FirBodyResolveTran
         if (branches.size == 1) return true
         if (branches.size > 2) return false
         val lastBranch = branches.last()
-        return lastBranch.condition is FirElseIfTrueCondition && lastBranch.result is FirEmptyExpressionBlock
+        return lastBranch.source != null && lastBranch.condition is FirElseIfTrueCondition && lastBranch.result is FirEmptyExpressionBlock
     }
 
     override fun transformWhenBranch(whenBranch: FirWhenBranch, data: ResolutionMode): CompositeTransformResult<FirWhenBranch> {
@@ -114,7 +125,7 @@ class FirControlFlowStatementsResolveTransformer(transformer: FirBodyResolveTran
         whenSubjectExpression: FirWhenSubjectExpression,
         data: ResolutionMode
     ): CompositeTransformResult<FirStatement> {
-        val parentWhen = whenSubjectExpression.whenSubject.whenExpression
+        val parentWhen = whenSubjectExpression.whenRef.value
         val subjectType = parentWhen.subject?.resultType ?: parentWhen.subjectVariable?.returnTypeRef
         if (subjectType != null) {
             whenSubjectExpression.resultType = subjectType
@@ -135,31 +146,37 @@ class FirControlFlowStatementsResolveTransformer(transformer: FirBodyResolveTran
         dataFlowAnalyzer.exitTryMainBlock(tryExpression)
         tryExpression.transformCatches(this, ResolutionMode.ContextDependent)
 
+        var callCompleted = false
+
         @Suppress("NAME_SHADOWING")
         var result = syntheticCallGenerator.generateCalleeForTryExpression(tryExpression)?.let {
             val expectedTypeRef = data.expectedType
-            callCompleter.completeCall(it, expectedTypeRef)
+            val completionResult = callCompleter.completeCall(it, expectedTypeRef)
+            callCompleted = completionResult.callCompleted
+            completionResult.result
         } ?: run {
-            tryExpression.resultType = FirErrorTypeRefImpl(null, FirSimpleDiagnostic("Can't resolve try expression", DiagnosticKind.InferenceError))
+            tryExpression.resultType = buildErrorTypeRef {
+                diagnostic = ConeSimpleDiagnostic("Can't resolve try expression", DiagnosticKind.InferenceError)
+            }
+            callCompleted = true
             tryExpression
         }
 
         result = if (result.finallyBlock != null) {
-            result.also(dataFlowAnalyzer::enterFinallyBlock)
+            result.also { dataFlowAnalyzer.enterFinallyBlock() }
                 .transformFinallyBlock(transformer, ResolutionMode.ContextIndependent)
                 .also(dataFlowAnalyzer::exitFinallyBlock)
         } else {
             result
         }
-        dataFlowAnalyzer.exitTryExpression(result)
+        dataFlowAnalyzer.exitTryExpression(callCompleted)
         return result.compose()
     }
 
     override fun transformCatch(catch: FirCatch, data: ResolutionMode): CompositeTransformResult<FirCatch> {
         dataFlowAnalyzer.enterCatchClause(catch)
         catch.parameter.transformReturnTypeRef(transformer, ResolutionMode.ContextIndependent)
-        return withScopeCleanup(localScopes) {
-            localScopes += FirLocalScope()
+        return withNewLocalScope {
             catch.transformParameter(transformer, ResolutionMode.ContextIndependent)
             catch.transformBlock(transformer, ResolutionMode.ContextDependent)
         }.also { dataFlowAnalyzer.exitCatchClause(it) }.compose()
@@ -168,14 +185,48 @@ class FirControlFlowStatementsResolveTransformer(transformer: FirBodyResolveTran
     // ------------------------------- Jumps -------------------------------
 
     override fun <E : FirTargetElement> transformJump(jump: FirJump<E>, data: ResolutionMode): CompositeTransformResult<FirStatement> {
-        val result = transformer.transformExpression(jump, data)
+        val expectedTypeRef = (jump as? FirReturnExpression)?.target?.labeledElement?.returnTypeRef
+
+        val mode = if (expectedTypeRef != null) {
+            ResolutionMode.WithExpectedType(expectedTypeRef)
+        } else {
+            ResolutionMode.ContextIndependent
+        }
+        var result = transformer.transformExpression(jump, mode).single
+        if (result is FirReturnExpression) {
+            result = result.transformResult(integerLiteralTypeApproximator, expectedTypeRef!!.coneTypeSafe())
+        }
         dataFlowAnalyzer.exitJump(jump)
-        return result
+        return result.compose()
     }
 
-    override fun transformThrowExpression(throwExpression: FirThrowExpression, data: ResolutionMode): CompositeTransformResult<FirStatement> {
+    override fun transformThrowExpression(
+        throwExpression: FirThrowExpression,
+        data: ResolutionMode
+    ): CompositeTransformResult<FirStatement> {
         return transformer.transformExpression(throwExpression, data).also {
             dataFlowAnalyzer.exitThrowExceptionNode(it.single as FirThrowExpression)
         }
+    }
+
+    // ------------------------------- Elvis -------------------------------
+
+    override fun transformElvisExpression(elvisExpression: FirElvisExpression, data: ResolutionMode): CompositeTransformResult<FirStatement> {
+        if (elvisExpression.calleeReference is FirResolvedNamedReference) return elvisExpression.compose()
+        elvisExpression.transformAnnotations(transformer, data)
+        elvisExpression.transformLhs(transformer, ResolutionMode.ContextDependent)
+        dataFlowAnalyzer.exitElvisLhs(elvisExpression)
+        elvisExpression.transformRhs(transformer, ResolutionMode.ContextDependent)
+
+        val result = syntheticCallGenerator.generateCalleeForElvisExpression(elvisExpression)?.let {
+            callCompleter.completeCall(it, data.expectedType).result
+        } ?: elvisExpression.also {
+            it.resultType = buildErrorTypeRef {
+                diagnostic = ConeSimpleDiagnostic("Can't resolve ?: operator call", DiagnosticKind.InferenceError)
+            }
+        }
+
+        dataFlowAnalyzer.exitElvis()
+        return result.compose()
     }
 }

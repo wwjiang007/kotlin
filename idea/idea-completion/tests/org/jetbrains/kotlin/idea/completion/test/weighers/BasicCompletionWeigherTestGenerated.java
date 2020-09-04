@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -30,7 +30,7 @@ public class BasicCompletionWeigherTestGenerated extends AbstractBasicCompletion
     }
 
     public void testAllFilesPresentInBasic() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), true);
+        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/idea-completion/testData/weighers/basic"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
     }
 
     @TestMetadata("CallableReference_NothingLast.kt")
@@ -56,6 +56,11 @@ public class BasicCompletionWeigherTestGenerated extends AbstractBasicCompletion
     @TestMetadata("DeprecatedJavaClass.kt")
     public void testDeprecatedJavaClass() throws Exception {
         runTest("idea/idea-completion/testData/weighers/basic/DeprecatedJavaClass.kt");
+    }
+
+    @TestMetadata("DeprecatedSinceKotlinFun.kt")
+    public void testDeprecatedSinceKotlinFun() throws Exception {
+        runTest("idea/idea-completion/testData/weighers/basic/DeprecatedSinceKotlinFun.kt");
     }
 
     @TestMetadata("DslCallWithExpectedType.kt")
@@ -222,7 +227,7 @@ public class BasicCompletionWeigherTestGenerated extends AbstractBasicCompletion
         }
 
         public void testAllFilesPresentInContextualReturn() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/contextualReturn"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/contextualReturn"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
         }
 
         @TestMetadata("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType")
@@ -234,7 +239,7 @@ public class BasicCompletionWeigherTestGenerated extends AbstractBasicCompletion
             }
 
             public void testAllFilesPresentInNoReturnType() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/contextualReturn/noReturnType"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
             }
 
             @TestMetadata("BeginOfNestedBlock.kt")
@@ -302,7 +307,7 @@ public class BasicCompletionWeigherTestGenerated extends AbstractBasicCompletion
             }
 
             public void testAllFilesPresentInWithReturnType() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/contextualReturn/withReturnType"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
             }
 
             @TestMetadata("BeginOfNestedBlock.kt")
@@ -406,7 +411,7 @@ public class BasicCompletionWeigherTestGenerated extends AbstractBasicCompletion
         }
 
         public void testAllFilesPresentInExpectedInfo() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/expectedInfo"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/expectedInfo"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
         }
 
         @TestMetadata("CompanionObjectMethod.kt")
@@ -489,7 +494,7 @@ public class BasicCompletionWeigherTestGenerated extends AbstractBasicCompletion
         }
 
         public void testAllFilesPresentInParameterNameAndType() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/parameterNameAndType"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/idea-completion/testData/weighers/basic/parameterNameAndType"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
         }
 
         @TestMetadata("Deprecated.kt")

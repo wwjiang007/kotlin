@@ -5,12 +5,21 @@
 
 package org.jetbrains.kotlin.backend.common.ir
 
-import org.jetbrains.kotlin.ir.declarations.IrClass
-import org.jetbrains.kotlin.ir.declarations.IrDeclaration
-import org.jetbrains.kotlin.ir.declarations.IrFunction
-import org.jetbrains.kotlin.ir.declarations.IrProperty
+import org.jetbrains.kotlin.ir.declarations.*
 
 val IrDeclaration.isExpect
     get() = this is IrClass && isExpect ||
             this is IrFunction && isExpect ||
             this is IrProperty && isExpect
+
+// The original isExpect represents what user has written.
+// This predicate means "there can possibly exist an 'actual' for the given declaration".
+// Shouldn't it be incorporated to descriptor -> ir declaration psi2ir translation phase?
+@Suppress("unused")
+val IrDeclaration.isProperExpect: Boolean
+    get() = this is IrClass && isExpect ||
+            this is IrFunction && isExpect ||
+            this is IrProperty && isExpect ||
+            (this is IrClass || this is IrFunction || this is IrProperty || this is IrConstructor || this is IrEnumEntry)
+            && (this.parent as? IrDeclaration)?.isProperExpect ?: false
+

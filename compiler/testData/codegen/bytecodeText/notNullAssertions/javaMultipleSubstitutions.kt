@@ -1,5 +1,3 @@
-// IGNORE_BACKEND: JVM_IR
-// Missing IMPLICIT_NOTNULL casts
 // FILE: A.java
 import org.jetbrains.annotations.NotNull;
 
@@ -34,7 +32,7 @@ internal fun bar(a: A<String, Int>, b: B<String>, c: C) {
 }
 
 // @JavaMultipleSubstitutionsKt.class
-// 3 checkExpressionValueIsNotNull
-// 0 checkNotNullExpressionValue
-// 3 checkParameterIsNotNull
-// 0 checkNotNullParameter
+// 0 checkExpressionValueIsNotNull
+// 3 checkNotNullExpressionValue
+// 0 checkParameterIsNotNull
+// 3 checkNotNullParameter

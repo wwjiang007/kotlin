@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -51,7 +51,8 @@ class ScriptCodegen private constructor(
                     typeMapper.mapSupertype(it.defaultType, null).internalName
                 }.toTypedArray()
         )
-        AnnotationCodegen.forClass(v.visitor, this, state).genAnnotations(scriptDescriptor, null)
+        v.visitSource(scriptDeclaration.containingKtFile.name, null)
+        AnnotationCodegen.forClass(v.visitor, this, state).genAnnotations(scriptDescriptor, null, null)
     }
 
     override fun generateBody() {
@@ -99,7 +100,8 @@ class ScriptCodegen private constructor(
                 OtherOrigin(scriptDeclaration, scriptDescriptor.unsubstitutedPrimaryConstructor),
                 ACC_PUBLIC, jvmSignature.asmMethod.name, jvmSignature.asmMethod.descriptor, null, null)
 
-        AnnotationCodegen.forMethod(mv, this, state).genAnnotations(scriptDescriptor.unsubstitutedPrimaryConstructor, asmMethod.returnType)
+        AnnotationCodegen.forMethod(mv, this, state)
+            .genAnnotations(scriptDescriptor.unsubstitutedPrimaryConstructor, asmMethod.returnType, null)
 
         if (state.classBuilderMode.generateBodies) {
             mv.visitCode()

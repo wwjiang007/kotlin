@@ -5,12 +5,12 @@
 
 package org.jetbrains.kotlin.resolve.jvm;
 
+import kotlin.collections.CollectionsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.kotlin.builtins.PrimitiveType;
 import org.jetbrains.org.objectweb.asm.Type;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 public class AsmTypes {
     private static final Map<Class<?>, Type> TYPES_MAP = new HashMap<>();
@@ -29,7 +29,11 @@ public class AsmTypes {
     public static final Type UNIT_TYPE = Type.getObjectType("kotlin/Unit");
 
     public static final Type LAMBDA = Type.getObjectType("kotlin/jvm/internal/Lambda");
+    public static final Type FUNCTION_ADAPTER = Type.getObjectType("kotlin/jvm/internal/FunctionAdapter");
+
     public static final Type FUNCTION_REFERENCE = Type.getObjectType("kotlin/jvm/internal/FunctionReference");
+    public static final Type FUNCTION_REFERENCE_IMPL = Type.getObjectType("kotlin/jvm/internal/FunctionReferenceImpl");
+
     public static final Type PROPERTY_REFERENCE0 = Type.getObjectType("kotlin/jvm/internal/PropertyReference0");
     public static final Type PROPERTY_REFERENCE1 = Type.getObjectType("kotlin/jvm/internal/PropertyReference1");
     public static final Type PROPERTY_REFERENCE2 = Type.getObjectType("kotlin/jvm/internal/PropertyReference2");
@@ -37,8 +41,7 @@ public class AsmTypes {
     public static final Type MUTABLE_PROPERTY_REFERENCE1 = Type.getObjectType("kotlin/jvm/internal/MutablePropertyReference1");
     public static final Type MUTABLE_PROPERTY_REFERENCE2 = Type.getObjectType("kotlin/jvm/internal/MutablePropertyReference2");
 
-    public static final Type RESULT_FAILURE = Type.getObjectType("kotlin/Result$Failure");
-
+    public static final Type FUNCTION = Type.getObjectType("kotlin/Function");
     public static final Type FUNCTION0 = Type.getObjectType("kotlin/jvm/functions/Function0");
     public static final Type FUNCTION1 = Type.getObjectType("kotlin/jvm/functions/Function1");
 
@@ -55,6 +58,7 @@ public class AsmTypes {
 
     public static final Type K_CLASS_TYPE = reflect("KClass");
     public static final Type K_CLASS_ARRAY_TYPE = Type.getObjectType("[" + K_CLASS_TYPE.getDescriptor());
+    public static final Type K_CLASSIFIER_TYPE = reflect("KClassifier");
     public static final Type K_DECLARATION_CONTAINER_TYPE = reflect("KDeclarationContainer");
 
     public static final Type K_FUNCTION = reflect("KFunction");
@@ -70,6 +74,8 @@ public class AsmTypes {
     public static final Type K_TYPE = reflect("KType");
     public static final Type K_TYPE_PROJECTION = reflect("KTypeProjection");
     public static final Type K_TYPE_PROJECTION_COMPANION = reflect("KTypeProjection$Companion");
+    public static final Type K_TYPE_PARAMETER = reflect("KTypeParameter");
+    public static final Type K_VARIANCE = reflect("KVariance");
 
     public static final Type SUSPEND_FUNCTION_TYPE = Type.getObjectType("kotlin/coroutines/jvm/internal/SuspendFunction");
 
@@ -122,6 +128,16 @@ public class AsmTypes {
     @NotNull
     public static Type getType(@NotNull Class<?> javaClass) {
         return TYPES_MAP.computeIfAbsent(javaClass, k -> Type.getType(javaClass));
+    }
+
+    public static final List<Type> OPTIMIZED_PROPERTY_REFERENCE_SUPERTYPES =
+            CollectionsKt.flatten(Arrays.asList(
+                    Arrays.asList(PROPERTY_REFERENCE_IMPL),
+                    Arrays.asList(MUTABLE_PROPERTY_REFERENCE_IMPL)
+            ));
+
+    public static boolean isOptimizedPropertyReferenceSupertype(@NotNull Type type) {
+        return OPTIMIZED_PROPERTY_REFERENCE_SUPERTYPES.contains(type);
     }
 
     private AsmTypes() {

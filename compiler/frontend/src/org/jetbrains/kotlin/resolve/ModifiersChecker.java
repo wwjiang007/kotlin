@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.resolve;
 
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -133,19 +134,19 @@ public class ModifiersChecker {
     }
 
     @NotNull
-    public static Visibility resolveVisibilityFromModifiers(
+    public static DescriptorVisibility resolveVisibilityFromModifiers(
             @NotNull KtModifierListOwner modifierListOwner,
-            @NotNull Visibility defaultVisibility
+            @NotNull DescriptorVisibility defaultVisibility
     ) {
         return resolveVisibilityFromModifiers(modifierListOwner.getModifierList(), defaultVisibility);
     }
 
-    public static Visibility resolveVisibilityFromModifiers(@Nullable KtModifierList modifierList, @NotNull Visibility defaultVisibility) {
+    public static DescriptorVisibility resolveVisibilityFromModifiers(@Nullable KtModifierList modifierList, @NotNull DescriptorVisibility defaultVisibility) {
         if (modifierList == null) return defaultVisibility;
-        if (modifierList.hasModifier(PRIVATE_KEYWORD)) return Visibilities.PRIVATE;
-        if (modifierList.hasModifier(PUBLIC_KEYWORD)) return Visibilities.PUBLIC;
-        if (modifierList.hasModifier(PROTECTED_KEYWORD)) return Visibilities.PROTECTED;
-        if (modifierList.hasModifier(INTERNAL_KEYWORD)) return Visibilities.INTERNAL;
+        if (modifierList.hasModifier(PRIVATE_KEYWORD)) return DescriptorVisibilities.PRIVATE;
+        if (modifierList.hasModifier(PUBLIC_KEYWORD)) return DescriptorVisibilities.PUBLIC;
+        if (modifierList.hasModifier(PROTECTED_KEYWORD)) return DescriptorVisibilities.PROTECTED;
+        if (modifierList.hasModifier(INTERNAL_KEYWORD)) return DescriptorVisibilities.INTERNAL;
         return defaultVisibility;
     }
 
@@ -270,11 +271,12 @@ public class ModifiersChecker {
                     missingSupertypesResolver
             );
             for (DeclarationChecker checker : declarationCheckers) {
+                ProgressManager.checkCanceled();
                 checker.check(declaration, descriptor, context);
             }
             OperatorModifierChecker.INSTANCE.check(declaration, descriptor, trace, languageVersionSettings);
             PublishedApiUsageChecker.INSTANCE.check(declaration, descriptor, trace);
-            OptionalExpectationTargetChecker.INSTANCE.check(declaration, descriptor, trace);
+            OptionalExpectationChecker.INSTANCE.check(declaration, descriptor, trace);
         }
 
         public void checkTypeParametersModifiers(@NotNull KtModifierListOwner modifierListOwner) {

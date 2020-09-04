@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.resolve
@@ -19,8 +8,11 @@ package org.jetbrains.kotlin.idea.resolve
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.analyzer.AnalysisResult
+import org.jetbrains.kotlin.analyzer.ModuleInfo
+import org.jetbrains.kotlin.analyzer.ResolverForProject
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
+import org.jetbrains.kotlin.idea.FrontendInternals
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.resolve.BindingContext
@@ -39,20 +31,25 @@ interface ResolutionFacade {
     val moduleDescriptor: ModuleDescriptor
 
     // get service for the module this resolution was created for
+    @FrontendInternals
     fun <T : Any> getFrontendService(serviceClass: Class<T>): T
 
     fun <T : Any> getIdeService(serviceClass: Class<T>): T
 
     // get service for the module defined by PsiElement/ModuleDescriptor passed as parameter
+    @FrontendInternals
     fun <T : Any> getFrontendService(element: PsiElement, serviceClass: Class<T>): T
+
+    @FrontendInternals
     fun <T : Any> tryGetFrontendService(element: PsiElement, serviceClass: Class<T>): T?
 
+    @FrontendInternals
     fun <T : Any> getFrontendService(moduleDescriptor: ModuleDescriptor, serviceClass: Class<T>): T
 
+    fun getResolverForProject(): ResolverForProject<out ModuleInfo>
 }
 
-inline fun <reified T : Any> ResolutionFacade.frontendService(): T
-        = this.getFrontendService(T::class.java)
+@FrontendInternals
+inline fun <reified T : Any> ResolutionFacade.frontendService(): T = this.getFrontendService(T::class.java)
 
-inline fun <reified T : Any> ResolutionFacade.ideService(): T
-        = this.getIdeService(T::class.java)
+inline fun <reified T : Any> ResolutionFacade.ideService(): T = this.getIdeService(T::class.java)

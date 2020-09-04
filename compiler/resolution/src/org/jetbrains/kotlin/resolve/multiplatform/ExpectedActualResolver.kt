@@ -22,8 +22,8 @@ import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.TypeConstructor
 import org.jetbrains.kotlin.types.TypeConstructorSubstitution
 import org.jetbrains.kotlin.types.TypeSubstitutor
-import org.jetbrains.kotlin.types.checker.NewKotlinTypeChecker
 import org.jetbrains.kotlin.types.checker.ClassicTypeCheckerContext
+import org.jetbrains.kotlin.types.checker.NewKotlinTypeChecker
 import org.jetbrains.kotlin.types.typeUtil.asTypeProjection
 import org.jetbrains.kotlin.utils.SmartList
 import org.jetbrains.kotlin.utils.keysToMap
@@ -55,7 +55,7 @@ object ExpectedActualResolver {
                     // TODO: use some other way to determine that the declaration is from Kotlin.
                     //       This way behavior differs between fast and PSI-based Java class reading mode
                     // TODO: support non-source definitions (e.g. from Java)
-                    actual.source.containingFile != SourceFile.NO_SOURCE_FILE
+                    actual.couldHaveASource
                 }.groupBy { actual ->
                     areCompatibleCallables(expected, actual, platformModule)
                 }
@@ -63,7 +63,7 @@ object ExpectedActualResolver {
             is ClassDescriptor -> {
                 expected.findClassifiersFromModule(platformModule, moduleVisibilityFilter).filter { actual ->
                     expected != actual && !actual.isExpect &&
-                    actual.source.containingFile != SourceFile.NO_SOURCE_FILE
+                    actual.couldHaveASource
                 }.groupBy { actual ->
                     areCompatibleClassifiers(expected, actual)
                 }
@@ -455,7 +455,7 @@ object ExpectedActualResolver {
         a: CallableMemberDescriptor,
         b: CallableMemberDescriptor
     ): Boolean {
-        val compare = Visibilities.compare(a.visibility, b.visibility)
+        val compare = DescriptorVisibilities.compare(a.visibility, b.visibility)
         return if (a.isOverridable) {
             // For overridable declarations visibility should match precisely, see KT-19664
             compare == 0
@@ -560,3 +560,23 @@ object ExpectedActualResolver {
     }
 }
 
+fun DeclarationDescriptor.findExpects(inModule: ModuleDescriptor = this.module): List<MemberDescriptor> {
+    return ExpectedActualResolver.findExpectedForActual(
+        this as MemberDescriptor,
+        inModule,
+        { true }
+    )?.get(Compatible).orEmpty()
+}
+
+fun DeclarationDescriptor.findActuals(inModule: ModuleDescriptor = this.module): List<MemberDescriptor> {
+    return ExpectedActualResolver.findActualForExpected(
+        (this as MemberDescriptor),
+        inModule,
+        { true }
+    )?.get(Compatible).orEmpty()
+}
+
+// TODO: Klibs still need to better handle source in deserialized descriptors.
+val DeclarationDescriptorWithSource.couldHaveASource: Boolean get() =
+    this.source.containingFile != SourceFile.NO_SOURCE_FILE ||
+    this is DeserializedDescriptor

@@ -1,11 +1,20 @@
 Usage: kotlinc-js <options> <source files>
 where advanced options include:
+  -Xdisable-fake-override-validator
+                             Disable IR fake override validator
   -Xenable-js-scripting      Enable experimental support of .kts files using K/JS (with -Xir only)
+  -Xerror-tolerance-policy   Set up error tolerance policy (NONE, SEMANTIC, SYNTAX, ALL)
   -Xfriend-modules=<path>    Paths to friend modules
   -Xfriend-modules-disabled  Disable internal declaration export
   -Xgenerate-dts             Generate TypeScript declarations .d.ts file alongside JS file. Available in IR backend only.
+  -Xinclude=<path>           A path to an intermediate library that should be processed in the same manner as source files.
   -Xir-dce                   Perform experimental dead code elimination
+  -Xir-dce-driven            Perform a more experimental faster dead code elimination
+  -Xir-dce-print-reachability-info
+                             Print declarations' reachability info to stdout during performing DCE
+  -Xir-module-name=<name>    Specify a compilation module name for IR backend
   -Xir-only                  Disables pre-IR backend
+  -Xir-per-module            Splits generated .js per-module
   -Xir-produce-js            Generates JS file using IR backend. Also disables pre-IR backend
   -Xir-produce-klib-dir      Generate unpacked KLIB into parent directory of output JS file.
                              In combination with -meta-info generates both IR and pre-IR versions of library.
@@ -21,6 +30,7 @@ where advanced options include:
                              Should be a subset of sources passed as free arguments
   -Xcoroutines={enable|warn|error}
                              Enable coroutines or report warnings or errors on declarations and use sites of 'suspend' modifier
+  -Xdeserialize-fake-overrides Fallback to deserializing fake overrides
   -Xdisable-default-scripting-plugin
                              Do not enable scripting plugin by default
   -Xdisable-phases           Disable backend phases
@@ -28,6 +38,7 @@ where advanced options include:
   -Xdump-fqname              FqName of declaration that should be dumped
   -Xdump-perf=<path>         Dump detailed performance statistics to the specified file
   -Xeffect-system            Enable experimental language feature: effect system
+  -Xexpect-actual-linker     Enable experimental expect/actual linker
   -Xexperimental=<fq.name>   Enable and propagate usages of experimental API for marker annotation with the given fully qualified name
   -Xexplicit-api={strict|warning|disable}
                              Force compiler to report errors on all public API declarations without explicit visibility or return type.
@@ -42,6 +53,7 @@ where advanced options include:
   -Xnew-inference            Enable new experimental generic type inference algorithm
   -Xno-check-actual          Do not check presence of 'actual' modifier in multi-platform projects
   -Xno-inline                Disable method inlining
+  -Xopt-in=<fq.name>         Enable usages of API that requires opt-in with an opt-in requirement marker with the given fully qualified name
   -Xphases-to-dump           Dump backend state both before and after these phases
   -Xphases-to-dump-after     Dump backend state after these phases
   -Xphases-to-dump-before    Dump backend state before these phases
@@ -55,9 +67,11 @@ where advanced options include:
   -Xread-deserialized-contracts Enable reading of contracts from metadata
   -Xreport-output-files      Report source to output files mapping
   -Xreport-perf              Report detailed performance statistics
-  -Xskip-metadata-version-check Load classes with bad metadata version anyway (incl. pre-release classes)
+  -Xskip-metadata-version-check Allow to load classes with bad metadata version and pre-release classes
+  -Xskip-prerelease-check    Allow to load pre-release classes
   -Xuse-experimental=<fq.name> Enable, but don't propagate usages of experimental API for marker annotation with the given fully qualified name
   -Xuse-fir                  Compile using Front-end IR. Warning: this feature is far from being production-ready
+  -Xuse-fir-extended-checkers Use extended analysis mode based on Front-end IR. Warning: this feature is far from being production-ready
   -Xuse-mixed-named-arguments Enable Support named arguments in their own position even if the result appears as mixed
   -Xverbose-phases           Be verbose while performing these backend phases
 

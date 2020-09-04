@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -36,22 +36,44 @@ interface SourceCode {
      * @param col source code position column
      * @param absolutePos absolute source code text position, if available
      */
-    data class Position(val line: Int, val col: Int, val absolutePos: Int? = null)
+    data class Position(val line: Int, val col: Int, val absolutePos: Int? = null) : Serializable
 
     /**
      * The source code positions range
      * @param start range start position
      * @param end range end position (after the last char)
      */
-    data class Range(val start: Position, val end: Position)
+    data class Range(val start: Position, val end: Position) : Serializable
 
     /**
      * The source code location, pointing either at a position or at a range
      * @param start location start position
      * @param end optional range location end position (after the last char)
      */
-    data class Location(val start: Position, val end: Position? = null)
+    data class Location(val start: Position, val end: Position? = null) : Serializable
+
+    /**
+     * The source code location including the path to the file
+     * @param codeLocationId the file path or other script location identifier (see [SourceCode.locationId])
+     * @param locationInText concrete location of the source code in file
+     */
+    data class LocationWithId(val codeLocationId: String, val locationInText: Location) : Serializable
 }
+
+/**
+ * Annotation found during script source parsing along with its location
+ */
+data class ScriptSourceAnnotation<out A : Annotation>(
+    /**
+     * Annotation found during script source parsing
+     */
+    val annotation: A,
+
+    /**
+     * Location of annotation is script
+     */
+    val location: SourceCode.LocationWithId?
+)
 
 /**
  * The interface for the source code located externally
@@ -90,6 +112,13 @@ class ScriptCollectedData(properties: Map<PropertiesCollection.Key<*>, Any>) : P
  * The script file-level annotations found during script source parsing
  */
 val ScriptCollectedDataKeys.foundAnnotations by PropertiesCollection.key<List<Annotation>>()
+
+/**
+ * The script file-level annotations and their locations found during script source parsing
+ */
+val ScriptCollectedDataKeys.collectedAnnotations by PropertiesCollection.key<List<ScriptSourceAnnotation<*>>>(getDefaultValue = {
+    get(ScriptCollectedData.foundAnnotations)?.map { ScriptSourceAnnotation(it, null) }
+})
 
 /**
  * The facade to the script data for compilation configuration refinement callbacks
@@ -147,7 +176,7 @@ val ScriptEvaluationContextDataKeys.commandLineArgs by PropertiesCollection.key<
  * The facade to the script data for evaluation configuration refinement callbacks
  */
 data class ScriptEvaluationConfigurationRefinementContext(
-    val compiledScript: CompiledScript<*>,
+    val compiledScript: CompiledScript,
     val evaluationConfiguration: ScriptEvaluationConfiguration,
     val contextData: ScriptEvaluationContextData? = null
 )

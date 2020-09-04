@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.completion
@@ -20,11 +9,15 @@ import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiDocCommentOwner
 import com.intellij.psi.PsiNamedElement
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
+import org.jetbrains.kotlin.builtins.StandardNames
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.idea.core.completion.DeclarationLookupObject
 import org.jetbrains.kotlin.idea.imports.importableFqName
+import org.jetbrains.kotlin.idea.project.languageVersionSettings
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.resolve.deprecation.computeLevelForDeprecatedSinceKotlin
 import org.jetbrains.kotlin.util.descriptorsEqualWithSubstitution
 
 /**
@@ -32,8 +25,8 @@ import org.jetbrains.kotlin.util.descriptorsEqualWithSubstitution
  * Position will be used for sorting
  */
 abstract class DeclarationLookupObjectImpl(
-        final override val descriptor: DeclarationDescriptor?
-): DeclarationLookupObject {
+    final override val descriptor: DeclarationDescriptor?
+) : DeclarationLookupObject {
     override val name: Name?
         get() = descriptor?.name ?: (psiElement as? PsiNamedElement)?.name?.let { Name.identifier(it) }
 
@@ -67,8 +60,22 @@ abstract class DeclarationLookupObjectImpl(
     override val isDeprecated: Boolean
         get() {
             return if (descriptor != null)
-                KotlinBuiltIns.isDeprecated(descriptor)
+                isDeprecatedAtCallSite(descriptor, psiElement?.languageVersionSettings)
             else
                 (psiElement as? PsiDocCommentOwner)?.isDeprecated == true
         }
+
+}
+
+// This function is kind of a hack to avoid using DeprecationResolver as it's hard to preserve same resolutionFacade for descriptor
+fun isDeprecatedAtCallSite(descriptor: DeclarationDescriptor, languageVersionSettings: LanguageVersionSettings?): Boolean {
+    val isDeprecatedAtDeclarationSite = KotlinBuiltIns.isDeprecated(descriptor)
+    if (languageVersionSettings == null) return isDeprecatedAtDeclarationSite
+
+    if (!isDeprecatedAtDeclarationSite) return false
+
+    return computeLevelForDeprecatedSinceKotlin(
+        descriptor.original.annotations.findAnnotation(StandardNames.FqNames.deprecatedSinceKotlin) ?: return true,
+        languageVersionSettings.apiVersion
+    ) != null
 }

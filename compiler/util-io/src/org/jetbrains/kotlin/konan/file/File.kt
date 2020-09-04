@@ -14,11 +14,14 @@ import java.lang.Exception
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.*
+import java.nio.file.attribute.BasicFileAttributeView
 import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.FileTime
 
 data class File constructor(internal val javaPath: Path) {
     constructor(parent: Path, child: String): this(parent.resolve(child))
     constructor(parent: File, child: String): this(parent.javaPath.resolve(child))
+    constructor(parent: File, child: File): this(parent.javaPath.resolve(child.javaPath))
     constructor(path: String): this(Paths.get(path))
     constructor(parent: String, child: String): this(Paths.get(parent, child))
 
@@ -28,6 +31,11 @@ data class File constructor(internal val javaPath: Path) {
         get() = javaPath.toAbsolutePath().toString()
     val absoluteFile: File
         get() = File(absolutePath)
+    val canonicalPath: String
+        get() = javaPath.toFile().canonicalPath
+    val canonicalFile: File
+        get() = File(canonicalPath)
+
     val name: String
         get() = javaPath.fileName.toString().removeSuffixIfPresent("/") // https://bugs.java.com/bugdatabase/view_bug.do?bug_id=8153248
     val extension: String
@@ -44,9 +52,9 @@ data class File constructor(internal val javaPath: Path) {
     val isFile
         get() = Files.isRegularFile(javaPath)
     val isAbsolute
-        get() = javaPath.isAbsolute()
+        get() = javaPath.isAbsolute
     val listFiles: List<File>
-        get() = Files.newDirectoryStream(javaPath).use { stream -> stream.map { File(it) } }
+        get() = Files.newDirectoryStream(javaPath).use { stream -> stream.map(::File) }
     val listFilesOrEmpty: List<File>
         get() = if (exists) listFiles else emptyList()
 
@@ -56,10 +64,10 @@ data class File constructor(internal val javaPath: Path) {
         Files.copy(javaPath, destination.javaPath, StandardCopyOption.REPLACE_EXISTING)
     }
 
-    fun recursiveCopyTo(destination: File) {
+    fun recursiveCopyTo(destination: File, resetTimeAttributes: Boolean = false) {
         val sourcePath = javaPath
         val destPath = destination.javaPath
-        sourcePath.recursiveCopyTo(destPath)
+        sourcePath.recursiveCopyTo(destPath, resetTimeAttributes = resetTimeAttributes)
     }
 
     fun mkdirs() = Files.createDirectories(javaPath)
@@ -179,7 +187,7 @@ fun createTempFile(name: String, suffix: String? = null)
 fun createTempDir(name: String): File
         = Files.createTempDirectory(name).File()
 
-fun Path.recursiveCopyTo(destPath: Path) {
+fun Path.recursiveCopyTo(destPath: Path, resetTimeAttributes: Boolean = false) {
     val sourcePath = this
     Files.walk(sourcePath).forEach next@ { oldPath ->
 
@@ -195,6 +203,10 @@ fun Path.recursiveCopyTo(destPath: Path) {
             Files.createDirectories(newPath)
         } else {
             Files.copy(oldPath, newPath, StandardCopyOption.REPLACE_EXISTING)
+        }
+        if (resetTimeAttributes) {
+            val zero = FileTime.fromMillis(0)
+            Files.getFileAttributeView(newPath, BasicFileAttributeView::class.java).setTimes(zero, zero, zero);
         }
     }
 }

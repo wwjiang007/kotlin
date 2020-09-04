@@ -1,57 +1,15 @@
 // KOTLIN_CONFIGURATION_FLAGS: +JVM.DISABLE_PARAM_ASSERTIONS, +JVM.DISABLE_CALL_ASSERTIONS
-// FILE: A.java
+// FILE: noCallAssertions.kt
 
-import org.jetbrains.annotations.NotNull;
-
-public class A {
-    @NotNull
-    public final String NULL = null;
-
-    @NotNull
-    public static final String STATIC_NULL = null;
-
-    public String foo() {
-        return null;
-    }
-
-    public static String staticFoo() {
-        return null;
-    }
-
-    public A plus(A a) {
-        return null;
-    }
-
-    public A inc() {
-        return null;
-    }
-
-    public Object get(Object o) {
-        return null;
-    }
-
-    public A a() { return this; }
-
-    public static class B {
-        public static B b() { return null; }
-    }
-
-    public static class C {
-        public static C c() { return null; }
-    }
-}
-
-// FILE: AssertionChecker.kt
-
-class AssertionChecker(val illegalStateExpected: Boolean) {
+class AssertionChecker(val nullPointerExceptionExpected: Boolean) {
     operator fun invoke(name: String, f: () -> Any) {
         try {
             f()
-        } catch (e: IllegalStateException) {
-            if (!illegalStateExpected) throw AssertionError("Unexpected IllegalStateException on calling $name")
+        } catch (e: NullPointerException) {
+            if (!nullPointerExceptionExpected) throw AssertionError("Unexpected NullPointerException on calling $name")
             return
         }
-        if (illegalStateExpected) throw AssertionError("IllegalStateException expected on calling $name")
+        if (nullPointerExceptionExpected) throw AssertionError("NullPointerException expected on calling $name")
     }
 }
 
@@ -67,8 +25,8 @@ class Derived : A(), Tr {
 class Delegated : Tr by Derived() {
 }
 
-fun checkAssertions(illegalStateExpected: Boolean) {
-    val check = AssertionChecker(illegalStateExpected)
+fun checkAssertions(nullPointerExceptionExpected: Boolean) {
+    val check = AssertionChecker(nullPointerExceptionExpected)
 
     // simple call
     check("foo") { A().foo() }
@@ -122,3 +80,46 @@ fun box(): String {
     checkAssertions(false)
     return "OK"
 }
+
+// FILE: A.java
+
+import org.jetbrains.annotations.NotNull;
+
+public class A {
+    @NotNull
+    public final String NULL = null;
+
+    @NotNull
+    public static final String STATIC_NULL = null;
+
+    public String foo() {
+        return null;
+    }
+
+    public static String staticFoo() {
+        return null;
+    }
+
+    public A plus(A a) {
+        return null;
+    }
+
+    public A inc() {
+        return null;
+    }
+
+    public Object get(Object o) {
+        return null;
+    }
+
+    public A a() { return this; }
+
+    public static class B {
+        public static B b() { return null; }
+    }
+
+    public static class C {
+        public static C c() { return null; }
+    }
+}
+

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -25,7 +25,7 @@ public class CopyTestGenerated extends AbstractCopyTest {
     }
 
     public void testAllFilesPresentInCopy() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentInSingleGeneratedClass(this.getClass(), new File("idea/testData/refactoring/copy"), Pattern.compile("^(.+)\\.test$"));
+        KotlinTestUtils.assertAllTestsPresentInSingleGeneratedClassWithExcluded(this.getClass(), new File("idea/testData/refactoring/copy"), Pattern.compile("^(.+)\\.test$"), null);
     }
 
     @TestMetadata("copyClassCaretInside/copyClassCaretInside.test")
@@ -81,6 +81,11 @@ public class CopyTestGenerated extends AbstractCopyTest {
     @TestMetadata("copyFIleToDefaultPackage/copyFIleToDefaultPackage.test")
     public void testCopyFIleToDefaultPackage_CopyFIleToDefaultPackage() throws Exception {
         runTest("idea/testData/refactoring/copy/copyFIleToDefaultPackage/copyFIleToDefaultPackage.test");
+    }
+
+    @TestMetadata("copyFileToRoot/copyFileToRoot.test")
+    public void testCopyFileToRoot_CopyFileToRoot() throws Exception {
+        runTest("idea/testData/refactoring/copy/copyFileToRoot/copyFileToRoot.test");
     }
 
     @TestMetadata("copyFIleWithPackageAndDirUnmatched/copyFIleWithPackageAndDirUnmatched.test")

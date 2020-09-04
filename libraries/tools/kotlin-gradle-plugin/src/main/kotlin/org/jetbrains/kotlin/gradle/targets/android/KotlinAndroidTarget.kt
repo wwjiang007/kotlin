@@ -13,7 +13,6 @@ import org.gradle.api.Project
 import org.gradle.api.attributes.Usage.JAVA_RUNTIME_JARS
 import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.utils.dashSeparatedName
-import org.jetbrains.kotlin.gradle.utils.isGradleVersionAtLeast
 import org.jetbrains.kotlin.gradle.utils.lowerCamelCaseName
 
 open class KotlinAndroidTarget(
@@ -64,7 +63,7 @@ open class KotlinAndroidTarget(
     private fun checkPublishLibraryVariantsExist() {
         fun AbstractAndroidProjectHandler.getLibraryVariantNames() =
             mutableSetOf<String>().apply {
-                forEachVariant(project) {
+                project.forEachVariant {
                     if (getLibraryOutputTask(it) != null)
                         add(getVariantName(it))
                 }
@@ -94,7 +93,7 @@ open class KotlinAndroidTarget(
 
     private fun AbstractAndroidProjectHandler.doCreateComponents(): Set<KotlinTargetComponent> {
         val publishableVariants = mutableListOf<BaseVariant>()
-            .apply { forEachVariant(project) { add(it) } }
+            .apply { project.forEachVariant { add(it) } }
             .toList() // Defensive copy against unlikely modification by the lambda that captures the list above in forEachVariant { }
             .filter { getLibraryOutputTask(it) != null && publishLibraryVariants?.contains(getVariantName(it)) ?: true }
 

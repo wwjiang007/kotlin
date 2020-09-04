@@ -5,8 +5,11 @@
 
 package org.jetbrains.kotlin.ir.util
 
+import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.MemberDescriptor
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrGetValue
@@ -16,76 +19,100 @@ import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
-import org.jetbrains.kotlin.ir.visitors.acceptVoid
 import org.jetbrains.kotlin.resolve.checkers.ExpectedActualDeclarationChecker
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.resolve.multiplatform.ExpectedActualResolver
 
 // `doRemove` means should expect-declaration be removed from IR
+@OptIn(ObsoleteDescriptorBasedAPI::class)
 class ExpectDeclarationRemover(val symbolTable: ReferenceSymbolTable, private val doRemove: Boolean) : IrElementVisitorVoid {
     override fun visitElement(element: IrElement) {
         element.acceptChildrenVoid(this)
     }
 
     override fun visitFile(declaration: IrFile) {
-        // All declarations with `isExpect == true` are nested into a top-level declaration with `isExpect == true`.
+        super.visitFile(declaration)
         declaration.declarations.removeAll {
-            val descriptor = it.descriptor
-            if (descriptor is MemberDescriptor && descriptor.isExpect) {
-                copyDefaultArgumentsFromExpectToActual(it)
-                doRemove
-            } else {
-                false
+            shouldRemoveTopLevelDeclaration(it)
+        }
+    }
+
+    override fun visitValueParameter(declaration: IrValueParameter) {
+        super.visitValueParameter(declaration)
+        tryCopyDefaultArguments(declaration)
+    }
+
+    fun transformFlat(declaration: IrDeclaration): List<IrDeclaration>? {
+
+        if (declaration.isTopLevelDeclaration && shouldRemoveTopLevelDeclaration(declaration)) {
+            return emptyList()
+        }
+
+        if (declaration is IrValueParameter) {
+            tryCopyDefaultArguments(declaration)
+        }
+
+        return null
+    }
+
+    private fun shouldRemoveTopLevelDeclaration(declaration: IrDeclaration): Boolean {
+        return doRemove && when (declaration) {
+            is IrClass -> declaration.isExpect
+            is IrProperty -> declaration.isExpect
+            is IrFunction -> declaration.isExpect
+            else -> false
+        }
+    }
+
+    private fun isOptionalAnnotationClass(klass: IrClass): Boolean {
+        return klass.kind == ClassKind.ANNOTATION_CLASS &&
+                klass.isExpect &&
+                klass.annotations.hasAnnotation(ExpectedActualDeclarationChecker.OPTIONAL_EXPECTATION_FQ_NAME)
+    }
+
+    private fun tryCopyDefaultArguments(declaration: IrValueParameter) {
+        // Keep actual default value if present. They are generally not allowed but can be suppressed with
+        // @Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
+        if (declaration.defaultValue != null) {
+            return
+        }
+
+        val function = declaration.parent as? IrFunction ?: return
+
+        if (function is IrConstructor) {
+            if (isOptionalAnnotationClass(function.constructedClass)) {
+                return
+            }
+        }
+
+        if (!function.descriptor.isActual) return
+
+        val index = declaration.index
+
+        if (index < 0) return
+
+        assert(function.valueParameters[index] == declaration)
+
+        // If the containing declaration is an `expect class` that matches an `actual typealias`,
+        // the `actual fun` or `actual constructor` for this may be in a different module.
+        // Nothing we can do with those.
+        // TODO they may not actually have the defaults though -- may be a frontend bug.
+        val expectParameter = function.findExpectForActual()?.valueParameters?.get(index) ?: return
+
+        val defaultValue = expectParameter.defaultValue ?: return
+
+        defaultValue.let { originalDefault ->
+            declaration.defaultValue = declaration.factory.createExpressionBody(originalDefault.startOffset, originalDefault.endOffset) {
+                expression = originalDefault.expression.deepCopyWithSymbols(function).remapExpectValueSymbols()
             }
         }
     }
 
-    private fun copyDefaultArgumentsFromExpectToActual(declaration: IrDeclaration) {
-        declaration.acceptVoid(object : IrElementVisitorVoid {
-            override fun visitElement(element: IrElement) {
-                element.acceptChildrenVoid(this)
-            }
-
-            override fun visitValueParameter(declaration: IrValueParameter) {
-                super.visitValueParameter(declaration)
-
-                val defaultValue = declaration.defaultValue ?: return
-                val function = declaration.parent as IrFunction
-
-                val index = declaration.index
-                assert(function.valueParameters[index] == declaration)
-
-                if (function is IrConstructor &&
-                    ExpectedActualDeclarationChecker.isOptionalAnnotationClass(
-                        function.descriptor.constructedClass
-                    )
-                ) {
-                    return
-                }
-
-                // If the containing declaration is an `expect class` that matches an `actual typealias`,
-                // the `actual fun` or `actual constructor` for this may be in a different module.
-                // Nothing we can do with those.
-                // TODO they may not actually have the defaults though -- may be a frontend bug.
-                val actualFunction = function.findActualForExpected() ?: return
-                val actualParameter = actualFunction.valueParameters[index]
-
-                // Keep actual default value if present. They are generally not allowed but can be suppressed with
-                // @Suppress("ACTUAL_FUNCTION_WITH_DEFAULT_ARGUMENTS")
-                if (actualParameter.defaultValue != null)
-                    return
-
-                actualParameter.defaultValue = defaultValue.also {
-                    it.expression = it.expression.remapExpectValueSymbols()
-                    // Default value might have some declarations inside. Patching parents.
-                    it.expression.patchDeclarationParents(actualParameter.parent)
-                }
-            }
-        })
-    }
-
     private fun IrFunction.findActualForExpected(): IrFunction? =
         descriptor.findActualForExpect()?.let { symbolTable.referenceFunction(it).owner }
+
+    private fun IrFunction.findExpectForActual(): IrFunction? =
+        descriptor.findExpectForActual()?.let { symbolTable.referenceFunction(it).owner }
 
     private fun IrClass.findActualForExpected(): IrClass? =
         descriptor.findActualForExpect()?.let { symbolTable.referenceClass(it).owner }
@@ -96,6 +123,14 @@ class ExpectDeclarationRemover(val symbolTable: ReferenceSymbolTable, private va
         if (!descriptor.isExpect) error(this)
 
         findCompatibleActualForExpected(descriptor.module).singleOrNull()
+    } as T?
+
+    private inline fun <reified T : MemberDescriptor> T.findExpectForActual() = with(ExpectedActualResolver) {
+        val descriptor = this@findExpectForActual
+
+        if (!descriptor.isActual) error(this) else {
+            findCompatibleExpectedForActual(descriptor.module).singleOrNull()
+        }
     } as T?
 
     private fun IrExpression.remapExpectValueSymbols(): IrExpression {

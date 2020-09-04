@@ -11,10 +11,11 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.kotlin.TestsRuntimeError;
 import org.jetbrains.kotlin.backend.common.CodegenUtil;
+import org.jetbrains.kotlin.builtins.StandardNames;
+import org.jetbrains.kotlin.codegen.ir.AbstractFirBlackBoxCodegenTest;
 import org.jetbrains.kotlin.fileClasses.JvmFileClassUtil;
 import org.jetbrains.kotlin.psi.KtFile;
 import org.jetbrains.kotlin.test.InTextDirectivesUtils;
-import org.jetbrains.kotlin.test.TargetBackend;
 import org.jetbrains.kotlin.utils.ExceptionUtilsKt;
 
 import java.io.File;
@@ -32,7 +33,7 @@ public abstract class AbstractBlackBoxCodegenTest extends CodegenTestCase {
             @NotNull List<TestFile> files,
             boolean unexpectedBehaviour
     ) throws Exception {
-        boolean isIgnored = InTextDirectivesUtils.isIgnoredTarget(getBackend(), wholeFile);
+        boolean isIgnored = isIgnoredTarget(wholeFile);
 
         compile(files, !isIgnored, false);
 
@@ -56,18 +57,19 @@ public abstract class AbstractBlackBoxCodegenTest extends CodegenTestCase {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     protected void doMultiFileTest(
         @NotNull File wholeFile,
-        @NotNull List<TestFile> files
+        @NotNull List<? extends TestFile> files
     ) throws Exception {
-        doMultiFileTest(wholeFile, files, false);
+        doMultiFileTest(wholeFile, (List<TestFile>) files, false);
     }
 
     private void doBytecodeListingTest(@NotNull File wholeFile) throws Exception {
         if (!InTextDirectivesUtils.isDirectiveDefined(FileUtil.loadFile(wholeFile), "CHECK_BYTECODE_LISTING")) return;
 
         String suffix =
-                (coroutinesPackage.contains("experimental") || coroutinesPackage.isEmpty())
+                (coroutinesPackage.equals(StandardNames.COROUTINES_PACKAGE_FQ_NAME_EXPERIMENTAL.asString()) || coroutinesPackage.isEmpty())
                 && InTextDirectivesUtils.isDirectiveDefined(FileUtil.loadFile(wholeFile), "COMMON_COROUTINES_TEST")
                 ? "_1_2" :
                 getBackend().isIR() ? "_ir" : "";
@@ -138,5 +140,16 @@ public abstract class AbstractBlackBoxCodegenTest extends CodegenTestCase {
         return CodegenUtil.getMemberDeclarationsToGenerate(file).isEmpty()
                ? null
                : JvmFileClassUtil.getFileClassInfoNoResolve(file).getFacadeClassFqName().asString();
+    }
+
+    protected boolean isIgnoredTarget(@NotNull File wholeFile) {
+        try {
+            return InTextDirectivesUtils.isIgnoredTarget(getBackend(), wholeFile) ||
+                   (this instanceof AbstractFirBlackBoxCodegenTest &&
+                    InTextDirectivesUtils.isDirectiveDefined(FileUtil.loadFile(wholeFile), "IGNORE_BACKEND_FIR: JVM_IR"));
+        }
+        catch (Exception e) {
+            throw ExceptionUtilsKt.rethrow(e);
+        }
     }
 }

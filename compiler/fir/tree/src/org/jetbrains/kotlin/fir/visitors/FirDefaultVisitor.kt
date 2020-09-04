@@ -5,18 +5,12 @@
 
 package org.jetbrains.kotlin.fir.visitors
 
-import org.jetbrains.kotlin.fir.declarations.FirEnumEntry
 import org.jetbrains.kotlin.fir.declarations.FirErrorFunction
-import org.jetbrains.kotlin.fir.declarations.FirSealedClass
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.references.FirErrorNamedReference
 import org.jetbrains.kotlin.fir.types.*
 
 abstract class FirDefaultVisitor<R, D> : FirVisitor<R, D>() {
-    override fun visitDelegatedTypeRef(delegatedTypeRef: FirDelegatedTypeRef, data: D): R {
-        return visitTypeRef(delegatedTypeRef, data)
-    }
-
     override fun visitImplicitTypeRef(implicitTypeRef: FirImplicitTypeRef, data: D): R {
         return visitTypeRef(implicitTypeRef, data)
     }
@@ -69,9 +63,6 @@ abstract class FirDefaultVisitor<R, D> : FirVisitor<R, D>() {
         return visitJump(breakExpression, data)
     }
 
-    override fun visitEnumEntry(enumEntry: FirEnumEntry, data: D): R {
-        return visitRegularClass(enumEntry, data)
-    }
 
     override fun visitLambdaArgumentExpression(lambdaArgumentExpression: FirLambdaArgumentExpression, data: D): R {
         return visitWrappedArgumentExpression(lambdaArgumentExpression, data)
@@ -83,10 +74,6 @@ abstract class FirDefaultVisitor<R, D> : FirVisitor<R, D>() {
 
     override fun visitNamedArgumentExpression(namedArgumentExpression: FirNamedArgumentExpression, data: D): R {
         return visitWrappedArgumentExpression(namedArgumentExpression, data)
-    }
-
-    override fun visitSealedClass(sealedClass: FirSealedClass, data: D): R {
-        return visitRegularClass(sealedClass, data)
     }
 
     override fun visitErrorExpression(errorExpression: FirErrorExpression, data: D): R {
@@ -103,6 +90,10 @@ abstract class FirDefaultVisitor<R, D> : FirVisitor<R, D>() {
 
     override fun visitErrorFunction(errorFunction: FirErrorFunction, data: D): R {
         return visitFunction(errorFunction, data)
+    }
+
+    override fun visitErrorResolvedQualifier(errorResolvedQualifier: FirErrorResolvedQualifier, data: D): R {
+        return visitResolvedQualifier(errorResolvedQualifier, data)
     }
 }
 

@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.refactoring.introduce.introduceParameter
@@ -26,6 +15,7 @@ import com.intellij.refactoring.ui.RefactoringDialog
 import com.intellij.ui.NonFocusableCheckBox
 import org.jetbrains.kotlin.idea.KotlinFileType
 import org.jetbrains.kotlin.idea.core.util.isMultiLine
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractFunction.ui.ExtractFunctionParameterTablePanel
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractFunction.ui.KotlinExtractFunctionDialog
 import org.jetbrains.kotlin.idea.refactoring.introduce.extractionEngine.*
@@ -47,41 +37,41 @@ import javax.swing.JLabel
 import javax.swing.JPanel
 
 class KotlinIntroduceParameterDialog private constructor(
+    project: Project,
+    val editor: Editor,
+    val descriptor: IntroduceParameterDescriptor,
+    val lambdaExtractionDescriptor: ExtractableCodeDescriptor?,
+    nameSuggestions: Array<String>,
+    typeSuggestions: List<KotlinType>,
+    val helper: KotlinIntroduceParameterHelper
+) : RefactoringDialog(project, true) {
+    constructor(
         project: Project,
-        val editor: Editor,
-        val descriptor: IntroduceParameterDescriptor,
-        val lambdaExtractionDescriptor: ExtractableCodeDescriptor?,
+        editor: Editor,
+        descriptor: IntroduceParameterDescriptor,
         nameSuggestions: Array<String>,
         typeSuggestions: List<KotlinType>,
-        val helper: KotlinIntroduceParameterHelper
-): RefactoringDialog(project, true) {
-    constructor(
-            project: Project,
-            editor: Editor,
-            descriptor: IntroduceParameterDescriptor,
-            nameSuggestions: Array<String>,
-            typeSuggestions: List<KotlinType>,
-            helper: KotlinIntroduceParameterHelper
-    ): this(project, editor, descriptor, null, nameSuggestions, typeSuggestions, helper)
+        helper: KotlinIntroduceParameterHelper
+    ) : this(project, editor, descriptor, null, nameSuggestions, typeSuggestions, helper)
 
-    constructor(project: Project,
-                editor: Editor,
-                introduceParameterDescriptor: IntroduceParameterDescriptor,
-                lambdaExtractionDescriptor: ExtractableCodeDescriptor,
-                helper: KotlinIntroduceParameterHelper
+    constructor(
+        project: Project,
+        editor: Editor,
+        introduceParameterDescriptor: IntroduceParameterDescriptor,
+        lambdaExtractionDescriptor: ExtractableCodeDescriptor,
+        helper: KotlinIntroduceParameterHelper
     ) : this(
-            project,
-            editor,
-            introduceParameterDescriptor,
-            lambdaExtractionDescriptor,
-            lambdaExtractionDescriptor.suggestedNames.toTypedArray(),
-            listOf(lambdaExtractionDescriptor.returnType),
-            helper
+        project,
+        editor,
+        introduceParameterDescriptor,
+        lambdaExtractionDescriptor,
+        lambdaExtractionDescriptor.suggestedNames.toTypedArray(),
+        listOf(lambdaExtractionDescriptor.returnType),
+        helper
     )
 
-    private val typeNameSuggestions = typeSuggestions
-            .map { IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_NO_ANNOTATIONS.renderType(it) }
-            .toTypedArray()
+    private val typeNameSuggestions =
+        typeSuggestions.map { IdeDescriptorRenderers.SOURCE_CODE_SHORT_NAMES_NO_ANNOTATIONS.renderType(it) }.toTypedArray()
 
     private val nameField = NameSuggestionsField(nameSuggestions, project, KotlinFileType.INSTANCE)
     private val typeField = NameSuggestionsField(typeNameSuggestions, project, KotlinFileType.INSTANCE)
@@ -123,8 +113,7 @@ class KotlinIntroduceParameterDialog private constructor(
         gbConstraints.weightx = 0.0
         gbConstraints.weighty = 0.0
         gbConstraints.gridy = 0
-        val nameLabel = JLabel("Parameter name: ")
-        nameLabel.setDisplayedMnemonic('n')
+        val nameLabel = JLabel(KotlinBundle.message("text.parameter.name"))
         nameLabel.labelFor = nameField
         panel.add(nameLabel, gbConstraints)
 
@@ -140,8 +129,12 @@ class KotlinIntroduceParameterDialog private constructor(
         gbConstraints.gridx = 0
         gbConstraints.gridy++
         gbConstraints.fill = GridBagConstraints.NONE
-        val typeLabel = JLabel(if (lambdaExtractionDescriptor != null) "Lambda return type" else "Parameter type: ")
-        typeLabel.setDisplayedMnemonic('t')
+        val typeLabel = JLabel(
+            if (lambdaExtractionDescriptor != null)
+                                   KotlinBundle.message("text.lambda.return.type")
+                               else
+                KotlinBundle.message("text.parameter.type")
+        )
         typeLabel.labelFor = typeField
         panel.add(typeLabel, gbConstraints)
 
@@ -151,8 +144,9 @@ class KotlinIntroduceParameterDialog private constructor(
         gbConstraints.fill = GridBagConstraints.BOTH
         panel.add(typeField, gbConstraints)
 
-        if (lambdaExtractionDescriptor != null
-            && (lambdaExtractionDescriptor.parameters.isNotEmpty() || lambdaExtractionDescriptor.receiverParameter != null)) {
+        if (lambdaExtractionDescriptor != null && (lambdaExtractionDescriptor.parameters
+                .isNotEmpty() || lambdaExtractionDescriptor.receiverParameter != null)
+        ) {
             val parameterTablePanel = object : ExtractFunctionParameterTablePanel() {
                 override fun onEnterAction() {
                     doOKAction()
@@ -170,8 +164,7 @@ class KotlinIntroduceParameterDialog private constructor(
             gbConstraints.gridx = 0
             gbConstraints.gridy++
             gbConstraints.fill = GridBagConstraints.NONE
-            val parametersLabel = JLabel("Lambda parameters: ")
-            parametersLabel.setDisplayedMnemonic('p')
+            val parametersLabel = JLabel(KotlinBundle.message("text.lambda.parameters"))
             parametersLabel.labelFor = parameterTablePanel
             panel.add(parametersLabel, gbConstraints)
 
@@ -190,9 +183,8 @@ class KotlinIntroduceParameterDialog private constructor(
         gbConstraints.gridwidth = 2
         gbConstraints.gridy++
 
-        val defaultValueCheckBox = NonFocusableCheckBox("Introduce default value")
+        val defaultValueCheckBox = NonFocusableCheckBox(KotlinBundle.message("text.introduce.default.value"))
         defaultValueCheckBox.isSelected = descriptor.withDefaultValue
-        defaultValueCheckBox.setMnemonic('d')
         defaultValueCheckBox.addActionListener { updateRemoveParamCheckBoxes() }
         panel.add(defaultValueCheckBox, gbConstraints)
 
@@ -202,9 +194,10 @@ class KotlinIntroduceParameterDialog private constructor(
 
         if (occurrenceCount > 1) {
             gbConstraints.gridy++
-            val replaceAllCheckBox = NonFocusableCheckBox("Replace all occurrences ($occurrenceCount)")
+            val replaceAllCheckBox = NonFocusableCheckBox(
+                KotlinBundle.message("checkbox.text.replace.all.occurrences.0", occurrenceCount)
+            )
             replaceAllCheckBox.isSelected = true
-            replaceAllCheckBox.setMnemonic('R')
             replaceAllCheckBox.addActionListener { updateRemoveParamCheckBoxes() }
             panel.add(replaceAllCheckBox, gbConstraints)
             this.replaceAllCheckBox = replaceAllCheckBox
@@ -215,8 +208,13 @@ class KotlinIntroduceParameterDialog private constructor(
         }
 
         for (parameter in descriptor.parametersToRemove) {
-            val removeWhat = if (parameter is KtParameter) "parameter '${parameter.name}'" else "receiver"
-            val cb = NonFocusableCheckBox("Remove $removeWhat no longer used")
+            val removeWhat = if (parameter is KtParameter)
+                KotlinBundle.message("text.parameter.0", parameter.name.toString())
+            else
+                KotlinBundle.message("text.receiver")
+            val cb = NonFocusableCheckBox(
+                KotlinBundle.message("text.remove.0.no.longer.used", removeWhat)
+            )
 
             removeParamsCheckBoxes[cb] = parameter
             cb.isSelected = true
@@ -231,8 +229,10 @@ class KotlinIntroduceParameterDialog private constructor(
 
     override fun canRun() {
         val psiFactory = KtPsiFactory(myProject)
-        psiFactory.createExpressionIfPossible(nameField.enteredName.quoteIfNeeded()).validateElement("Invalid parameter name")
-        psiFactory.createTypeIfPossible(typeField.enteredName).validateElement("Invalid parameter type")
+        psiFactory.createExpressionIfPossible(nameField.enteredName.quoteIfNeeded()).validateElement(
+            KotlinBundle.message("error.text.invalid.parameter.name"))
+        psiFactory.createTypeIfPossible(typeField.enteredName).validateElement(
+            KotlinBundle.message("error.text.invalid.parameter.type"))
     }
 
     override fun doAction() {
@@ -264,19 +264,19 @@ class KotlinIntroduceParameterDialog private constructor(
 
             lambdaExtractionDescriptor?.let { oldDescriptor ->
                 val newDescriptor = KotlinExtractFunctionDialog.createNewDescriptor(
-                        oldDescriptor,
-                        chosenName,
-                        null,
-                        parameterTablePanel?.selectedReceiverInfo,
-                        parameterTablePanel?.selectedParameterInfos ?: listOf(),
-                        null
+                    oldDescriptor,
+                    chosenName,
+                    null,
+                    parameterTablePanel?.selectedReceiverInfo,
+                    parameterTablePanel?.selectedParameterInfos ?: listOf(),
+                    null
                 )
                 val options = ExtractionGeneratorOptions.DEFAULT.copy(
-                        target = ExtractionTarget.FAKE_LAMBDALIKE_FUNCTION,
-                        allowExpressionBody = false
+                    target = ExtractionTarget.FAKE_LAMBDALIKE_FUNCTION,
+                    allowExpressionBody = false
                 )
                 runWriteAction {
-                    with (ExtractionGeneratorConfiguration(newDescriptor, options).generateDeclaration()) {
+                    with(ExtractionGeneratorConfiguration(newDescriptor, options).generateDeclaration()) {
                         val function = declaration as KtFunction
                         val receiverType = function.receiverTypeReference?.text
                         val parameterTypes = function
@@ -296,24 +296,23 @@ class KotlinIntroduceParameterDialog private constructor(
             }
 
             val descriptorToRefactor = descriptor.copy(
-                    newParameterName = chosenName,
-                    newParameterTypeText = chosenType,
-                    argumentValue = newArgumentValue,
-                    withDefaultValue = defaultValueCheckBox!!.isSelected,
-                    occurrencesToReplace = with(descriptor) {
-                        if (replaceAllCheckBox?.isSelected ?: true) {
-                            occurrencesToReplace
-                        }
-                        else {
-                            Collections.singletonList(originalOccurrence)
-                        }
-                    },
-                    parametersToRemove = removeParamsCheckBoxes.filter { it.key.isEnabled && it.key.isSelected }.map { it.value },
-                    occurrenceReplacer = newReplacer
+                newParameterName = chosenName,
+                newParameterTypeText = chosenType,
+                argumentValue = newArgumentValue,
+                withDefaultValue = defaultValueCheckBox!!.isSelected,
+                occurrencesToReplace = with(descriptor) {
+                    if (replaceAllCheckBox?.isSelected != false) {
+                        occurrencesToReplace
+                    } else {
+                        Collections.singletonList(originalOccurrence)
+                    }
+                },
+                parametersToRemove = removeParamsCheckBoxes.filter { it.key.isEnabled && it.key.isSelected }.map { it.value },
+                occurrenceReplacer = newReplacer
             )
 
             helper.configure(descriptorToRefactor).performRefactoring(
-                    onExit = { FinishMarkAction.finish(myProject, editor, startMarkAction) }
+                onExit = { FinishMarkAction.finish(myProject, editor, startMarkAction) }
             )
         }
     }

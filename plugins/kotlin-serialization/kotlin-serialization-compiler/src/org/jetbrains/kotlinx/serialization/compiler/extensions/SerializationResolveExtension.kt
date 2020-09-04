@@ -42,6 +42,10 @@ open class SerializationResolveExtension : SyntheticResolveExtension {
         else -> listOf()
     }
 
+    override fun getPossibleSyntheticNestedClassNames(thisDescriptor: ClassDescriptor): List<Name>? {
+        return listOf(SerialEntityNames.IMPL_NAME, SerialEntityNames.SERIALIZER_CLASS_NAME)
+    }
+
     override fun getSyntheticFunctionNames(thisDescriptor: ClassDescriptor): List<Name> = when {
         thisDescriptor.isSerializableObject || thisDescriptor.isCompanionObject && getSerializableClassDescriptorByCompanion(thisDescriptor) != null ->
             listOf(SerialEntityNames.SERIALIZER_PROVIDER_NAME)
@@ -72,6 +76,7 @@ open class SerializationResolveExtension : SyntheticResolveExtension {
     override fun addSyntheticSupertypes(thisDescriptor: ClassDescriptor, supertypes: MutableList<KotlinType>) {
         KSerializerDescriptorResolver.addSerialInfoSuperType(thisDescriptor, supertypes)
         KSerializerDescriptorResolver.addSerializerSupertypes(thisDescriptor, supertypes)
+        KSerializerDescriptorResolver.addSerializerFactorySuperType(thisDescriptor, supertypes)
     }
 
     override fun generateSyntheticSecondaryConstructors(

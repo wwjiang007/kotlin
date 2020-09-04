@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -41,7 +41,7 @@ public class IrClassFileToSourceStubConverterTestGenerated extends AbstractIrCla
     }
 
     public void testAllFilesPresentInConverter() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("plugins/kapt3/kapt3-compiler/testData/converter"), Pattern.compile("^(.+)\\.kt$"), TargetBackend.JVM_IR, true);
+        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("plugins/kapt3/kapt3-compiler/testData/converter"), Pattern.compile("^(.+)\\.kt$"), null, TargetBackend.JVM_IR, true);
     }
 
     @TestMetadata("annotationWithFqNames.kt")
@@ -87,6 +87,16 @@ public class IrClassFileToSourceStubConverterTestGenerated extends AbstractIrCla
     @TestMetadata("defaultImpls.kt")
     public void testDefaultImpls() throws Exception {
         runTest("plugins/kapt3/kapt3-compiler/testData/converter/defaultImpls.kt");
+    }
+
+    @TestMetadata("defaultParameterValueOff.kt")
+    public void testDefaultParameterValueOff() throws Exception {
+        runTest("plugins/kapt3/kapt3-compiler/testData/converter/defaultParameterValueOff.kt");
+    }
+
+    @TestMetadata("defaultParameterValueOn.kt")
+    public void testDefaultParameterValueOn() throws Exception {
+        runTest("plugins/kapt3/kapt3-compiler/testData/converter/defaultParameterValueOn.kt");
     }
 
     @TestMetadata("deprecated.kt")
@@ -287,6 +297,11 @@ public class IrClassFileToSourceStubConverterTestGenerated extends AbstractIrCla
     @TestMetadata("kt28306.kt")
     public void testKt28306() throws Exception {
         runTest("plugins/kapt3/kapt3-compiler/testData/converter/kt28306.kt");
+    }
+
+    @TestMetadata("kt34569.kt")
+    public void testKt34569() throws Exception {
+        runTest("plugins/kapt3/kapt3-compiler/testData/converter/kt34569.kt");
     }
 
     @TestMetadata("lazyProperty.kt")

@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.codegen.binding.CodegenBinding.*
 import org.jetbrains.kotlin.codegen.binding.MutableClosure
 import org.jetbrains.kotlin.codegen.context.EnclosedValueDescriptor
 import org.jetbrains.kotlin.codegen.coroutines.getOrCreateJvmSuspendFunctionView
+import org.jetbrains.kotlin.codegen.coroutines.isCapturedSuspendLambda
 import org.jetbrains.kotlin.codegen.state.KotlinTypeMapper
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.config.isReleaseCoroutines
@@ -25,7 +26,7 @@ import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCallWithAssert
-import org.jetbrains.kotlin.resolve.jvm.AsmTypes
+import org.jetbrains.kotlin.resolve.jvm.AsmTypes.*
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.util.OperatorNameConventions
 import org.jetbrains.org.objectweb.asm.ClassReader
@@ -59,12 +60,15 @@ abstract class LambdaInfo(@JvmField val isCrossInline: Boolean) : FunctionalArgu
     open val hasDispatchReceiver = true
 
     fun addAllParameters(remapper: FieldRemapper): Parameters {
-        val builder = ParametersBuilder.initializeBuilderFrom(AsmTypes.OBJECT_TYPE, invokeMethod.descriptor, this)
+        val builder = ParametersBuilder.initializeBuilderFrom(OBJECT_TYPE, invokeMethod.descriptor, this)
 
         for (info in capturedVars) {
             val field = remapper.findField(FieldInsnNode(0, info.containingLambdaName, info.fieldName, ""))
                 ?: error("Captured field not found: " + info.containingLambdaName + "." + info.fieldName)
-            builder.addCapturedParam(field, info.fieldName)
+            val recapturedParamInfo = builder.addCapturedParam(field, info.fieldName)
+            if (this is ExpressionLambda && isCapturedSuspend(info)) {
+                recapturedParamInfo.functionalArgument = NonInlineableArgumentForInlineableParameterCalledInSuspend
+            }
         }
 
         return builder.buildParameters()
@@ -82,7 +86,7 @@ abstract class LambdaInfo(@JvmField val isCrossInline: Boolean) : FunctionalArgu
     }
 }
 
-class NonInlineableArgumentForInlineableParameterCalledInSuspend(val isSuspend: Boolean) : FunctionalArgument
+object NonInlineableArgumentForInlineableParameterCalledInSuspend : FunctionalArgument
 object NonInlineableArgumentForInlineableSuspendParameter : FunctionalArgument
 
 
@@ -96,6 +100,11 @@ class PsiDefaultLambda(
     override fun mapAsmSignature(sourceCompiler: SourceCompilerForInline): Method {
         return sourceCompiler.state.typeMapper.mapSignatureSkipGeneric(invokeMethodDescriptor).asmMethod
     }
+
+    override fun findInvokeMethodDescriptor(): FunctionDescriptor =
+        parameterDescriptor.type.memberScope
+            .getContributedFunctions(OperatorNameConventions.INVOKE, NoLookupLocation.FROM_BACKEND)
+            .single()
 }
 
 abstract class DefaultLambda(
@@ -139,21 +148,17 @@ abstract class DefaultLambda(
                 superName: String?,
                 interfaces: Array<out String>?
             ) {
-                isPropertyReference = superName?.startsWith("kotlin/jvm/internal/PropertyReference") ?: false
-                isFunctionReference = "kotlin/jvm/internal/FunctionReference" == superName
+                isPropertyReference = superName in PROPERTY_REFERENCE_SUPER_CLASSES
+                isFunctionReference = superName == FUNCTION_REFERENCE.internalName || superName == FUNCTION_REFERENCE_IMPL.internalName
 
                 super.visit(version, access, name, signature, superName, interfaces)
             }
         }, ClassReader.SKIP_CODE or ClassReader.SKIP_FRAMES or ClassReader.SKIP_DEBUG)
 
-        invokeMethodDescriptor =
-            parameterDescriptor.type.memberScope
-                .getContributedFunctions(OperatorNameConventions.INVOKE, NoLookupLocation.FROM_BACKEND)
-                .single()
-                .let {
-                    //property reference generates erased 'get' method
-                    if (isPropertyReference) it.original else it
-                }
+        invokeMethodDescriptor = findInvokeMethodDescriptor().let {
+            //property reference generates erased 'get' method
+            if (isPropertyReference) it.original else it
+        }
 
         val descriptor = Type.getMethodDescriptor(Type.VOID_TYPE, *capturedArgs)
         val constructor = getMethodNode(
@@ -201,6 +206,17 @@ abstract class DefaultLambda(
     }
 
     protected abstract fun mapAsmSignature(sourceCompiler: SourceCompilerForInline): Method
+
+    protected abstract fun findInvokeMethodDescriptor(): FunctionDescriptor
+
+    private companion object {
+        val PROPERTY_REFERENCE_SUPER_CLASSES =
+            listOf(
+                PROPERTY_REFERENCE0, PROPERTY_REFERENCE1, PROPERTY_REFERENCE2,
+                MUTABLE_PROPERTY_REFERENCE0, MUTABLE_PROPERTY_REFERENCE1, MUTABLE_PROPERTY_REFERENCE2
+            ).plus(OPTIMIZED_PROPERTY_REFERENCE_SUPERTYPES)
+                .mapTo(HashSet(), Type::getInternalName)
+    }
 }
 
 internal fun Type.boxReceiverForBoundReference() =
@@ -212,9 +228,11 @@ internal fun Type.boxReceiverForBoundReference(kotlinType: KotlinType, typeMappe
 abstract class ExpressionLambda(isCrossInline: Boolean) : LambdaInfo(isCrossInline) {
     override fun generateLambdaBody(sourceCompiler: SourceCompilerForInline, reifiedTypeInliner: ReifiedTypeInliner<*>) {
         node = sourceCompiler.generateLambdaBody(this)
+        node.node.preprocessSuspendMarkers(forInline = true, keepFakeContinuation = false)
     }
 
     abstract fun getInlineSuspendLambdaViewDescriptor(): FunctionDescriptor
+    abstract fun isCapturedSuspend(desc: CapturedParamDesc): Boolean
 }
 
 class PsiExpressionLambda(
@@ -328,4 +346,7 @@ class PsiExpressionLambda(
             typeMapper.bindingContext
         )
     }
+
+    override fun isCapturedSuspend(desc: CapturedParamDesc): Boolean =
+        isCapturedSuspendLambda(closure, desc.fieldName, typeMapper.bindingContext)
 }

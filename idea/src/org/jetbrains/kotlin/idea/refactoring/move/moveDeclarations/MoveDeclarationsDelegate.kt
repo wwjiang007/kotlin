@@ -13,6 +13,7 @@ import com.intellij.util.containers.MultiMap
 import org.jetbrains.kotlin.asJava.toLightClass
 import org.jetbrains.kotlin.asJava.unwrapped
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.unsafeResolveToDescriptor
 import org.jetbrains.kotlin.idea.codeInsight.shorten.isToBeShortened
 import org.jetbrains.kotlin.idea.refactoring.move.*
@@ -101,7 +102,10 @@ sealed class MoveDeclarationsDelegate {
                 val isConflict = when (usage) {
                     is ImplicitCompanionAsDispatchReceiverUsageInfo -> {
                         if (!isValidTargetForImplicitCompanionAsDispatchReceiver(descriptor, usage.companionDescriptor)) {
-                            conflicts.putValue(element, "Implicit companion object will be inaccessible: ${element.text}")
+                            conflicts.putValue(
+                                element,
+                                KotlinBundle.message("text.implicit.companion.object.will.be.inaccessible.0", element.text)
+                            )
                         }
                         true
                     }
@@ -128,8 +132,9 @@ sealed class MoveDeclarationsDelegate {
 
                     if (outerInstanceParameterName != null) {
                         val type = (containingClassOrObject!!.unsafeResolveToDescriptor() as ClassDescriptor).defaultType
-                        val parameter = KtPsiFactory(project)
-                            .createParameter("private val $outerInstanceParameterName: ${IdeDescriptorRenderers.SOURCE_CODE.renderType(type)}")
+                        val parameter = KtPsiFactory(project).createParameter(
+                            "private val $outerInstanceParameterName: ${IdeDescriptorRenderers.SOURCE_CODE.renderType(type)}"
+                        )
                         createPrimaryConstructorParameterListIfAbsent().addParameter(parameter).isToBeShortened = true
                     }
                 }

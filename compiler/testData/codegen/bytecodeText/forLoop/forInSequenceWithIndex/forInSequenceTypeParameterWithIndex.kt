@@ -1,5 +1,3 @@
-// IGNORE_BACKEND: JVM_IR
-// TODO: Handle Sequences by extending DefaultIterableHandler.
 fun <T : Sequence<*>> test(sequence: T): String {
     val s = StringBuilder()
 

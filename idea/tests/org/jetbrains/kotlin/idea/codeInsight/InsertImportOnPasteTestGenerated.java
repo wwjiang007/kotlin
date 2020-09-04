@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -27,7 +27,7 @@ public class InsertImportOnPasteTestGenerated extends AbstractInsertImportOnPast
         }
 
         public void testAllFilesPresentInCopy() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/copyPaste/imports"), Pattern.compile("^([^.]+)\\.kt$"), false);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/copyPaste/imports"), Pattern.compile("^([^.]+)\\.kt$"), null, false);
         }
 
         @TestMetadata("AlreadyImportedExtensions.kt")
@@ -53,6 +53,11 @@ public class InsertImportOnPasteTestGenerated extends AbstractInsertImportOnPast
         @TestMetadata("ClassObject.kt")
         public void testClassObject() throws Exception {
             runTest("idea/testData/copyPaste/imports/ClassObject.kt");
+        }
+
+        @TestMetadata("ClassObjectAndDropImports.kt")
+        public void testClassObjectAndDropImports() throws Exception {
+            runTest("idea/testData/copyPaste/imports/ClassObjectAndDropImports.kt");
         }
 
         @TestMetadata("ClassObjectFunInsideClass.kt")
@@ -130,6 +135,11 @@ public class InsertImportOnPasteTestGenerated extends AbstractInsertImportOnPast
             runTest("idea/testData/copyPaste/imports/DependencyOnStdLib.kt");
         }
 
+        @TestMetadata("EntireFile.kt")
+        public void testEntireFile() throws Exception {
+            runTest("idea/testData/copyPaste/imports/EntireFile.kt");
+        }
+
         @TestMetadata("EnumEntries.kt")
         public void testEnumEntries() throws Exception {
             runTest("idea/testData/copyPaste/imports/EnumEntries.kt");
@@ -195,6 +205,11 @@ public class InsertImportOnPasteTestGenerated extends AbstractInsertImportOnPast
             runTest("idea/testData/copyPaste/imports/ImportDirective.kt");
         }
 
+        @TestMetadata("ImportDirectiveAndClassBody.kt")
+        public void testImportDirectiveAndClassBody() throws Exception {
+            runTest("idea/testData/copyPaste/imports/ImportDirectiveAndClassBody.kt");
+        }
+
         @TestMetadata("ImportableEntityInExtensionLiteral.kt")
         public void testImportableEntityInExtensionLiteral() throws Exception {
             runTest("idea/testData/copyPaste/imports/ImportableEntityInExtensionLiteral.kt");
@@ -233,6 +248,11 @@ public class InsertImportOnPasteTestGenerated extends AbstractInsertImportOnPast
         @TestMetadata("Local.kt")
         public void testLocal() throws Exception {
             runTest("idea/testData/copyPaste/imports/Local.kt");
+        }
+
+        @TestMetadata("MultiCaretSelectionEntireFile.kt")
+        public void testMultiCaretSelectionEntireFile() throws Exception {
+            runTest("idea/testData/copyPaste/imports/MultiCaretSelectionEntireFile.kt");
         }
 
         @TestMetadata("MultiDeclaration.kt")
@@ -370,7 +390,7 @@ public class InsertImportOnPasteTestGenerated extends AbstractInsertImportOnPast
         }
 
         public void testAllFilesPresentInCut() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/copyPaste/imports"), Pattern.compile("^([^.]+)\\.kt$"), false);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/copyPaste/imports"), Pattern.compile("^([^.]+)\\.kt$"), null, false);
         }
 
         @TestMetadata("AlreadyImportedExtensions.kt")
@@ -396,6 +416,11 @@ public class InsertImportOnPasteTestGenerated extends AbstractInsertImportOnPast
         @TestMetadata("ClassObject.kt")
         public void testClassObject() throws Exception {
             runTest("idea/testData/copyPaste/imports/ClassObject.kt");
+        }
+
+        @TestMetadata("ClassObjectAndDropImports.kt")
+        public void testClassObjectAndDropImports() throws Exception {
+            runTest("idea/testData/copyPaste/imports/ClassObjectAndDropImports.kt");
         }
 
         @TestMetadata("ClassObjectFunInsideClass.kt")
@@ -473,6 +498,11 @@ public class InsertImportOnPasteTestGenerated extends AbstractInsertImportOnPast
             runTest("idea/testData/copyPaste/imports/DependencyOnStdLib.kt");
         }
 
+        @TestMetadata("EntireFile.kt")
+        public void testEntireFile() throws Exception {
+            runTest("idea/testData/copyPaste/imports/EntireFile.kt");
+        }
+
         @TestMetadata("EnumEntries.kt")
         public void testEnumEntries() throws Exception {
             runTest("idea/testData/copyPaste/imports/EnumEntries.kt");
@@ -538,6 +568,11 @@ public class InsertImportOnPasteTestGenerated extends AbstractInsertImportOnPast
             runTest("idea/testData/copyPaste/imports/ImportDirective.kt");
         }
 
+        @TestMetadata("ImportDirectiveAndClassBody.kt")
+        public void testImportDirectiveAndClassBody() throws Exception {
+            runTest("idea/testData/copyPaste/imports/ImportDirectiveAndClassBody.kt");
+        }
+
         @TestMetadata("ImportableEntityInExtensionLiteral.kt")
         public void testImportableEntityInExtensionLiteral() throws Exception {
             runTest("idea/testData/copyPaste/imports/ImportableEntityInExtensionLiteral.kt");
@@ -576,6 +611,11 @@ public class InsertImportOnPasteTestGenerated extends AbstractInsertImportOnPast
         @TestMetadata("Local.kt")
         public void testLocal() throws Exception {
             runTest("idea/testData/copyPaste/imports/Local.kt");
+        }
+
+        @TestMetadata("MultiCaretSelectionEntireFile.kt")
+        public void testMultiCaretSelectionEntireFile() throws Exception {
+            runTest("idea/testData/copyPaste/imports/MultiCaretSelectionEntireFile.kt");
         }
 
         @TestMetadata("MultiDeclaration.kt")

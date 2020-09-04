@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2016 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.actions.internal
@@ -29,6 +18,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileVisitor
 import com.intellij.psi.PsiManager
 import com.intellij.psi.search.searches.ReferencesSearch
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.search.usagesSearch.ExpressionsOfTypeProcessor
 import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.psi.KtClass
@@ -45,7 +35,7 @@ class CheckComponentsUsageSearchAction : AnAction() {
             {
                 runReadAction { process(selectedKotlinFiles, project) }
             },
-            "Checking Data Classes",
+            KotlinBundle.message("checking.data.classes"),
             true,
             project
         )
@@ -60,7 +50,7 @@ class CheckComponentsUsageSearchAction : AnAction() {
 
         val progressIndicator = ProgressManager.getInstance().progressIndicator
         for ((i, dataClass) in dataClasses.withIndex()) {
-            progressIndicator?.text = "Checking data class ${i + 1} of ${dataClasses.size}..."
+            progressIndicator?.text = KotlinBundle.message("checking.data.class.0.of.1", i + 1, dataClasses.size)
             progressIndicator?.text2 = dataClass.fqName?.asString() ?: ""
 
             val parameter = dataClass.primaryConstructor?.valueParameters?.firstOrNull()
@@ -86,8 +76,13 @@ class CheckComponentsUsageSearchAction : AnAction() {
                         SwingUtilities.invokeLater {
                             Messages.showInfoMessage(
                                 project,
-                                "Difference found for data class ${dataClass.fqName?.asString()}. Found $smartRefsCount usage(s) but $goldRefsCount expected",
-                                "Error"
+                                KotlinBundle.message(
+                                    "difference.found.for.data.class.0.found.1.2",
+                                    dataClass.fqName?.asString().toString(),
+                                    smartRefsCount,
+                                    goldRefsCount
+                                ),
+                                KotlinBundle.message("title.error")
                             )
                         }
                         return
@@ -101,7 +96,11 @@ class CheckComponentsUsageSearchAction : AnAction() {
         }
 
         SwingUtilities.invokeLater {
-            Messages.showInfoMessage(project, "Analyzed ${dataClasses.size} classes. No difference found.", "Success")
+            Messages.showInfoMessage(
+                project,
+                KotlinBundle.message("analyzed.0.classes.no.difference.found", dataClasses.size),
+                KotlinBundle.message("title.success")
+            )
         }
     }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -261,16 +261,6 @@ public abstract class Random {
         override fun nextBytes(array: ByteArray): ByteArray = defaultRandom.nextBytes(array)
         override fun nextBytes(size: Int): ByteArray = defaultRandom.nextBytes(size)
         override fun nextBytes(array: ByteArray, fromIndex: Int, toIndex: Int): ByteArray = defaultRandom.nextBytes(array, fromIndex, toIndex)
-
-        @Deprecated("Use Default companion object instead", level = DeprecationLevel.HIDDEN)
-        @Suppress("DEPRECATION_ERROR")
-        @kotlin.jvm.JvmField
-        public val Companion: Random.Companion = Random.Companion
-    }
-
-    @Deprecated("Use Default companion object instead", level = DeprecationLevel.HIDDEN)
-    public object Companion : Random() {
-        override fun nextBits(bitCount: Int): Int = Default.nextBits(bitCount)
     }
 }
 
@@ -281,6 +271,8 @@ public abstract class Random {
  *
  * *Note:* Future versions of Kotlin may change the algorithm of this seeded number generator so that it will return
  * a sequence of values different from the current one for a given seed.
+ *
+ * On JVM the returned generator is NOT thread-safe. Do not invoke it from multiple threads without proper synchronization.
  *
  * @sample samples.random.Randoms.seededRandom
  */
@@ -294,6 +286,8 @@ public fun Random(seed: Int): Random = XorWowRandom(seed, seed.shr(31))
  *
  * *Note:* Future versions of Kotlin may change the algorithm of this seeded number generator so that it will return
  * a sequence of values different from the current one for a given seed.
+ *
+ * On JVM the returned generator is NOT thread-safe. Do not invoke it from multiple threads without proper synchronization.
  *
  * @sample samples.random.Randoms.seededRandom
  */
@@ -338,7 +332,7 @@ public fun Random.nextLong(range: LongRange): Long = when {
 internal expect fun defaultPlatformRandom(): Random
 internal expect fun doubleFromParts(hi26: Int, low27: Int): Double
 
-@UseExperimental(ExperimentalStdlibApi::class)
+@OptIn(ExperimentalStdlibApi::class)
 internal fun fastLog2(value: Int): Int = 31 - value.countLeadingZeroBits()
 
 /** Takes upper [bitCount] bits (0..32) from this number. */

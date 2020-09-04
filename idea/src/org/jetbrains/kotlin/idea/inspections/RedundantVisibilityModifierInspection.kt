@@ -10,10 +10,11 @@ import com.intellij.psi.PsiElementVisitor
 import org.jetbrains.kotlin.config.AnalysisFlags
 import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
-import org.jetbrains.kotlin.descriptors.Visibilities
-import org.jetbrains.kotlin.descriptors.Visibility
+import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
+import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.config.ExplicitApiMode
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptorWithVisibility
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.core.implicitVisibility
 import org.jetbrains.kotlin.idea.project.languageVersionSettings
@@ -25,6 +26,7 @@ import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtPropertyAccessor
 import org.jetbrains.kotlin.psi.declarationVisitor
 import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
+import org.jetbrains.kotlin.psi.psiUtil.isPrivate
 import org.jetbrains.kotlin.psi.psiUtil.visibilityModifier
 import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyPublicApi
@@ -42,7 +44,9 @@ class RedundantVisibilityModifierInspection : AbstractKotlinInspection(), Cleanu
             val redundantVisibility = when {
                 visibilityModifier.node.elementType == implicitVisibility ->
                     implicitVisibility
-                declaration.hasModifier(KtTokens.INTERNAL_KEYWORD) && declaration.containingClassOrObject?.isLocal == true ->
+                declaration.hasModifier(KtTokens.INTERNAL_KEYWORD) && declaration.containingClassOrObject?.let {
+                    it.isLocal || it.isPrivate()
+                } == true ->
                     KtTokens.INTERNAL_KEYWORD
                 else ->
                     null
@@ -52,12 +56,12 @@ class RedundantVisibilityModifierInspection : AbstractKotlinInspection(), Cleanu
                 && declaration is KtProperty
                 && declaration.hasModifier(KtTokens.OVERRIDE_KEYWORD)
                 && declaration.isVar
-                && declaration.setterVisibility().let { it != null && it != Visibilities.PUBLIC }
+                && declaration.setterVisibility().let { it != null && it != DescriptorVisibilities.PUBLIC }
             ) return
 
             holder.registerProblem(
                 visibilityModifier,
-                "Redundant visibility modifier",
+                KotlinBundle.message("redundant.visibility.modifier"),
                 ProblemHighlightType.LIKE_UNUSED_SYMBOL,
                 IntentionWrapper(
                     RemoveModifierFix(declaration, redundantVisibility, isRedundant = true),
@@ -67,7 +71,7 @@ class RedundantVisibilityModifierInspection : AbstractKotlinInspection(), Cleanu
         })
     }
 
-    private fun KtProperty.setterVisibility(): Visibility? {
+    private fun KtProperty.setterVisibility(): DescriptorVisibility? {
         val descriptor = descriptor as? PropertyDescriptor ?: return null
         if (setter?.visibilityModifier() != null) {
             val visibility = descriptor.setter?.visibility

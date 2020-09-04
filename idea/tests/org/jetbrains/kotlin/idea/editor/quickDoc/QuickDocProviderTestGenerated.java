@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -25,7 +25,7 @@ public class QuickDocProviderTestGenerated extends AbstractQuickDocProviderTest 
     }
 
     public void testAllFilesPresentInQuickDoc() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("idea/testData/editor/quickDoc"), Pattern.compile("^([^_]+)\\.(kt|java)$"), true);
+        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/editor/quickDoc"), Pattern.compile("^([^_]+)\\.(kt|java)$"), null, true);
     }
 
     @TestMetadata("AnonymousObjectLocalVariable.kt")
@@ -98,6 +98,11 @@ public class QuickDocProviderTestGenerated extends AbstractQuickDocProviderTest 
         runTest("idea/testData/editor/quickDoc/IndentedCodeBlock.kt");
     }
 
+    @TestMetadata("JavaClassConstructorUsedInKotlin.kt")
+    public void testJavaClassConstructorUsedInKotlin() throws Exception {
+        runTest("idea/testData/editor/quickDoc/JavaClassConstructorUsedInKotlin.kt");
+    }
+
     @TestMetadata("JavaClassUsedInKotlin.kt")
     public void testJavaClassUsedInKotlin() throws Exception {
         runTest("idea/testData/editor/quickDoc/JavaClassUsedInKotlin.kt");
@@ -116,6 +121,11 @@ public class QuickDocProviderTestGenerated extends AbstractQuickDocProviderTest 
     @TestMetadata("JavaMethodUsedInKotlin.kt")
     public void testJavaMethodUsedInKotlin() throws Exception {
         runTest("idea/testData/editor/quickDoc/JavaMethodUsedInKotlin.kt");
+    }
+
+    @TestMetadata("JavaMethodUsedInKotlinInParen.kt")
+    public void testJavaMethodUsedInKotlinInParen() throws Exception {
+        runTest("idea/testData/editor/quickDoc/JavaMethodUsedInKotlinInParen.kt");
     }
 
     @TestMetadata("KotlinClassUsedFromJava.java")
@@ -146,6 +156,11 @@ public class QuickDocProviderTestGenerated extends AbstractQuickDocProviderTest 
     @TestMetadata("OnClassDeclarationWithNoPackage.kt")
     public void testOnClassDeclarationWithNoPackage() throws Exception {
         runTest("idea/testData/editor/quickDoc/OnClassDeclarationWithNoPackage.kt");
+    }
+
+    @TestMetadata("OnEmptySecondaryConstructor.kt")
+    public void testOnEmptySecondaryConstructor() throws Exception {
+        runTest("idea/testData/editor/quickDoc/OnEmptySecondaryConstructor.kt");
     }
 
     @TestMetadata("OnEnumClassReference.kt")
@@ -201,6 +216,11 @@ public class QuickDocProviderTestGenerated extends AbstractQuickDocProviderTest 
     @TestMetadata("OnMethodUsage.kt")
     public void testOnMethodUsage() throws Exception {
         runTest("idea/testData/editor/quickDoc/OnMethodUsage.kt");
+    }
+
+    @TestMetadata("OnMethodUsageInParen.kt")
+    public void testOnMethodUsageInParen() throws Exception {
+        runTest("idea/testData/editor/quickDoc/OnMethodUsageInParen.kt");
     }
 
     @TestMetadata("OnMethodUsageMultiline.kt")

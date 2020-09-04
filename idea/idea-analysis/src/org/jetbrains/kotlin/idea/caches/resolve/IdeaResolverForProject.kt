@@ -13,6 +13,7 @@ import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.builtins.jvm.JvmBuiltIns
 import org.jetbrains.kotlin.caches.resolve.CompositeAnalyzerServices
 import org.jetbrains.kotlin.caches.resolve.CompositeResolverForModuleFactory
+import org.jetbrains.kotlin.caches.resolve.KotlinCacheService
 import org.jetbrains.kotlin.caches.resolve.resolution
 import org.jetbrains.kotlin.context.ProjectContext
 import org.jetbrains.kotlin.context.withModule
@@ -31,8 +32,8 @@ import org.jetbrains.kotlin.platform.idePlatformKind
 import org.jetbrains.kotlin.platform.isCommon
 import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
 import org.jetbrains.kotlin.platform.jvm.isJvm
-import org.jetbrains.kotlin.platform.toTargetPlatform
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.resolve.ResolutionAnchorProvider
 import org.jetbrains.kotlin.resolve.jvm.JvmPlatformParameters
 
 class IdeaResolverForProject(
@@ -51,7 +52,8 @@ class IdeaResolverForProject(
     modules,
     fallbackModificationTracker,
     delegateResolver,
-    ServiceManager.getService(projectContext.project, IdePackageOracleFactory::class.java)
+    ServiceManager.getService(projectContext.project, IdePackageOracleFactory::class.java),
+    ServiceManager.getService(projectContext.project, ResolutionAnchorProvider::class.java)
 ) {
     private val builtInsCache: BuiltInsCache =
         (delegateResolver as? IdeaResolverForProject)?.builtInsCache ?: BuiltInsCache(projectContext, this)
@@ -93,6 +95,12 @@ class IdeaResolverForProject(
             moduleByJavaClass = { javaClass: JavaClass ->
                 val psiClass = (javaClass as JavaClassImpl).psi
                 psiClass.getPlatformModuleInfo(JvmPlatforms.unspecifiedJvmPlatform)?.platformModule ?: psiClass.getNullableModuleInfo()
+            },
+            resolverForReferencedModule = { targetModuleInfo, referencingModuleInfo ->
+                require(targetModuleInfo is IdeaModuleInfo && referencingModuleInfo is IdeaModuleInfo) {
+                    "Unexpected modules passed through JvmPlatformParameters to IDE resolver ($targetModuleInfo, $referencingModuleInfo)"
+                }
+                tryGetResolverForModuleWithResolutionAnchorFallback(targetModuleInfo, referencingModuleInfo)
             }
         )
 
@@ -113,7 +121,7 @@ class IdeaResolverForProject(
                 commonPlatformParameters,
                 jvmPlatformParameters,
                 platform,
-                CompositeAnalyzerServices(platform.componentPlatforms.map { it.toTargetPlatform().findAnalyzerServices })
+                CompositeAnalyzerServices(platform.componentPlatforms.map { it.findAnalyzerServices() })
             )
         }
     }
@@ -123,13 +131,14 @@ class IdeaResolverForProject(
         private val cache = mutableMapOf<BuiltInsCacheKey, KotlinBuiltIns>()
 
         fun getOrCreateIfNeeded(module: IdeaModuleInfo): KotlinBuiltIns = projectContextFromSdkResolver.storageManager.compute {
-            val key = module.platform.idePlatformKind.resolution.getKeyForBuiltIns(module)
+            val sdk = resolverForSdk.sdkDependency(module)
+
+            val key = module.platform.idePlatformKind.resolution.getKeyForBuiltIns(module, sdk)
             val cachedBuiltIns = cache[key]
             if (cachedBuiltIns != null) return@compute cachedBuiltIns
 
             // Note #1: we can't use .getOrPut, because we have to put builtIns into map *before* initialization
             // Note #2: it's OK to put not-initialized built-ins into public map, because access to [cache] is guarded by storageManager.lock
-            val sdk = resolverForSdk.sdkDependency(module)
             val newBuiltIns = module.platform.idePlatformKind.resolution.createBuiltIns(module, projectContextFromSdkResolver, sdk)
             cache[key] = newBuiltIns
 
@@ -144,6 +153,36 @@ class IdeaResolverForProject(
 
             return@compute newBuiltIns
         }
+    }
+
+    private fun tryGetResolverForModuleWithResolutionAnchorFallback(
+        targetModuleInfo: IdeaModuleInfo,
+        referencingModuleInfo: IdeaModuleInfo,
+    ): ResolverForModule? {
+        tryGetResolverForModule(targetModuleInfo)?.let { return it }
+
+        return getResolverForProjectUsingResolutionAnchor(targetModuleInfo, referencingModuleInfo)
+    }
+
+    private fun getResolverForProjectUsingResolutionAnchor(
+        targetModuleInfo: IdeaModuleInfo,
+        referencingModuleInfo: IdeaModuleInfo
+    ): ResolverForModule? {
+        val moduleDescriptorOfReferencingModule = descriptorByModule[referencingModuleInfo]?.moduleDescriptor
+            ?: error("$referencingModuleInfo is not contained in this resolver, which means incorrect use of anchor-aware search")
+
+        val anchorModuleInfo = resolutionAnchorProvider.getResolutionAnchor(moduleDescriptorOfReferencingModule)?.moduleInfo ?: return null
+
+        val resolverForProjectFromAnchorModule = KotlinCacheService.getInstance(projectContext.project)
+            .getResolutionFacadeByModuleInfo(anchorModuleInfo, anchorModuleInfo.platform)
+            ?.getResolverForProject()
+            ?: return null
+
+        require(resolverForProjectFromAnchorModule is IdeaResolverForProject) {
+            "Resolution via anchor modules is expected to be used only from IDE resolvers"
+        }
+
+        return resolverForProjectFromAnchorModule.tryGetResolverForModule(targetModuleInfo)
     }
 }
 

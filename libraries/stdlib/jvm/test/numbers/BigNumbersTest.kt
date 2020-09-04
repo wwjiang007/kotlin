@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -62,6 +62,18 @@ class BigNumbersTest {
         assertEquals(BigInteger("2"), c)
     }
 
+    @Test fun sumOfBigInteger() {
+        val numbers = (1..10).map { it.toBigInteger() }
+        val i55 = 55.toBigInteger()
+        assertEquals(i55, numbers.sumOf { it })
+        assertEquals(i55, numbers.asSequence().sumOf { it })
+        assertEquals(i55, numbers.toTypedArray().sumOf { it })
+
+        val chars = ('0'..'9').joinToString("")
+        assertEquals(i55, chars.sumOf { it.toString().toBigInteger().inc() })
+        assertEquals(i55, chars.toCharArray().sumOf { it.toString().toBigInteger().inc() })
+    }
+
     @Test fun testBigDecimal() {
         val a = BigDecimal("2")
         val b = BigDecimal("3")
@@ -72,7 +84,6 @@ class BigNumbersTest {
         assertEquals(BigDecimal("2"), BigDecimal("4") / a)
         assertEquals(BigDecimal("-2"), -a)
         assertEquals(BigDecimal("-2"), -a % b)
-        assertEquals(BigDecimal("-2"), @Suppress("DEPRECATION_ERROR") (-a).mod(b))
         assertEquals(BigDecimal("-2"), (-a).rem(b))
 
         assertEquals(BigDecimal("3"), a.inc())
@@ -103,6 +114,18 @@ class BigNumbersTest {
         assertEquals(d2, d5 / d2)
         assertEquals(d4, d7 / d2)
         assertEquals(d1, d7 / d5)
+    }
+
+    @Test fun sumOfBigDecimal() {
+        val numbers = (1..10).map { it.toBigDecimal() }
+        val d55 = 55.toBigDecimal()
+        assertEquals(d55, numbers.sumOf { it })
+        assertEquals(d55, numbers.asSequence().sumOf { it })
+        assertEquals(d55, numbers.toTypedArray().sumOf { it })
+
+        val chars = ('0'..'9').joinToString("")
+        assertEquals(d55, chars.sumOf { it.toString().toBigDecimal().inc() })
+        assertEquals(d55, chars.toCharArray().sumOf { it.toString().toBigDecimal().inc() })
     }
 }
 

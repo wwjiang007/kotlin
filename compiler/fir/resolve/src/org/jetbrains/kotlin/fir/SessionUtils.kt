@@ -5,17 +5,46 @@
 
 package org.jetbrains.kotlin.fir
 
+import org.jetbrains.kotlin.descriptors.Visibility
+import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.resolve.ScopeSession
+import org.jetbrains.kotlin.fir.scopes.ProcessorAction
+import org.jetbrains.kotlin.fir.scopes.processOverriddenFunctions
+import org.jetbrains.kotlin.fir.scopes.unsubstitutedScope
+import org.jetbrains.kotlin.fir.types.ConeInferenceContext
 import org.jetbrains.kotlin.fir.types.ConeTypeCheckerContext
-import org.jetbrains.kotlin.fir.types.ConeTypeContext
-import org.jetbrains.kotlin.types.AbstractTypeCheckerContext
 
-private class SessionBasedTypeContext(override val session: FirSession) : ConeTypeContext {
-    override fun newBaseTypeCheckerContext(
-        errorTypesEqualToAnything: Boolean,
-        stubTypesEqualToAnything: Boolean
-    ): AbstractTypeCheckerContext {
-        return ConeTypeCheckerContext(errorTypesEqualToAnything, stubTypesEqualToAnything, session)
+val FirSession.typeContext: ConeInferenceContext
+    get() = ConeTypeCheckerContext(isErrorTypeEqualsToAnything = false, isStubTypeEqualsToAnything = false, this)
+
+/**
+ * Returns the list of functions that overridden by given
+ */
+fun FirSimpleFunction.lowestVisibilityAmongOverrides(
+    containingClass: FirClass<*>,
+    session: FirSession,
+    scopeSession: ScopeSession
+): Visibility {
+    val firTypeScope = containingClass.unsubstitutedScope(session, scopeSession)
+    var visibility = visibility
+
+    // required; otherwise processOverriddenFunctions()
+    // will process nothing
+    firTypeScope.processFunctionsByName(symbol.fir.name) { }
+
+    firTypeScope.processOverriddenFunctions(symbol) {
+        val overriddenVisibility = when (val fir = it.fir) {
+            is FirMemberDeclaration -> fir.visibility
+            is FirPropertyAccessor -> fir.visibility
+            else -> null
+        }
+
+        overriddenVisibility?.let { that ->
+            visibility = that
+        }
+
+        ProcessorAction.NEXT
     }
-}
 
-val FirSession.typeContext: ConeTypeContext get() = SessionBasedTypeContext(this)
+    return visibility
+}

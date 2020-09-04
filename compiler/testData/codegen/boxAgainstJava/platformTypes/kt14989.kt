@@ -1,4 +1,3 @@
-// IGNORE_BACKEND: JVM_IR
 //WITH_RUNTIME
 // FILE: JavaClass.java
 
@@ -20,7 +19,7 @@ fun box(): String {
     try {
         test(JavaClass().test())
     }
-    catch (e: IllegalStateException) {
+    catch (e: NullPointerException) {
         return "OK"
     }
     return "fail"

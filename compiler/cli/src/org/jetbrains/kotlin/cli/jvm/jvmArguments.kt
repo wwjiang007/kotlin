@@ -38,6 +38,17 @@ fun CompilerConfiguration.setupJvmSpecificArguments(arguments: K2JVMCompilerArgu
         }
     }
 
+    val jvmTarget = get(JVMConfigurationKeys.JVM_TARGET) ?: JvmTarget.DEFAULT
+    if (jvmTarget.bytecodeVersion < JvmTarget.JVM_1_8.bytecodeVersion) {
+        val jvmDefaultMode = languageVersionSettings.getFlag(JvmAnalysisFlags.jvmDefaultMode)
+        if (jvmDefaultMode.forAllMethodsWithBody) {
+            messageCollector.report(
+                ERROR,
+                "'-Xjvm-default=${jvmDefaultMode.description}' is only supported since JVM target 1.8. Recompile with '-jvm-target 1.8'"
+            )
+        }
+    }
+
     addAll(JVMConfigurationKeys.ADDITIONAL_JAVA_MODULES, arguments.additionalJavaModules?.asList())
 }
 
@@ -138,12 +149,12 @@ fun KotlinCoreEnvironment.registerJavacIfNeeded(
     return true
 }
 
-
 fun CompilerConfiguration.configureAdvancedJvmOptions(arguments: K2JVMCompilerArguments) {
 
     put(JVMConfigurationKeys.PARAMETERS_METADATA, arguments.javaParameters)
 
-    put(JVMConfigurationKeys.IR, arguments.useIR)
+    put(JVMConfigurationKeys.IR, arguments.useIR && !arguments.noUseIR)
+    put(JVMConfigurationKeys.IS_IR_WITH_STABLE_ABI, arguments.isIrWithStableAbi)
     put(JVMConfigurationKeys.DISABLE_CALL_ASSERTIONS, arguments.noCallAssertions)
     put(JVMConfigurationKeys.DISABLE_RECEIVER_ASSERTIONS, arguments.noReceiverAssertions)
     put(JVMConfigurationKeys.DISABLE_PARAM_ASSERTIONS, arguments.noParamAssertions)
@@ -152,6 +163,10 @@ fun CompilerConfiguration.configureAdvancedJvmOptions(arguments: K2JVMCompilerAr
         arguments.noExceptionOnExplicitEqualsForBoxedNull
     )
     put(JVMConfigurationKeys.DISABLE_OPTIMIZATION, arguments.noOptimize)
+    put(JVMConfigurationKeys.EMIT_JVM_TYPE_ANNOTATIONS, arguments.emitJvmTypeAnnotations)
+    put(JVMConfigurationKeys.NO_OPTIMIZED_CALLABLE_REFERENCES, arguments.noOptimizedCallableReferences)
+    put(JVMConfigurationKeys.NO_KOTLIN_NOTHING_VALUE_EXCEPTION, arguments.noKotlinNothingValueException)
+    put(JVMConfigurationKeys.NO_UNIFIED_NULL_CHECKS, arguments.noUnifiedNullChecks)
 
     if (!JVMConstructorCallNormalizationMode.isSupportedValue(arguments.constructorCallNormalizationMode)) {
         getNotNull(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY).report(
@@ -195,6 +210,15 @@ fun CompilerConfiguration.configureAdvancedJvmOptions(arguments: K2JVMCompilerAr
 
     put(CLIConfigurationKeys.ALLOW_KOTLIN_PACKAGE, arguments.allowKotlinPackage)
     put(JVMConfigurationKeys.USE_SINGLE_MODULE, arguments.singleModule)
+    put(JVMConfigurationKeys.USE_OLD_SPILLED_VAR_TYPE_ANALYSIS, arguments.useOldSpilledVarTypeAnalysis)
 
     arguments.declarationsOutputPath?.let { put(JVMConfigurationKeys.DECLARATIONS_JSON_PATH, it) }
+}
+
+fun CompilerConfiguration.configureKlibPaths(arguments: K2JVMCompilerArguments) {
+    assert(arguments.useIR || arguments.klibLibraries == null) { "Klib libraries can only be used with IR backend" }
+    arguments.klibLibraries?.split(File.pathSeparator.toRegex())
+        ?.toTypedArray()
+        ?.filterNot { it.isEmpty() }
+        ?.let { put(JVMConfigurationKeys.KLIB_PATHS, it) }
 }

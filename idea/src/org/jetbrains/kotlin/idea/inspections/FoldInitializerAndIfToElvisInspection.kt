@@ -14,6 +14,7 @@ import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.search.LocalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import org.jetbrains.kotlin.descriptors.VariableDescriptor
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.analyze
 import org.jetbrains.kotlin.idea.caches.resolve.resolveToDescriptorIfAny
 import org.jetbrains.kotlin.idea.core.replaced
@@ -38,9 +39,9 @@ import org.jetbrains.kotlin.types.typeUtil.makeNotNullable
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
 
 class FoldInitializerAndIfToElvisInspection : AbstractApplicabilityBasedInspection<KtIfExpression>(KtIfExpression::class.java) {
-    override fun inspectionText(element: KtIfExpression): String = "If-Null return/break/... foldable to '?:'"
+    override fun inspectionText(element: KtIfExpression): String = KotlinBundle.message("if.null.return.break.foldable.to")
 
-    override val defaultFixText: String = "Replace 'if' with elvis operator"
+    override val defaultFixText: String get() = KotlinBundle.message("replace.if.with.elvis.operator")
 
     override fun inspectionHighlightRangeInElement(element: KtIfExpression) = element.fromIfKeywordToRightParenthesisTextRangeInThis()
 
@@ -74,7 +75,8 @@ class FoldInitializerAndIfToElvisInspection : AbstractApplicabilityBasedInspecti
                 declaration.isVar && declaration.typeReference == null -> initializer.analyze(BodyResolveMode.PARTIAL).getType(initializer)
 
                 // for val with explicit type, change it to non-nullable
-                !declaration.isVar && declaration.typeReference != null -> initializer.analyze(BodyResolveMode.PARTIAL).getType(initializer)?.makeNotNullable()
+                !declaration.isVar && declaration.typeReference != null -> initializer.analyze(BodyResolveMode.PARTIAL).getType(initializer)
+                    ?.makeNotNullable()
 
                 else -> null
             }
@@ -84,7 +86,8 @@ class FoldInitializerAndIfToElvisInspection : AbstractApplicabilityBasedInspecti
             val childRangeAfter = childRangeBefore.withoutLastStatement()
 
             val margin = CodeStyle.getSettings(element.containingKtFile).defaultRightMargin
-            val pattern = elvisPattern(declaration.textLength + ifNullExpr.textLength + 5 >= margin || element.then?.hasComments() == true)
+            val declarationTextLength = declaration.text.split("\n").lastOrNull()?.trim()?.length ?: 0
+            val pattern = elvisPattern(declarationTextLength + ifNullExpr.textLength + 5 >= margin || element.then?.hasComments() == true)
 
             val elvis = factory.createExpressionByPattern(pattern, initializer, ifNullExpr) as KtBinaryExpression
 

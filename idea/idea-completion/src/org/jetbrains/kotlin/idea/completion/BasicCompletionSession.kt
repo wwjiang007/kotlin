@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.completion
@@ -47,20 +36,21 @@ import org.jetbrains.kotlin.idea.project.TargetPlatformDetector
 import org.jetbrains.kotlin.idea.references.KtSimpleNameReference.ShorteningMode.FORCED_SHORTENING
 import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.idea.stubindex.PackageIndexUtil
+import org.jetbrains.kotlin.idea.util.CallType
 import org.jetbrains.kotlin.idea.util.CallTypeAndReceiver
 import org.jetbrains.kotlin.idea.util.getResolutionScope
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.load.java.descriptors.JavaClassDescriptor
-import org.jetbrains.kotlin.load.java.sam.SamConstructorDescriptor
-import org.jetbrains.kotlin.load.java.sam.SamConstructorDescriptorKindExclude
+import org.jetbrains.kotlin.resolve.sam.SamConstructorDescriptor
+import org.jetbrains.kotlin.resolve.sam.SamConstructorDescriptorKindExclude
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.platform.jvm.isJvm
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.*
 import org.jetbrains.kotlin.renderer.render
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.descriptorUtil.*
-import org.jetbrains.kotlin.platform.jvm.isJvm
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindExclude
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
@@ -116,7 +106,7 @@ class BasicCompletionSession(
         if (OPERATOR_NAME.isApplicable())
             return OPERATOR_NAME
 
-        if (NamedArgumentCompletion.isOnlyNamedArgumentExpected(nameExpression)) {
+        if (NamedArgumentCompletion.isOnlyNamedArgumentExpected(nameExpression, resolutionFacade)) {
             return NAMED_ARGUMENTS_ONLY
         }
 
@@ -136,7 +126,7 @@ class BasicCompletionSession(
 
         if (parameters.isAutoPopup) {
             collector.addLookupElementPostProcessor { lookupElement ->
-                lookupElement.putUserData(LookupCancelWatcher.AUTO_POPUP_AT, position.startOffset)
+                lookupElement.putUserData(LookupCancelService.AUTO_POPUP_AT, position.startOffset)
                 lookupElement
             }
 
@@ -200,13 +190,17 @@ class BasicCompletionSession(
                 completeDeclarationNameFromUnresolvedOrOverride(declaration)
 
                 if (declaration is KtProperty) {
-                    completeParameterOrVarNameAndType(declaration.modifierList?.hasModifier(KtTokens.LATEINIT_KEYWORD) == true)
+                    // we want to insert type only if the property is lateinit,
+                    // because lateinit var cannot have its type deduced from initializer
+                    completeParameterOrVarNameAndType(withType = declaration.hasModifier(KtTokens.LATEINIT_KEYWORD))
                 }
 
                 // no auto-popup on typing after "val", "var" and "fun" because it's likely the name of the declaration which is being typed by user
                 if (parameters.invocationCount == 0) {
                     val suppressOtherCompletion = when (declaration) {
-                        is KtNamedFunction, is KtProperty -> prefixMatcher.prefix.let { it.isEmpty() || it[0].isLowerCase() /* function name usually starts with lower case letter */ }
+                        is KtNamedFunction, is KtProperty -> prefixMatcher.prefix.let {
+                            it.isEmpty() || it[0].isLowerCase() /* function name usually starts with lower case letter */
+                        }
                         else -> true
                     }
                     if (suppressOtherCompletion) return
@@ -263,7 +257,9 @@ class BasicCompletionSession(
             }
 
             // getting root packages from scope is very slow so we do this in alternative way
-            if (callTypeAndReceiver.receiver == null && callTypeAndReceiver.callType.descriptorKindFilter.kindMask.and(DescriptorKindFilter.PACKAGES_MASK) != 0) {
+            if (callTypeAndReceiver.receiver == null &&
+                callTypeAndReceiver.callType.descriptorKindFilter.kindMask.and(DescriptorKindFilter.PACKAGES_MASK) != 0
+            ) {
                 //TODO: move this code somewhere else?
                 val packageNames = PackageIndexUtil.getSubPackageFqNames(FqName.ROOT, searchScope, project, prefixMatcher.asNameFilter())
                     .toMutableSet()
@@ -337,8 +333,14 @@ class BasicCompletionSession(
                     }
                 }
 
-                if (configuration.staticMembers && prefix.isNotEmpty()) {
-                    if (!receiverTypes.isNullOrEmpty()) {
+                if (!receiverTypes.isNullOrEmpty()) {
+                    // N.B.: callable references to member extensions are forbidden
+                    val shouldCompleteExtensionsFromObjects = when (callTypeAndReceiver.callType) {
+                        CallType.DEFAULT, CallType.DOT, CallType.SAFE, CallType.INFIX -> true
+                        else -> false
+                    }
+
+                    if (shouldCompleteExtensionsFromObjects) {
                         staticMembersCompletion.completeObjectMemberExtensionsFromIndices(
                             indicesHelper(false),
                             receiverTypes.map { it.type },
@@ -346,7 +348,9 @@ class BasicCompletionSession(
                             collector
                         )
                     }
+                }
 
+                if (configuration.staticMembers && prefix.isNotEmpty()) {
                     if (callTypeAndReceiver is CallTypeAndReceiver.DEFAULT) {
                         staticMembersCompletion.completeFromIndices(indicesHelper(false), collector)
                     }
@@ -471,14 +475,19 @@ class BasicCompletionSession(
                                     if (file != null) {
                                         val receiverInFile =
                                             file.findElementAt(receiver.startOffset)?.getParentOfType<KtSimpleNameExpression>(false)
-                                                    ?: return
+                                                ?: return
                                         receiverInFile.mainReference.bindToFqName(fqNameToImport, FORCED_SHORTENING)
                                     }
                                 }
 
                                 override fun renderElement(presentation: LookupElementPresentation?) {
                                     super.renderElement(presentation)
-                                    presentation?.appendTailText(" for $name in $packageName", true)
+                                    presentation?.appendTailText(
+                                        KotlinIdeaCompletionBundle.message(
+                                            "presentation.tail.for.0.in.1",
+                                            name,
+                                            packageName
+                                        ), true)
                                 }
                             }
                         })
@@ -524,7 +533,7 @@ class BasicCompletionSession(
     }
 
     private fun wasAutopopupRecentlyCancelled(parameters: CompletionParameters) =
-        LookupCancelWatcher.getInstance(project).wasAutoPopupRecentlyCancelled(parameters.editor, position.startOffset)
+        LookupCancelService.getInstance(project).wasAutoPopupRecentlyCancelled(parameters.editor, position.startOffset)
 
     private val KEYWORDS_ONLY = object : CompletionKind {
         override val descriptorKindFilter: DescriptorKindFilter?
@@ -570,7 +579,7 @@ class BasicCompletionSession(
                 if (keyword in keywordsToSkip) return@complete
 
                 when (keyword) {
-                // if "this" is parsed correctly in the current context - insert it and all this@xxx items
+                    // if "this" is parsed correctly in the current context - insert it and all this@xxx items
                     "this" -> {
                         if (expression != null) {
                             collector.addElements(
@@ -586,7 +595,7 @@ class BasicCompletionSession(
                         }
                     }
 
-                // if "return" is parsed correctly in the current context - insert it and all return@xxx items
+                    // if "return" is parsed correctly in the current context - insert it and all return@xxx items
                     "return" -> {
                         if (expression != null) {
                             collector.addElements(returnExpressionItems(bindingContext, expression))
@@ -642,6 +651,8 @@ class BasicCompletionSession(
                             )
                         }
                     }
+
+                    "contract" -> { }
 
                     else -> collector.addElement(lookupElement)
                 }

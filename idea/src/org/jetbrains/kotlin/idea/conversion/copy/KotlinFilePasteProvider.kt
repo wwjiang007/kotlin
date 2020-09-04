@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2000-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -17,6 +17,7 @@ import com.intellij.psi.JavaDirectoryService
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.IncorrectOperationException
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.util.application.executeWriteCommand
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtFile
@@ -34,9 +35,10 @@ class KotlinFilePasteProvider : PasteProvider {
 
         val ktFile = KtPsiFactory(project).createFile(text)
         val fileName = (ktFile.declarations.firstOrNull()?.name ?: return) + ".kt"
+
         @Suppress("UsePropertyAccessSyntax")
         val directory = ideView.getOrChooseDirectory() ?: return
-        project.executeWriteCommand("Create Kotlin file") {
+        project.executeWriteCommand(KotlinBundle.message("create.kotlin.file")) {
             val file = try {
                 directory.createFile(fileName)
             } catch (e: IncorrectOperationException) {

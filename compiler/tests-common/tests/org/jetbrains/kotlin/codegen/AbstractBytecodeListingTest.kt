@@ -5,31 +5,32 @@
 
 package org.jetbrains.kotlin.codegen
 
-import org.jetbrains.kotlin.resolve.DescriptorUtils
+import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 import org.jetbrains.kotlin.utils.sure
 import org.jetbrains.org.objectweb.asm.*
 import org.jetbrains.org.objectweb.asm.Opcodes.*
 import java.io.File
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 abstract class AbstractBytecodeListingTest : CodegenTestCase() {
     override fun doMultiFileTest(wholeFile: File, files: List<TestFile>) {
         compile(files)
         val actualTxt = BytecodeListingTextCollectingVisitor.getText(classFileFactory, withSignatures = isWithSignatures(wholeFile))
 
-        val prefixes =
-            if (coroutinesPackage == DescriptorUtils.COROUTINES_PACKAGE_FQ_NAME_RELEASE.asString()) {
-                listOf("_1_3", "")
-            } else listOf("")
+        val prefixes = when {
+            backend.isIR -> listOf("_ir", "_1_3", "")
+            coroutinesPackage == StandardNames.COROUTINES_PACKAGE_FQ_NAME_RELEASE.asString() -> listOf("_1_3", "")
+            else -> listOf("")
+        }
 
         val txtFile =
             prefixes.firstNotNullResult { File(wholeFile.parentFile, wholeFile.nameWithoutExtension + "$it.txt").takeIf(File::exists) }
                 .sure { "No testData file exists: ${wholeFile.nameWithoutExtension}.txt" }
 
-        KotlinTestUtils.assertEqualsToFile(txtFile, actualTxt) {
-            it.replace("COROUTINES_PACKAGE", coroutinesPackage)
-        }
+        KotlinTestUtils.assertEqualsToFile(txtFile, actualTxt)
     }
 
     private fun isWithSignatures(wholeFile: File): Boolean =
@@ -56,6 +57,33 @@ class BytecodeListingTextCollectingVisitor(val filter: Filter, val withSignature
 
                 if (!filter.shouldWriteClass(cr.access, cr.className)) null else visitor.text
             }.joinToString("\n\n", postfix = "\n")
+
+        private val CLASS_OR_FIELD_OR_METHOD = setOf(ModifierTarget.CLASS, ModifierTarget.FIELD, ModifierTarget.METHOD)
+        private val CLASS_OR_METHOD = setOf(ModifierTarget.CLASS, ModifierTarget.METHOD)
+        private val FIELD_ONLY = setOf(ModifierTarget.FIELD)
+        private val METHOD_ONLY = setOf(ModifierTarget.METHOD)
+        private val FIELD_OR_METHOD = setOf(ModifierTarget.FIELD, ModifierTarget.METHOD)
+
+        // TODO ACC_MANDATED - requires reading Parameters attribute, which we don't generate by default
+        internal val MODIFIERS =
+            arrayOf(
+                Modifier("public", ACC_PUBLIC, CLASS_OR_FIELD_OR_METHOD),
+                Modifier("protected", ACC_PROTECTED, CLASS_OR_FIELD_OR_METHOD),
+                Modifier("private", ACC_PRIVATE, CLASS_OR_FIELD_OR_METHOD),
+                Modifier("synthetic", ACC_SYNTHETIC, CLASS_OR_FIELD_OR_METHOD),
+                Modifier("bridge", ACC_BRIDGE, METHOD_ONLY),
+                Modifier("volatile", ACC_VOLATILE, FIELD_ONLY),
+                Modifier("synchronized", ACC_SYNCHRONIZED, METHOD_ONLY),
+                Modifier("varargs", ACC_VARARGS, METHOD_ONLY),
+                Modifier("transient", ACC_TRANSIENT, FIELD_ONLY),
+                Modifier("native", ACC_NATIVE, METHOD_ONLY),
+                Modifier("deprecated", ACC_DEPRECATED, CLASS_OR_FIELD_OR_METHOD),
+                Modifier("final", ACC_FINAL, CLASS_OR_FIELD_OR_METHOD),
+                Modifier("strict", ACC_STRICT, METHOD_ONLY),
+                Modifier("enum", ACC_ENUM, FIELD_ONLY), // ACC_ENUM modifier on class is handled in 'classOrInterface'
+                Modifier("abstract", ACC_ABSTRACT, CLASS_OR_METHOD, excludedMask = ACC_INTERFACE),
+                Modifier("static", ACC_STATIC, FIELD_OR_METHOD)
+            )
     }
 
     interface Filter {
@@ -89,17 +117,36 @@ class BytecodeListingTextCollectingVisitor(val filter: Filter, val withSignature
         list.add("$text ")
     }
 
-    private fun handleModifiers(access: Int, list: MutableList<String> = declarationsInsideClass.last().annotations) {
-        if (access and ACC_PUBLIC != 0) addModifier("public", list)
-        if (access and ACC_PROTECTED != 0) addModifier("protected", list)
-        if (access and ACC_PRIVATE != 0) addModifier("private", list)
-
-        if (access and ACC_SYNTHETIC != 0) addModifier("synthetic", list)
-        if (access and ACC_DEPRECATED != 0) addModifier("deprecated", list)
-        if (access and ACC_FINAL != 0) addModifier("final", list)
-        if (access and ACC_ABSTRACT != 0 && access and ACC_INTERFACE == 0) addModifier("abstract", list)
-        if (access and ACC_STATIC != 0) addModifier("static", list)
+    internal enum class ModifierTarget {
+        CLASS, FIELD, METHOD
     }
+
+    internal class Modifier(
+        val text: String,
+        private val mask: Int,
+        private val applicableTo: Set<ModifierTarget>,
+        private val excludedMask: Int = 0
+    ) {
+        fun hasModifier(access: Int, target: ModifierTarget) =
+            access and mask != 0 &&
+                    access and excludedMask == 0 &&
+                    applicableTo.contains(target)
+    }
+
+    private fun handleModifiers(
+        target: ModifierTarget,
+        access: Int,
+        list: MutableList<String> = declarationsInsideClass.last().annotations
+    ) {
+        for (modifier in MODIFIERS) {
+            if (modifier.hasModifier(access, target)) {
+                addModifier(modifier.text, list)
+            }
+        }
+    }
+
+    private fun getModifiers(target: ModifierTarget, access: Int) =
+        MODIFIERS.filter { it.hasModifier(access, target) }.joinToString(separator = " ") { it.text }
 
     private fun classOrInterface(access: Int): String {
         return when {
@@ -115,7 +162,7 @@ class BytecodeListingTextCollectingVisitor(val filter: Filter, val withSignature
             if (classAnnotations.isNotEmpty()) {
                 append(classAnnotations.joinToString("\n", postfix = "\n"))
             }
-            arrayListOf<String>().apply { handleModifiers(classAccess, this) }.forEach { append(it) }
+            arrayListOf<String>().apply { handleModifiers(ModifierTarget.CLASS, classAccess, this) }.forEach { append(it) }
             append(classOrInterface(classAccess))
             if (withSignatures) {
                 append("<$classSignature> ")
@@ -131,6 +178,14 @@ class BytecodeListingTextCollectingVisitor(val filter: Filter, val withSignature
             }
         }.toString()
 
+    override fun visitSource(source: String?, debug: String?) {
+        if (source != null) {
+            declarationsInsideClass.add(Declaration("// source: '$source'"))
+        } else {
+            declarationsInsideClass.add(Declaration("// source: null"))
+        }
+    }
+
     override fun visitMethod(access: Int, name: String, desc: String, signature: String?, exceptions: Array<out String>?): MethodVisitor? {
         if (!filter.shouldWriteMethod(access, name, desc)) {
             return null
@@ -141,7 +196,7 @@ class BytecodeListingTextCollectingVisitor(val filter: Filter, val withSignature
         val methodAnnotations = arrayListOf<String>()
         val parameterAnnotations = hashMapOf<Int, MutableList<String>>()
 
-        handleModifiers(access, methodAnnotations)
+        handleModifiers(ModifierTarget.METHOD, access, methodAnnotations)
         val methodParamCount = Type.getArgumentTypes(desc).size
 
         return object : MethodVisitor(API_VERSION) {
@@ -194,7 +249,7 @@ class BytecodeListingTextCollectingVisitor(val filter: Filter, val withSignature
         val fieldSignature = if (withSignatures) "<$signature> " else ""
         val fieldDeclaration = Declaration("field $fieldSignature$name: $type")
         declarationsInsideClass.add(fieldDeclaration)
-        handleModifiers(access)
+        handleModifiers(ModifierTarget.FIELD, access)
         if (access and ACC_VOLATILE != 0) addModifier("volatile", fieldDeclaration.annotations)
 
         return object : FieldVisitor(API_VERSION) {
@@ -217,10 +272,35 @@ class BytecodeListingTextCollectingVisitor(val filter: Filter, val withSignature
         classSignature = signature
     }
 
+    override fun visitOuterClass(owner: String, name: String?, descriptor: String?) {
+        if (name == null) {
+            assertNull(descriptor)
+            declarationsInsideClass.add(Declaration("enclosing class $owner"))
+        } else {
+            assertNotNull(descriptor)
+            declarationsInsideClass.add(Declaration("enclosing method $owner.$name$descriptor"))
+        }
+    }
+
     override fun visitInnerClass(name: String, outerName: String?, innerName: String?, access: Int) {
         if (!filter.shouldWriteInnerClass(name)) {
             return
         }
-        declarationsInsideClass.add(Declaration("inner class $name"))
+
+        when {
+            innerName == null -> {
+                assertNull(outerName, "Anonymous classes should have neither innerName nor outerName. Name=$name, outerName=$outerName")
+                declarationsInsideClass.add(Declaration("inner (anonymous) class $name"))
+            }
+            outerName == null -> {
+                declarationsInsideClass.add(Declaration("inner (local) class $name $innerName"))
+            }
+            name == "$outerName$$innerName" -> {
+                declarationsInsideClass.add(Declaration("${getModifiers(ModifierTarget.CLASS, access)} inner class $name"))
+            }
+            else -> {
+                declarationsInsideClass.add(Declaration("inner (unrecognized) class $name $outerName $innerName"))
+            }
+        }
     }
 }

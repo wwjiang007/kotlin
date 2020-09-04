@@ -1,7 +1,3 @@
-// IGNORE_BACKEND_FIR: JVM_IR
-// IGNORE_BACKEND: JVM
-// See KT-15971
-
 interface Foo {
     fun foo(a: Double = 1.0): Double
 }

@@ -38,22 +38,27 @@ import com.intellij.usages.impl.rules.UsageTypeProvider
 import com.intellij.usages.rules.UsageFilteringRule
 import com.intellij.usages.rules.UsageGroupingRule
 import com.intellij.util.CommonProcessors
+import org.jetbrains.kotlin.idea.caches.resolve.analyzeWithAllCompilerChecks
+import org.jetbrains.kotlin.idea.core.script.ScriptConfigurationManager
 import org.jetbrains.kotlin.idea.core.util.clearDialogsResults
 import org.jetbrains.kotlin.idea.core.util.setDialogsResult
-import org.jetbrains.kotlin.idea.findUsages.dialogs.KotlinFindPropertyUsagesDialog
 import org.jetbrains.kotlin.idea.findUsages.handlers.KotlinFindMemberUsagesHandler
 import org.jetbrains.kotlin.idea.refactoring.CHECK_SUPER_METHODS_YES_NO_DIALOG
 import org.jetbrains.kotlin.idea.search.usagesSearch.ExpressionsOfTypeProcessor
+import org.jetbrains.kotlin.idea.test.DirectiveBasedActionUtils
 import org.jetbrains.kotlin.idea.test.KotlinLightCodeInsightFixtureTestCase
 import org.jetbrains.kotlin.idea.test.KotlinWithJdkAndRuntimeLightProjectDescriptor
 import org.jetbrains.kotlin.idea.test.TestFixtureExtension
 import org.jetbrains.kotlin.idea.util.ProjectRootsUtil
 import org.jetbrains.kotlin.idea.util.runReadActionInSmartMode
+import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
+import org.jetbrains.kotlin.resolve.diagnostics.Diagnostics
 import org.jetbrains.kotlin.test.InTextDirectivesUtils
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import java.io.File
 import java.util.*
+import kotlin.collections.LinkedHashSet
 
 abstract class AbstractFindUsagesWithDisableComponentSearchTest : AbstractFindUsagesTest() {
 
@@ -87,6 +92,11 @@ abstract class AbstractFindUsagesTest : KotlinLightCodeInsightFixtureTestCase() 
         val prefix = mainFileName.substringBefore(".") + "."
 
         val isPropertiesFile = FileUtilRt.getExtension(path) == "properties"
+
+        InTextDirectivesUtils.findStringWithPrefixes(mainFileText, "// IGNORE: ")?.let {
+            println("test $mainFileName is ignored")
+            return
+        }
 
         val isFindFileUsages = InTextDirectivesUtils.isDirectiveDefined(mainFileText, "## FIND_FILE_USAGES")
 
@@ -124,6 +134,16 @@ abstract class AbstractFindUsagesTest : KotlinLightCodeInsightFixtureTestCase() 
                 myFixture.configureByFile(file.name)
             }
             myFixture.configureByFile(mainFileName)
+
+            if ((myFixture.file as? KtFile)?.isScript() == true) {
+                ScriptConfigurationManager.updateScriptDependenciesSynchronously(myFixture.file)
+            }
+
+            (myFixture.file as? KtFile)?.let { ktFile ->
+                val diagnosticsProvider: (KtFile) -> Diagnostics = { it.analyzeWithAllCompilerChecks().bindingContext.diagnostics }
+                DirectiveBasedActionUtils.checkForUnexpectedWarnings(ktFile, diagnosticsProvider)
+                DirectiveBasedActionUtils.checkForUnexpectedErrors(ktFile, diagnosticsProvider)
+            }
 
             val caretElement = when {
                 InTextDirectivesUtils.isDirectiveDefined(mainFileText, "// FIND_BY_REF") -> TargetElementUtil.findTargetElement(
@@ -216,7 +236,7 @@ internal fun <T : PsiElement> findUsagesAndCheckResults(
     val highlightingMode = InTextDirectivesUtils.isDirectiveDefined(mainFileText, "// HIGHLIGHTING")
 
     var log: String? = null
-    val logList = ArrayList<String>()
+    val logList = LinkedHashSet<String>()
     val usageInfos = try {
         if (ExpressionsOfTypeProcessor.mode !== ExpressionsOfTypeProcessor.Mode.ALWAYS_PLAIN) {
             ExpressionsOfTypeProcessor.testLog = logList
@@ -322,15 +342,15 @@ internal fun findUsages(
                     }
                 }
             } else {
-                ProgressManager.getInstance().run(object : Task(project, "", false) {
-                    override fun isModal() = true
-
-                    override fun run(indicator: ProgressIndicator) {
-                        project.runReadActionInSmartMode {
-                            handler.processElementUsages(psiElement, processor, options)
+                ProgressManager.getInstance().run(
+                    object : Task.Modal(project, "", false) {
+                        override fun run(indicator: ProgressIndicator) {
+                            project.runReadActionInSmartMode {
+                                handler.processElementUsages(psiElement, processor, options)
+                            }
                         }
-                    }
-                })
+                    },
+                )
             }
         }
 

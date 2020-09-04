@@ -1,5 +1,5 @@
 // WITH_RUNTIME
-// ADDITIONAL_COMPILER_ARGUMENTS: -Xuse-experimental=kotlin.ExperimentalMultiplatform
+// ADDITIONAL_COMPILER_ARGUMENTS: -Xopt-in=kotlin.ExperimentalMultiplatform
 
 @OptionalExpectation
 expect annotation class A()
@@ -18,3 +18,10 @@ annotation class InOtherAnnotation(val a: A)
 
 @InOtherAnnotation(A())
 fun useInOtherAnnotation() {}
+
+
+
+expect class C {
+    @OptionalExpectation
+    annotation class Nested
+}

@@ -14,6 +14,8 @@ import org.jetbrains.kotlin.console.KotlinConsoleRunner
 import org.jetbrains.kotlin.idea.run.createLibraryWithLongPaths
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.test.JUnit3WithIdeaConfigurationRunner
+import org.jetbrains.kotlin.test.WithMutedInDatabaseRunTest
+import org.jetbrains.kotlin.test.runTest
 import org.junit.Test
 import org.junit.runner.RunWith
 import kotlin.reflect.KMutableProperty0
@@ -21,6 +23,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @RunWith(JUnit3WithIdeaConfigurationRunner::class)
+@WithMutedInDatabaseRunTest
 class IdeReplExecutionTest : PlatformTestCase() {
     private lateinit var consoleRunner: KotlinConsoleRunner
     private var commandsSent = 0
@@ -36,6 +39,12 @@ class IdeReplExecutionTest : PlatformTestCase() {
         super.tearDown()
     }
 
+    override fun runTest() {
+        runTest {
+            super.runTest()
+        }
+    }
+
     private fun sendCommand(command: String) {
         runWriteAction { consoleRunner.consoleView.editorDocument.setText(command) }
         consoleRunner.executor.executeCommand()
@@ -43,13 +52,18 @@ class IdeReplExecutionTest : PlatformTestCase() {
     }
 
     private fun checkOutput(expectedOutput: String) {
-        val output = getReplOutput(textOnTimeOut = { "Only ${consoleRunner.commandHistory.processedEntriesCount} commands were processed" }) {
-            consoleRunner.commandHistory.processedEntriesCount >= commandsSent
-        }
+        val output = getReplOutput(textOnTimeOut = {
+            "Only ${consoleRunner.commandHistory.processedEntriesCount} commands were processed"
+        }) { consoleRunner.commandHistory.processedEntriesCount >= commandsSent }
         assertTrue(output.trim().endsWith(expectedOutput), "'$expectedOutput' should be printed but document text is:\n$output")
     }
 
-    private fun getReplOutput(maxIterations: Int = 50, sleepTime: Long = 500, textOnTimeOut: () -> String, predicate: () -> Boolean): String {
+    private fun getReplOutput(
+        maxIterations: Int = 50,
+        sleepTime: Long = 500,
+        textOnTimeOut: () -> String,
+        predicate: () -> Boolean
+    ): String {
         for (i in 1..maxIterations) {
             UIUtil.dispatchAllInvocationEvents()
             if (predicate()) {
@@ -73,9 +87,12 @@ class IdeReplExecutionTest : PlatformTestCase() {
         checkOutput(expectedOutput)
     }
 
-    @Test fun testRunPossibility() {
+    @Test
+    fun testRunPossibility() {
         val allOk = { x: String -> x.contains(":help for help") }
-        val hasErrors = { x: String -> x.contains("Process finished with exit code 1") || x.contains("Exception in") || x.contains("Error") }
+        val hasErrors = { x: String ->
+            x.contains("Process finished with exit code 1") || x.contains("Exception in") || x.contains("Error")
+        }
 
         val output = getReplOutput(textOnTimeOut = { "Repl startup timed out" }) {
             val editorText = refreshAndGetHistoryEditorText()
@@ -97,22 +114,31 @@ class IdeReplExecutionTest : PlatformTestCase() {
         testRunPossibility()
     }
 
-    @Test fun testOnePlusOne() = testSimpleCommand("1 + 1", "2")
-    @Test fun testPrintlnText() = "Hello, console world!".let { testSimpleCommand("println(\"$it\")", it) }
-    @Test fun testDivisionByZeroException() = testSimpleCommand("1 / 0", "java.lang.ArithmeticException: / by zero")
+    @Test
+    fun testOnePlusOne() = testSimpleCommand("1 + 1", "2")
 
-    @Test fun testMultilineSupport() {
+    @Test
+    fun testPrintlnText() = "Hello, console world!".let { testSimpleCommand("println(\"$it\")", it) }
+
+    @Test
+    fun testDivisionByZeroException() = testSimpleCommand("1 / 0", "java.lang.ArithmeticException: / by zero")
+
+    @Test
+    fun testMultilineSupport() {
         val printText = "Print in multiline!"
 
-        sendCommand("fun f() {\n" +
+        sendCommand(
+            "fun f() {\n" +
                     "    println(\"$printText\")\n" +
-                    "}\n")
+                    "}\n"
+        )
         sendCommand("f()")
 
         checkOutput(printText)
     }
 
-    @Test fun testReadLineSingle() {
+    @Test
+    fun testReadLineSingle() {
         val readLineText = "ReadMe!"
 
         sendCommand("val a = readLine()")
@@ -121,12 +147,15 @@ class IdeReplExecutionTest : PlatformTestCase() {
         checkOutput(readLineText)
     }
 
-    @Test fun testReadLineMultiple() {
+    @Test
+    fun testReadLineMultiple() {
         val readLineTextA = "ReadMe A!"
         val readLineTextB = "ReadMe B!"
 
-        sendCommand("val a = readLine()\n" +
-                    "val b = readLine()")
+        sendCommand(
+            "val a = readLine()\n" +
+                    "val b = readLine()"
+        )
         sendCommand(readLineTextA)
         sendCommand(readLineTextB)
 
@@ -136,14 +165,16 @@ class IdeReplExecutionTest : PlatformTestCase() {
         checkOutput(readLineTextB)
     }
 
-    @Test fun testCorrectAfterError() {
+    @Test
+    fun testCorrectAfterError() {
         val message = "MyMessage"
         sendCommand("fun f() { println(x)\n println(y) ")
         sendCommand("println(\"$message\")")
         checkOutput(message)
     }
 
-    @Test fun testMultipleErrorsHandling() {
+    @Test
+    fun testMultipleErrorsHandling() {
         val veryLongTextWithErrors = "println($);".repeat(30)
         sendCommand(veryLongTextWithErrors)
         sendCommand(veryLongTextWithErrors)

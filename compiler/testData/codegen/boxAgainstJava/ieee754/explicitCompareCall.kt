@@ -1,4 +1,3 @@
-// IGNORE_BACKEND: JVM_IR
 // FILE: JavaClass.java
 
 public class JavaClass {
@@ -31,7 +30,7 @@ fun box(): String {
     try {
         if (jClass.minus0().compareTo(jClass.null0()) != -2) return "fail 3"
         return "fail: exception expected";
-    } catch (e: IllegalStateException) {
+    } catch (e: NullPointerException) {
 
     }
 

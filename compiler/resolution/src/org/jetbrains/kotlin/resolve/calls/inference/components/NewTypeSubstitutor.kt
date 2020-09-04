@@ -15,11 +15,22 @@ import org.jetbrains.kotlin.types.checker.NewCapturedTypeConstructor
 import org.jetbrains.kotlin.types.checker.intersectTypes
 import org.jetbrains.kotlin.types.model.TypeSubstitutorMarker
 
-interface NewTypeSubstitutor: TypeSubstitutorMarker {
+interface NewTypeSubstitutor : TypeSubstitutorMarker {
     fun substituteNotNullTypeWithConstructor(constructor: TypeConstructor): UnwrappedType?
 
     fun safeSubstitute(type: UnwrappedType): UnwrappedType =
         substitute(type, runCapturedChecks = true, keepAnnotation = true) ?: type
+
+    val isEmpty: Boolean
+
+    /**
+     * Returns not null when substitutor manages specific type projection substitution by itself.
+     * Intended for corner cases involving interactions with legacy type substitutor,
+     * please consider using substituteNotNullTypeWithConstructor instead of making manual projection substitutions.
+     */
+    fun substituteArgumentProjection(argument: TypeProjection): TypeProjection? {
+        return null
+    }
 
     private fun substitute(type: UnwrappedType, keepAnnotation: Boolean, runCapturedChecks: Boolean): UnwrappedType? =
         when (type) {
@@ -81,7 +92,10 @@ interface NewTypeSubstitutor: TypeSubstitutorMarker {
                 if (innerType is StubType || substitutedInnerType is StubType) {
                     return NewCapturedType(
                         capturedType.captureStatus,
-                        NewCapturedTypeConstructor(TypeProjectionImpl(typeConstructor.projection.projectionKind, substitutedInnerType)),
+                        NewCapturedTypeConstructor(
+                            TypeProjectionImpl(typeConstructor.projection.projectionKind, substitutedInnerType),
+                            typeParameter = typeConstructor.typeParameter
+                        ),
                         lowerType = if (capturedType.lowerType != null) substitutedInnerType else null
                     )
                 } else {
@@ -101,12 +115,16 @@ interface NewTypeSubstitutor: TypeSubstitutorMarker {
         }
 
         if (typeConstructor is IntersectionTypeConstructor) {
-            var thereIsChanges = false
+            fun updateNullability(substituted: UnwrappedType) =
+                if (type.isMarkedNullable) substituted.makeNullableAsSpecified(true) else substituted
+
+            substituteNotNullTypeWithConstructor(typeConstructor)?.let { return updateNullability(it) }
+            var thereAreChanges = false
             val newTypes = typeConstructor.supertypes.map {
-                substitute(it.unwrap(), keepAnnotation, runCapturedChecks)?.apply { thereIsChanges = true } ?: it.unwrap()
+                substitute(it.unwrap(), keepAnnotation, runCapturedChecks)?.apply { thereAreChanges = true } ?: it.unwrap()
             }
-            if (!thereIsChanges) return null
-            return intersectTypes(newTypes).let { if (type.isMarkedNullable) it.makeNullableAsSpecified(true) else it }
+            if (!thereAreChanges) return null
+            return updateNullability(intersectTypes(newTypes))
         }
 
         // simple classifier type
@@ -156,6 +174,13 @@ interface NewTypeSubstitutor: TypeSubstitutorMarker {
             val argument = arguments[index]
 
             if (argument.isStarProjection) continue
+
+            val specialProjectionSubstitution = substituteArgumentProjection(argument)
+            if (specialProjectionSubstitution != null) {
+                newArguments[index] = specialProjectionSubstitution
+                continue
+            }
+
             val substitutedArgumentType = substitute(argument.type.unwrap(), keepAnnotation, runCapturedChecks) ?: continue
 
             newArguments[index] = TypeProjectionImpl(argument.projectionKind, substitutedArgumentType)
@@ -170,10 +195,14 @@ interface NewTypeSubstitutor: TypeSubstitutorMarker {
 
 object EmptySubstitutor : NewTypeSubstitutor {
     override fun substituteNotNullTypeWithConstructor(constructor: TypeConstructor): UnwrappedType? = null
+
+    override val isEmpty: Boolean get() = true
 }
 
 class NewTypeSubstitutorByConstructorMap(val map: Map<TypeConstructor, UnwrappedType>) : NewTypeSubstitutor {
     override fun substituteNotNullTypeWithConstructor(constructor: TypeConstructor): UnwrappedType? = map[constructor]
+
+    override val isEmpty: Boolean get() = map.isEmpty()
 }
 
 class FreshVariableNewTypeSubstitutor(val freshVariables: List<TypeVariableFromCallableDescriptor>) : NewTypeSubstitutor {
@@ -185,27 +214,46 @@ class FreshVariableNewTypeSubstitutor(val freshVariables: List<TypeVariableFromC
         return typeVariable.defaultType
     }
 
+    override val isEmpty: Boolean get() = freshVariables.isEmpty()
+
     companion object {
         val Empty = FreshVariableNewTypeSubstitutor(emptyList())
     }
 }
 
-fun createCompositeSubstitutor(appliedFirst: NewTypeSubstitutor, appliedLast: TypeSubstitutor): NewTypeSubstitutor {
-    if (appliedLast.isEmpty) return appliedFirst
+fun createCompositeSubstitutor(appliedFirst: TypeSubstitutor, appliedLast: NewTypeSubstitutor): NewTypeSubstitutor {
+    if (appliedFirst.isEmpty) return appliedLast
 
     return object : NewTypeSubstitutor {
-        override fun substituteNotNullTypeWithConstructor(constructor: TypeConstructor): UnwrappedType? {
-            val substitutedOnce = appliedFirst.substituteNotNullTypeWithConstructor(constructor)
+        override fun substituteArgumentProjection(argument: TypeProjection): TypeProjection? {
+            val substitutedProjection = appliedFirst.substitute(argument)
 
-            return if (substitutedOnce != null) {
-                appliedLast.substitute(substitutedOnce.unwrap())
+            if (substitutedProjection == null || substitutedProjection === argument) {
+                return null
+            }
+
+            if (substitutedProjection.isStarProjection)
+                return substitutedProjection
+
+            val resultingType = appliedLast.safeSubstitute(substitutedProjection.type.unwrap())
+            return TypeProjectionImpl(substitutedProjection.projectionKind, resultingType)
+        }
+
+        override fun substituteNotNullTypeWithConstructor(constructor: TypeConstructor): UnwrappedType? {
+            val substitutedOnce = constructor.declarationDescriptor?.defaultType?.let {
+                appliedFirst.substitute(it)
+            }
+
+            return if (substitutedOnce == null) {
+                appliedLast.substituteNotNullTypeWithConstructor(constructor)
             } else {
-                constructor.declarationDescriptor?.defaultType?.let {
-                    appliedLast.substitute(it)
-                }
+                appliedLast.safeSubstitute(substitutedOnce)
             }
         }
+
+        override val isEmpty: Boolean
+            get() = appliedFirst.isEmpty && appliedLast.isEmpty
     }
 }
 
-fun NewTypeSubstitutor.composeWith(appliedAfter: TypeSubstitutor) = createCompositeSubstitutor(this, appliedAfter)
+fun TypeSubstitutor.composeWith(appliedAfter: NewTypeSubstitutor) = createCompositeSubstitutor(this, appliedAfter)

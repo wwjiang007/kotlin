@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.quickfix
@@ -21,6 +10,8 @@ import com.intellij.openapi.project.Project
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.Errors
+import org.jetbrains.kotlin.idea.FrontendInternals
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.resolve.getResolutionFacade
 import org.jetbrains.kotlin.idea.core.quickfix.QuickFixUtil
 import org.jetbrains.kotlin.idea.intentions.SpecifyTypeExplicitlyIntention
@@ -33,23 +24,25 @@ import org.jetbrains.kotlin.types.isError
 import org.jetbrains.kotlin.types.refinement.TypeRefinement
 
 open class RemovePartsFromPropertyFix(
-        element: KtProperty,
-        private val removeInitializer: Boolean,
-        private val removeGetter: Boolean,
-        private val removeSetter: Boolean
+    element: KtProperty,
+    private val removeInitializer: Boolean,
+    private val removeGetter: Boolean,
+    private val removeSetter: Boolean
 ) : KotlinQuickFixAction<KtProperty>(element) {
 
     private constructor(element: KtProperty) : this(
-            element,
-            element.hasInitializer(),
-            element.getter?.bodyExpression != null,
-            element.setter?.bodyExpression != null
+        element,
+        element.hasInitializer(),
+        element.getter?.bodyExpression != null,
+        element.setter?.bodyExpression != null
     )
 
-    override fun getText(): String =
-            "Remove ${partsToRemove(removeGetter, removeSetter, removeInitializer)} from property"
+    override fun getText(): String = KotlinBundle.message(
+        "remove.0.from.property",
+        partsToRemove(removeGetter, removeSetter, removeInitializer)
+    )
 
-    override fun getFamilyName(): String = "Remove parts from property"
+    override fun getFamilyName(): String = KotlinBundle.message("remove.parts.from.property")
 
     override fun isAvailable(project: Project, editor: Editor?, file: KtFile): Boolean {
         val type = QuickFixUtil.getDeclarationReturnType(element) ?: return false
@@ -92,7 +85,8 @@ open class RemovePartsFromPropertyFix(
             // The ideal fix would be using a String that needs to be rendered instead of actual type
             //
             // But calling another type refinement also helps because it makes KotlinType instance using new module descriptor
-            @UseExperimental(TypeRefinement::class)
+            @OptIn(TypeRefinement::class)
+            @OptIn(FrontendInternals::class)
             typeToAdd = replaceElement.getResolutionFacade().frontendService<KotlinTypeRefiner>().refineType(typeToAdd)
 
             SpecifyTypeExplicitlyIntention.addTypeAnnotation(editor, replaceElement, typeToAdd)
@@ -101,17 +95,17 @@ open class RemovePartsFromPropertyFix(
 
     private fun partsToRemove(getter: Boolean, setter: Boolean, initializer: Boolean): String = buildString {
         if (getter) {
-            append("getter")
+            append(KotlinBundle.message("text.getter"))
             if (setter && initializer)
                 append(", ")
             else if (setter || initializer)
-                append(" and ")
+                append(" ${KotlinBundle.message("configuration.text.and")} ")
         }
         if (setter) {
-            append("setter")
-            if (initializer) append(" and ")
+            append(KotlinBundle.message("text.setter"))
+            if (initializer) append(" ${KotlinBundle.message("configuration.text.and")} ")
         }
-        if (initializer) append("initializer")
+        if (initializer) append(KotlinBundle.message("text.initializer"))
     }
 
     companion object : KotlinSingleIntentionActionFactory() {

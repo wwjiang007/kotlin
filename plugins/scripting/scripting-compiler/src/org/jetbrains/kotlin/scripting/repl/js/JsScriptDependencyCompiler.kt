@@ -8,17 +8,19 @@ package org.jetbrains.kotlin.scripting.repl.js
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
+import org.jetbrains.kotlin.config.languageVersionSettings
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.PackageFragmentProvider
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
+import org.jetbrains.kotlin.descriptors.konan.kotlinLibrary
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
 import org.jetbrains.kotlin.ir.backend.js.emptyLoggingContext
 import org.jetbrains.kotlin.ir.backend.js.generateJsCode
 import org.jetbrains.kotlin.ir.backend.js.lower.serialization.ir.JsIrLinker
-import org.jetbrains.kotlin.ir.backend.js.lower.serialization.ir.JsMangler
 import org.jetbrains.kotlin.ir.backend.js.utils.NameTables
 import org.jetbrains.kotlin.ir.declarations.impl.IrModuleFragmentImpl
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
+import org.jetbrains.kotlin.ir.descriptors.IrFunctionFactory
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.js.config.JSConfigurationKeys
 import org.jetbrains.kotlin.name.Name
@@ -46,13 +48,18 @@ class JsScriptDependencyCompiler(
         }
 
         val irBuiltIns = IrBuiltIns(builtIns, typeTranslator, symbolTable)
-        val jsLinker = JsIrLinker(moduleDescriptor, JsMangler, emptyLoggingContext, irBuiltIns, symbolTable)
+        val functionFactory = IrFunctionFactory(irBuiltIns, symbolTable)
+        irBuiltIns.functionFactory = functionFactory
+        val jsLinker = JsIrLinker(null, emptyLoggingContext, irBuiltIns, symbolTable, functionFactory, null)
 
-        val moduleFragment = IrModuleFragmentImpl(moduleDescriptor, irBuiltIns)
-        val irDependencies = dependencies.map { jsLinker.deserializeFullModule(it) }
-        val irProviders = generateTypicalIrProviderList(moduleDescriptor, irBuiltIns, symbolTable, deserializer = jsLinker)
+        val irDependencies = dependencies.map { jsLinker.deserializeFullModule(it, it.kotlinLibrary) }
+        val moduleFragment = irDependencies.last()
+        val irProviders = listOf(jsLinker)
 
-        ExternalDependenciesGenerator(symbolTable, irProviders).generateUnboundSymbolsAsDependencies()
+        jsLinker.init(null, emptyList())
+
+        ExternalDependenciesGenerator(symbolTable, irProviders, configuration.languageVersionSettings)
+            .generateUnboundSymbolsAsDependencies()
         moduleFragment.patchDeclarationParents()
 
         val backendContext = JsIrBackendContext(
@@ -65,10 +72,12 @@ class JsScriptDependencyCompiler(
             true
         )
 
-        ExternalDependenciesGenerator(symbolTable, irProviders).generateUnboundSymbolsAsDependencies()
+        ExternalDependenciesGenerator(symbolTable, irProviders, configuration.languageVersionSettings)
+            .generateUnboundSymbolsAsDependencies()
         moduleFragment.patchDeclarationParents()
+        jsLinker.postProcess()
 
-        moduleFragment.files += irDependencies.flatMap { it.files }
+        moduleFragment.files += irDependencies.filter { it !== moduleFragment }.flatMap { it.files }
 
         configuration.put(JSConfigurationKeys.MODULE_KIND, ModuleKind.PLAIN)
 

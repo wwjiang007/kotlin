@@ -1,9 +1,9 @@
 // !DIAGNOSTICS: -UNUSED_PARAMETER
-// !USE_EXPERIMENTAL: kotlin.Experimental
+// !USE_EXPERIMENTAL: kotlin.RequiresOptIn
 // !WITH_NEW_INFERENCE
 // NI_EXPECTED_FILE
 
-@file:UseExperimental(ExperimentalTypeInference::class)
+@file:OptIn(ExperimentalTypeInference::class)
 
 import kotlin.experimental.ExperimentalTypeInference
 
@@ -53,7 +53,7 @@ val test6 = <!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>generate<!> {
 }
 
 val test7 = <!OI;TYPE_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>generate<!> {
-    yield("baz")
+    yield(<!NI;TYPE_MISMATCH!>"baz"<!>)
     genericExtension<Int>()
 }
 

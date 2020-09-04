@@ -1,43 +1,35 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.test
 
-import com.intellij.ide.startup.impl.StartupManagerImpl
-import com.intellij.openapi.startup.StartupManager
 import com.intellij.openapi.vfs.newvfs.impl.VfsRootAccess
 import com.intellij.testFramework.fixtures.LightPlatformCodeInsightFixtureTestCase
+import com.intellij.util.ThrowableRunnable
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.TestMetadata
 import java.io.File
 import kotlin.reflect.full.findAnnotation
 
-abstract class KotlinLightPlatformCodeInsightFixtureTestCase: LightPlatformCodeInsightFixtureTestCase() {
+abstract class KotlinLightPlatformCodeInsightFixtureTestCase : LightPlatformCodeInsightFixtureTestCase() {
+    protected open fun isFirPlugin(): Boolean = false
     override fun setUp() {
         super.setUp()
-        (StartupManager.getInstance(project) as StartupManagerImpl).runPostStartupActivities()
+        enableKotlinOfficialCodeStyle(project)
+        runPostStartupActivitiesOnce(project)
         VfsRootAccess.allowRootAccess(KotlinTestUtils.getHomeDirectory())
-        invalidateLibraryCache(project)
+        if (!isFirPlugin()) {
+            invalidateLibraryCache(project)
+        }
     }
 
-    override fun tearDown() {
-        VfsRootAccess.disallowRootAccess(KotlinTestUtils.getHomeDirectory())
-
-        super.tearDown()
-    }
+    override fun tearDown() = runAll(
+        ThrowableRunnable { disableKotlinOfficialCodeStyle(project) },
+        ThrowableRunnable { VfsRootAccess.disallowRootAccess(KotlinTestUtils.getHomeDirectory()) },
+        ThrowableRunnable { super.tearDown() },
+    )
 
     protected fun testDataFile(fileName: String): File = File(testDataPath, fileName)
 

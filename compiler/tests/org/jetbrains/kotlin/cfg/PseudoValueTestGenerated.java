@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -27,7 +27,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
         }
 
         public void testAllFilesPresentInCfg() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg"), Pattern.compile("^(.+)\\.kt$"), null, true);
         }
 
         @TestMetadata("compiler/testData/cfg/arrays")
@@ -39,7 +39,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInArrays() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/arrays"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/arrays"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("ArrayAccess.kt")
@@ -102,7 +102,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInBasic() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/basic"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/basic"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("Basic.kt")
@@ -130,7 +130,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInBugs() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/bugs"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/bugs"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("functionalCallInEnumEntry.kt")
@@ -146,6 +146,11 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             @TestMetadata("kt10105.kt")
             public void testKt10105() throws Exception {
                 runTest("compiler/testData/cfg/bugs/kt10105.kt");
+            }
+
+            @TestMetadata("kt37447.kt")
+            public void testKt37447() throws Exception {
+                runTest("compiler/testData/cfg/bugs/kt37447.kt");
             }
 
             @TestMetadata("kt7761.kt")
@@ -173,7 +178,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInControlStructures() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/controlStructures"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/controlStructures"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("breakContinueInTryFinally.kt")
@@ -276,7 +281,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInConventions() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/conventions"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/conventions"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("bothReceivers.kt")
@@ -314,7 +319,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInDeadCode() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/deadCode"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/deadCode"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("DeadCode.kt")
@@ -357,7 +362,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInDeclarations() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/declarations"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/declarations"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("compiler/testData/cfg/declarations/classesAndObjects")
@@ -369,7 +374,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
                 }
 
                 public void testAllFilesPresentInClassesAndObjects() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/declarations/classesAndObjects"), Pattern.compile("^(.+)\\.kt$"), true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/declarations/classesAndObjects"), Pattern.compile("^(.+)\\.kt$"), null, true);
                 }
 
                 @TestMetadata("AnonymousInitializers.kt")
@@ -412,7 +417,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
                 }
 
                 public void testAllFilesPresentInFunctionLiterals() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/declarations/functionLiterals"), Pattern.compile("^(.+)\\.kt$"), true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/declarations/functionLiterals"), Pattern.compile("^(.+)\\.kt$"), null, true);
                 }
 
                 @TestMetadata("unusedFunctionLiteral.kt")
@@ -430,7 +435,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
                 }
 
                 public void testAllFilesPresentInFunctions() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/declarations/functions"), Pattern.compile("^(.+)\\.kt$"), true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/declarations/functions"), Pattern.compile("^(.+)\\.kt$"), null, true);
                 }
 
                 @TestMetadata("anonymousFunctionInBlock.kt")
@@ -468,7 +473,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
                 }
 
                 public void testAllFilesPresentInLocal() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/declarations/local"), Pattern.compile("^(.+)\\.kt$"), true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/declarations/local"), Pattern.compile("^(.+)\\.kt$"), null, true);
                 }
 
                 @TestMetadata("localClass.kt")
@@ -511,7 +516,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
                 }
 
                 public void testAllFilesPresentInMultiDeclaration() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/declarations/multiDeclaration"), Pattern.compile("^(.+)\\.kt$"), true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/declarations/multiDeclaration"), Pattern.compile("^(.+)\\.kt$"), null, true);
                 }
 
                 @TestMetadata("MultiDecl.kt")
@@ -534,7 +539,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
                 }
 
                 public void testAllFilesPresentInProperties() throws Exception {
-                    KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/declarations/properties"), Pattern.compile("^(.+)\\.kt$"), true);
+                    KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/declarations/properties"), Pattern.compile("^(.+)\\.kt$"), null, true);
                 }
 
                 @TestMetadata("DelegatedProperty.kt")
@@ -558,7 +563,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInExpressions() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/expressions"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/expressions"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("assignmentToThis.kt")
@@ -686,7 +691,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInFunctions() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/functions"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/functions"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("DefaultValuesForArguments.kt")
@@ -709,7 +714,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInSecondaryConstructors() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/secondaryConstructors"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/secondaryConstructors"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("withPrimary.kt")
@@ -747,7 +752,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInTailCalls() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg/tailCalls"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg/tailCalls"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("finally.kt")
@@ -786,7 +791,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
         }
 
         public void testAllFilesPresentInCfgWithStdLib() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfgWithStdLib"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfgWithStdLib"), Pattern.compile("^(.+)\\.kt$"), null, true);
         }
 
         @TestMetadata("compiler/testData/cfgWithStdLib/contracts")
@@ -798,7 +803,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInContracts() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfgWithStdLib/contracts"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfgWithStdLib/contracts"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("labeledReturns.kt")
@@ -842,7 +847,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
         }
 
         public void testAllFilesPresentInCfg_variables() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg-variables"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg-variables"), Pattern.compile("^(.+)\\.kt$"), null, true);
         }
 
         @TestMetadata("compiler/testData/cfg-variables/basic")
@@ -854,7 +859,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInBasic() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg-variables/basic"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg-variables/basic"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("ExhaustiveInitialization.kt")
@@ -902,7 +907,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInBugs() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg-variables/bugs"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg-variables/bugs"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("doWhileAssignment.kt")
@@ -970,7 +975,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInLexicalScopes() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfg-variables/lexicalScopes"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfg-variables/lexicalScopes"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("doWhileScope.kt")
@@ -1044,7 +1049,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
         }
 
         public void testAllFilesPresentInCfgVariablesWithStdLib() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfgVariablesWithStdLib"), Pattern.compile("^(.+)\\.kt$"), true);
+            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfgVariablesWithStdLib"), Pattern.compile("^(.+)\\.kt$"), null, true);
         }
 
         @TestMetadata("compiler/testData/cfgVariablesWithStdLib/contracts")
@@ -1056,7 +1061,7 @@ public class PseudoValueTestGenerated extends AbstractPseudoValueTest {
             }
 
             public void testAllFilesPresentInContracts() throws Exception {
-                KotlinTestUtils.assertAllTestsPresentByMetadata(this.getClass(), new File("compiler/testData/cfgVariablesWithStdLib/contracts"), Pattern.compile("^(.+)\\.kt$"), true);
+                KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("compiler/testData/cfgVariablesWithStdLib/contracts"), Pattern.compile("^(.+)\\.kt$"), null, true);
             }
 
             @TestMetadata("breakContinuesInInlinedLambda.kt")

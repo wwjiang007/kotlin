@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.inspections.branchedTransformations
@@ -20,6 +9,8 @@ import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiDocumentManager
+import org.jetbrains.kotlin.diagnostics.Errors
+import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.core.replaced
 import org.jetbrains.kotlin.idea.imports.importableFqName
 import org.jetbrains.kotlin.idea.inspections.AbstractApplicabilityBasedInspection
@@ -34,25 +25,26 @@ import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.bindingContextUtil.isUsedAsExpression
 import org.jetbrains.kotlin.resolve.calls.callUtil.getType
 
-class IfThenToSafeAccessInspection : AbstractApplicabilityBasedInspection<KtIfExpression>(KtIfExpression::class.java) {
+class IfThenToSafeAccessInspection @JvmOverloads constructor(private val inlineWithPrompt: Boolean = true) :
+    AbstractApplicabilityBasedInspection<KtIfExpression>(KtIfExpression::class.java) {
 
     override fun isApplicable(element: KtIfExpression): Boolean = isApplicableTo(element, expressionShouldBeStable = true)
 
     override fun inspectionHighlightRangeInElement(element: KtIfExpression) = element.fromIfKeywordToRightParenthesisTextRangeInThis()
 
-    override fun inspectionText(element: KtIfExpression) = "Foldable if-then"
+    override fun inspectionText(element: KtIfExpression) = KotlinBundle.message("foldable.if.then")
 
     override fun inspectionHighlightType(element: KtIfExpression): ProblemHighlightType =
         if (element.shouldBeTransformed()) ProblemHighlightType.GENERIC_ERROR_OR_WARNING else ProblemHighlightType.INFORMATION
 
-    override val defaultFixText = "Simplify foldable if-then"
+    override val defaultFixText get() = KotlinBundle.message("simplify.foldable.if.then")
 
     override fun fixText(element: KtIfExpression): String = fixTextFor(element)
 
     override val startFixInWriteAction = false
 
     override fun applyTo(element: KtIfExpression, project: Project, editor: Editor?) {
-        convert(element, editor)
+        convert(element, editor, inlineWithPrompt)
     }
 
     companion object {
@@ -60,16 +52,16 @@ class IfThenToSafeAccessInspection : AbstractApplicabilityBasedInspection<KtIfEx
             val ifThenToSelectData = element.buildSelectTransformationData()
             return if (ifThenToSelectData?.baseClauseEvaluatesToReceiver() == true) {
                 if (ifThenToSelectData.condition is KtIsExpression) {
-                    "Replace 'if' expression with safe cast expression"
+                    KotlinBundle.message("replace.if.expression.with.safe.cast.expression")
                 } else {
-                    "Remove redundant 'if' expression"
+                    KotlinBundle.message("remove.redundant.if.expression")
                 }
             } else {
-                "Replace 'if' expression with safe access expression"
+                KotlinBundle.message("replace.if.expression.with.safe.access.expression")
             }
         }
 
-        fun convert(ifExpression: KtIfExpression, editor: Editor?) {
+        fun convert(ifExpression: KtIfExpression, editor: Editor?, inlineWithPrompt: Boolean) {
             val ifThenToSelectData = ifExpression.buildSelectTransformationData() ?: return
 
             val factory = KtPsiFactory(ifExpression)
@@ -80,14 +72,16 @@ class IfThenToSafeAccessInspection : AbstractApplicabilityBasedInspection<KtIfEx
             }
 
             if (editor != null && resultExpr is KtSafeQualifiedExpression) {
-                resultExpr.inlineReceiverIfApplicableWithPrompt(editor)
+                resultExpr.inlineReceiverIfApplicable(editor, inlineWithPrompt)
                 resultExpr.renameLetParameter(editor)
             }
         }
 
         fun isApplicableTo(element: KtIfExpression, expressionShouldBeStable: Boolean): Boolean {
             val ifThenToSelectData = element.buildSelectTransformationData() ?: return false
-            if (expressionShouldBeStable && !ifThenToSelectData.receiverExpression.isStableSimpleExpression(ifThenToSelectData.context)) return false
+            if (expressionShouldBeStable &&
+                !ifThenToSelectData.receiverExpression.isStableSimpleExpression(ifThenToSelectData.context)
+            ) return false
 
             return ifThenToSelectData.clausesReplaceableBySafeCall()
         }
@@ -107,6 +101,8 @@ private fun IfThenToSelectData.clausesReplaceableBySafeCall(): Boolean = when {
     baseClause == null -> false
     negatedClause == null && baseClause.isUsedAsExpression(context) -> false
     negatedClause != null && !negatedClause.isNullExpression() -> false
+    context.diagnostics.forElement(condition)
+        .any { it.factory == Errors.SENSELESS_COMPARISON || it.factory == Errors.USELESS_IS_CHECK } -> false
     baseClause.evaluatesTo(receiverExpression) -> true
     baseClause.hasFirstReceiverOf(receiverExpression) -> withoutResultInCallChain(baseClause, context)
     baseClause.anyArgumentEvaluatesTo(receiverExpression) -> true

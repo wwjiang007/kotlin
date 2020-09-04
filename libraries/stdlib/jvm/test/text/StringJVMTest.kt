@@ -1,11 +1,12 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package test.text
 
 import test.collections.assertArrayNotSameButEquals
+import test.platformNull
 import java.util.*
 import kotlin.test.*
 
@@ -41,9 +42,14 @@ class StringJVMTest {
         assertEquals("1,234,567.890", "%,.3f".format(Locale.ENGLISH, 1234567.890))
         assertEquals("1.234.567,890", "%,.3f".format(Locale.GERMAN,  1234567.890))
         assertEquals("1 234 567,890", "%,.3f".format(Locale("fr"),   1234567.890))
+        assertEquals("1,234,567.890", "%,.3f".format(null,           1234567.890))
+        assertEquals("1,234,567.890", "%,.3f".format(platformNull<Locale>(), 1234567.890))
+
         assertEquals("1,234,567.890", String.format(Locale.ENGLISH, "%,.3f", 1234567.890))
         assertEquals("1.234.567,890", String.format(Locale.GERMAN,  "%,.3f", 1234567.890))
         assertEquals("1 234 567,890", String.format(Locale("fr"),   "%,.3f", 1234567.890))
+        assertEquals("1,234,567.890", String.format(null,           "%,.3f", 1234567.890))
+        assertEquals("1,234,567.890", String.format(platformNull<Locale>(), "%,.3f", 1234567.890))
     }
 
     @Test fun toByteArrayEncodings() {
@@ -66,6 +72,25 @@ class StringJVMTest {
         assertEquals("UTF-32", Charsets.UTF_32.name())
         assertEquals("UTF-32LE", Charsets.UTF_32LE.name())
         assertEquals("UTF-32BE", Charsets.UTF_32BE.name())
+    }
+
+    @Test fun capitalize() {
+        // Case mapping that results in multiple characters (validating Character.toUpperCase was not used).
+        assertEquals("SSßß", "ßßß".capitalize())
+
+        // Case mapping where title case is different than uppercase and so Character.toTitleCase is preferred.
+        assertEquals("ǲǳǳ", "ǳǳǳ".capitalize())
+        assertEquals("ǱǱǱ", "ǱǱǱ".capitalize())
+    }
+
+    @Test fun decapitalize() {
+        assertEquals("aBC", "ABC".decapitalize())
+        assertEquals("abc", "Abc".decapitalize())
+        assertEquals("abc", "abc".decapitalize())
+
+        // Case mapping where title case is different than uppercase.
+        assertEquals("ǳǳǳ", "Ǳǳǳ".decapitalize())
+        assertEquals("ǳǳǳ", "ǲǳǳ".decapitalize())
     }
 
     @Test fun capitalizeLocale() {
@@ -97,5 +122,20 @@ class StringJVMTest {
         // Case mapping where title case is different than uppercase.
         assertEquals("ǳǳǳ", "Ǳǳǳ".decapitalize(Locale.US))
         assertEquals("ǳǳǳ", "ǲǳǳ".decapitalize(Locale.US))
+    }
+
+    @Test
+    fun stringToBoolean() {
+        assertFalse(platformNull<String>().toBoolean())
+    }
+
+    @Test
+    fun stringEquals() {
+        assertFalse(platformNull<String>().equals("sample", ignoreCase = false))
+        assertFalse(platformNull<String>().equals("sample", ignoreCase = true))
+        assertFalse("sample".equals(platformNull<String>(), ignoreCase = false))
+        assertFalse("sample".equals(platformNull(), ignoreCase = true))
+        assertTrue(platformNull<String>().equals(platformNull(), ignoreCase = true))
+        assertTrue(platformNull<String>().equals(platformNull<String>(), ignoreCase = false))
     }
 }

@@ -1,4 +1,4 @@
-// IGNORE_BACKEND_FIR: JVM_IR
+// !LANGUAGE: -ProhibitProtectedCallFromInline
 // TARGET_BACKEND: JVM
 
 // FILE: JavaClass.java

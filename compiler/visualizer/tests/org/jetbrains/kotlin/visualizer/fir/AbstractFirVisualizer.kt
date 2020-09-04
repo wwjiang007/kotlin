@@ -16,8 +16,8 @@ import org.jetbrains.kotlin.fir.builder.RawFirBuilder
 import org.jetbrains.kotlin.fir.createSession
 import org.jetbrains.kotlin.fir.render
 import org.jetbrains.kotlin.fir.resolve.firProvider
-import org.jetbrains.kotlin.fir.resolve.impl.FirProviderImpl
-import org.jetbrains.kotlin.fir.resolve.transformers.FirTotalResolveTransformer
+import org.jetbrains.kotlin.fir.resolve.providers.impl.FirProviderImpl
+import org.jetbrains.kotlin.fir.resolve.transformers.FirTotalResolveProcessor
 import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.visualizer.AbstractVisualizer
 import org.junit.Assert
@@ -34,16 +34,17 @@ abstract class AbstractFirVisualizer : AbstractVisualizer() {
             .uniteWith(TopDownAnalyzerFacadeForJVM.AllJavaSourcesInProjectScope(environment.project))
         val session = createSession(environment, scope)
 
-        val builder = RawFirBuilder(session, stubMode = false)
+        val firProvider = (session.firProvider as FirProviderImpl)
+        val builder = RawFirBuilder(session, firProvider.kotlinScopeProvider, stubMode = false)
 
-        val transformer = FirTotalResolveTransformer()
+        val transformer = FirTotalResolveProcessor(session)
         val firFiles = ktFiles.map {
             val firFile = builder.buildFirFile(it)
-            (session.firProvider as FirProviderImpl).recordFile(firFile)
+            firProvider.recordFile(firFile)
             firFile
         }.also {
             try {
-                transformer.processFiles(it)
+                transformer.process(it)
             } catch (e: Exception) {
                 it.forEach { println(it.render()) }
                 throw e

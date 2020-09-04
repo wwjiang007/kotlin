@@ -1,17 +1,6 @@
 /*
- * Copyright 2010-2015 JetBrains s.r.o.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.idea.core.overrideImplement
@@ -19,6 +8,7 @@ package org.jetbrains.kotlin.idea.core.overrideImplement
 import com.intellij.openapi.project.Project
 import com.intellij.util.SmartList
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.idea.core.util.KotlinIdeaCoreBundle
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import java.util.*
@@ -29,13 +19,13 @@ class OverrideMembersHandler(private val preferConstructorParameters: Boolean = 
         for (member in descriptor.unsubstitutedMemberScope.getContributedDescriptors()) {
             if (member is CallableMemberDescriptor && (member.kind != CallableMemberDescriptor.Kind.DECLARATION)) {
                 val overridden = member.overriddenDescriptors
-                if (overridden.any { it.modality == Modality.FINAL || Visibilities.isPrivate(it.visibility.normalize()) }) continue
+                if (overridden.any { it.modality == Modality.FINAL || DescriptorVisibilities.isPrivate(it.visibility.normalize()) }) continue
 
                 if (DescriptorUtils.isInterface(descriptor) && overridden.any { descriptor.builtIns.isMemberOfAny(it) }) continue
 
                 class Data(
-                        val realSuper: CallableMemberDescriptor,
-                        val immediateSupers: MutableList<CallableMemberDescriptor> = SmartList()
+                    val realSuper: CallableMemberDescriptor,
+                    val immediateSupers: MutableList<CallableMemberDescriptor> = SmartList()
                 )
 
                 val byOriginalRealSupers = LinkedHashMap<CallableMemberDescriptor, Data>()
@@ -49,8 +39,7 @@ class OverrideMembersHandler(private val preferConstructorParameters: Boolean = 
                 val nonAbstractRealSupers = realSupers.filter { it.modality != Modality.ABSTRACT }
                 val realSupersToUse = if (nonAbstractRealSupers.isNotEmpty()) {
                     nonAbstractRealSupers
-                }
-                else {
+                } else {
                     listOf(realSupers.firstOrNull() ?: continue)
                 }
 
@@ -60,9 +49,9 @@ class OverrideMembersHandler(private val preferConstructorParameters: Boolean = 
 
                     val immediateSuperToUse = if (immediateSupers.size == 1) {
                         immediateSupers.single()
-                    }
-                    else {
-                        immediateSupers.singleOrNull { (it.containingDeclaration as? ClassDescriptor)?.kind == ClassKind.CLASS } ?: immediateSupers.first()
+                    } else {
+                        immediateSupers.singleOrNull { (it.containingDeclaration as? ClassDescriptor)?.kind == ClassKind.CLASS }
+                            ?: immediateSupers.first()
                     }
 
                     val bodyType = when {
@@ -76,7 +65,15 @@ class OverrideMembersHandler(private val preferConstructorParameters: Boolean = 
                             OverrideMemberChooserObject.BodyType.QUALIFIED_SUPER
                     }
 
-                    result.add(OverrideMemberChooserObject.create(project, realSuper, immediateSuperToUse, bodyType, preferConstructorParameters))
+                    result.add(
+                        OverrideMemberChooserObject.create(
+                            project,
+                            realSuper,
+                            immediateSuperToUse,
+                            bodyType,
+                            preferConstructorParameters
+                        )
+                    )
                 }
             }
         }
@@ -92,7 +89,7 @@ class OverrideMembersHandler(private val preferConstructorParameters: Boolean = 
         return overridden.flatMap { toRealSupers(it) }.distinctBy { it.original }
     }
 
-    override fun getChooserTitle() = "Override Members"
+    override fun getChooserTitle() = KotlinIdeaCoreBundle.message("override.members.handler.title")
 
-    override fun getNoMembersFoundHint() = "No members to override have been found"
+    override fun getNoMembersFoundHint() = KotlinIdeaCoreBundle.message("override.members.handler.no.members.hint")
 }

@@ -7,36 +7,33 @@ package org.jetbrains.kotlin.fir.scopes.impl
 
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.scopes.FirScope
-import org.jetbrains.kotlin.fir.scopes.ProcessorAction
-import org.jetbrains.kotlin.fir.scopes.ProcessorAction.NEXT
-import org.jetbrains.kotlin.fir.scopes.ProcessorAction.STOP
-import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
+import org.jetbrains.kotlin.fir.scopes.FirTypeScope
+import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirVariableSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.isStatic
 import org.jetbrains.kotlin.name.Name
 
 class FirClassUseSiteMemberScope(
     session: FirSession,
-    superTypesScope: FirSuperTypeScope,
+    superTypesScope: FirTypeScope,
     declaredMemberScope: FirScope
 ) : AbstractFirUseSiteMemberScope(session, FirStandardOverrideChecker(session), superTypesScope, declaredMemberScope) {
 
-    override fun processPropertiesByName(name: Name, processor: (FirCallableSymbol<*>) -> ProcessorAction): ProcessorAction {
-        val seen = mutableSetOf<FirCallableSymbol<*>>()
-        if (!declaredMemberScope.processPropertiesByName(name) {
-                seen += it
-                processor(it)
-            }
-        ) return STOP
+    override fun processPropertiesByName(name: Name, processor: (FirVariableSymbol<*>) -> Unit) {
+        val seen = mutableSetOf<FirVariableSymbol<*>>()
+        declaredMemberScope.processPropertiesByName(name) l@{
+            if (it.isStatic) return@l
+            seen += it
+            processor(it)
+        }
 
-        return superTypesScope.processPropertiesByName(name) {
-
+        superTypesScope.processPropertiesByName(name) {
             val overriddenBy = it.getOverridden(seen)
             if (overriddenBy == null) {
                 processor(it)
-            } else {
-                NEXT
+            } else if (overriddenBy is FirPropertySymbol && it is FirPropertySymbol) {
+                directOverriddenProperties.getOrPut(overriddenBy) { mutableListOf() }.add(it)
             }
         }
     }
 }
-
-

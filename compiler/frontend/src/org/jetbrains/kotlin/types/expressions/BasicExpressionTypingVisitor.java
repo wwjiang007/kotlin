@@ -17,7 +17,6 @@
 package org.jetbrains.kotlin.types.expressions;
 
 import com.google.common.collect.Lists;
-import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.StubBasedPsiElement;
 import com.intellij.psi.tree.IElementType;
@@ -39,6 +38,7 @@ import org.jetbrains.kotlin.incremental.KotlinLookupLocation;
 import org.jetbrains.kotlin.lexer.KtKeywordToken;
 import org.jetbrains.kotlin.lexer.KtTokens;
 import org.jetbrains.kotlin.name.Name;
+import org.jetbrains.kotlin.parsing.ParseUtilsKt;
 import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.psi.psiUtil.PsiUtilsKt;
 import org.jetbrains.kotlin.psi.psiUtil.ReservedCheckingKt;
@@ -75,12 +75,9 @@ import org.jetbrains.kotlin.types.expressions.typeInfoFactory.TypeInfoFactoryKt;
 import org.jetbrains.kotlin.types.expressions.unqualifiedSuper.UnqualifiedSuperKt;
 import org.jetbrains.kotlin.util.OperatorNameConventions;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.jetbrains.kotlin.diagnostics.Errors.*;
 import static org.jetbrains.kotlin.lexer.KtTokens.*;
@@ -237,8 +234,6 @@ public class BasicExpressionTypingVisitor extends ExpressionTypingVisitor {
         return components.dataFlowAnalyzer.createCompileTimeConstantTypeInfo(compileTimeConstant, expression, context);
     }
 
-    private static final Pattern FP_LITERAL_PARTS = Pattern.compile("(?:([_\\d]*)\\.?([_\\d]*)e?[+-]?([_\\d]*))[f]?");
-
     private void checkUnderscores(
             @NotNull KtConstantExpression expression,
             @NotNull IElementType elementType,
@@ -254,30 +249,8 @@ public class BasicExpressionTypingVisitor extends ExpressionTypingVisitor {
             return;
         }
 
-        List<String> parts;
-
-        if (elementType == KtNodeTypes.INTEGER_CONSTANT) {
-            int start = 0;
-            int end = expression.getText().length();
-            if (text.startsWith("0x") || text.startsWith("0b")) start += 2;
-            if (StringUtil.endsWithChar(text, 'l')) --end;
-            parts = Collections.singletonList(text.substring(start, end));
-        }
-        else {
-            Matcher matcher = FP_LITERAL_PARTS.matcher(text);
-            parts = new ArrayList<>();
-            if (matcher.matches()) {
-                for (int i = 0; i < matcher.groupCount(); i++) {
-                    parts.add(matcher.group(i + 1));
-                }
-            }
-        }
-
-        for (String part : parts) {
-            if (part != null && (part.startsWith("_") || part.endsWith("_"))) {
-                context.trace.report(Errors.ILLEGAL_UNDERSCORE.on(expression));
-                return;
-            }
+        if (ParseUtilsKt.hasIllegalUnderscore(expression.getText(), elementType)) {
+            context.trace.report(Errors.ILLEGAL_UNDERSCORE.on(expression));
         }
     }
 
@@ -387,7 +360,7 @@ public class BasicExpressionTypingVisitor extends ExpressionTypingVisitor {
             return;
         }
 
-        if (!CastDiagnosticsUtil.isCastPossible(actualType, targetType, components.platformToKotlinClassMap)) {
+        if (!CastDiagnosticsUtil.isCastPossible(actualType, targetType, components.platformToKotlinClassMapper)) {
             context.trace.report(CAST_NEVER_SUCCEEDS.on(expression.getOperationReference()));
             return;
         }
@@ -956,7 +929,7 @@ public class BasicExpressionTypingVisitor extends ExpressionTypingVisitor {
             IElementType operationType = operationExpression.getOperationReference().getReferencedNameElementType();
             if (KtTokens.AUGMENTED_ASSIGNMENTS.contains(operationType)
                     || operationType == KtTokens.PLUSPLUS || operationType == KtTokens.MINUSMINUS) {
-                ResolvedCall<?> resolvedCall = traceWithIndexedLValue.get(INDEXED_LVALUE_SET, expression);
+                ResolvedCall<FunctionDescriptor> resolvedCall = traceWithIndexedLValue.get(INDEXED_LVALUE_SET, expression);
                 if (resolvedCall != null && trace.wantsDiagnostics()) {
                     // Call must be validated with the actual, not temporary trace in order to report operator diagnostic
                     // Only unary assignment expressions (++, --) and +=/... must be checked, normal assignments have the proper trace
@@ -970,6 +943,10 @@ public class BasicExpressionTypingVisitor extends ExpressionTypingVisitor {
                             );
                     for (CallChecker checker : components.callCheckers) {
                         checker.check(resolvedCall, expression, callCheckerContext);
+                    }
+                    // Should make sure resolved call for 'set' operator is recorded, see KT-36956.
+                    if (trace.get(INDEXED_LVALUE_SET, expression) == null) {
+                        trace.record(INDEXED_LVALUE_SET, expression, resolvedCall);
                     }
                 }
             }
@@ -1402,9 +1379,14 @@ public class BasicExpressionTypingVisitor extends ExpressionTypingVisitor {
         ExpressionReceiver receiver = safeGetExpressionReceiver(facade, right, contextWithNoExpectedType);
         ExpressionTypingContext contextWithDataFlow = context.replaceDataFlowInfo(dataFlowInfo);
 
+        Call containsCall = CallMaker.makeCall(
+                callElement, receiver, null, operationSign,
+                Collections.singletonList(leftArgument), Call.CallType.CONTAINS
+        );
+
         OverloadResolutionResults<FunctionDescriptor> resolutionResult = components.callResolver.resolveCallWithGivenName(
                 contextWithDataFlow,
-                CallMaker.makeCall(callElement, receiver, null, operationSign, Collections.singletonList(leftArgument)),
+                containsCall,
                 operationSign,
                 OperatorNameConventions.CONTAINS);
         KotlinType containsType = OverloadResolutionResultsUtil.getResultingType(resolutionResult, context);
@@ -1761,8 +1743,13 @@ public class BasicExpressionTypingVisitor extends ExpressionTypingVisitor {
             traceForResolveResult.report(isGet ? NO_GET_METHOD.on(arrayAccessExpression) : NO_SET_METHOD.on(arrayAccessExpression));
             return resultTypeInfo.clearType();
         }
-        traceForResolveResult.record(isGet ? INDEXED_LVALUE_GET : INDEXED_LVALUE_SET, arrayAccessExpression,
-                                     functionResults.getResultingCall());
+
+        if (isGet) {
+            traceForResolveResult.record(INDEXED_LVALUE_GET, arrayAccessExpression, functionResults.getResultingCall());
+        } else {
+            traceForResolveResult.record(INDEXED_LVALUE_SET, arrayAccessExpression, functionResults.getResultingCall());
+        }
+
         return resultTypeInfo.replaceType(functionResults.getResultingDescriptor().getReturnType());
     }
 

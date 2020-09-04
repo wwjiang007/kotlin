@@ -37,6 +37,13 @@ internal class KlibMetadataExtensions : MetadataExtensions {
         proto.getExtensionOrNull(KlibMetadataProtoBuf.classFile)?.let {
             extension.visitFile(c.getSourceFile(it))
         }
+        proto.enumEntryList.forEach { entryProto ->
+            val ordinal = entryProto.getExtensionOrNull(KlibMetadataProtoBuf.enumEntryOrdinal)
+            val name = c[entryProto.name]
+            val uniqId = entryProto.getExtensionOrNull(KlibMetadataProtoBuf.enumEntryUniqId)?.readUniqId()
+            val annotations = entryProto.getExtension(KlibMetadataProtoBuf.enumEntryAnnotation).map { it.readAnnotation(c.strings) }
+            extension.visitEnumEntry(KlibEnumEntry(name, uniqId, ordinal, annotations.toMutableList()))
+        }
     }
 
     override fun readPackageExtensions(v: KmPackageVisitor, proto: ProtoBuf.Package, c: ReadContext) {
@@ -162,6 +169,25 @@ internal class KlibMetadataExtensions : MetadataExtensions {
             override fun visitFile(file: KlibSourceFile) {
                 val fileIdx = c.getIndexOf(file)
                 proto.setExtension(KlibMetadataProtoBuf.classFile, fileIdx)
+            }
+
+            override fun visitEnumEntry(entry: KlibEnumEntry) {
+                val entryIndex = proto.enumEntryList.indexOfFirst { it.name == c[entry.name] }
+                val entryAnnotationsProto = entry.annotations.map { it.writeAnnotation(c.strings).build() }
+                val entryProto = ProtoBuf.EnumEntry.newBuilder()
+                    .setName(c[entry.name])
+                    .setExtension(KlibMetadataProtoBuf.enumEntryAnnotation, entryAnnotationsProto)
+                entry.uniqId?.let { uniqId ->
+                    entryProto.setExtension(KlibMetadataProtoBuf.enumEntryUniqId, uniqId.writeUniqId().build())
+                }
+                entry.ordinal?.let { ordinal ->
+                    entryProto.setExtension(KlibMetadataProtoBuf.enumEntryOrdinal, ordinal)
+                }
+                if (entryIndex == -1) {
+                    proto.addEnumEntry(entryProto.build())
+                } else {
+                    proto.setEnumEntry(entryIndex, entryProto.build())
+                }
             }
         }
     }

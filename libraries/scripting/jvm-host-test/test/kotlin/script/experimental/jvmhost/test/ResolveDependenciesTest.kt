@@ -13,6 +13,7 @@ import kotlin.script.experimental.host.toScriptSource
 import kotlin.script.experimental.jvm.*
 import kotlin.script.experimental.jvm.util.classpathFromClass
 import kotlin.script.experimental.jvmhost.BasicJvmScriptingHost
+import kotlin.script.experimental.jvmhost.test.ReplTest.Companion.checkEvaluateInRepl
 
 class ResolveDependenciesTest : TestCase() {
 
@@ -60,15 +61,15 @@ class ResolveDependenciesTest : TestCase() {
 
     @Test
     fun testReplResolveFunAndValFromClassloader() {
-        chechEvaluateInRepl(
-            configurationWithDependenciesFromClassloader, null,
-            sequenceOf(funAndValAccessScriptText, funAndValAccessScriptText),
-            sequenceOf(42, 42)
+        checkEvaluateInRepl(
+            sequenceOf(funAndValAccessScriptText, funAndValAccessScriptText), sequenceOf(42, 42),
+            configurationWithDependenciesFromClassloader,
+            null
         )
-        chechEvaluateInRepl(
-            configurationWithDependenciesFromClassloader, null,
-            funAndValImportScriptText.split('\n').asSequence(),
-            sequenceOf(null, null, 42)
+        checkEvaluateInRepl(
+            funAndValImportScriptText.split('\n').asSequence(), sequenceOf(null, null, 42),
+            configurationWithDependenciesFromClassloader,
+            null
         )
         runScriptAndCheckResult(funAndValImportScript, configurationWithDependenciesFromClassloader, null, 42)
     }

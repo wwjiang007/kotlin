@@ -5,23 +5,21 @@
 
 package org.jetbrains.kotlin.ir.backend.js.lower
 
-import org.jetbrains.kotlin.backend.common.ClassLoweringPass
-import org.jetbrains.kotlin.backend.common.CommonBackendContext
+import org.jetbrains.kotlin.backend.common.DeclarationTransformer
 import org.jetbrains.kotlin.backend.common.bridges.FunctionHandle
 import org.jetbrains.kotlin.backend.common.bridges.generateBridges
-import org.jetbrains.kotlin.backend.common.ir.copyTo
-import org.jetbrains.kotlin.backend.common.ir.copyTypeParametersFrom
-import org.jetbrains.kotlin.backend.common.ir.isMethodOfAny
-import org.jetbrains.kotlin.backend.common.ir.isSuspend
+import org.jetbrains.kotlin.backend.common.ir.*
 import org.jetbrains.kotlin.backend.common.lower.*
 import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
+import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
+import org.jetbrains.kotlin.ir.backend.js.JsCommonBackendContext
 import org.jetbrains.kotlin.ir.backend.js.JsLoweredDeclarationOrigin
-import org.jetbrains.kotlin.ir.backend.js.ir.JsIrBuilder
 import org.jetbrains.kotlin.ir.backend.js.utils.functionSignature
 import org.jetbrains.kotlin.ir.backend.js.utils.getJsName
 import org.jetbrains.kotlin.ir.builders.*
+import org.jetbrains.kotlin.ir.builders.declarations.buildFun
 import org.jetbrains.kotlin.ir.declarations.*
-import org.jetbrains.kotlin.ir.declarations.impl.IrValueParameterImpl
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classifierOrNull
@@ -46,23 +44,21 @@ import org.jetbrains.kotlin.ir.util.*
 //            fun foo(t: Any?) = foo(t as Int)  // Constructed bridge
 //          }
 //
-class BridgesConstruction(val context: CommonBackendContext) : ClassLoweringPass {
+@OptIn(ObsoleteDescriptorBasedAPI::class)
+class BridgesConstruction(val context: JsCommonBackendContext) : DeclarationTransformer {
 
     private val specialBridgeMethods = SpecialBridgeMethods(context)
 
-    override fun lower(irClass: IrClass) {
-        irClass.declarations
-            .asSequence()
-            .filterIsInstance<IrSimpleFunction>()
-            .filter { !it.isStaticMethodOfClass }
-            .toList()
-            .forEach { generateBridges(it, irClass) }
+    override fun transformFlat(declaration: IrDeclaration): List<IrDeclaration>? {
+        if (declaration !is IrSimpleFunction || declaration.isStaticMethodOfClass || declaration.parent !is IrClass) return null
+
+        return generateBridges(declaration)?.let { listOf(declaration) + it }
     }
 
-    private fun generateBridges(function: IrSimpleFunction, irClass: IrClass) {
+    private fun generateBridges(function: IrSimpleFunction): List<IrDeclaration>? {
         // equals(Any?), hashCode(), toString() never need bridges
         if (function.isMethodOfAny())
-            return
+            return null
 
         val (specialOverride: IrSimpleFunction?, specialOverrideInfo) =
             specialBridgeMethods.findSpecialWithOverride(function) ?: Pair(null, null)
@@ -73,6 +69,10 @@ class BridgesConstruction(val context: CommonBackendContext) : ClassLoweringPass
             function = IrBasedFunctionHandle(function),
             signature = { FunctionAndSignature(it.function) }
         )
+
+        if (bridgesToGenerate.isEmpty()) return null
+
+        val result = mutableListOf<IrDeclaration>()
 
         for ((from, to) in bridgesToGenerate) {
             if (!from.function.parentAsClass.isInterface &&
@@ -97,8 +97,10 @@ class BridgesConstruction(val context: CommonBackendContext) : ClassLoweringPass
             }
 
 
-            irClass.declarations.add(bridge)
+            result += bridge
         }
+
+        return result
     }
 
     // Ported from from jvm.lower.BridgeLowering
@@ -116,57 +118,51 @@ class BridgesConstruction(val context: CommonBackendContext) : ClassLoweringPass
                 IrDeclarationOrigin.BRIDGE
 
         // TODO: Support offsets for debug info
-        val irFunction = JsIrBuilder.buildFunction(
-            bridge.name,
-            bridge.returnType,
-            function.parent,
-            bridge.visibility,
-            bridge.modality, // TODO: should copy modality?
-            isInline = bridge.isInline,
-            isExternal = bridge.isExternal,
-            isTailrec = bridge.isTailrec,
-            isSuspend = bridge.isSuspend,
-            isExpect = bridge.isExpect,
-            origin = origin
-        ).apply {
+        val irFunction = context.irFactory.buildFun {
+            updateFrom(bridge)
+            this.startOffset = UNDEFINED_OFFSET
+            this.endOffset = UNDEFINED_OFFSET
+            this.name = bridge.name
+            this.returnType = bridge.returnType
+            this.modality = Modality.FINAL
+            this.isFakeOverride = false
+            this.origin = origin
+        }.apply {
+            parent = function.parent
             copyTypeParametersFrom(bridge)
-            // TODO: should dispatch receiver be copied?
-            dispatchReceiverParameter = bridge.dispatchReceiverParameter?.run {
-                IrValueParameterImpl(startOffset, endOffset, origin, descriptor, type, varargElementType).also { it.parent = this@apply }
-            }
-            extensionReceiverParameter = bridge.extensionReceiverParameter?.copyTo(this)
+            copyReceiverParametersFrom(bridge)
             valueParameters += bridge.valueParameters.map { p -> p.copyTo(this) }
             annotations += bridge.annotations
-            overriddenSymbols.addAll(delegateTo.overriddenSymbols)
-            overriddenSymbols.add(bridge.symbol)
+            overriddenSymbols += delegateTo.overriddenSymbols
+            overriddenSymbols += bridge.symbol
         }
 
-        context.createIrBuilder(irFunction.symbol).irBlockBody(irFunction) {
-            if (specialMethodInfo != null) {
-                irFunction.valueParameters.take(specialMethodInfo.argumentsToCheck).forEach {
-                    +irIfThen(
-                        context.irBuiltIns.unitType,
-                        irNot(irIs(irGet(it), delegateTo.valueParameters[it.index].type)),
-                        irReturn(specialMethodInfo.defaultValueGenerator(irFunction))
-                    )
+        irFunction.body = context.irFactory.createBlockBody(UNDEFINED_OFFSET, UNDEFINED_OFFSET) {
+            statements += context.createIrBuilder(irFunction.symbol).irBlockBody(irFunction) {
+                if (specialMethodInfo != null) {
+                    irFunction.valueParameters.take(specialMethodInfo.argumentsToCheck).forEach {
+                        +irIfThen(
+                            context.irBuiltIns.unitType,
+                            irNot(irIs(irGet(it), delegateTo.valueParameters[it.index].type)),
+                            irReturn(specialMethodInfo.defaultValueGenerator(irFunction))
+                        )
+                    }
                 }
-            }
 
-            val call = irCall(delegateTo.symbol)
-            call.dispatchReceiver = irGet(irFunction.dispatchReceiverParameter!!)
-            irFunction.extensionReceiverParameter?.let {
-                call.extensionReceiver = irCastIfNeeded(irGet(it), delegateTo.extensionReceiverParameter!!.type)
-            }
+                val call = irCall(delegateTo.symbol)
+                call.dispatchReceiver = irGet(irFunction.dispatchReceiverParameter!!)
+                irFunction.extensionReceiverParameter?.let {
+                    call.extensionReceiver = irCastIfNeeded(irGet(it), delegateTo.extensionReceiverParameter!!.type)
+                }
 
-            val toTake = irFunction.valueParameters.size - if (call.isSuspend xor irFunction.isSuspend) 1 else 0
+                val toTake = irFunction.valueParameters.size - if (call.isSuspend xor irFunction.isSuspend) 1 else 0
 
-            irFunction.valueParameters.subList(0, toTake).mapIndexed { i, valueParameter ->
-                call.putValueArgument(i, irCastIfNeeded(irGet(valueParameter), delegateTo.valueParameters[i].type))
-            }
+                irFunction.valueParameters.subList(0, toTake).mapIndexed { i, valueParameter ->
+                    call.putValueArgument(i, irCastIfNeeded(irGet(valueParameter), delegateTo.valueParameters[i].type))
+                }
 
-            +irReturn(call)
-        }.apply {
-            irFunction.body = this
+                +irReturn(call)
+            }.statements
         }
 
         return irFunction
