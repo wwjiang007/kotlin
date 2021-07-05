@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -20,11 +20,11 @@ import org.jetbrains.kotlin.fir.visitors.*
 
 @FirBuilderDsl
 interface FirQualifiedAccessBuilder {
-    abstract var source: FirSourceElement?
     abstract val annotations: MutableList<FirAnnotationCall>
     abstract val typeArguments: MutableList<FirTypeProjection>
     abstract var explicitReceiver: FirExpression?
     abstract var dispatchReceiver: FirExpression
     abstract var extensionReceiver: FirExpression
+    abstract var source: FirSourceElement?
     fun build(): FirQualifiedAccess
 }

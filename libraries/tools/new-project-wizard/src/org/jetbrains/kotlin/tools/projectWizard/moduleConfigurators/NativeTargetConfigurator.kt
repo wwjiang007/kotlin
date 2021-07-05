@@ -4,8 +4,6 @@ import kotlinx.collections.immutable.toPersistentList
 import org.jetbrains.annotations.NonNls
 import org.jetbrains.kotlin.tools.projectWizard.KotlinNewProjectWizardBundle
 import org.jetbrains.kotlin.tools.projectWizard.core.Reader
-
-import org.jetbrains.kotlin.tools.projectWizard.core.buildList
 import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.BuildSystemIR
 import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.gradle.*
 import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.gradle.multiplatform.NonDefaultTargetConfigurationIR
@@ -13,6 +11,7 @@ import org.jetbrains.kotlin.tools.projectWizard.plugins.buildSystem.BuildSystemT
 import org.jetbrains.kotlin.tools.projectWizard.plugins.kotlin.*
 import org.jetbrains.kotlin.tools.projectWizard.plugins.printer.GradlePrinter
 import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.Module
+import java.util.*
 
 interface NativeTargetConfigurator : TargetConfigurator {
     val isDesktopTarget: Boolean
@@ -22,20 +21,24 @@ interface NativeTargetConfigurator : TargetConfigurator {
 class RealNativeTargetConfigurator private constructor(
     override val moduleSubType: ModuleSubType
 ) : NativeTargetConfigurator, SimpleTargetConfigurator {
-    override val text: String = moduleSubType.name.capitalize()
+    override val text: String = moduleSubType.name.replaceFirstChar(Char::uppercaseChar)
     override val isDesktopTarget: Boolean
         get() = moduleSubType.isNativeDesktop
 
     override val isIosTarget: Boolean
         get() = moduleSubType.isIOS
 
-    override fun createInnerTargetIrs(reader: Reader, module: Module): List<BuildSystemIR> = if (moduleSubType.isIOS) irsList {
-        "binaries" {
-            "framework"  {
-                "baseName" assign const(module.parent!!.name)
+    override fun createInnerTargetIrs(reader: Reader, module: Module): List<BuildSystemIR> = irsList {
+        +super<SimpleTargetConfigurator>.createInnerTargetIrs(reader, module)
+        if (moduleSubType.isIOS) {
+            "binaries" {
+                "framework"  {
+                    "baseName" assign const(module.parent!!.name)
+                }
             }
         }
-    } else emptyList()
+    }
+
 
     companion object {
         val configurators = ModuleSubType.values()

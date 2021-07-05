@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
 import org.jetbrains.kotlin.descriptors.*;
 import org.jetbrains.kotlin.descriptors.annotations.Annotations;
 import org.jetbrains.kotlin.name.Name;
+import org.jetbrains.kotlin.resolve.DescriptorEquivalenceForOverrides;
 import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
 import org.jetbrains.kotlin.resolve.scopes.LazyScopeAdapter;
 import org.jetbrains.kotlin.resolve.scopes.MemberScope;
@@ -136,6 +137,11 @@ public abstract class AbstractTypeParameterDescriptor extends DeclarationDescrip
         return (TypeParameterDescriptor) super.getOriginal();
     }
 
+    @NotNull
+    protected List<KotlinType> processBoundsWithoutCycles(@NotNull List<KotlinType> bounds) {
+        return bounds;
+    }
+
     @Override
     public <R, D> R accept(DeclarationDescriptorVisitor<R, D> visitor, D data) {
         return visitor.visitTypeParameterDescriptor(this, data);
@@ -206,10 +212,26 @@ public abstract class AbstractTypeParameterDescriptor extends DeclarationDescrip
             AbstractTypeParameterDescriptor.this.reportSupertypeLoopError(type);
         }
 
+        @NotNull
+        @Override
+        protected List<KotlinType> processSupertypesWithoutCycles(@NotNull List<KotlinType> supertypes) {
+            return processBoundsWithoutCycles(supertypes);
+        }
+
         @Nullable
         @Override
         protected KotlinType defaultSupertypeIfEmpty() {
             return ErrorUtils.createErrorType("Cyclic upper bounds");
+        }
+
+        @Override
+        protected boolean isSameClassifier(@NotNull ClassifierDescriptor classifier) {
+            return classifier instanceof TypeParameterDescriptor &&
+                   DescriptorEquivalenceForOverrides.INSTANCE.areTypeParametersEquivalent(
+                           AbstractTypeParameterDescriptor.this,
+                           (TypeParameterDescriptor) classifier,
+                           true
+                   );
         }
     }
 }

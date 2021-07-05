@@ -1,5 +1,6 @@
 fun test() {
-    1.(fun Int.() = 2)()
+    val fn = fun Int.() = 2
+    1.fn()
 }
 
-// 1 invoke \(I\)I
+// 1 invoke \(Ljava/lang/Object;\)Ljava/lang/Object;

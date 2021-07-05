@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.idea.caches.resolve;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.util.KtTestUtil;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -30,12 +31,22 @@ public class MultiplatformAnalysisTestGenerated extends AbstractMultiplatformAna
     }
 
     public void testAllFilesPresentInMultiplatform() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/multiplatform"), Pattern.compile("^([^\\.]+)$"), null, false);
+        KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/multiplatform"), Pattern.compile("^([^\\.]+)$"), null, false);
+    }
+
+    @TestMetadata("builtinsAndStdlib")
+    public void testBuiltinsAndStdlib() throws Exception {
+        runTest("idea/testData/multiplatform/builtinsAndStdlib/");
     }
 
     @TestMetadata("callableReferences")
     public void testCallableReferences() throws Exception {
         runTest("idea/testData/multiplatform/callableReferences/");
+    }
+
+    @TestMetadata("commonSealedWithPlatformInheritor")
+    public void testCommonSealedWithPlatformInheritor() throws Exception {
+        runTest("idea/testData/multiplatform/commonSealedWithPlatformInheritor/");
     }
 
     @TestMetadata("constructorsOfExpect")
@@ -158,9 +169,19 @@ public class MultiplatformAnalysisTestGenerated extends AbstractMultiplatformAna
         runTest("idea/testData/multiplatform/jvmDefaultNonMpp/");
     }
 
+    @TestMetadata("jvmInlineValueClass")
+    public void testJvmInlineValueClass() throws Exception {
+        runTest("idea/testData/multiplatform/jvmInlineValueClass/");
+    }
+
     @TestMetadata("kt41218")
     public void testKt41218() throws Exception {
         runTest("idea/testData/multiplatform/kt41218/");
+    }
+
+    @TestMetadata("kt44898")
+    public void testKt44898() throws Exception {
+        runTest("idea/testData/multiplatform/kt44898/");
     }
 
     @TestMetadata("lambdas")
@@ -178,6 +199,26 @@ public class MultiplatformAnalysisTestGenerated extends AbstractMultiplatformAna
         runTest("idea/testData/multiplatform/multilevelParents/");
     }
 
+    @TestMetadata("multiplatformLibrary")
+    public void testMultiplatformLibrary() throws Exception {
+        runTest("idea/testData/multiplatform/multiplatformLibrary/");
+    }
+
+    @TestMetadata("overrideExpect")
+    public void testOverrideExpect() throws Exception {
+        runTest("idea/testData/multiplatform/overrideExpect/");
+    }
+
+    @TestMetadata("overrideExpectWithCompositeType")
+    public void testOverrideExpectWithCompositeType() throws Exception {
+        runTest("idea/testData/multiplatform/overrideExpectWithCompositeType/");
+    }
+
+    @TestMetadata("platformDependencyInCommon")
+    public void testPlatformDependencyInCommon() throws Exception {
+        runTest("idea/testData/multiplatform/platformDependencyInCommon/");
+    }
+
     @TestMetadata("platformSpecificChecksInCommon")
     public void testPlatformSpecificChecksInCommon() throws Exception {
         runTest("idea/testData/multiplatform/platformSpecificChecksInCommon/");
@@ -193,9 +234,24 @@ public class MultiplatformAnalysisTestGenerated extends AbstractMultiplatformAna
         runTest("idea/testData/multiplatform/recursiveTypes/");
     }
 
+    @TestMetadata("sealedInheritorsInComplexModuleStructure1")
+    public void testSealedInheritorsInComplexModuleStructure1() throws Exception {
+        runTest("idea/testData/multiplatform/sealedInheritorsInComplexModuleStructure1/");
+    }
+
+    @TestMetadata("sealedInheritorsInComplexModuleStructure2")
+    public void testSealedInheritorsInComplexModuleStructure2() throws Exception {
+        runTest("idea/testData/multiplatform/sealedInheritorsInComplexModuleStructure2/");
+    }
+
     @TestMetadata("simple")
     public void testSimple() throws Exception {
         runTest("idea/testData/multiplatform/simple/");
+    }
+
+    @TestMetadata("smartCastOnPropertyFromDependentModule")
+    public void testSmartCastOnPropertyFromDependentModule() throws Exception {
+        runTest("idea/testData/multiplatform/smartCastOnPropertyFromDependentModule/");
     }
 
     @TestMetadata("supertypes")
@@ -223,6 +279,11 @@ public class MultiplatformAnalysisTestGenerated extends AbstractMultiplatformAna
         runTest("idea/testData/multiplatform/typeParameters/");
     }
 
+    @TestMetadata("unresolvedInMultiplatformLibrary")
+    public void testUnresolvedInMultiplatformLibrary() throws Exception {
+        runTest("idea/testData/multiplatform/unresolvedInMultiplatformLibrary/");
+    }
+
     @TestMetadata("useCorrectBuiltIns")
     public void testUseCorrectBuiltIns() throws Exception {
         runTest("idea/testData/multiplatform/useCorrectBuiltIns/");
@@ -231,5 +292,10 @@ public class MultiplatformAnalysisTestGenerated extends AbstractMultiplatformAna
     @TestMetadata("weaklyIncompatibleActualInIntermediateModule")
     public void testWeaklyIncompatibleActualInIntermediateModule() throws Exception {
         runTest("idea/testData/multiplatform/weaklyIncompatibleActualInIntermediateModule/");
+    }
+
+    @TestMetadata("whenExhaustivenessForSealed")
+    public void testWhenExhaustivenessForSealed() throws Exception {
+        runTest("idea/testData/multiplatform/whenExhaustivenessForSealed/");
     }
 }

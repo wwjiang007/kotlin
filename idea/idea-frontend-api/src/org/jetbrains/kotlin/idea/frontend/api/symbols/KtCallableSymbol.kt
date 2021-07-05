@@ -5,8 +5,17 @@
 
 package org.jetbrains.kotlin.idea.frontend.api.symbols
 
+import org.jetbrains.kotlin.idea.frontend.api.symbols.markers.KtSymbolWithKind
+import org.jetbrains.kotlin.idea.frontend.api.symbols.markers.KtTypeAndAnnotations
 import org.jetbrains.kotlin.idea.frontend.api.symbols.pointers.KtSymbolPointer
+import org.jetbrains.kotlin.name.CallableId
 
-abstract class KtCallableSymbol : KtSymbol {
+abstract class KtCallableSymbol : KtSymbol, KtSymbolWithKind {
+    abstract val callableIdIfNonLocal: CallableId?
+    abstract val annotatedType: KtTypeAndAnnotations
+
+    abstract val receiverType: KtTypeAndAnnotations?
+    abstract val isExtension: Boolean
+
     abstract override fun createPointer(): KtSymbolPointer<KtCallableSymbol>
 }

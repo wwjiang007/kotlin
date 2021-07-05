@@ -11,11 +11,11 @@ dependencies {
     compile(project(":compiler:frontend.java"))
     compile(project(":idea:ide-common"))
     compile(project(":idea:idea-core"))
+    compile(project(":plugins:uast-kotlin-base"))
     compile(project(":plugins:uast-kotlin"))
+    compile(project(":plugins:uast-kotlin-idea-base"))
     compileOnly(intellijDep())
-    Platform[192].orHigher {
-        compileOnly(intellijPluginDep("java"))
-    }
+    compileOnly(intellijPluginDep("java"))
 }
 
 sourceSets {

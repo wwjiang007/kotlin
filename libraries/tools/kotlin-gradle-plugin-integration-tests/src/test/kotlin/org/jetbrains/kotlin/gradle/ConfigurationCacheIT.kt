@@ -5,7 +5,10 @@
 
 package org.jetbrains.kotlin.gradle
 
+import org.jetbrains.kotlin.gradle.targets.js.dukat.ExternalsOutputFormat
+import org.jetbrains.kotlin.gradle.util.createTempDir
 import org.jetbrains.kotlin.gradle.util.findFileByName
+import org.jetbrains.kotlin.gradle.util.modify
 import org.junit.Test
 import java.io.File
 import java.net.URI
@@ -16,6 +19,27 @@ class ConfigurationCacheIT : AbstractConfigurationCacheIT() {
     @Test
     fun testSimpleKotlinJvmProject() = with(Project("kotlinProject")) {
         testConfigurationCacheOf(":compileKotlin")
+    }
+
+    @Test
+    fun testJvmWithMavenPublish() = with(Project("kotlinProject")) {
+        setupWorkingDir()
+        gradleBuildScript().appendText("""
+            apply plugin: "maven-publish"
+            group = "com.example"
+            version = "1.0"
+            publishing.repositories {
+                maven { 
+                    url = "${'$'}buildDir/repo"
+                }
+            }
+            publishing.publications {
+                maven(MavenPublication) {
+                    from(components["java"])
+                }
+            }
+        """.trimIndent())
+        testConfigurationCacheOf(":publishMavenPublicationToMavenRepository", checkUpToDateOnRebuild = false)
     }
 
     @Test
@@ -42,21 +66,85 @@ class ConfigurationCacheIT : AbstractConfigurationCacheIT() {
         testConfigurationCacheOf("assemble", executedTaskNames = asList(":lib-project:compileKotlin"))
     }
 
+    // KT-43605
+    @Test
+    fun testInstantExecutionWithBuildSrc() = with(Project("instantExecutionWithBuildSrc")) {
+        setupWorkingDir()
+        testConfigurationCacheOf(
+            "build", executedTaskNames = listOf(
+                ":compileKotlin",
+            )
+        )
+    }
+
+    @Test
+    fun testInstantExecutionWithIncludedBuildPlugin() =
+        with(Project("instantExecutionWithIncludedBuildPlugin", gradleVersionRequirement = GradleVersionRequired.AtLeast("6.8"))) {
+            setupWorkingDir()
+            testConfigurationCacheOf(
+                "build", executedTaskNames = listOf(
+                    ":compileKotlin",
+                )
+            )
+        }
+
     @Test
     fun testInstantExecutionForJs() = with(Project("instantExecutionToJs")) {
         testConfigurationCacheOf("assemble", executedTaskNames = asList(":compileKotlin2Js"))
     }
+
+    @Test
+    fun testConfigurationCacheJsPlugin() = with(Project("kotlin-js-browser-project")) {
+        setupWorkingDir()
+        gradleBuildScript().modify(::transformBuildScriptWithPluginsDsl)
+        gradleSettingsScript().modify(::transformBuildScriptWithPluginsDsl)
+        testConfigurationCacheOf(
+            ":app:build", executedTaskNames = asList(
+                ":app:packageJson",
+                ":app:publicPackageJson",
+                ":app:compileKotlinJs",
+                ":app:processDceKotlinJs",
+                ":app:browserProductionWebpack",
+            )
+        )
+    }
+
+    @Test
+    fun testConfigurationCacheDukatSrc() = testConfigurationCacheDukat()
+
+    @Test
+    fun testConfigurationCacheDukatBinaries() = testConfigurationCacheDukat {
+        gradleProperties().modify {
+            """
+                ${ExternalsOutputFormat.externalsOutputFormatProperty}=${ExternalsOutputFormat.BINARY}
+            """.trimIndent()
+        }
+    }
+
+    private fun testConfigurationCacheDukat(configure: Project.() -> Unit = {}) =
+        with(Project("both", directoryPrefix = "dukat-integration")) {
+            setupWorkingDir()
+            gradleBuildScript().modify(::transformBuildScriptWithPluginsDsl)
+            gradleSettingsScript().modify(::transformBuildScriptWithPluginsDsl)
+            configure(this)
+            testConfigurationCacheOf(
+                "irGenerateExternalsIntegrated", executedTaskNames = listOf(
+                    ":irGenerateExternalsIntegrated"
+                )
+            )
+        }
 }
 
 abstract class AbstractConfigurationCacheIT : BaseGradleIT() {
     override fun defaultBuildOptions() =
         super.defaultBuildOptions().copy(configurationCache = true)
 
-    override val defaultGradleVersion: GradleVersionRequired = GradleVersionRequired.AtLeast("6.6-rc-3")
+    override val defaultGradleVersion: GradleVersionRequired = GradleVersionRequired.AtLeast("6.6.1")
 
     protected fun Project.testConfigurationCacheOf(
         vararg taskNames: String,
         executedTaskNames: List<String>? = null,
+        checkUpToDateOnRebuild: Boolean = true,
         buildOptions: BuildOptions = defaultBuildOptions()
     ) {
         // First, run a build that serializes the tasks state for instant execution in further builds
@@ -70,7 +158,7 @@ abstract class AbstractConfigurationCacheIT : BaseGradleIT() {
             checkInstantExecutionSucceeded()
         }
 
-        build("clean") {
+        build("clean", options = buildOptions) {
             assertSuccessful()
         }
 
@@ -81,9 +169,11 @@ abstract class AbstractConfigurationCacheIT : BaseGradleIT() {
             assertContains("Reusing configuration cache.")
         }
 
-        build(*taskNames, options = buildOptions) {
-            assertSuccessful()
-            assertTasksUpToDate(executedTask)
+        if (checkUpToDateOnRebuild) {
+            build(*taskNames, options = buildOptions) {
+                assertSuccessful()
+                assertTasksUpToDate(executedTask)
+            }
         }
     }
 
@@ -99,7 +189,7 @@ abstract class AbstractConfigurationCacheIT : BaseGradleIT() {
      * directory.
      */
     private fun copyReportToTempDir(htmlReportFile: File): File =
-        createTempDir().let { tempDir ->
+        createTempDir("report").let { tempDir ->
             htmlReportFile.parentFile.copyRecursively(tempDir)
             tempDir.resolve(htmlReportFile.name)
         }

@@ -10,34 +10,36 @@ import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
+import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.util.DeclarationStubGenerator
 import org.jetbrains.kotlin.ir.util.TypeTranslator
+import org.jetbrains.kotlin.ir.util.render
 import org.jetbrains.kotlin.metadata.ProtoBuf
 import org.jetbrains.kotlin.metadata.deserialization.NameResolver
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedClassDescriptor
 
 class IrLazyClass(
-        override val startOffset: Int,
-        override val endOffset: Int,
-        override var origin: IrDeclarationOrigin,
-        override val symbol: IrClassSymbol,
-        @OptIn(ObsoleteDescriptorBasedAPI::class)
+    override val startOffset: Int,
+    override val endOffset: Int,
+    override var origin: IrDeclarationOrigin,
+    override val symbol: IrClassSymbol,
+    @OptIn(ObsoleteDescriptorBasedAPI::class)
     override val descriptor: ClassDescriptor,
-        override val name: Name,
-        override val kind: ClassKind,
-        override var visibility: DescriptorVisibility,
-        override var modality: Modality,
-        override val isCompanion: Boolean,
-        override val isInner: Boolean,
-        override val isData: Boolean,
-        override val isExternal: Boolean,
-        override val isInline: Boolean,
-        override val isExpect: Boolean,
-        override val isFun: Boolean,
-        override val stubGenerator: DeclarationStubGenerator,
-        override val typeTranslator: TypeTranslator
+    override val name: Name,
+    override val kind: ClassKind,
+    override var visibility: DescriptorVisibility,
+    override var modality: Modality,
+    override val isCompanion: Boolean,
+    override val isInner: Boolean,
+    override val isData: Boolean,
+    override val isExternal: Boolean,
+    override val isInline: Boolean,
+    override val isExpect: Boolean,
+    override val isFun: Boolean,
+    override val stubGenerator: DeclarationStubGenerator,
+    override val typeTranslator: TypeTranslator
 ) : IrClass(), IrLazyDeclarationBase {
     init {
         symbol.bind(this)
@@ -47,19 +49,19 @@ class IrLazyClass(
 
     override var annotations: List<IrConstructorCall> by createLazyAnnotations()
 
-    override var thisReceiver: IrValueParameter? by lazyVar {
+    override var thisReceiver: IrValueParameter? by lazyVar(stubGenerator.lock) {
         typeTranslator.buildWithScope(this) {
             descriptor.thisAsReceiverParameter.generateReceiverParameterStub().apply { parent = this@IrLazyClass }
         }
     }
 
 
-    override val declarations: MutableList<IrDeclaration> by lazyVar {
+    override val declarations: MutableList<IrDeclaration> by lazyVar(stubGenerator.lock) {
         ArrayList<IrDeclaration>().also {
             typeTranslator.buildWithScope(this) {
                 generateChildStubs(descriptor.constructors, it)
-                generateMemberStubs(descriptor.defaultType.memberScope, it)
-                generateMemberStubs(descriptor.staticScope, it)
+                generateChildStubs(descriptor.defaultType.memberScope.getContributedDescriptors(), it)
+                generateChildStubs(descriptor.staticScope.getContributedDescriptors(), it)
             }
         }.also {
             it.forEach {
@@ -68,18 +70,34 @@ class IrLazyClass(
         }
     }
 
-    override var typeParameters: List<IrTypeParameter> by lazyVar {
+    private fun generateChildStubs(descriptors: Collection<DeclarationDescriptor>, declarations: MutableList<IrDeclaration>) {
+        descriptors.mapNotNullTo(declarations) { descriptor ->
+            if (shouldBuildStub(descriptor)) stubGenerator.generateMemberStub(descriptor) else null
+        }
+    }
+
+    private fun shouldBuildStub(descriptor: DeclarationDescriptor): Boolean =
+        descriptor !is DeclarationDescriptorWithVisibility ||
+                !DescriptorVisibilities.isPrivate(descriptor.visibility)
+
+    override var typeParameters: List<IrTypeParameter> by lazyVar(stubGenerator.lock) {
         descriptor.declaredTypeParameters.mapTo(arrayListOf()) {
             stubGenerator.generateOrGetTypeParameterStub(it)
         }
     }
 
-    override var superTypes: List<IrType> by lazyVar {
+    override var superTypes: List<IrType> by lazyVar(stubGenerator.lock) {
         typeTranslator.buildWithScope(this) {
             // TODO get rid of code duplication, see ClassGenerator#generateClass
             descriptor.typeConstructor.supertypes.mapNotNullTo(arrayListOf()) {
                 it.toIrType()
             }
+        }
+    }
+
+    override var inlineClassRepresentation: InlineClassRepresentation<IrSimpleType>? by lazyVar(stubGenerator.lock) {
+        descriptor.inlineClassRepresentation?.mapUnderlyingType {
+            it.toIrType() as? IrSimpleType ?: error("Inline class underlying type is not a simple type: ${render()}")
         }
     }
 

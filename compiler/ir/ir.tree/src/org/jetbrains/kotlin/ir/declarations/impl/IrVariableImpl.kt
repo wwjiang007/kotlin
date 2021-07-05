@@ -36,7 +36,7 @@ class IrVariableImpl(
     override var origin: IrDeclarationOrigin,
     override val symbol: IrVariableSymbol,
     override val name: Name,
-    override val type: IrType,
+    override var type: IrType,
     override val isVar: Boolean,
     override val isConst: Boolean,
     override val isLateinit: Boolean
@@ -60,6 +60,12 @@ class IrVariableImpl(
         get() = symbol.descriptor
 
     override var initializer: IrExpression? = null
+
+    // Variables are assignable by default. This means that they can be used in IrSetValue.
+    // Variables are assigned in the IR even though they are not 'var' in the input. Hence
+    // the separate assignability flag.
+    override val isAssignable: Boolean
+        get() = true
 
     override val factory: IrFactory
         get() = error("Create IrVariableImpl directly")

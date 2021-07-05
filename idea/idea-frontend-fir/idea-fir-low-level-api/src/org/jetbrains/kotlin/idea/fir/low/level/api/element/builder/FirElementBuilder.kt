@@ -5,60 +5,117 @@
 
 package org.jetbrains.kotlin.idea.fir.low.level.api.element.builder
 
+import com.intellij.psi.PsiElement
+import org.jetbrains.annotations.TestOnly
 import org.jetbrains.kotlin.fir.FirElement
-import org.jetbrains.kotlin.fir.declarations.FirDeclaration
+import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
-import org.jetbrains.kotlin.idea.fir.low.level.api.lazy.resolve.FirLazyDeclarationResolver
+import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.idea.fir.low.level.api.annotations.ThreadSafe
+import org.jetbrains.kotlin.idea.fir.low.level.api.api.FirModuleResolveState
 import org.jetbrains.kotlin.idea.fir.low.level.api.file.builder.FirFileBuilder
 import org.jetbrains.kotlin.idea.fir.low.level.api.file.builder.ModuleFileCache
-import org.jetbrains.kotlin.idea.fir.low.level.api.util.FirElementFinder
-import org.jetbrains.kotlin.idea.util.getElementTextInContext
+import org.jetbrains.kotlin.idea.fir.low.level.api.file.structure.FileStructureCache
+import org.jetbrains.kotlin.idea.fir.low.level.api.file.structure.FileStructureElement
+import org.jetbrains.kotlin.idea.fir.low.level.api.lazy.resolve.FirLazyDeclarationResolver
+import org.jetbrains.kotlin.idea.fir.low.level.api.util.getElementTextInContext
+import org.jetbrains.kotlin.idea.fir.low.level.api.lazy.resolve.declarationCanBeLazilyResolved
+import org.jetbrains.kotlin.idea.fir.low.level.api.util.isNonAnonymousClassOrObject
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
+import org.jetbrains.kotlin.psi.psiUtil.isAncestor
+import org.jetbrains.kotlin.psi2ir.deparenthesize
 
 /**
  * Maps [KtElement] to [FirElement]
- * Stateless, caches everything into [ModuleFileCache] & [PsiToFirCache] passed into the function
+ * Stateless, caches everything into [ModuleFileCache] & [FileStructureCache] passed into the function
  */
 @ThreadSafe
-internal class FirElementBuilder(
-    private val firFileBuilder: FirFileBuilder,
-    private val firLazyDeclarationResolver: FirLazyDeclarationResolver,
-) {
+internal class FirElementBuilder {
+    fun getPsiAsFirElementSource(element: KtElement): KtElement {
+        val deparenthesized = if (element is KtPropertyDelegate) element.deparenthesize() else element
+        return when {
+            deparenthesized is KtParenthesizedExpression -> deparenthesized.deparenthesize()
+            deparenthesized is KtPropertyDelegate -> deparenthesized.expression ?: element
+            deparenthesized is KtQualifiedExpression && deparenthesized.selectorExpression is KtCallExpression -> {
+                /*
+                 KtQualifiedExpression with KtCallExpression in selector transformed in FIR to FirFunctionCall expression
+                 Which will have a receiver as qualifier
+                 */
+                deparenthesized.selectorExpression ?: error("Incomplete code:\n${element.getElementTextInContext()}")
+            }
+            else -> deparenthesized
+        }
+    }
+
     fun getOrBuildFirFor(
         element: KtElement,
+        firFileBuilder: FirFileBuilder,
         moduleFileCache: ModuleFileCache,
-        psiToFirCache: PsiToFirCache,
-        toPhase: FirResolvePhase,
+        fileStructureCache: FileStructureCache,
+        firLazyDeclarationResolver: FirLazyDeclarationResolver,
+        state: FirModuleResolveState,
+    ): FirElement = when (element) {
+        is KtFile -> getOrBuildFirForKtFile(element, firFileBuilder, moduleFileCache, firLazyDeclarationResolver)
+        else -> getOrBuildFirForNonKtFileElement(element, fileStructureCache, moduleFileCache, state)
+    }
+
+    private fun getOrBuildFirForKtFile(
+        ktFile: KtFile,
+        firFileBuilder: FirFileBuilder,
+        moduleFileCache: ModuleFileCache,
+        firLazyDeclarationResolver: FirLazyDeclarationResolver
+    ): FirFile {
+        val firFile = firFileBuilder.buildRawFirFileWithCaching(ktFile, moduleFileCache, preferLazyBodies = false)
+        firLazyDeclarationResolver.lazyResolveFileDeclaration(
+            firFile = firFile,
+            moduleFileCache = moduleFileCache,
+            toPhase = FirResolvePhase.BODY_RESOLVE,
+            scopeSession = ScopeSession(),
+            checkPCE = true
+        )
+        return firFile
+    }
+
+    private fun getOrBuildFirForNonKtFileElement(
+        element: KtElement,
+        fileStructureCache: FileStructureCache,
+        moduleFileCache: ModuleFileCache,
+        state: FirModuleResolveState,
     ): FirElement {
-        val ktFile = element.containingKtFile
-        val firFile = firFileBuilder.buildRawFirFileWithCaching(ktFile, moduleFileCache)
+        require(element !is KtFile)
+        val firFile = element.containingKtFile
+        val fileStructure = fileStructureCache.getFileStructure(firFile, moduleFileCache)
 
-        val containerFir = when (val container = element.getNonLocalContainingDeclarationWithFqName()) {
-            is KtDeclaration -> {
-                FirElementFinder.findElementByPsiIn<FirDeclaration>(firFile, container)
-                    ?: error("Declaration was not found in FIR file which was build by declaration KtFile, declaration is\n${container.getElementTextInContext()}")
-            }
-            null -> firFile
-            else -> error("Unsupported: ${container.text}")
-        }
-        firLazyDeclarationResolver.lazyResolveDeclaration(containerFir, moduleFileCache, toPhase, checkPCE = true)
+        val mappings = fileStructure.getStructureElementFor(element).mappings
+        val psi = getPsiAsFirElementSource(element)
+        return mappings.getFirOfClosestParent(psi, state)
+            ?: state.getOrBuildFirFile(firFile)
+    }
 
-        return psiToFirCache.getFir(element, containerFir, firFile)
+    @TestOnly
+    fun getStructureElementFor(
+        element: KtElement,
+        moduleFileCache: ModuleFileCache,
+        fileStructureCache: FileStructureCache,
+    ): FileStructureElement {
+        val fileStructure = fileStructureCache.getFileStructure(element.containingKtFile, moduleFileCache)
+        return fileStructure.getStructureElementFor(element)
     }
 }
 
-
-fun KtElement.getNonLocalContainingDeclarationWithFqName(): KtNamedDeclaration? {
-    var container = parent
+// TODO: simplify
+internal inline fun PsiElement.getNonLocalContainingOrThisDeclaration(predicate: (KtDeclaration) -> Boolean = { true }): KtNamedDeclaration? {
+    var container: PsiElement? = this
     while (container != null && container !is KtFile) {
         if (container is KtNamedDeclaration
-            && (container is KtClassOrObject || container is KtDeclarationWithBody)
-            && !KtPsiUtil.isLocal(container)
-            && container.name != null
+            && (container.isNonAnonymousClassOrObject() || container is KtDeclarationWithBody || container is KtProperty || container is KtTypeAlias)
+            && container !is KtPrimaryConstructor
+            && declarationCanBeLazilyResolved(container)
             && container !is KtEnumEntry
+            && container !is KtFunctionLiteral
             && container.containingClassOrObject !is KtEnumEntry
+            && predicate(container)
         ) {
             return container
         }
@@ -66,3 +123,14 @@ fun KtElement.getNonLocalContainingDeclarationWithFqName(): KtNamedDeclaration? 
     }
     return null
 }
+
+fun PsiElement.getNonLocalContainingInBodyDeclarationWith(): KtNamedDeclaration? =
+    getNonLocalContainingOrThisDeclaration { declaration ->
+        when (declaration) {
+            is KtNamedFunction -> declaration.bodyExpression?.isAncestor(this) == true
+            is KtProperty -> declaration.initializer?.isAncestor(this) == true ||
+                    declaration.getter?.isAncestor(this) == true ||
+                    declaration.setter?.isAncestor(this) == true
+            else -> false
+        }
+    }

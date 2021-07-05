@@ -21,6 +21,7 @@ import com.intellij.openapi.vfs.CharsetToolkit
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.PsiFile
+import com.intellij.testFramework.fixtures.impl.CodeInsightTestFixtureImpl
 import com.intellij.util.ArrayUtil
 import com.intellij.util.PathUtil
 import junit.framework.ComparisonFailure
@@ -120,7 +121,7 @@ abstract class AbstractQuickFixMultiFileTest : KotlinLightCodeInsightFixtureTest
                     }
                     return TestFile(fileName, linesWithoutDirectives.joinToString(separator = "\n"))
                 }
-            }, ""
+            }
         )
 
         val afterFile = subFiles.firstOrNull { file -> file.path.contains(".after") }
@@ -143,7 +144,7 @@ abstract class AbstractQuickFixMultiFileTest : KotlinLightCodeInsightFixtureTest
                     val actionShouldBeAvailable = actionHint.shouldPresent()
 
                     if (psiFile is KtFile) {
-                        DirectiveBasedActionUtils.checkForUnexpectedErrors(psiFile)
+                        checkForUnexpectedErrors(psiFile)
                     }
 
                     doAction(
@@ -154,6 +155,7 @@ abstract class AbstractQuickFixMultiFileTest : KotlinLightCodeInsightFixtureTest
                         getTestName(false),
                         this::availableActions,
                         myFixture::doHighlighting,
+                        checkAvailableActionsAreExpected = this::checkAvailableActionsAreExpected
                     )
 
                     val actualText = file.text
@@ -220,7 +222,7 @@ abstract class AbstractQuickFixMultiFileTest : KotlinLightCodeInsightFixtureTest
                     val actionShouldBeAvailable = actionHint.shouldPresent()
 
                     if (psiFile is KtFile) {
-                        DirectiveBasedActionUtils.checkForUnexpectedErrors(psiFile)
+                        checkForUnexpectedErrors(psiFile)
                     }
 
                     doAction(
@@ -231,6 +233,7 @@ abstract class AbstractQuickFixMultiFileTest : KotlinLightCodeInsightFixtureTest
                         beforeFileName,
                         this::availableActions,
                         myFixture::doHighlighting,
+                        checkAvailableActionsAreExpected = this::checkAvailableActionsAreExpected
                     )
 
                     if (actionShouldBeAvailable) {
@@ -272,6 +275,14 @@ abstract class AbstractQuickFixMultiFileTest : KotlinLightCodeInsightFixtureTest
         }
     }
 
+    protected open fun checkForUnexpectedErrors(file: KtFile) {
+        DirectiveBasedActionUtils.checkForUnexpectedErrors(file)
+    }
+
+    protected open fun checkAvailableActionsAreExpected(file: PsiFile, actions: Collection<IntentionAction>) {
+        DirectiveBasedActionUtils.checkAvailableActionsAreExpected(file, availableActions)
+    }
+
     private val availableActions: List<IntentionAction>
         get() {
             myFixture.doHighlighting()
@@ -304,7 +315,9 @@ abstract class AbstractQuickFixMultiFileTest : KotlinLightCodeInsightFixtureTest
             testFilePath: String,
             getAvailableActions: () -> List<IntentionAction>,
             doHighlighting: () -> List<HighlightInfo>,
-            shouldBeAvailableAfterExecution: Boolean = false
+            shouldBeAvailableAfterExecution: Boolean = false,
+            checkAvailableActionsAreExpected: (PsiFile, Collection<IntentionAction>) -> Unit =
+                DirectiveBasedActionUtils::checkAvailableActionsAreExpected
         ) {
             val pattern = if (text.startsWith("/"))
                 Pattern.compile(text.substring(1, text.length - 1))
@@ -328,14 +341,14 @@ abstract class AbstractQuickFixMultiFileTest : KotlinLightCodeInsightFixtureTest
                                 StringUtil.join(infos, "\n")
                     )
                 } else {
-                    DirectiveBasedActionUtils.checkAvailableActionsAreExpected(file, availableActions)
+                    checkAvailableActionsAreExpected(file, availableActions)
                 }
             } else {
                 if (!actionShouldBeAvailable) {
                     TestCase.fail("Action '$text' is available (but must not) in test $testFilePath")
                 }
 
-                invokeIntentionCompat(action, file, editor)
+                CodeInsightTestFixtureImpl.invokeIntention(action, file, editor)
 
                 if (!shouldBeAvailableAfterExecution) {
                     val afterAction = findActionByPattern(pattern, getAvailableActions())

@@ -5,6 +5,7 @@ plugins {
 }
 
 dependencies {
+    testCompile(kotlinStdlib("jdk8"))
     testCompile(project(":kotlin-scripting-compiler"))
     testCompile(project(":core:descriptors"))
     testCompile(project(":core:descriptors.jvm"))
@@ -24,6 +25,7 @@ dependencies {
     testCompile(project(":compiler:fir:cones"))
     testCompile(project(":compiler:fir:resolve"))
     testCompile(project(":compiler:fir:checkers"))
+    testCompile(project(":compiler:fir:checkers:checkers.jvm"))
     testCompile(project(":compiler:fir:java"))
     testCompile(project(":compiler:fir:entrypoint"))
     testCompile(project(":compiler:ir.ir2cfg"))
@@ -44,26 +46,23 @@ dependencies {
     testCompile(project(":js:js.translator"))
     testCompile(project(":native:frontend.native"))
     testCompileOnly(project(":plugins:android-extensions-compiler"))
+    testApi(projectTests(":generators:test-generator"))
+    testCompile(projectTests(":compiler:tests-compiler-utils"))
     testCompile(project(":kotlin-test:kotlin-test-jvm"))
     testCompile(projectTests(":compiler:tests-common-jvm6"))
     testCompile(project(":kotlin-scripting-compiler-impl"))
+    testCompile(projectTests(":compiler:test-infrastructure-utils"))
     testCompile(commonDep("junit:junit"))
-    testCompile(androidDxJar()) { isTransitive = false }
     testCompile(commonDep("com.android.tools:r8"))
     testCompileOnly(project(":kotlin-reflect-api"))
     testCompileOnly(toolsJar())
     testCompileOnly(intellijCoreDep()) { includeJars("intellij-core") }
-    Platform[193].orLower {
-        testCompile(intellijDep()) { includeJars("openapi", "picocontainer", rootProject = rootProject) }
-    }
-    Platform[201].orHigher {
-        testCompile(intellijDep()) {
-            includeJars(
-                "testFramework",
-                "testFramework.core",
-                rootProject = rootProject
-            )
-        }
+    testCompile(intellijDep()) {
+        includeJars(
+            "testFramework",
+            "testFramework.core",
+            rootProject = rootProject
+        )
     }
     Platform[202] {
         testCompile(intellijDep()) { includeJars("intellij-deps-fastutil-8.3.1-1") }
@@ -92,13 +91,9 @@ dependencies {
         isTransitive = false
     }
 
-    Platform[192].orHigher {
-        testCompile(intellijDep()) { includeJars("platform-util-ui", "platform-concurrency", "platform-objectSerializer") }
-    }
-
-    Platform[193].orHigher {
-        testCompile(intellijDep()) { includeJars("platform-ide-util-io") }
-    }
+    testCompile(intellijDep()) { includeJars("platform-util-ui", "platform-concurrency", "platform-objectSerializer") }
+    testCompile(intellijDep()) { includeJars("platform-ide-util-io") }
+    testApiJUnit5()
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.dsl.KotlinCompile<*>> {

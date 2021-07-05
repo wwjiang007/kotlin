@@ -44,12 +44,10 @@ dependencies {
     testCompileOnly(intellijDep())
     testRuntimeOnly(intellijDep())
 
-    Platform[192].orHigher {
-        compileOnly(intellijPluginDep("java"))
+    compileOnly(intellijPluginDep("java"))
 
-        testCompileOnly(intellijPluginDep("java"))
-        testRuntimeOnly(intellijPluginDep("java"))
-    }
+    testCompileOnly(intellijPluginDep("java"))
+    testRuntimeOnly(intellijPluginDep("java"))
 }
 
 sourceSets {
@@ -64,5 +62,3 @@ sourcesJar()
 javadocJar()
 
 projectTest(parallel = true)
-
-apply(from = "$rootDir/gradle/kotlinPluginPublication.gradle.kts")

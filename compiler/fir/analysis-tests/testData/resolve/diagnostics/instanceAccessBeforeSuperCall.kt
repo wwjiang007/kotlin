@@ -7,10 +7,10 @@ class A {
 class B(other: B = <!NO_THIS!>this<!>)
 
 class C() {
-    constructor(x: Int) : <!INAPPLICABLE_CANDIDATE!>this<!>({
+    constructor(x: Int) : this(<!ARGUMENT_TYPE_MISMATCH!>{
         val a = 10
-        <!INSTANCE_ACCESS_BEFORE_SUPER_CALL!>this<!>
-    }) {}
+        <!ARGUMENT_TYPE_MISMATCH, INSTANCE_ACCESS_BEFORE_SUPER_CALL!>this<!>
+    }<!>) {}
 }
 
 class D {
@@ -22,9 +22,9 @@ class D {
 
 fun main() {
     val x1: String.() -> String = if (true) {
-        { <!NO_THIS!>this<!> }
+        { this }
     } else {
-        { <!NO_THIS!>this<!> }
+        { this }
     }
 }
 

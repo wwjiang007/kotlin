@@ -9,19 +9,23 @@ import org.jetbrains.kotlin.backend.common.serialization.mangle.KotlinMangleComp
 import org.jetbrains.kotlin.backend.common.serialization.mangle.MangleConstant
 import org.jetbrains.kotlin.backend.common.serialization.mangle.MangleMode
 import org.jetbrains.kotlin.backend.common.serialization.mangle.collectForMangler
-import org.jetbrains.kotlin.fir.FirElement
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.*
 import org.jetbrains.kotlin.fir.declarations.*
-import org.jetbrains.kotlin.fir.render
-import org.jetbrains.kotlin.fir.resolve.firSymbolProvider
+import org.jetbrains.kotlin.fir.declarations.utils.isExpect
+import org.jetbrains.kotlin.fir.declarations.utils.isStatic
+import org.jetbrains.kotlin.fir.resolve.firProvider
+import org.jetbrains.kotlin.fir.resolve.fullyExpandedType
+import org.jetbrains.kotlin.fir.resolve.symbolProvider
 import org.jetbrains.kotlin.fir.resolve.toSymbol
+import org.jetbrains.kotlin.fir.symbols.ConeClassLikeLookupTag
 import org.jetbrains.kotlin.fir.symbols.impl.FirClassSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirTypeAliasSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirTypeParameterSymbol
 import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.fir.visitors.FirVisitor
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.util.capitalizeDecapitalize.toLowerCaseAsciiOnly
 import org.jetbrains.kotlin.utils.addToStdlib.ifNotEmpty
-import java.lang.IllegalStateException
 
 open class FirJvmMangleComputer(
     private val builder: StringBuilder,
@@ -33,9 +37,14 @@ open class FirJvmMangleComputer(
 
     private var isRealExpect = false
 
-    open fun FirFunction<*>.platformSpecificFunctionName(): String? = null
+    open fun FirFunction.platformSpecificFunctionName(): String? = null
 
-    open fun FirFunction<*>.specialValueParamPrefix(param: FirValueParameter): String = ""
+    open fun FirFunction.platformSpecificSuffix(): String? =
+        if (this is FirSimpleFunction && name.asString() == "main")
+            this@FirJvmMangleComputer.session.firProvider.getFirCallableContainerFile(symbol)?.name
+        else null
+
+    open fun FirFunction.specialValueParamPrefix(param: FirValueParameter): String = ""
 
     private fun addReturnType(): Boolean = false
 
@@ -74,12 +83,12 @@ open class FirJvmMangleComputer(
 
     private fun FirDeclaration.visitParent() {
         val (parentPackageFqName, parentClassId) = when (this) {
-            is FirCallableDeclaration<*> -> this.symbol.callableId.let { it.packageName to it.classId }
-            is FirClassLikeDeclaration<*> -> this.symbol.classId.let { it.packageFqName to it.outerClassId }
+            is FirCallableMemberDeclaration -> this.containingClass()?.classId?.let { it.packageFqName to it } ?: return
+            is FirClassLikeDeclaration -> this.symbol.classId.let { it.packageFqName to it.outerClassId }
             else -> return
         }
         if (parentClassId != null && !parentClassId.isLocal) {
-            val parentClassLike = session.firSymbolProvider.getClassLikeSymbolByFqName(parentClassId)?.fir
+            val parentClassLike = this@FirJvmMangleComputer.session.symbolProvider.getClassLikeSymbolByFqName(parentClassId)?.fir
                 ?: error("Attempt to find parent ($parentClassId) for probably-local declaration!")
             if (parentClassLike is FirRegularClass || parentClassLike is FirTypeAlias) {
                 parentClassLike.accept(this@FirJvmMangleComputer, false)
@@ -102,7 +111,7 @@ open class FirJvmMangleComputer(
         builder.appendName(name)
     }
 
-    private fun FirFunction<*>.mangleFunction(isCtor: Boolean, isStatic: Boolean, container: FirDeclaration) {
+    private fun FirFunction.mangleFunction(isCtor: Boolean, isStatic: Boolean, container: FirDeclaration) {
 
         isRealExpect = isRealExpect || (this as? FirMemberDeclaration)?.isExpect == true
 
@@ -121,10 +130,15 @@ open class FirJvmMangleComputer(
         val name = (this as? FirSimpleFunction)?.name ?: Name.special("<anonymous>")
         builder.append(name.asString())
 
+        platformSpecificSuffix()?.let {
+            builder.append(MangleConstant.PLATFORM_FUNCTION_MARKER)
+            builder.append(it)
+        }
+
         mangleSignature(isCtor, isStatic)
     }
 
-    private fun FirFunction<*>.mangleSignature(isCtor: Boolean, isStatic: Boolean) {
+    private fun FirFunction.mangleSignature(isCtor: Boolean, isStatic: Boolean) {
         if (!mode.signature) {
             return
         }
@@ -157,13 +171,10 @@ open class FirJvmMangleComputer(
             if (this in parent.typeParameters) {
                 return parent
             }
-            if (parent is FirCallableDeclaration<*>) {
-                val overriddenSymbol = parent.symbol.overriddenSymbol
-                if (overriddenSymbol != null) {
-                    val fir = overriddenSymbol.fir
-                    if (fir is FirTypeParametersOwner && this in fir.typeParameters) {
-                        return parent
-                    }
+            if (parent is FirCallableDeclaration) {
+                val overriddenFir = parent.originalForSubstitutionOverride
+                if (overriddenFir is FirTypeParametersOwner && this in overriddenFir.typeParameters) {
+                    return parent
                 }
             }
         }
@@ -200,8 +211,16 @@ open class FirJvmMangleComputer(
         when (type) {
             is ConeLookupTagBasedType -> {
                 when (val symbol = type.lookupTag.toSymbol(session)) {
+                    is FirTypeAliasSymbol -> {
+                        mangleType(tBuilder, type.fullyExpandedType(session))
+                        return
+                    }
                     is FirClassSymbol -> symbol.fir.accept(copy(MangleMode.FQNAME), false)
                     is FirTypeParameterSymbol -> tBuilder.mangleTypeParameterReference(symbol.fir)
+                    // This is performed for a case with invisible class-like symbol in fake override
+                    null -> (type.lookupTag as? ConeClassLikeLookupTag)?.let {
+                        tBuilder.append(it.classId)
+                    }
                 }
 
                 type.typeArguments.asList().ifNotEmpty {
@@ -210,7 +229,7 @@ open class FirJvmMangleComputer(
                             is ConeStarProjection -> appendSignature(MangleConstant.STAR_MARK)
                             is ConeKotlinTypeProjection -> {
                                 if (arg.kind != ProjectionKind.INVARIANT) {
-                                    appendSignature(arg.kind.name.toLowerCase())
+                                    appendSignature(arg.kind.name.toLowerCaseAsciiOnly())
                                     appendSignature(MangleConstant.VARIANCE_SEPARATOR)
                                 }
 
@@ -222,6 +241,10 @@ open class FirJvmMangleComputer(
 
                 if (type.isMarkedNullable) {
                     tBuilder.appendSignature(MangleConstant.Q_MARK)
+                }
+
+                if (type.hasEnhancedNullability) {
+                    tBuilder.appendSignature(MangleConstant.ENHANCED_NULLABILITY_MARK)
                 }
             }
             is ConeFlexibleType -> {
@@ -237,6 +260,9 @@ open class FirJvmMangleComputer(
             is ConeDefinitelyNotNullType -> {
                 // E.g. not-null type parameter in Java
                 mangleType(tBuilder, type.original)
+            }
+            is ConeCapturedType -> {
+                mangleType(tBuilder, type.lowerType ?: type.constructor.supertypes!!.first())
             }
             else -> error("Unexpected type $type")
         }

@@ -27,7 +27,7 @@ abstract class IrExpression : IrElementBase(), IrStatement, IrVarargElement, IrA
     @Suppress("LeakingThis")
     override var attributeOwnerId: IrAttributeContainer = this
 
-    abstract val type: IrType
+    abstract var type: IrType
 
     override fun <D> transform(transformer: IrElementTransformer<D>, data: D): IrExpression =
         accept(transformer, data) as IrExpression
@@ -39,8 +39,4 @@ abstract class IrExpression : IrElementBase(), IrStatement, IrVarargElement, IrA
     override fun <D> transformChildren(transformer: IrElementTransformer<D>, data: D) {
         // No children by default
     }
-}
-
-interface IrExpressionWithCopy {
-    fun copy(): IrExpression
 }

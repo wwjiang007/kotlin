@@ -57,8 +57,8 @@ class DeserializerForClassfileDecompiler(
             BinaryClassAnnotationAndConstantLoaderImpl(moduleDescriptor, notFoundClasses, storageManager, classFinder)
 
         val configuration = object : DeserializationConfiguration {
-            override val readDeserializedContracts: Boolean
-                get() = true
+            override val readDeserializedContracts: Boolean = true
+            override val preserveDeclarationsOrdering: Boolean = true
         }
 
         deserializationComponents = DeserializationComponents(
@@ -85,10 +85,12 @@ class DeserializerForClassfileDecompiler(
             return emptyList()
         }
         val (nameResolver, packageProto) = JvmProtoBufUtil.readPackageDataFrom(annotationData, strings)
+        val dummyPackageFragment = createDummyPackageFragment(header.packageName?.let(::FqName) ?: facadeFqName.parent())
         val membersScope = DeserializedPackageMemberScope(
-            createDummyPackageFragment(header.packageName?.let(::FqName) ?: facadeFqName.parent()),
+            dummyPackageFragment,
             packageProto, nameResolver, header.metadataVersion,
-            JvmPackagePartSource(binaryClassForPackageClass, packageProto, nameResolver), deserializationComponents
+            JvmPackagePartSource(binaryClassForPackageClass, packageProto, nameResolver), deserializationComponents,
+            "scope of dummyPackageFragment ${dummyPackageFragment.fqName} in module $moduleDescriptor @DeserializerForClassfileDecompiler"
         ) { emptyList() }
         return membersScope.getContributedDescriptors().toList()
     }

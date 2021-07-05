@@ -20,29 +20,23 @@ dependencies {
 
     compileOnly(intellijDep())
     compileOnly(intellijPluginDep("gradle"))
-    Platform[193].orHigher {
-        compileOnly(intellijPluginDep("gradle-java"))
-    }
+    compileOnly(intellijPluginDep("gradle-java"))
     compileOnly(intellijPluginDep("Groovy"))
     compileOnly(intellijPluginDep("junit"))
     compileOnly(intellijPluginDep("testng"))
-    runtimeOnly(project(":kotlin-coroutines-experimental-compat"))
+    runtimeOnly( "org.jetbrains.kotlin:kotlin-coroutines-experimental-compat:1.4.20")
 
     compileOnly(project(":kotlin-gradle-statistics"))
 
-    Platform[192].orHigher {
-        compileOnly(intellijPluginDep("java"))
-        testCompileOnly(intellijPluginDep("java"))
-        testRuntimeOnly(intellijPluginDep("java"))
-    }
+    compileOnly(intellijPluginDep("java"))
+    testCompileOnly(intellijPluginDep("java"))
+    testRuntimeOnly(intellijPluginDep("java"))
 
     testCompile(projectTests(":idea"))
     testCompile(projectTests(":idea:idea-test-framework"))
 
     testCompile(intellijPluginDep("gradle"))
-    Platform[193].orHigher {
-        testCompile(intellijPluginDep("gradle-java"))
-    }
+    testCompile(intellijPluginDep("gradle-java"))
     testCompileOnly(intellijPluginDep("Groovy"))
     testCompileOnly(intellijDep())
 
@@ -64,32 +58,27 @@ dependencies {
     testRuntime(project(":noarg-ide-plugin"))
     testRuntime(project(":kotlin-scripting-idea"))
     testRuntime(project(":kotlinx-serialization-ide-plugin"))
+    testRuntime(project(":plugins:parcelize:parcelize-ide"))
+    testRuntime(project(":plugins:lombok:lombok-ide-plugin"))
     testRuntime(project(":kotlin-gradle-statistics"))
     // TODO: the order of the plugins matters here, consider avoiding order-dependency
     testRuntime(intellijPluginDep("junit"))
     testRuntime(intellijPluginDep("testng"))
     testRuntime(intellijPluginDep("properties"))
     testRuntime(intellijPluginDep("gradle"))
-    Platform[193].orHigher {
-        testRuntime(intellijPluginDep("gradle-java"))
-    }
+    testRuntime(intellijPluginDep("gradle-java"))
     testRuntime(intellijPluginDep("Groovy"))
     testRuntime(intellijPluginDep("coverage"))
     if (Ide.IJ()) {
         testRuntime(intellijPluginDep("maven"))
-
-        if (Ide.IJ201.orHigher()) {
-            testRuntime(intellijPluginDep("repository-search"))
-        }
+        testRuntime(intellijPluginDep("repository-search"))
     }
+
     testRuntime(intellijPluginDep("android"))
     testRuntime(intellijPluginDep("smali"))
 
-    if (Ide.AS41.orHigher()) {
-         testRuntime(intellijPluginDep("platform-images"))
-    }
-
-    if (Ide.AS36.orHigher()) {
+    testRuntime(intellijPluginDep("platform-images"))
+    if (Ide.AS()) {
         testRuntime(intellijPluginDep("android-layoutlib"))
     }
 }
@@ -106,21 +95,23 @@ testsJar()
 
 projectTest(parallel = false) {
     dependsOn(":dist")
-    dependsOnKotlinPluginInstall()
-    if (!Ide.AS41.orHigher()) {
+    dependsOnKotlinGradlePluginInstall()
+    if (Ide.IJ()) {
         systemProperty("android.studio.sdk.manager.disabled", "true")
     }
     workingDir = rootDir
     useAndroidSdk()
 
-    doFirst {
-        val mainResourceDirPath = File(project.buildDir, "resources/main").absolutePath
-        sourceSets["test"].runtimeClasspath = sourceSets["test"].runtimeClasspath.filter { file ->
-            if (!file.absolutePath.contains(mainResourceDirPath)) {
-                true
-            } else {
-                println("Remove `${file.path}` from the test runtime classpath")
-                false
+    if (kotlinBuildProperties.isJpsBuildEnabled) {
+        doFirst {
+            val mainResourceDirPath = File(project.buildDir, "resources/main").absolutePath
+            sourceSets["test"].runtimeClasspath = sourceSets["test"].runtimeClasspath.filter { file ->
+                if (!file.absolutePath.contains(mainResourceDirPath)) {
+                    true
+                } else {
+                    println("Remove `${file.path}` from the test runtime classpath")
+                    false
+                }
             }
         }
     }
@@ -128,7 +119,7 @@ projectTest(parallel = false) {
 
 configureFormInstrumentation()
 
-if (Ide.AS41.orHigher()) {
+if (Ide.AS()) {
     getOrCreateTask<Test>("test") {
         setExcludes(listOf("**"))
     }

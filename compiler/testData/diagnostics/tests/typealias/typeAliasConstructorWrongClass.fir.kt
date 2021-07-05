@@ -2,23 +2,23 @@
 
 abstract class AbstractClass
 typealias Test1 = AbstractClass
-val test1 = Test1()
-val test1a = AbstractClass()
+val test1 = <!CREATING_AN_INSTANCE_OF_ABSTRACT_CLASS!>Test1()<!>
+val test1a = <!CREATING_AN_INSTANCE_OF_ABSTRACT_CLASS!>AbstractClass()<!>
 
 annotation class AnnotationClass
 typealias Test2 = AnnotationClass
-val test2 = Test2()
-val test2a = AnnotationClass()
+val test2 = <!ANNOTATION_CLASS_CONSTRUCTOR_CALL!>Test2()<!>
+val test2a = <!ANNOTATION_CLASS_CONSTRUCTOR_CALL!>AnnotationClass()<!>
 
 enum class EnumClass { VALUE1, VALUE2 }
 typealias Test3 = EnumClass
-val test3 = <!HIDDEN!>Test3<!>()
-val test3a = <!HIDDEN!>EnumClass<!>()
+val test3 = <!INVISIBLE_REFERENCE!>Test3<!>()
+val test3a = <!INVISIBLE_REFERENCE!>EnumClass<!>()
 
 sealed class SealedClass
 typealias Test4 = SealedClass
-val test4 = <!SEALED_CLASS_CONSTRUCTOR_CALL!>Test4<!>()
-val test4a = <!SEALED_CLASS_CONSTRUCTOR_CALL!>SealedClass<!>()
+val test4 = <!INVISIBLE_REFERENCE!>Test4<!>()
+val test4a = <!INVISIBLE_REFERENCE!>SealedClass<!>()
 
 class Outer {
     inner class Inner
@@ -26,9 +26,9 @@ class Outer {
 }
 typealias Test5 = Outer.Inner
 
-val test5 = Test5()
+val test5 = <!UNRESOLVED_REFERENCE!>Test5<!>()
 val test5a = Outer.<!UNRESOLVED_REFERENCE!>Inner<!>()
 val test5b = Outer.<!UNRESOLVED_REFERENCE!>TestInner<!>()
 val test5c = Outer().<!UNRESOLVED_REFERENCE!>TestInner<!>()
 val test5d = Outer().Inner()
-val test5e = Outer().<!UNRESOLVED_REFERENCE!>Test5<!>()
+val test5e = Outer().Test5()

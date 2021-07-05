@@ -21,9 +21,12 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.impl.ZipHandler
 import com.intellij.openapi.vfs.impl.jar.CoreJarFileSystem
 import org.jetbrains.kotlin.build.DEFAULT_KOTLIN_SOURCE_FILES_EXTENSIONS
+import org.jetbrains.kotlin.build.report.BuildReporter
+import org.jetbrains.kotlin.build.report.RemoteBuildReporter
+import org.jetbrains.kotlin.build.report.RemoteReporter
 import org.jetbrains.kotlin.cli.common.CLICompiler
+import org.jetbrains.kotlin.cli.common.CompilerSystemProperties
 import org.jetbrains.kotlin.cli.common.ExitCode
-import org.jetbrains.kotlin.cli.common.KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY
 import org.jetbrains.kotlin.cli.common.arguments.*
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
@@ -99,7 +102,7 @@ abstract class CompileServiceImplBase(
     protected val log by lazy { Logger.getLogger("compiler") }
 
     init {
-        System.setProperty(KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY, "true")
+        CompilerSystemProperties.KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY.value = "true"
     }
 
     // wrapped in a class to encapsulate alive check logic
@@ -240,7 +243,7 @@ abstract class CompileServiceImplBase(
             runFileDir,
             makeRunFilenameString(
                 timestamp = "%tFT%<tH-%<tM-%<tS.%<tLZ".format(Calendar.getInstance(TimeZone.getTimeZone("Z"))),
-                digest = compilerId.compilerClasspath.map { File(it).absolutePath }.distinctStringsDigest().toHexString(),
+                digest = compilerId.digest(),
                 port = port.toString()
             )
         )
@@ -286,7 +289,7 @@ abstract class CompileServiceImplBase(
         createMessageCollector: (ServicesFacadeT, CompilationOptions) -> MessageCollector,
         createReporter: (ServicesFacadeT, CompilationOptions) -> DaemonMessageReporter,
         createServices: (JpsServicesFacadeT, EventManager, Profiler) -> Services,
-        getICReporter: (ServicesFacadeT, CompilationResultsT?, IncrementalCompilationOptions) -> RemoteICReporter
+        getICReporter: (ServicesFacadeT, CompilationResultsT?, IncrementalCompilationOptions) -> RemoteBuildReporter
     ) = kotlin.run {
         val messageCollector = createMessageCollector(servicesFacade, compilationOptions)
         val daemonReporter = createReporter(servicesFacade, compilationOptions)
@@ -514,7 +517,7 @@ abstract class CompileServiceImplBase(
         args: K2JSCompilerArguments,
         incrementalCompilationOptions: IncrementalCompilationOptions,
         compilerMessageCollector: MessageCollector,
-        reporter: RemoteICReporter
+        reporter: RemoteBuildReporter
     ): ExitCode {
         val allKotlinFiles = arrayListOf<File>()
         val freeArgsWithoutKotlinFiles = arrayListOf<String>()
@@ -554,7 +557,7 @@ abstract class CompileServiceImplBase(
         k2jvmArgs: K2JVMCompilerArguments,
         incrementalCompilationOptions: IncrementalCompilationOptions,
         compilerMessageCollector: MessageCollector,
-        reporter: RemoteICReporter
+        reporter: RemoteBuildReporter
     ): ExitCode {
         val allKotlinExtensions = (DEFAULT_KOTLIN_SOURCE_FILES_EXTENSIONS +
                 (incrementalCompilationOptions.kotlinScriptExtensions ?: emptyArray())).distinct()
@@ -589,6 +592,8 @@ abstract class CompileServiceImplBase(
             }
         }
 
+        val projectRoot = incrementalCompilationOptions.modulesInfo.projectRoot
+
         val compiler = IncrementalJvmCompilerRunner(
             workingDir,
             reporter,
@@ -599,7 +604,7 @@ abstract class CompileServiceImplBase(
             kotlinSourceFilesExtensions = allKotlinExtensions
         )
         return try {
-            compiler.compile(allKotlinFiles, k2jvmArgs, compilerMessageCollector, changedFiles)
+            compiler.compile(allKotlinFiles, k2jvmArgs, compilerMessageCollector, changedFiles, projectRoot)
         } finally {
             reporter.flush()
         }
@@ -782,7 +787,7 @@ class CompileServiceImpl(
         createMessageCollector = ::CompileServicesFacadeMessageCollector,
         createReporter = ::DaemonMessageReporter,
         createServices = this::createCompileServices,
-        getICReporter = { a, b, c -> getICReporter(a, b!!, c)}
+        getICReporter = { a, b, c -> getBuildReporter(a, b!!, c)}
     )
 
     override fun leaseReplSession(

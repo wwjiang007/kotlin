@@ -35,7 +35,7 @@ import org.jetbrains.kotlin.storage.getValue
 
 class LazyJavaPackageFragment(
     outerContext: LazyJavaResolverContext,
-    private val jPackage: JavaPackage
+    private val jPackage: JavaPackage,
 ) : PackageFragmentDescriptorImpl(outerContext.module, jPackage.fqName) {
     private val c = outerContext.childForClassOrPackage(this)
 
@@ -56,7 +56,7 @@ class LazyJavaPackageFragment(
 
     override val annotations =
         // Do not resolve package annotations if JSR-305 is disabled
-        if (c.components.annotationTypeQualifierResolver.disabled) Annotations.EMPTY
+        if (c.components.javaTypeEnhancementState.disabledDefaultAnnotations) Annotations.EMPTY
         else c.resolveAnnotations(jPackage)
 
     internal fun getSubPackageFqNames(): List<FqName> = subPackages()
@@ -86,7 +86,7 @@ class LazyJavaPackageFragment(
 
     override fun getMemberScope() = scope
 
-    override fun toString() = "Lazy Java package fragment: $fqName"
+    override fun toString() = "Lazy Java package fragment: $fqName of module ${c.components.module}"
 
     override fun getSource(): SourceElement = KotlinJvmBinaryPackageSourceElement(this)
 }

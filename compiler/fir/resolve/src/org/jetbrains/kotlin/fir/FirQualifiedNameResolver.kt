@@ -11,17 +11,23 @@ import org.jetbrains.kotlin.fir.expressions.FirStatement
 import org.jetbrains.kotlin.fir.expressions.builder.buildResolvedQualifier
 import org.jetbrains.kotlin.fir.references.impl.FirSimpleNamedReference
 import org.jetbrains.kotlin.fir.resolve.BodyResolveComponents
-import org.jetbrains.kotlin.fir.resolve.firSymbolProvider
+import org.jetbrains.kotlin.fir.resolve.symbolProvider
 import org.jetbrains.kotlin.fir.resolve.transformers.PackageOrClass
 import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.resultType
 import org.jetbrains.kotlin.fir.resolve.transformers.resolveToPackageOrClass
 import org.jetbrains.kotlin.fir.resolve.typeForQualifier
+import org.jetbrains.kotlin.fir.types.FirTypeProjection
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 
-class FirQualifiedNameResolver(components: BodyResolveComponents) : BodyResolveComponents by components {
-    private var qualifierStack = mutableListOf<Name>()
+const val ROOT_PREFIX_FOR_IDE_RESOLUTION_MODE = "_root_ide_package_"
+
+class FirQualifiedNameResolver(private val components: BodyResolveComponents) {
+    private val session = components.session
+    private var qualifierStack = mutableListOf<NameWithTypeArguments>()
     private var qualifierPartsToDrop = 0
+
+    private class NameWithTypeArguments(val name: Name, val typeArguments: List<FirTypeProjection>)
 
     fun reset() {
         qualifierStack.clear()
@@ -40,17 +46,20 @@ class FirQualifiedNameResolver(components: BodyResolveComponents) : BodyResolveC
      */
     fun isPotentialQualifierPartPosition() = qualifierStack.size > 1
 
-    fun initProcessingQualifiedAccess(callee: FirSimpleNamedReference) {
+    fun initProcessingQualifiedAccess(callee: FirSimpleNamedReference, typeArguments: List<FirTypeProjection>) {
         if (callee.name.isSpecial) {
             qualifierStack.clear()
         } else {
-            qualifierStack.add(callee.name)
+            qualifierStack.add(NameWithTypeArguments(callee.name, typeArguments.toList()))
         }
     }
 
     fun replacedQualifier(qualifiedAccess: FirQualifiedAccess): FirStatement? =
         if (qualifierPartsToDrop > 0) {
             qualifierPartsToDrop--
+            if (qualifierPartsToDrop == 0) {
+                reset()
+            }
             qualifiedAccess.explicitReceiver ?: qualifiedAccess
         } else {
             null
@@ -60,8 +69,13 @@ class FirQualifiedNameResolver(components: BodyResolveComponents) : BodyResolveC
         if (qualifierStack.isEmpty()) {
             return null
         }
-        val symbolProvider = session.firSymbolProvider
-        var qualifierParts = qualifierStack.asReversed().map { it.asString() }
+        val symbolProvider = session.symbolProvider
+        var qualifierParts = qualifierStack.asReversed().map { it.name.asString() }
+
+        val fakeRootIdePrefixIsPresent = qualifierParts.firstOrNull() == ROOT_PREFIX_FOR_IDE_RESOLUTION_MODE
+        if (fakeRootIdePrefixIsPresent) {
+            qualifierParts = qualifierParts.drop(1)
+        }
         var resolved: PackageOrClass?
         do {
             resolved = resolveToPackageOrClass(
@@ -74,17 +88,22 @@ class FirQualifiedNameResolver(components: BodyResolveComponents) : BodyResolveC
 
         if (resolved != null) {
             qualifierPartsToDrop = qualifierParts.size - 1
+            // we would need to drop fake package too
+            if (fakeRootIdePrefixIsPresent) {
+                qualifierPartsToDrop += 1
+            }
+
             return buildResolvedQualifier {
-                this.source = source
+                this.source = source?.getWholeQualifierSourceIfPossible(qualifierPartsToDrop)
                 packageFqName = resolved.packageFqName
                 relativeClassFqName = resolved.relativeClassFqName
                 symbol = resolved.classSymbol
+                typeArguments.addAll(qualifierStack.take(qualifierParts.size).flatMap { it.typeArguments })
             }.apply {
-                resultType = typeForQualifier(this)
+                resultType = components.typeForQualifier(this)
             }
         }
 
         return null
     }
-
 }

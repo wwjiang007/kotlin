@@ -6,19 +6,20 @@
 package org.jetbrains.kotlin.fir.analysis.collectors
 
 import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.analysis.collectors.components.DiagnosticComponentsFactory
+import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnostic
+import org.jetbrains.kotlin.fir.analysis.diagnostics.impl.DiagnosticReporterWithSuppress
+import org.jetbrains.kotlin.fir.analysis.diagnostics.impl.SimpleDiagnosticReporter
+import org.jetbrains.kotlin.fir.declarations.FirFile
+import org.jetbrains.kotlin.fir.resolve.ScopeSession
 
 object FirDiagnosticsCollector {
-    fun create(session: FirSession): AbstractDiagnosticCollector {
-        val collector = SimpleDiagnosticsCollector(session)
-        collector.registerAllComponents()
-        return collector
-    }
-
-    // Use in CLI compiler
-    @Suppress("unused")
-    fun createParallel(session: FirSession): AbstractDiagnosticCollector {
-        val collector = ParallelDiagnosticsCollector(session, numberOfThreads = 4)
-        collector.registerAllComponents()
-        return collector
+    fun create(
+        session: FirSession,
+        scopeSession: ScopeSession,
+    ): SimpleDiagnosticsCollector {
+        return SimpleDiagnosticsCollector(session, scopeSession) { reporter ->
+            DiagnosticComponentsFactory.createAllDiagnosticComponents(session, reporter)
+        }
     }
 }

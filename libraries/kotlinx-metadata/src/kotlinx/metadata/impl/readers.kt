@@ -6,13 +6,14 @@
 package kotlinx.metadata.impl
 
 import kotlinx.metadata.*
+import kotlinx.metadata.Flags // Don't remove this import. See KT-45553
 import kotlinx.metadata.impl.extensions.MetadataExtensions
 import org.jetbrains.kotlin.metadata.ProtoBuf
 import org.jetbrains.kotlin.metadata.deserialization.*
 import org.jetbrains.kotlin.metadata.deserialization.Flags as F
 
 /**
- * Allows to populate [BasicReadContext] with additional data
+ * Allows to populate [ReadContext] with additional data
  * that can be used when reading metadata in [MetadataExtensions].
  */
 interface ReadContextExtension
@@ -92,6 +93,13 @@ fun ProtoBuf.Class.accept(
         v.visitSealedSubclass(c.className(sealedSubclassFqName))
     }
 
+    if (hasInlineClassUnderlyingPropertyName()) {
+        v.visitInlineClassUnderlyingPropertyName(c[inlineClassUnderlyingPropertyName])
+    }
+    loadInlineClassUnderlyingType(c)?.let { underlyingType ->
+        v.visitInlineClassUnderlyingType(underlyingType.flags)?.let { underlyingType.accept(it, c) }
+    }
+
     for (versionRequirement in versionRequirementList) {
         v.visitVersionRequirement()?.let { acceptVersionRequirementVisitor(versionRequirement, it, c) }
     }
@@ -101,6 +109,18 @@ fun ProtoBuf.Class.accept(
     }
 
     v.visitEnd()
+}
+
+private fun ProtoBuf.Class.loadInlineClassUnderlyingType(c: ReadContext): ProtoBuf.Type? {
+    val type = inlineClassUnderlyingType(c.types)
+    if (type != null) return type
+
+    if (!hasInlineClassUnderlyingPropertyName()) return null
+
+    // Kotlin compiler doesn't write underlying type to metadata in case it can be loaded from the underlying property.
+    return propertyList
+        .singleOrNull { it.receiverType(c.types) == null && c[it.name] == c[inlineClassUnderlyingPropertyName] }
+        ?.returnType(c.types)
 }
 
 fun ProtoBuf.Package.accept(
@@ -337,7 +357,7 @@ private fun ProtoBuf.Type.accept(v: KmTypeVisitor, c: ReadContext) {
         hasTypeParameter() -> v.visitTypeParameter(typeParameter)
         hasTypeParameterName() -> {
             val id = c.getTypeParameterId(typeParameterName)
-                    ?: throw InconsistentKotlinMetadataException("No type parameter id for ${c[typeParameterName]}")
+                ?: throw InconsistentKotlinMetadataException("No type parameter id for ${c[typeParameterName]}")
             v.visitTypeParameter(id)
         }
         else -> {
@@ -355,7 +375,7 @@ private fun ProtoBuf.Type.accept(v: KmTypeVisitor, c: ReadContext) {
 
         if (variance != null) {
             val argumentType = argument.type(c.types)
-                    ?: throw InconsistentKotlinMetadataException("No type argument for non-STAR projection in Type")
+                ?: throw InconsistentKotlinMetadataException("No type argument for non-STAR projection in Type")
             v.visitArgument(argumentType.typeFlags, variance)?.let { argumentType.accept(it, c) }
         } else {
             v.visitStarProjection()

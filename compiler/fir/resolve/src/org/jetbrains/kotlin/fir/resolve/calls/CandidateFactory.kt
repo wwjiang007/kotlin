@@ -6,65 +6,76 @@
 package org.jetbrains.kotlin.fir.resolve.calls
 
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
+import org.jetbrains.kotlin.fir.declarations.FirRegularClass
 import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
 import org.jetbrains.kotlin.fir.declarations.builder.buildErrorFunction
 import org.jetbrains.kotlin.fir.declarations.builder.buildErrorProperty
+import org.jetbrains.kotlin.fir.declarations.utils.classId
 import org.jetbrains.kotlin.fir.diagnostics.ConeDiagnostic
 import org.jetbrains.kotlin.fir.expressions.*
-import org.jetbrains.kotlin.fir.resolve.BodyResolveComponents
+import org.jetbrains.kotlin.fir.moduleData
 import org.jetbrains.kotlin.fir.returnExpressions
-import org.jetbrains.kotlin.fir.symbols.AbstractFirBasedSymbol
+import org.jetbrains.kotlin.fir.scopes.FirScope
+import org.jetbrains.kotlin.fir.symbols.FirBasedSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirErrorFunctionSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirErrorPropertySymbol
+import org.jetbrains.kotlin.fir.types.classId
 import org.jetbrains.kotlin.resolve.calls.components.PostponedArgumentsAnalyzerContext
 import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintStorage
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
 
 class CandidateFactory private constructor(
-    val bodyResolveComponents: BodyResolveComponents,
-    val callInfo: CallInfo,
+    val context: ResolutionContext,
     private val baseSystem: ConstraintStorage
 ) {
 
     companion object {
-        private fun buildBaseSystem(bodyResolveComponents: BodyResolveComponents, callInfo: CallInfo): ConstraintStorage {
-            val system = bodyResolveComponents.inferenceComponents.createConstraintSystem()
+        private fun buildBaseSystem(context: ResolutionContext, callInfo: CallInfo): ConstraintStorage {
+            val system = context.inferenceComponents.createConstraintSystem()
             callInfo.arguments.forEach {
                 system.addSubsystemFromExpression(it)
             }
-            system.addOtherSystem(bodyResolveComponents.inferenceComponents.inferenceSession.currentConstraintSystem)
+            system.addOtherSystem(context.bodyResolveContext.inferenceSession.currentConstraintSystem)
             return system.asReadOnlyStorage()
         }
     }
 
-    constructor(bodyResolveComponents: BodyResolveComponents, callInfo: CallInfo) :
-            this(bodyResolveComponents, callInfo, buildBaseSystem(bodyResolveComponents, callInfo))
-
-    fun replaceCallInfo(callInfo: CallInfo): CandidateFactory {
-        if (this.callInfo.arguments.size != callInfo.arguments.size) {
-            throw AssertionError("Incorrect replacement of call info in CandidateFactory")
-        }
-        return CandidateFactory(bodyResolveComponents, callInfo, baseSystem)
-    }
+    constructor(context: ResolutionContext, callInfo: CallInfo) : this(context, buildBaseSystem(context, callInfo))
 
     fun createCandidate(
-        symbol: AbstractFirBasedSymbol<*>,
+        callInfo: CallInfo,
+        symbol: FirBasedSymbol<*>,
         explicitReceiverKind: ExplicitReceiverKind,
+        scope: FirScope?,
         dispatchReceiverValue: ReceiverValue? = null,
-        implicitExtensionReceiverValue: ImplicitReceiverValue<*>? = null,
+        extensionReceiverValue: ReceiverValue? = null,
         builtInExtensionFunctionReceiverValue: ReceiverValue? = null
     ): Candidate {
         return Candidate(
-            symbol, dispatchReceiverValue, implicitExtensionReceiverValue,
-            explicitReceiverKind, bodyResolveComponents, baseSystem,
+            symbol, dispatchReceiverValue, extensionReceiverValue,
+            explicitReceiverKind, context.inferenceComponents.constraintSystemFactory, baseSystem,
             builtInExtensionFunctionReceiverValue?.receiverExpression?.let {
                 callInfo.withReceiverAsArgument(it)
-            } ?: callInfo
+            } ?: callInfo,
+            scope,
+            isFromCompanionObjectTypeScope = when (explicitReceiverKind) {
+                ExplicitReceiverKind.EXTENSION_RECEIVER -> extensionReceiverValue.isCandidateFromCompanionObjectTypeScope()
+                ExplicitReceiverKind.DISPATCH_RECEIVER -> dispatchReceiverValue.isCandidateFromCompanionObjectTypeScope()
+                // The following cases are not applicable for companion objects.
+                ExplicitReceiverKind.NO_EXPLICIT_RECEIVER, ExplicitReceiverKind.BOTH_RECEIVERS -> false
+            }
         )
     }
 
-    fun createErrorCandidate(diagnostic: ConeDiagnostic): Candidate {
-        val symbol: AbstractFirBasedSymbol<*> = when (callInfo.callKind) {
+    private fun ReceiverValue?.isCandidateFromCompanionObjectTypeScope(): Boolean {
+        val expressionReceiverValue = this as? ExpressionReceiverValue ?: return false
+        val resolvedQualifier = (expressionReceiverValue.explicitReceiver as? FirResolvedQualifier) ?: return false
+        val originClassOfCandidate = expressionReceiverValue.type.classId ?: return false
+        return (resolvedQualifier.symbol?.fir as? FirRegularClass)?.companionObject?.classId == originClassOfCandidate
+    }
+
+    fun createErrorCandidate(callInfo: CallInfo, diagnostic: ConeDiagnostic): Candidate {
+        val symbol: FirBasedSymbol<*> = when (callInfo.callKind) {
             is CallKind.VariableAccess -> createErrorPropertySymbol(diagnostic)
             is CallKind.Function,
             is CallKind.DelegatingConstructorCall,
@@ -76,18 +87,19 @@ class CandidateFactory private constructor(
         return Candidate(
             symbol,
             dispatchReceiverValue = null,
-            implicitExtensionReceiverValue = null,
+            extensionReceiverValue = null,
             explicitReceiverKind = ExplicitReceiverKind.NO_EXPLICIT_RECEIVER,
-            bodyResolveComponents,
+            context.inferenceComponents.constraintSystemFactory,
             baseSystem,
-            callInfo
+            callInfo,
+            originScope = null,
         )
     }
 
     private fun createErrorFunctionSymbol(diagnostic: ConeDiagnostic): FirErrorFunctionSymbol {
         return FirErrorFunctionSymbol().also {
             buildErrorFunction {
-                session = this@CandidateFactory.bodyResolveComponents.session
+                moduleData = context.session.moduleData
                 resolvePhase = FirResolvePhase.BODY_RESOLVE
                 origin = FirDeclarationOrigin.Synthetic
                 this.diagnostic = diagnostic
@@ -99,7 +111,7 @@ class CandidateFactory private constructor(
     private fun createErrorPropertySymbol(diagnostic: ConeDiagnostic): FirErrorPropertySymbol {
         return FirErrorPropertySymbol(diagnostic).also {
             buildErrorProperty {
-                session = this@CandidateFactory.bodyResolveComponents.session
+                moduleData = context.session.moduleData
                 resolvePhase = FirResolvePhase.BODY_RESOLVE
                 origin = FirDeclarationOrigin.Synthetic
                 name = FirErrorPropertySymbol.NAME

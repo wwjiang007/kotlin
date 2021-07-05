@@ -6,13 +6,17 @@
 package org.jetbrains.kotlin.backend.jvm.lower.inlineclasses
 
 import org.jetbrains.kotlin.backend.jvm.ir.erasedUpperBound
+import org.jetbrains.kotlin.backend.jvm.ir.isInlineClassType
 import org.jetbrains.kotlin.builtins.StandardNames
+import org.jetbrains.kotlin.codegen.state.InfoForMangling
+import org.jetbrains.kotlin.codegen.state.collectFunctionSignatureForManglingSuffix
 import org.jetbrains.kotlin.codegen.state.md5base64
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrStatementOriginImpl
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.load.java.JvmAbi
+import org.jetbrains.kotlin.name.FqNameUnsafe
 import org.jetbrains.kotlin.name.Name
 
 /**
@@ -35,10 +39,10 @@ object InlineClassAbi {
      */
     internal fun unboxType(type: IrType): IrType? {
         val klass = type.classOrNull?.owner ?: return null
-        if (!klass.isInline) return null
+        val representation = klass.inlineClassRepresentation ?: return null
 
         // TODO: Apply type substitutions
-        val underlyingType = getUnderlyingType(klass).unboxInlineClass()
+        val underlyingType = representation.underlyingType.unboxInlineClass()
         if (!type.isNullable())
             return underlyingType
         if (underlyingType.isNullable() || underlyingType.isPrimitiveType())
@@ -47,22 +51,10 @@ object InlineClassAbi {
     }
 
     /**
-     * Get the underlying type of an inline class based on the single argument to its
-     * primary constructor. This is what the current jvm backend does.
-     *
-     * Looking for a backing field does not work for unsigned types, which don't
-     * contain a field.
-     */
-    fun getUnderlyingType(irClass: IrClass): IrType {
-        require(irClass.isInline)
-        return irClass.primaryConstructor!!.valueParameters[0].type
-    }
-
-    /**
      * Returns a mangled name for a function taking inline class arguments
      * to avoid clashes between overloaded methods.
      */
-    fun mangledNameFor(irFunction: IrFunction, mangleReturnTypes: Boolean): Name {
+    fun mangledNameFor(irFunction: IrFunction, mangleReturnTypes: Boolean, useOldMangleRules: Boolean): Name {
         if (irFunction is IrConstructor) {
             // Note that we might drop this convention and use standard mangling for constructors too, see KT-37186.
             assert(irFunction.constructedClass.isInline) {
@@ -71,13 +63,14 @@ object InlineClassAbi {
             return Name.identifier("constructor-impl")
         }
 
-        val suffix = when {
-            irFunction.fullValueParameterList.any { it.type.requiresMangling } ->
-                hashSuffix(irFunction)
-            mangleReturnTypes && irFunction.hasMangledReturnType ->
-                returnHashSuffix(irFunction)
-            (irFunction.parent as? IrClass)?.isInline == true -> "impl"
-            else -> return irFunction.name
+        val suffix = hashSuffix(
+            useOldMangleRules,
+            irFunction.fullValueParameterList.map { it.type },
+            irFunction.returnType.takeIf { mangleReturnTypes && irFunction.hasMangledReturnType },
+            irFunction.isSuspend
+        )
+        if (suffix == null && ((irFunction.parent as? IrClass)?.isInline != true || irFunction.origin == IrDeclarationOrigin.IR_BUILTINS_STUB)) {
+            return irFunction.name
         }
 
         val base = when {
@@ -91,33 +84,38 @@ object InlineClassAbi {
                 irFunction.name.asString()
         }
 
-        return Name.identifier("$base-$suffix")
+        return Name.identifier("$base-${suffix ?: "impl"}")
     }
 
-    private val IrFunction.propertyName: Name
-        get() = (this as IrSimpleFunction).correspondingPropertySymbol!!.owner.name
-
-    fun returnHashSuffix(irFunction: IrFunction) =
-        md5base64(":${irFunction.returnType.eraseToString()}")
-
-    private fun hashSuffix(irFunction: IrFunction): String {
-        val signatureElementsForMangling =
-            irFunction.fullValueParameterList.mapTo(mutableListOf()) { it.type.eraseToString() }
-        if (irFunction.isSuspend) {
+    fun hashSuffix(
+        useOldMangleRules: Boolean,
+        valueParameters: List<IrType>,
+        returnType: IrType?,
+        addContinuation: Boolean = false
+    ): String? =
+        collectFunctionSignatureForManglingSuffix(
+            useOldMangleRules,
+            valueParameters.any { it.requiresMangling },
             // The JVM backend computes mangled names after creating suspend function views, but before default argument
             // stub insertion. It would be nice if this part of the continuation lowering happened earlier in the pipeline.
             // TODO: Move suspend function view creation before JvmInlineClassLowering.
-            signatureElementsForMangling += "Lkotlin.coroutines.Continuation;"
-        }
-        return md5base64(signatureElementsForMangling.joinToString())
-    }
+            if (addContinuation)
+                valueParameters.map { it.asInfoForMangling() } +
+                        InfoForMangling(FqNameUnsafe("kotlin.coroutines.Continuation"), isInline = false, isNullable = false)
+            else
+                valueParameters.map { it.asInfoForMangling() },
+            returnType?.asInfoForMangling()
+        )?.let(::md5base64)
 
-    private fun IrType.eraseToString() = buildString {
-        append('L')
-        append(erasedUpperBound.fqNameWhenAvailable!!)
-        if (isNullable()) append('?')
-        append(';')
-    }
+    private fun IrType.asInfoForMangling(): InfoForMangling =
+        InfoForMangling(
+            erasedUpperBound.fqNameWhenAvailable!!.toUnsafe(),
+            isInline = isInlineClassType(),
+            isNullable = isNullable()
+        )
+
+    private val IrFunction.propertyName: Name
+        get() = (this as IrSimpleFunction).correspondingPropertySymbol!!.owner.name
 }
 
 internal val IrType.requiresMangling: Boolean
@@ -135,14 +133,11 @@ internal val IrFunction.hasMangledParameters: Boolean
             (this is IrConstructor && constructedClass.isInline)
 
 internal val IrFunction.hasMangledReturnType: Boolean
-    get() = returnType.erasedUpperBound.isInline && parentClassOrNull?.isFileClass != true
+    get() = returnType.isInlineClassType() && parentClassOrNull?.isFileClass != true
 
 internal val IrClass.inlineClassFieldName: Name
-    get() = primaryConstructor!!.valueParameters.single().name
+    get() = (inlineClassRepresentation ?: error("Not an inline class: ${render()}")).underlyingPropertyName
 
 val IrFunction.isInlineClassFieldGetter: Boolean
     get() = (parent as? IrClass)?.isInline == true && this is IrSimpleFunction && extensionReceiverParameter == null &&
             correspondingPropertySymbol?.let { it.owner.getter == this && it.owner.name == parentAsClass.inlineClassFieldName } == true
-
-val IrFunction.isPrimaryInlineClassConstructor: Boolean
-    get() = this is IrConstructor && isPrimary && constructedClass.isInline

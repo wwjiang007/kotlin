@@ -27,9 +27,10 @@ class GradleScriptInfo(
         val javaHome = buildRoot.javaHome
 
         val scriptFile = File(model.file)
-        val virtualFile = VfsUtil.findFile(scriptFile.toPath(), true)!!
+        val virtualFile = VfsUtil.findFile(scriptFile.toPath(), true)
 
-        if (definition == null) return null
+        val definition = definition
+        if (definition == null || virtualFile == null) return null
 
         return ScriptCompilationConfigurationWrapper.FromCompilationConfiguration(
             VirtualFileScriptSource(virtualFile),

@@ -11,7 +11,6 @@ import org.gradle.api.tasks.Nested
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJsCompilation
-import org.jetbrains.kotlin.gradle.targets.js.ir.GENERATE_D_TS
 import org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrCompilation
 import org.jetbrains.kotlin.gradle.targets.js.npm.NpmProject.Companion.PACKAGE_JSON
 import org.jetbrains.kotlin.gradle.utils.property
@@ -21,46 +20,68 @@ import javax.inject.Inject
 open class PublicPackageJsonTask
 @Inject
 constructor(
-    compilation: KotlinJsCompilation
+    @Transient
+    private val compilation: KotlinJsCompilation
 ) : DefaultTask() {
-
     private val npmProject = compilation.npmProject
 
+    @Transient
     private val nodeJs = npmProject.nodeJs
+    private val resolutionManager = nodeJs.npmResolutionManager
+
+    private val compilationName = compilation.disambiguatedName
+    private val projectPath = project.path
 
     private val compilationResolution
-        get() = nodeJs.npmResolutionManager.requireInstalled()[project][npmProject.compilation]
+        get() = resolutionManager.requireInstalled(
+            services,
+            logger
+        )[projectPath][compilationName]
+
+    private val packageJsonHandlers = compilation.packageJsonHandlers
+
+    @get:Input
+    val packageJsonCustomFields: Map<String, Any?>
+        get() = PackageJson(fakePackageJsonValue, fakePackageJsonValue)
+            .apply {
+                packageJsonHandlers.forEach { it() }
+            }.customFields
 
     @get:Nested
-    internal val externalDependencies: Collection<NestedNpmDependency>
+    internal val externalDependencies: Collection<NpmDependencyDeclaration>
         get() = compilationResolution.externalNpmDependencies
             .map {
-                NestedNpmDependency(
+                NpmDependencyDeclaration(
                     scope = it.scope,
                     name = it.name,
-                    version = it.version
+                    version = it.version,
+                    generateExternals = it.generateExternals
                 )
             }
 
-    private val realExternalDependencies: Collection<NpmDependency>
-        get() = compilationResolution.externalNpmDependencies
+    private val publicPackageJsonTaskName by lazy {
+        npmProject.publicPackageJsonTaskName
+    }
 
-    @get:OutputFile
-    var packageJsonFile: File by property {
+    private val defaultPackageJsonFile by lazy {
         project.buildDir
             .resolve("tmp")
-            .resolve(npmProject.publicPackageJsonTaskName)
+            .resolve(publicPackageJsonTaskName)
             .resolve(PACKAGE_JSON)
     }
 
+    @get:OutputFile
+    var packageJsonFile: File by property { defaultPackageJsonFile }
+
+    private val isJrIrCompilation = compilation is KotlinJsIrCompilation
+    private val projectVersion = project.version.toString()
+
     @TaskAction
     fun resolve() {
-        val compilation = npmProject.compilation
-
-        packageJson(npmProject, realExternalDependencies).let { packageJson ->
+        packageJson(npmProject.name, projectVersion, npmProject.main, externalDependencies, packageJsonHandlers).let { packageJson ->
             packageJson.main = "${npmProject.name}.js"
 
-            if (compilation is KotlinJsIrCompilation) {
+            if (isJrIrCompilation) {
                 packageJson.types = "${npmProject.name}.d.ts"
             }
 
@@ -89,12 +110,3 @@ constructor(
         const val NAME = "publicPackageJson"
     }
 }
-
-internal data class NestedNpmDependency(
-    @Input
-    val scope: NpmDependency.Scope,
-    @Input
-    val name: String,
-    @Input
-    val version: String
-)

@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -82,6 +82,36 @@ public inline fun CharSequence.first(predicate: (Char) -> Boolean): Char {
 }
 
 /**
+ * Returns the first non-null value produced by [transform] function being applied to characters of this char sequence in iteration order,
+ * or throws [NoSuchElementException] if no non-null value was produced.
+ * 
+ * @sample samples.collections.Collections.Transformations.firstNotNullOf
+ */
+@SinceKotlin("1.5")
+@kotlin.internal.InlineOnly
+public inline fun <R : Any> CharSequence.firstNotNullOf(transform: (Char) -> R?): R {
+    return firstNotNullOfOrNull(transform) ?: throw NoSuchElementException("No element of the char sequence was transformed to a non-null value.")
+}
+
+/**
+ * Returns the first non-null value produced by [transform] function being applied to characters of this char sequence in iteration order,
+ * or `null` if no non-null value was produced.
+ * 
+ * @sample samples.collections.Collections.Transformations.firstNotNullOf
+ */
+@SinceKotlin("1.5")
+@kotlin.internal.InlineOnly
+public inline fun <R : Any> CharSequence.firstNotNullOfOrNull(transform: (Char) -> R?): R? {
+    for (element in this) {
+        val result = transform(element)
+        if (result != null) {
+            return result
+        }
+    }
+    return null
+}
+
+/**
  * Returns the first character, or `null` if the char sequence is empty.
  */
 public fun CharSequence.firstOrNull(): Char? {
@@ -139,7 +169,10 @@ public inline fun CharSequence.indexOfLast(predicate: (Char) -> Boolean): Int {
 
 /**
  * Returns the last character.
- * @throws [NoSuchElementException] if the char sequence is empty.
+ * 
+ * @throws NoSuchElementException if the char sequence is empty.
+ * 
+ * @sample samples.text.Strings.last
  */
 public fun CharSequence.last(): Char {
     if (isEmpty())
@@ -149,7 +182,10 @@ public fun CharSequence.last(): Char {
 
 /**
  * Returns the last character matching the given [predicate].
- * @throws [NoSuchElementException] if no such character is found.
+ * 
+ * @throws NoSuchElementException if no such character is found.
+ * 
+ * @sample samples.text.Strings.last
  */
 public inline fun CharSequence.last(predicate: (Char) -> Boolean): Char {
     for (index in this.indices.reversed()) {
@@ -161,6 +197,8 @@ public inline fun CharSequence.last(predicate: (Char) -> Boolean): Char {
 
 /**
  * Returns the last character, or `null` if the char sequence is empty.
+ * 
+ * @sample samples.text.Strings.last
  */
 public fun CharSequence.lastOrNull(): Char? {
     return if (isEmpty()) null else this[length - 1]
@@ -168,6 +206,8 @@ public fun CharSequence.lastOrNull(): Char? {
 
 /**
  * Returns the last character matching the given [predicate], or `null` if no such character was found.
+ * 
+ * @sample samples.text.Strings.last
  */
 public inline fun CharSequence.lastOrNull(predicate: (Char) -> Boolean): Char? {
     for (index in this.indices.reversed()) {
@@ -1139,14 +1179,14 @@ public inline fun CharSequence.forEachIndexed(action: (index: Int, Char) -> Unit
     for (item in this) action(index++, item)
 }
 
-@Deprecated("Use maxOrNull instead.", ReplaceWith("maxOrNull()"))
-@DeprecatedSinceKotlin(warningSince = "1.4")
+@Deprecated("Use maxOrNull instead.", ReplaceWith("this.maxOrNull()"))
+@DeprecatedSinceKotlin(warningSince = "1.4", errorSince = "1.5")
 public fun CharSequence.max(): Char? {
     return maxOrNull()
 }
 
-@Deprecated("Use maxByOrNull instead.", ReplaceWith("maxByOrNull(selector)"))
-@DeprecatedSinceKotlin(warningSince = "1.4")
+@Deprecated("Use maxByOrNull instead.", ReplaceWith("this.maxByOrNull(selector)"))
+@DeprecatedSinceKotlin(warningSince = "1.4", errorSince = "1.5")
 public inline fun <R : Comparable<R>> CharSequence.maxBy(selector: (Char) -> R): Char? {
     return maxByOrNull(selector)
 }
@@ -1356,8 +1396,8 @@ public fun CharSequence.maxOrNull(): Char? {
     return max
 }
 
-@Deprecated("Use maxWithOrNull instead.", ReplaceWith("maxWithOrNull(comparator)"))
-@DeprecatedSinceKotlin(warningSince = "1.4")
+@Deprecated("Use maxWithOrNull instead.", ReplaceWith("this.maxWithOrNull(comparator)"))
+@DeprecatedSinceKotlin(warningSince = "1.4", errorSince = "1.5")
 public fun CharSequence.maxWith(comparator: Comparator<in Char>): Char? {
     return maxWithOrNull(comparator)
 }
@@ -1376,14 +1416,14 @@ public fun CharSequence.maxWithOrNull(comparator: Comparator<in Char>): Char? {
     return max
 }
 
-@Deprecated("Use minOrNull instead.", ReplaceWith("minOrNull()"))
-@DeprecatedSinceKotlin(warningSince = "1.4")
+@Deprecated("Use minOrNull instead.", ReplaceWith("this.minOrNull()"))
+@DeprecatedSinceKotlin(warningSince = "1.4", errorSince = "1.5")
 public fun CharSequence.min(): Char? {
     return minOrNull()
 }
 
-@Deprecated("Use minByOrNull instead.", ReplaceWith("minByOrNull(selector)"))
-@DeprecatedSinceKotlin(warningSince = "1.4")
+@Deprecated("Use minByOrNull instead.", ReplaceWith("this.minByOrNull(selector)"))
+@DeprecatedSinceKotlin(warningSince = "1.4", errorSince = "1.5")
 public inline fun <R : Comparable<R>> CharSequence.minBy(selector: (Char) -> R): Char? {
     return minByOrNull(selector)
 }
@@ -1593,8 +1633,8 @@ public fun CharSequence.minOrNull(): Char? {
     return min
 }
 
-@Deprecated("Use minWithOrNull instead.", ReplaceWith("minWithOrNull(comparator)"))
-@DeprecatedSinceKotlin(warningSince = "1.4")
+@Deprecated("Use minWithOrNull instead.", ReplaceWith("this.minWithOrNull(comparator)"))
+@DeprecatedSinceKotlin(warningSince = "1.4", errorSince = "1.5")
 public fun CharSequence.minWith(comparator: Comparator<in Char>): Char? {
     return minWithOrNull(comparator)
 }
@@ -1960,23 +2000,11 @@ public inline fun <R> CharSequence.scanIndexed(initial: R, operation: (index: In
     return runningFoldIndexed(initial, operation)
 }
 
-@Deprecated("Use runningReduce instead.", ReplaceWith("runningReduce(operation)"), level = DeprecationLevel.ERROR)
-@SinceKotlin("1.3")
-@ExperimentalStdlibApi
-public inline fun CharSequence.scanReduce(operation: (acc: Char, Char) -> Char): List<Char> {
-    return runningReduce(operation)
-}
-
-@Deprecated("Use runningReduceIndexed instead.", ReplaceWith("runningReduceIndexed(operation)"), level = DeprecationLevel.ERROR)
-@SinceKotlin("1.3")
-@ExperimentalStdlibApi
-public inline fun CharSequence.scanReduceIndexed(operation: (index: Int, acc: Char, Char) -> Char): List<Char> {
-    return runningReduceIndexed(operation)
-}
-
 /**
  * Returns the sum of all values produced by [selector] function applied to each character in the char sequence.
  */
+@Deprecated("Use sumOf instead.", ReplaceWith("this.sumOf(selector)"))
+@DeprecatedSinceKotlin(warningSince = "1.5")
 public inline fun CharSequence.sumBy(selector: (Char) -> Int): Int {
     var sum: Int = 0
     for (element in this) {
@@ -1988,6 +2016,8 @@ public inline fun CharSequence.sumBy(selector: (Char) -> Int): Int {
 /**
  * Returns the sum of all values produced by [selector] function applied to each character in the char sequence.
  */
+@Deprecated("Use sumOf instead.", ReplaceWith("this.sumOf(selector)"))
+@DeprecatedSinceKotlin(warningSince = "1.5")
 public inline fun CharSequence.sumByDouble(selector: (Char) -> Double): Double {
     var sum: Double = 0.0
     for (element in this) {
@@ -2047,11 +2077,11 @@ public inline fun CharSequence.sumOf(selector: (Char) -> Long): Long {
 /**
  * Returns the sum of all values produced by [selector] function applied to each character in the char sequence.
  */
-@SinceKotlin("1.4")
+@SinceKotlin("1.5")
 @OptIn(kotlin.experimental.ExperimentalTypeInference::class)
 @OverloadResolutionByLambdaReturnType
 @kotlin.jvm.JvmName("sumOfUInt")
-@ExperimentalUnsignedTypes
+@WasExperimental(ExperimentalUnsignedTypes::class)
 @kotlin.internal.InlineOnly
 public inline fun CharSequence.sumOf(selector: (Char) -> UInt): UInt {
     var sum: UInt = 0.toUInt()
@@ -2064,11 +2094,11 @@ public inline fun CharSequence.sumOf(selector: (Char) -> UInt): UInt {
 /**
  * Returns the sum of all values produced by [selector] function applied to each character in the char sequence.
  */
-@SinceKotlin("1.4")
+@SinceKotlin("1.5")
 @OptIn(kotlin.experimental.ExperimentalTypeInference::class)
 @OverloadResolutionByLambdaReturnType
 @kotlin.jvm.JvmName("sumOfULong")
-@ExperimentalUnsignedTypes
+@WasExperimental(ExperimentalUnsignedTypes::class)
 @kotlin.internal.InlineOnly
 public inline fun CharSequence.sumOf(selector: (Char) -> ULong): ULong {
     var sum: ULong = 0.toULong()
@@ -2081,7 +2111,7 @@ public inline fun CharSequence.sumOf(selector: (Char) -> ULong): ULong {
 /**
  * Splits this char sequence into a list of strings each not exceeding the given [size].
  * 
- * The last string in the resulting list may have less characters than the given [size].
+ * The last string in the resulting list may have fewer characters than the given [size].
  * 
  * @param size the number of elements to take in each string, must be positive and can be greater than the number of elements in this char sequence.
  * 
@@ -2100,7 +2130,7 @@ public fun CharSequence.chunked(size: Int): List<String> {
  * 
  * Note that the char sequence passed to the [transform] function is ephemeral and is valid only inside that function.
  * You should not store it or allow it to escape in some way, unless you made a snapshot of it.
- * The last char sequence may have less characters than the given [size].
+ * The last char sequence may have fewer characters than the given [size].
  * 
  * @param size the number of elements to take in each char sequence, must be positive and can be greater than the number of elements in this char sequence.
  * 
@@ -2114,7 +2144,7 @@ public fun <R> CharSequence.chunked(size: Int, transform: (CharSequence) -> R): 
 /**
  * Splits this char sequence into a sequence of strings each not exceeding the given [size].
  * 
- * The last string in the resulting sequence may have less characters than the given [size].
+ * The last string in the resulting sequence may have fewer characters than the given [size].
  * 
  * @param size the number of elements to take in each string, must be positive and can be greater than the number of elements in this char sequence.
  * 
@@ -2133,7 +2163,7 @@ public fun CharSequence.chunkedSequence(size: Int): Sequence<String> {
  * 
  * Note that the char sequence passed to the [transform] function is ephemeral and is valid only inside that function.
  * You should not store it or allow it to escape in some way, unless you made a snapshot of it.
- * The last char sequence may have less characters than the given [size].
+ * The last char sequence may have fewer characters than the given [size].
  * 
  * @param size the number of elements to take in each char sequence, must be positive and can be greater than the number of elements in this char sequence.
  * 
@@ -2189,7 +2219,7 @@ public inline fun String.partition(predicate: (Char) -> Boolean): Pair<String, S
  * sliding along this char sequence with the given [step], where each
  * snapshot is a string.
  * 
- * Several last strings may have less characters than the given [size].
+ * Several last strings may have fewer characters than the given [size].
  * 
  * Both [size] and [step] must be positive and can be greater than the number of elements in this char sequence.
  * @param size the number of elements to take in each window
@@ -2211,7 +2241,7 @@ public fun CharSequence.windowed(size: Int, step: Int = 1, partialWindows: Boole
  * 
  * Note that the char sequence passed to the [transform] function is ephemeral and is valid only inside that function.
  * You should not store it or allow it to escape in some way, unless you made a snapshot of it.
- * Several last char sequences may have less characters than the given [size].
+ * Several last char sequences may have fewer characters than the given [size].
  * 
  * Both [size] and [step] must be positive and can be greater than the number of elements in this char sequence.
  * @param size the number of elements to take in each window
@@ -2242,7 +2272,7 @@ public fun <R> CharSequence.windowed(size: Int, step: Int = 1, partialWindows: B
  * sliding along this char sequence with the given [step], where each
  * snapshot is a string.
  * 
- * Several last strings may have less characters than the given [size].
+ * Several last strings may have fewer characters than the given [size].
  * 
  * Both [size] and [step] must be positive and can be greater than the number of elements in this char sequence.
  * @param size the number of elements to take in each window
@@ -2264,7 +2294,7 @@ public fun CharSequence.windowedSequence(size: Int, step: Int = 1, partialWindow
  * 
  * Note that the char sequence passed to the [transform] function is ephemeral and is valid only inside that function.
  * You should not store it or allow it to escape in some way, unless you made a snapshot of it.
- * Several last char sequences may have less characters than the given [size].
+ * Several last char sequences may have fewer characters than the given [size].
  * 
  * Both [size] and [step] must be positive and can be greater than the number of elements in this char sequence.
  * @param size the number of elements to take in each window

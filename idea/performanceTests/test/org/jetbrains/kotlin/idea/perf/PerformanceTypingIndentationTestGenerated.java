@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.idea.perf;
 import com.intellij.testFramework.TestDataPath;
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
+import org.jetbrains.kotlin.test.util.KtTestUtil;
 import org.jetbrains.kotlin.test.TestMetadata;
 import org.junit.runner.RunWith;
 
@@ -54,13 +55,23 @@ public class PerformanceTypingIndentationTestGenerated extends AbstractPerforman
         runTest("idea/testData/indentationOnNewline/AfterImport.kt");
     }
 
+    @TestMetadata("AfterPropertyGetter.kt")
+    public void testAfterPropertyGetter() throws Exception {
+        runTest("idea/testData/indentationOnNewline/AfterPropertyGetter.kt");
+    }
+
+    @TestMetadata("AfterPropertySetter.kt")
+    public void testAfterPropertySetter() throws Exception {
+        runTest("idea/testData/indentationOnNewline/AfterPropertySetter.kt");
+    }
+
     @TestMetadata("AfterTry.kt")
     public void testAfterTry() throws Exception {
         runTest("idea/testData/indentationOnNewline/AfterTry.kt");
     }
 
     public void testAllFilesPresentInIndentationOnNewline() throws Exception {
-        KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
+        KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
     }
 
     @TestMetadata("Annotation.kt")
@@ -91,16 +102,6 @@ public class PerformanceTypingIndentationTestGenerated extends AbstractPerforman
     @TestMetadata("ConsecutiveCallsInSafeCallsEnd.kt")
     public void testConsecutiveCallsInSafeCallsEnd() throws Exception {
         runTest("idea/testData/indentationOnNewline/ConsecutiveCallsInSafeCallsEnd.kt");
-    }
-
-    @TestMetadata("FunctionBlock.kt")
-    public void testFunctionBlock() throws Exception {
-        runTest("idea/testData/indentationOnNewline/FunctionBlock.kt");
-    }
-
-    @TestMetadata("FunctionBlock2.kt")
-    public void testFunctionBlock2() throws Exception {
-        runTest("idea/testData/indentationOnNewline/FunctionBlock2.kt");
     }
 
     @TestMetadata("HigherOrderFunction.kt")
@@ -262,7 +263,7 @@ public class PerformanceTypingIndentationTestGenerated extends AbstractPerforman
         }
 
         public void testAllFilesPresentInArrayAccess() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/arrayAccess"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/arrayAccess"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
         }
 
         @TestMetadata("listAccess.kt")
@@ -280,7 +281,7 @@ public class PerformanceTypingIndentationTestGenerated extends AbstractPerforman
         }
 
         public void testAllFilesPresentInControlFlowConstructions() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/controlFlowConstructions"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/controlFlowConstructions"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
         }
 
         @TestMetadata("Catch.kt")
@@ -553,7 +554,7 @@ public class PerformanceTypingIndentationTestGenerated extends AbstractPerforman
         }
 
         public void testAllFilesPresentInElvis() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/elvis"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/elvis"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
         }
 
         @TestMetadata("BeforeElvis.kt")
@@ -567,6 +568,64 @@ public class PerformanceTypingIndentationTestGenerated extends AbstractPerforman
         }
     }
 
+    @TestMetadata("idea/testData/indentationOnNewline/emptyBraces")
+    @TestDataPath("$PROJECT_ROOT")
+    @RunWith(JUnit3RunnerWithInners.class)
+    public static class EmptyBraces extends AbstractPerformanceTypingIndentationTest {
+        private void runTest(String testDataFilePath) throws Exception {
+            KotlinTestUtils.runTest(this::doPerfTest, this, testDataFilePath);
+        }
+
+        public void testAllFilesPresentInEmptyBraces() throws Exception {
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/emptyBraces"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
+        }
+
+        @TestMetadata("ClassWithConstructor.kt")
+        public void testClassWithConstructor() throws Exception {
+            runTest("idea/testData/indentationOnNewline/emptyBraces/ClassWithConstructor.kt");
+        }
+
+        @TestMetadata("ClassWithConstructor2.kt")
+        public void testClassWithConstructor2() throws Exception {
+            runTest("idea/testData/indentationOnNewline/emptyBraces/ClassWithConstructor2.kt");
+        }
+
+        @TestMetadata("ClassWithoutConstructor.kt")
+        public void testClassWithoutConstructor() throws Exception {
+            runTest("idea/testData/indentationOnNewline/emptyBraces/ClassWithoutConstructor.kt");
+        }
+
+        @TestMetadata("FunctionBlock.kt")
+        public void testFunctionBlock() throws Exception {
+            runTest("idea/testData/indentationOnNewline/emptyBraces/FunctionBlock.kt");
+        }
+
+        @TestMetadata("FunctionBlock2.kt")
+        public void testFunctionBlock2() throws Exception {
+            runTest("idea/testData/indentationOnNewline/emptyBraces/FunctionBlock2.kt");
+        }
+
+        @TestMetadata("FunctionBody3.kt")
+        public void testFunctionBody3() throws Exception {
+            runTest("idea/testData/indentationOnNewline/emptyBraces/FunctionBody3.kt");
+        }
+
+        @TestMetadata("FunctionBody4.kt")
+        public void testFunctionBody4() throws Exception {
+            runTest("idea/testData/indentationOnNewline/emptyBraces/FunctionBody4.kt");
+        }
+
+        @TestMetadata("FunctionBodyInsideClass.kt")
+        public void testFunctionBodyInsideClass() throws Exception {
+            runTest("idea/testData/indentationOnNewline/emptyBraces/FunctionBodyInsideClass.kt");
+        }
+
+        @TestMetadata("FunctionBodyInsideClass2.kt")
+        public void testFunctionBodyInsideClass2() throws Exception {
+            runTest("idea/testData/indentationOnNewline/emptyBraces/FunctionBodyInsideClass2.kt");
+        }
+    }
+
     @TestMetadata("idea/testData/indentationOnNewline/emptyParameters")
     @TestDataPath("$PROJECT_ROOT")
     @RunWith(JUnit3RunnerWithInners.class)
@@ -576,7 +635,7 @@ public class PerformanceTypingIndentationTestGenerated extends AbstractPerforman
         }
 
         public void testAllFilesPresentInEmptyParameters() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/emptyParameters"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/emptyParameters"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
         }
 
         @TestMetadata("EmptyArgumentInCallByArrayAccess.kt")
@@ -874,7 +933,7 @@ public class PerformanceTypingIndentationTestGenerated extends AbstractPerforman
         }
 
         public void testAllFilesPresentInEmptyParenthesisInBinaryExpression() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/emptyParenthesisInBinaryExpression"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/emptyParenthesisInBinaryExpression"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
         }
 
         @TestMetadata("AssignmentAfterEq.kt")
@@ -1002,7 +1061,7 @@ public class PerformanceTypingIndentationTestGenerated extends AbstractPerforman
         }
 
         public void testAllFilesPresentInExpressionBody() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/expressionBody"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/expressionBody"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
         }
 
         @TestMetadata("FunctionWithExplicitType.kt")
@@ -1060,7 +1119,7 @@ public class PerformanceTypingIndentationTestGenerated extends AbstractPerforman
         }
 
         public void testAllFilesPresentInScript() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/script"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/script"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
         }
 
         @TestMetadata("ScriptAfterClosingBrace.kts")
@@ -1103,7 +1162,7 @@ public class PerformanceTypingIndentationTestGenerated extends AbstractPerforman
         }
 
         public void testAllFilesPresentInTemplates() throws Exception {
-            KotlinTestUtils.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/templates"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
+            KtTestUtil.assertAllTestsPresentByMetadataWithExcluded(this.getClass(), new File("idea/testData/indentationOnNewline/templates"), Pattern.compile("^([^.]+)\\.(kt|kts)$"), null, true);
         }
 
         @TestMetadata("LargeFileWithStringTemplate.kt")

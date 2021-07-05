@@ -1,5 +1,5 @@
 // !DIAGNOSTICS: -UNUSED_PARAMETER,-UNUSED_VARIABLE
-
+// WITH_RUNTIME
 // FILE: test.kt
 import kotlinx.serialization.*
 import kotlinx.serialization.encoding.*
@@ -19,3 +19,6 @@ object EnumSerializer: KSerializer<ExplicitlyMarkedEnumCustom> {
     override fun serialize(encoder: Encoder, value: ExplicitlyMarkedEnumCustom) = TODO()
     override fun deserialize(decoder: Decoder): ExplicitlyMarkedEnumCustom = TODO()
 }
+
+@Serializable
+data class EnumUsage(val s: SimpleEnum, val m: MarkedNameEnum, val e: ExplicitlyMarkedEnum)

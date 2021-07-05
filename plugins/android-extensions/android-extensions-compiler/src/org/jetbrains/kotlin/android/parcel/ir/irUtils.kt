@@ -26,7 +26,6 @@ import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.types.Variance
-import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 // true if the class should be processed by the parcelize plugin
 val IrClass.isParcelize: Boolean
@@ -34,7 +33,7 @@ val IrClass.isParcelize: Boolean
 
 // Finds the getter for a pre-existing CREATOR field on the class companion, which is used for manual Parcelable implementations in Kotlin.
 val IrClass.creatorGetter: IrSimpleFunctionSymbol?
-    get() = companionObject()?.safeAs<IrClass>()?.getPropertyGetter(CREATOR_NAME.asString())?.takeIf {
+    get() = companionObject()?.getPropertyGetter(CREATOR_NAME.asString())?.takeIf {
         it.owner.correspondingPropertySymbol?.owner?.backingField?.hasAnnotation(FqName("kotlin.jvm.JvmField")) == true
     }
 
@@ -60,7 +59,11 @@ fun IrBuilderWithScope.parcelerCreate(parceler: IrClass, parcel: IrValueDeclarat
 
 // object P: Parceler<T> { fun newArray(size: Int): Array<T> }
 fun IrBuilderWithScope.parcelerNewArray(parceler: IrClass?, size: IrValueDeclaration): IrExpression? =
-    parceler?.parcelerSymbolByName("newArray")?.let { newArraySymbol ->
+    parceler?.parcelerSymbolByName("newArray")?.takeIf {
+        // The `newArray` method in `kotlinx.parcelize.Parceler` is stubbed out and we
+        // have to produce a new implementation, unless the user overrides it.
+        !it.owner.isFakeOverride || it.owner.resolveFakeOverride()?.parentClassOrNull?.fqNameWhenAvailable != PARCELER_FQNAME
+    }?.let { newArraySymbol ->
         irCall(newArraySymbol).apply {
             dispatchReceiver = irGetObject(parceler.symbol)
             putValueArgument(0, irGet(size))
@@ -102,7 +105,7 @@ fun IrBuilderWithScope.parcelableCreatorCreateFromParcel(creator: IrExpression, 
 // has already done the work.
 private fun IrClass.parcelerSymbolByName(name: String): IrSimpleFunctionSymbol? =
     functions.firstOrNull { function ->
-        !function.isFakeOverride && function.name.asString() == name && function.overridesFunctionIn(PARCELER_FQNAME)
+        function.name.asString() == name && function.overridesFunctionIn(PARCELER_FQNAME)
     }?.symbol
 
 fun IrSimpleFunction.overridesFunctionIn(fqName: FqName): Boolean =
@@ -126,13 +129,13 @@ fun IrClass.isSubclassOfFqName(fqName: String): Boolean =
     fqNameWhenAvailable?.asString() == fqName || superTypes.any { it.erasedUpperBound.isSubclassOfFqName(fqName) }
 
 inline fun IrBlockBuilder.forUntil(upperBound: IrExpression, loopBody: IrBlockBuilder.(IrValueDeclaration) -> Unit) {
-    val indexTemporary = irTemporaryVar(irInt(0))
+    val indexTemporary = irTemporary(irInt(0), isMutable = true)
     +irWhile().apply {
         condition = irNotEquals(irGet(indexTemporary), upperBound)
         body = irBlock {
             loopBody(indexTemporary)
             val inc = context.irBuiltIns.intClass.getSimpleFunction("inc")!!
-            +irSetVar(indexTemporary.symbol, irCall(inc).apply {
+            +irSet(indexTemporary.symbol, irCall(inc).apply {
                 dispatchReceiver = irGet(indexTemporary)
             })
         }

@@ -19,6 +19,7 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinTargetWithBinaries
 import org.jetbrains.kotlin.gradle.plugin.mpp.disambiguateName
 import org.jetbrains.kotlin.gradle.targets.js.JsAggregatingExecutionSource
 import org.jetbrains.kotlin.gradle.targets.js.KotlinJsReportAggregatingTestRun
+import org.jetbrains.kotlin.gradle.targets.js.KotlinJsTarget
 import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsBrowserDsl
 import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsNodeDsl
 import org.jetbrains.kotlin.gradle.targets.js.dsl.KotlinJsSubTargetContainerDsl
@@ -45,6 +46,9 @@ constructor(
     open var isMpp: Boolean? = null
         internal set
 
+    var legacyTarget: KotlinJsTarget? = null
+        internal set
+
     override var moduleName: String? = null
         set(value) {
             check(!isBrowserConfigured && !isNodejsConfigured) {
@@ -68,7 +72,13 @@ constructor(
     }
 
     internal val commonFakeApiElementsConfigurationName: String
-        get() = disambiguateName("commonFakeApiElements")
+        get() = lowerCamelCaseName(
+            if (mixedMode)
+                disambiguationClassifierInPlatform
+            else
+                disambiguationClassifier,
+            "commonFakeApiElements"
+        )
 
     val disambiguationClassifierInPlatform: String?
         get() = if (mixedMode) {
@@ -107,6 +117,8 @@ constructor(
                     binary.linkTask.configure {
                         it.kotlinOptions.outputFile = project.buildDir
                             .resolve(COMPILE_SYNC)
+                            .resolve(compilation.name)
+                            .resolve(binary.name)
                             .resolve(npmProject.main)
                             .canonicalPath
 
@@ -216,7 +228,5 @@ constructor(
 
     private fun KotlinJsOptions.configureCommonJsOptions() {
         moduleKind = "commonjs"
-        sourceMap = true
-        sourceMapEmbedSources = null
     }
 }

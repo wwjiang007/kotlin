@@ -40,10 +40,7 @@ val sharedVariablesPhase = makeIrFilePhase(
 class SharedVariablesLowering(val context: BackendContext) : BodyLoweringPass {
 
     override fun lower(irBody: IrBody, container: IrDeclaration) {
-        // TODO remove this condition
-        if (container is IrFunction || container is IrField || container is IrAnonymousInitializer) {
-            SharedVariablesTransformer(irBody, container).lowerSharedVariables()
-        }
+        SharedVariablesTransformer(irBody, container).lowerSharedVariables()
     }
 
     private inner class SharedVariablesTransformer(val irBody: IrBody, val irDeclaration: IrDeclaration) {
@@ -118,11 +115,11 @@ class SharedVariablesLowering(val context: BackendContext) : BodyLoweringPass {
                     }
                 }
 
-                override fun visitSetVariable(expression: IrSetVariable, data: IrDeclarationParent?) {
-                    super.visitSetVariable(expression, data)
+                override fun visitSetValue(expression: IrSetValue, data: IrDeclarationParent?) {
+                    super.visitSetValue(expression, data)
 
                     val variable = expression.symbol.owner
-                    if (variable.initializer == null && getRealParent(variable) != data && variable in relevantVals) {
+                    if (variable is IrVariable && variable.initializer == null && getRealParent(variable) != data && variable in relevantVals) {
                         sharedVariables.add(variable)
                     }
                 }
@@ -159,7 +156,7 @@ class SharedVariablesLowering(val context: BackendContext) : BodyLoweringPass {
                     return context.sharedVariablesManager.getSharedValue(newDeclaration, expression)
                 }
 
-                override fun visitSetVariable(expression: IrSetVariable): IrExpression {
+                override fun visitSetValue(expression: IrSetValue): IrExpression {
                     expression.transformChildrenVoid(this)
 
                     val newDeclaration = getTransformedSymbol(expression.symbol) ?: return expression

@@ -38,17 +38,16 @@ dependencies {
     testCompileOnly(project(":kotlin-sam-with-receiver-compiler-plugin"))
     testCompileOnly(project(":noarg-ide-plugin"))
     testCompileOnly(project(":sam-with-receiver-ide-plugin"))
+    testCompileOnly(project(":plugins:lombok:lombok-ide-plugin"))
     testCompileOnly(project(":idea:idea-native"))
     testCompileOnly(project(":idea:idea-gradle-native"))
     testCompileOnly(projectTests(":idea:idea-test-framework"))
     testCompileOnly(intellijDep())
     testRuntimeOnly(intellijDep())
 
-    Platform[192].orHigher {
-        compileOnly(intellijPluginDep("java"))
-        testCompileOnly(intellijPluginDep("java"))
-        testRuntimeOnly(intellijPluginDep("java"))
-    }
+    compileOnly(intellijPluginDep("java"))
+    testCompileOnly(intellijPluginDep("java"))
+    testRuntimeOnly(intellijPluginDep("java"))
 }
 
 sourceSets {
@@ -63,5 +62,3 @@ sourcesJar()
 javadocJar()
 
 projectTest(parallel = true)
-
-apply(from = "$rootDir/gradle/kotlinPluginPublication.gradle.kts")

@@ -103,7 +103,7 @@ open class PodspecTask : DefaultTask() {
             """.trimIndent()
         }
 
-        val gradleCommand = "\$REPO_ROOT/${gradleWrapper!!.toRelativeString(project.projectDir)}"
+        val gradleCommand = "\$REPO_ROOT/${gradleWrapper.toRelativeString(project.projectDir)}"
         val syncTask = "${project.path}:$SYNC_TASK_NAME"
 
         val deploymentTargets = run {
@@ -124,7 +124,6 @@ open class PodspecTask : DefaultTask() {
                 |    spec.license                  = '${license.getOrEmpty()}'
                 |    spec.summary                  = '${summary.getOrEmpty()}'
                 |
-                |    spec.static_framework         = true
                 |    spec.vendored_frameworks      = "$frameworkDir/${frameworkName.get()}.framework"
                 |    spec.libraries                = "c++"
                 |    spec.module_name              = "#{spec.name}_umbrella"
@@ -136,7 +135,7 @@ open class PodspecTask : DefaultTask() {
                 |    spec.pod_target_xcconfig = {
                 |        'KOTLIN_TARGET[sdk=iphonesimulator*]' => 'ios_x64',
                 |        'KOTLIN_TARGET[sdk=iphoneos*]' => '$KOTLIN_TARGET_FOR_IOS_DEVICE',
-                |        'KOTLIN_TARGET[sdk=watchsimulator*]' => 'watchos_x86',
+                |        'KOTLIN_TARGET[sdk=watchsimulator*]' => 'watchos_x64',
                 |        'KOTLIN_TARGET[sdk=watchos*]' => '$KOTLIN_TARGET_FOR_WATCHOS_DEVICE',
                 |        'KOTLIN_TARGET[sdk=appletvsimulator*]' => 'tvos_x64',
                 |        'KOTLIN_TARGET[sdk=appletvos*]' => 'tvos_arm64',
@@ -189,6 +188,9 @@ open class PodspecTask : DefaultTask() {
             if (project.rootProject == project) project.multiplatformExtensionOrNull?.cocoapodsExtensionOrNull?.podfile != null
             else project.multiplatformExtensionOrNull?.cocoapodsExtensionOrNull?.podfile != null
                     || (project.parent?.let { hasPodfileOwnOrParent(it) } ?: false)
+
+        internal fun retrieveSpecRepos(project: Project): SpecRepos? = project.multiplatformExtensionOrNull?.cocoapodsExtensionOrNull?.specRepos
+        internal fun retrievePods(project: Project): List<CocoapodsDependency>? = project.multiplatformExtensionOrNull?.cocoapodsExtensionOrNull?.podsAsTaskInput
     }
 }
 
@@ -212,8 +214,17 @@ open class DummyFrameworkTask : DefaultTask() {
     @Input
     lateinit var frameworkName: Provider<String>
 
+    @Input
+    lateinit var useDynamicFramework: Provider<Boolean>
+
     private val frameworkDir: File
         get() = destinationDir.resolve("${frameworkName.get()}.framework")
+
+    private val dummyFrameworkPath: String
+        get() {
+            val staticOrDynamic = if (useDynamicFramework.get()) "dynamic" else "static"
+            return "/cocoapods/$staticOrDynamic/dummy.framework/"
+        }
 
     private fun copyResource(from: String, to: File) {
         to.parentFile.mkdirs()
@@ -237,7 +248,7 @@ open class DummyFrameworkTask : DefaultTask() {
 
     private fun copyFrameworkFile(relativeFrom: String, relativeTo: String = relativeFrom) =
         copyResource(
-            "/cocoapods/dummy.framework/$relativeFrom",
+            "$dummyFrameworkPath$relativeFrom",
             frameworkDir.resolve(relativeTo)
         )
 
@@ -246,7 +257,7 @@ open class DummyFrameworkTask : DefaultTask() {
         relativeTo: String = relativeFrom,
         transform: (String) -> String = { it }
     ) = copyTextResource(
-        "/cocoapods/dummy.framework/$relativeFrom",
+        "$dummyFrameworkPath$relativeFrom",
         frameworkDir.resolve(relativeTo),
         transform
     )

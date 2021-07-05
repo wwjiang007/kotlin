@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -26,11 +26,13 @@ import org.jetbrains.kotlin.fir.visitors.*
 @FirBuilderDsl
 class FirErrorTypeRefBuilder : FirAnnotationContainerBuilder {
     override var source: FirSourceElement? = null
+    var delegatedTypeRef: FirTypeRef? = null
     lateinit var diagnostic: ConeDiagnostic
 
     override fun build(): FirErrorTypeRef {
         return FirErrorTypeRefImpl(
             source,
+            delegatedTypeRef,
             diagnostic,
         )
     }
@@ -55,6 +57,7 @@ inline fun buildErrorTypeRefCopy(original: FirErrorTypeRef, init: FirErrorTypeRe
     }
     val copyBuilder = FirErrorTypeRefBuilder()
     copyBuilder.source = original.source
+    copyBuilder.delegatedTypeRef = original.delegatedTypeRef
     copyBuilder.diagnostic = original.diagnostic
     return copyBuilder.apply(init).build()
 }

@@ -13,10 +13,6 @@ val ideaSandboxDir: File by extra
 val ideaSdkPath: String
     get() = IntellijRootUtils.getIntellijRootDir(rootProject).absolutePath
 
-val intellijUltimateEnabled: Boolean by rootProject.extra
-val ideaUltimatePluginDir: File by rootProject.extra
-val ideaUltimateSandboxDir: File by rootProject.extra
-
 fun JUnit.configureForKotlin(xmx: String = "1600m") {
     vmParameters = listOf(
         "-ea",
@@ -25,9 +21,9 @@ fun JUnit.configureForKotlin(xmx: String = "1600m") {
         "-XX:+UseCodeCacheFlushing",
         "-XX:ReservedCodeCacheSize=128m",
         "-Djna.nosys=true",
-        if (Platform[201].orHigher()) "-Didea.platform.prefix=Idea" else null,
+        "-Didea.platform.prefix=Idea",
         "-Didea.is.unit.test=true",
-        if (Platform[202].orHigher()) "-Didea.ignore.disabled.plugins=true" else null,
+        "-Didea.ignore.disabled.plugins=true",
         "-Didea.home.path=$ideaSdkPath",
         "-Djps.kotlin.home=${ideaPluginDir.absolutePath}",
         "-Dkotlin.ni=" + if (rootProject.hasProperty("newInferenceTests")) "true" else "false",
@@ -64,8 +60,8 @@ fun setupGenerateAllTestsRunConfiguration() {
 fun setupFirRunConfiguration() {
 
     val junit = JUnit("_stub").apply { configureForKotlin("2048m") }
-    junit.moduleName = "kotlin.compiler.tests-spec.test"
-    junit.pattern = "^(org\\.jetbrains\\.kotlin\\.fir((?!\\.lightTree\\.benchmark)(\\.\\w+)*)\\.((?!(TreesCompareTest|TotalKotlinTest|RawFirBuilderTotalKotlinTestCase))\\w+)|org\\.jetbrains\\.kotlin\\.codegen\\.ir\\.FirBlackBoxCodegenTestGenerated|org\\.jetbrains\\.kotlin\\.spec\\.checkers\\.FirDiagnosticsTestSpecGenerated)\$"
+    junit.moduleName = "kotlin.compiler.fir.fir2ir.test"
+    junit.pattern = """^.*\.Fir\w+Test\w*Generated$"""
     junit.vmParameters = junit.vmParameters.replace(rootDir.absolutePath, "\$PROJECT_DIR\$")
     junit.workingDirectory = junit.workingDirectory.replace(rootDir.absolutePath, "\$PROJECT_DIR\$")
 
@@ -86,6 +82,7 @@ fun setupFirRunConfiguration() {
             |    <envs>
                    ${junit.envs.entries.joinToString("\n") { (name, value) -> "|      <env name=\"$name\" value=\"$value\" />" }}
             |    </envs>
+            |    <dir value="${'$'}PROJECT_DIR${'$'}/compiler/fir/analysis-tests/tests-gen" />
             |    <patterns>
             |      <pattern testClass="${junit.pattern}" />
             |    </patterns>
@@ -158,8 +155,6 @@ if (kotlinBuildProperties.isInJpsBuildIdeaSync) {
                 settings {
                     ideArtifacts {
                         kotlinCompilerJar()
-                        
-                        kotlinPluginJar()
 
                         kotlinReflectJar()
 
@@ -171,11 +166,7 @@ if (kotlinBuildProperties.isInJpsBuildIdeaSync) {
 
                         kotlinDaemonClientJar()
 
-                        kotlinJpsPluginJar()
-
                         kotlinc()
-
-                        ideaPlugin()
 
                         dist()
                     }
@@ -198,6 +189,7 @@ if (kotlinBuildProperties.isInJpsBuildIdeaSync) {
                             pluginDir: File,
                             disableProcessCanceledException: Boolean = false
                         ) {
+                            val useAndroidStudio = rootProject.extra.has("versions.androidStudioRelease")
                             application(title) {
                                 moduleName = "kotlin.idea-runner.main"
                                 workingDirectory = File(intellijRootDir(), "bin").toString()
@@ -213,11 +205,13 @@ if (kotlinBuildProperties.isInJpsBuildIdeaSync) {
                                     "-Didea.system.path=${sandboxDir.absolutePath}",
                                     "-Didea.config.path=${sandboxDir.absolutePath}/config",
                                     "-Didea.tooling.debug=true",
+                                    "-Dfus.internal.test.mode=true",
                                     "-Dapple.laf.useScreenMenuBar=true",
                                     "-Dapple.awt.graphics.UseQuartz=true",
                                     "-Dsun.io.useCanonCaches=false",
                                     "-Dplugin.path=${pluginDir.absolutePath}",
-                                    "-Didea.ProcessCanceledException=${if (disableProcessCanceledException) "disabled" else "enabled"}"
+                                    "-Didea.ProcessCanceledException=${if (disableProcessCanceledException) "disabled" else "enabled"}",
+                                    if (useAndroidStudio) "-Didea.platform.prefix=AndroidStudio" else ""
                                 ).joinToString(" ")
                             }
                         }
@@ -225,10 +219,6 @@ if (kotlinBuildProperties.isInJpsBuildIdeaSync) {
                         idea("[JPS] IDEA", ideaSandboxDir, ideaPluginDir)
 
                         idea("[JPS] IDEA (No ProcessCanceledException)", ideaSandboxDir, ideaPluginDir, disableProcessCanceledException = true)
-
-                        if (intellijUltimateEnabled) {
-                            idea("[JPS] IDEA Ultimate", ideaUltimateSandboxDir, ideaPluginDir)
-                        }
 
                         defaults<JUnit> {
                             configureForKotlin()
@@ -239,14 +229,6 @@ if (kotlinBuildProperties.isInJpsBuildIdeaSync) {
                             moduleName = "kotlin.idea.test"
                             pattern = "org.jetbrains.kotlin.*"
                             configureForKotlin()
-                        }
-
-                        if (intellijUltimateEnabled) {
-                            junit("[JPS] All IDEA Ultimate Plugin Tests") {
-                                moduleName = "kotlin.ultimate.test"
-                                pattern = "org.jetbrains.kotlin.*"
-                                configureForKotlin()
-                            }
                         }
 
                         junit("[JPS] Compiler Tests") {
@@ -333,7 +315,7 @@ fun NamedDomainObjectContainer<TopLevelArtifact>.dist() {
         file("$rootDir/build/build.txt")
 
         // Use output-file-name when fixed https://github.com/JetBrains/gradle-idea-ext-plugin/issues/63
-        archive("kotlin-stdlib-minimal-for-test.jar") {
+        archive("kotlin-stdlib-jvm-minimal-for-test.jar") {
             extractedDirectory(stdlibMinimal.singleFile)
         }
 
@@ -476,7 +458,7 @@ fun RecursiveArtifact.jarContentsFromConfiguration(configuration: Configuration)
 
     resolvedArtifacts.filter { it.id.componentIdentifier is ModuleComponentIdentifier }
         .map { it.file }
-        .forEach(::extractedDirectory)
+        .forEach { extractedDirectory(it) }
 
     resolvedArtifacts
         .map { it.id.componentIdentifier }

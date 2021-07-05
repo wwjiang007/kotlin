@@ -9,6 +9,7 @@ import com.intellij.openapi.util.SystemInfo
 import com.intellij.util.PathUtil
 import com.intellij.util.SystemProperties
 import com.sun.jdi.AbsentInformationException
+import com.sun.jdi.Location
 import com.sun.jdi.VirtualMachine
 import com.sun.jdi.event.*
 import com.sun.jdi.request.EventRequest
@@ -24,10 +25,10 @@ import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.clientserver.TestProcessServer
 import org.jetbrains.kotlin.test.clientserver.TestProxy
 import org.jetbrains.kotlin.test.clientserver.getGeneratedClass
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import org.junit.After
 import org.junit.Before
 import java.io.File
-import java.lang.IllegalStateException
 import java.net.URLClassLoader
 import kotlin.properties.Delegates
 
@@ -109,6 +110,10 @@ abstract class AbstractDebugTest : CodegenTestCase() {
                 ?: File(javaBin, "java").also { assert(it.exists()) }
         }
 
+        val Location.isInDebugTestInfrastructure: Boolean
+            get() {
+                return this.sourcePath().startsWith("helpers" + File.separatorChar)
+            }
     }
 
     @Before
@@ -157,7 +162,7 @@ abstract class AbstractDebugTest : CodegenTestCase() {
             GenerationUtils.compileFiles(myFiles.psiFiles, myEnvironment, classBuilderFactory)
         classFileFactory = generationState.factory
 
-        val tempDirForTest = KotlinTestUtils.tmpDir("debuggerTest")
+        val tempDirForTest = KtTestUtil.tmpDir("debuggerTest")
         val classesDir = File(tempDirForTest, "classes")
         try {
             classFileFactory.writeAllTo(classesDir)
@@ -171,6 +176,9 @@ abstract class AbstractDebugTest : CodegenTestCase() {
 
         val classLoader = createGeneratedClassLoader(classesDir)
         val aClass = getGeneratedClass(classLoader, TEST_CLASS)
+        assert(aClass.declaredMethods.any { it.name == BOX_METHOD }) {
+            "Test method $BOX_METHOD not present on test class $TEST_CLASS"
+        }
         if (virtualMachine.allThreads().any { it.isSuspended }) {
             virtualMachine.resume()
         }
@@ -261,6 +269,34 @@ abstract class AbstractDebugTest : CodegenTestCase() {
         }
         virtualMachine.resume()
         checkResult(wholeFile, loggedItems)
+    }
+
+    fun Location.formatAsExpectation(): String {
+        val synthetic = if (method().isSynthetic) " (synthetic)" else ""
+        return "${sourceName()}:${lineNumber()} ${method().name()}$synthetic"
+    }
+
+    /*
+       Compresses runs of the same, linenumber-less location in the log:
+       specifically removes locations without linenumber, that would otherwise
+       print as byte offsets. This avoids overspecifying code generation
+       strategy in debug tests.
+     */
+    fun <T> compressRunsWithoutLinenumber(loggedItems: List<T>, getLocation: (T) -> Location): List<T> {
+        if (loggedItems.isEmpty()) return listOf()
+
+        val logIterator = loggedItems.iterator()
+        var currentItem = logIterator.next()
+        val result = mutableListOf(currentItem)
+
+        for (logItem in logIterator) {
+            if (getLocation(currentItem).lineNumber() != -1 || getLocation(currentItem).formatAsExpectation() != getLocation(logItem).formatAsExpectation()) {
+                result.add(logItem)
+                currentItem = logItem
+            }
+        }
+
+        return result
     }
 
     abstract fun storeStep(loggedItems: ArrayList<Any>, event: Event)

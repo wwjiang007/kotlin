@@ -18,6 +18,7 @@ import java.util.*
 
 class FirControlFlowGraphRenderVisitor(
     builder: StringBuilder,
+    private val renderLevels: Boolean = false
 ) : FirVisitorVoid() {
     companion object {
         private const val EDGE = " -> "
@@ -81,7 +82,13 @@ class FirControlFlowGraphRenderVisitor(
                 color = BLUE
             }
             val attributes = mutableListOf<String>()
-            attributes += "label=\"${node.render().replace("\"", "")}\""
+            val label = buildString {
+                append(node.render().replace("\"", ""))
+                if (renderLevels) {
+                    append(" [${node.level}]")
+                }
+            }
+            attributes += "label=\"$label\""
 
             fun fillColor(color: String) {
                 attributes += "style=\"filled\""
@@ -108,15 +115,35 @@ class FirControlFlowGraphRenderVisitor(
             if (node.followingNodes.isEmpty()) continue
 
             fun renderEdges(kind: EdgeKind) {
-                val edges = node.followingNodes.filter { node.outgoingEdges.getValue(it) == kind }
+                val edges = node.followingNodes.filter { node.outgoingEdges.getValue(it).kind == kind }
                 if (edges.isEmpty()) return
-                print(
-                    indices.getValue(node),
-                    EDGE,
-                    edges.joinToString(prefix = "{", postfix = "}", separator = " ") { indices.getValue(it).toString() }
-                )
-                EDGE_STYLE.getValue(kind).takeIf { it.isNotBlank() }?.let { printWithNoIndent(" $it") }
-                printlnWithNoIndent(";")
+
+                fun renderEdgesWithoutLabel(edges: List<CFGNode<*>>) {
+                    print(
+                        indices.getValue(node),
+                        EDGE,
+                        edges.joinToString(prefix = "{", postfix = "}", separator = " ") { indices.getValue(it).toString() }
+                    )
+                    EDGE_STYLE.getValue(kind).takeIf { it.isNotBlank() }?.let { printWithNoIndent(" $it") }
+                    printlnWithNoIndent(";")
+                }
+
+                if (edges.any { node.outgoingEdges[it]?.label?.label != null }) {
+                    val edgeGroups = edges.groupBy { node.outgoingEdges[it]?.label?.label != null }
+                    edgeGroups[false]?.let { renderEdgesWithoutLabel(it) }
+                    for (edge in edgeGroups[true]!!) {
+                        print(
+                            indices.getValue(node),
+                            EDGE,
+                            "{", indices.getValue(edge), "}"
+                        )
+                        EDGE_STYLE.getValue(kind).takeIf { it.isNotBlank() }?.let { printWithNoIndent(" $it") }
+                        print("[label=${node.outgoingEdges[edge]!!.label}]")
+                        printlnWithNoIndent(";")
+                    }
+                } else {
+                    renderEdgesWithoutLabel(edges)
+                }
             }
 
             for (kind in EdgeKind.values()) {

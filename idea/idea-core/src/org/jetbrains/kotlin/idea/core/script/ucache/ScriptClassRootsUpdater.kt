@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.idea.core.script.ucache
 import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.runInEdt
+import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
@@ -27,6 +28,7 @@ import org.jetbrains.kotlin.idea.core.script.ScriptDependenciesModificationTrack
 import org.jetbrains.kotlin.idea.core.script.configuration.CompositeScriptConfigurationManager
 import org.jetbrains.kotlin.idea.core.script.scriptingDebugLog
 import org.jetbrains.kotlin.idea.core.util.EDT
+import org.jetbrains.kotlin.idea.util.FirPluginOracleService
 import org.jetbrains.kotlin.idea.util.application.runReadAction
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
 import org.jetbrains.kotlin.psi.KtFile
@@ -189,7 +191,9 @@ abstract class ScriptClassRootsUpdater(
                 }
             }
 
-            lastSeen = updates.cache
+            val scriptClassRootsCache = updates.cache
+            ScriptCacheDependencies(scriptClassRootsCache).save(project)
+            lastSeen = scriptClassRootsCache
         } finally {
             synchronized(this) {
                 scheduledUpdate = null
@@ -203,7 +207,7 @@ abstract class ScriptClassRootsUpdater(
             val new = recreateRootsCache()
             if (cache.compareAndSet(old, new)) {
                 afterUpdate()
-                return new.diff(lastSeen)
+                return new.diff(project, lastSeen)
             }
         }
     }
@@ -237,14 +241,24 @@ abstract class ScriptClassRootsUpdater(
         if (!project.isOpen) return
 
         val openFiles = FileEditorManager.getInstance(project).allEditors.mapNotNull { it.file }
-        val openedScripts = openFiles.filter { filter(it) }
+        val openedScripts = openFiles.filter(filter)
 
         if (openedScripts.isEmpty()) return
+
+        /**
+         * Scripts guts are everywhere in the plugin code, without them some functionality does not work,
+         * And with them some other fir plugin related is broken
+         * As FIR plugin does not have scripts support yet, just disabling not working one for now
+         */
+        @Suppress("DEPRECATION")
+        if (project.service<FirPluginOracleService>().isFirPlugin()) return
 
         GlobalScope.launch(EDT(project)) {
             if (project.isDisposed) return@launch
 
             openedScripts.forEach {
+                if (!it.isValid) return@forEach
+
                 PsiManager.getInstance(project).findFile(it)?.let { psiFile ->
                     if (psiFile is KtFile) {
                         DaemonCodeAnalyzer.getInstance(project).restart(psiFile)

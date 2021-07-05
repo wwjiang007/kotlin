@@ -26,6 +26,7 @@ import org.jetbrains.kotlin.codegen.forTestCompile.ForTestCompileRuntime;
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor;
 import org.jetbrains.kotlin.descriptors.PackageFragmentDescriptor;
 import org.jetbrains.kotlin.descriptors.PackageFragmentProvider;
+import org.jetbrains.kotlin.descriptors.PackageFragmentProviderKt;
 import org.jetbrains.kotlin.descriptors.deserialization.AdditionalClassPartsProvider;
 import org.jetbrains.kotlin.descriptors.deserialization.PlatformDependentDeclarationFilter;
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl;
@@ -36,7 +37,7 @@ import org.jetbrains.kotlin.storage.LockBasedStorageManager;
 import org.jetbrains.kotlin.test.ConfigurationKind;
 import org.jetbrains.kotlin.test.KotlinTestWithEnvironment;
 import org.jetbrains.kotlin.test.TestJdkKind;
-import org.jetbrains.kotlin.test.util.RecursiveDescriptorComparator;
+import org.jetbrains.kotlin.test.util.RecursiveDescriptorComparatorAdaptor;
 
 import java.io.File;
 import java.util.Collections;
@@ -59,8 +60,8 @@ public class LoadBuiltinsTest extends KotlinTestWithEnvironment {
                     CollectionsKt.single(module.getPackage(packageFqName).getFragments());
             if (fromLazyResolve instanceof LazyPackageDescriptor) {
                 PackageFragmentDescriptor deserialized =
-                        CollectionsKt.single(packageFragmentProvider.getPackageFragments(packageFqName));
-                RecursiveDescriptorComparator.validateAndCompareDescriptors(
+                        CollectionsKt.single(PackageFragmentProviderKt.packageFragments(packageFragmentProvider, packageFqName));
+                RecursiveDescriptorComparatorAdaptor.validateAndCompareDescriptors(
                         fromLazyResolve, deserialized, AbstractBuiltInsWithJDKMembersTest.createComparatorConfiguration(),
                         new File("compiler/testData/builtin-classes/default/" + packageFqName.asString().replace('.', '-') + ".txt")
                 );

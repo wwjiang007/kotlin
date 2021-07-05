@@ -4,11 +4,12 @@ plugins {
 
 repositories {
     mavenLocal()
-    jcenter()
+    mavenCentral()
 }
 
 kotlin {
     js {
+        useCommonJs()
         nodejs()
     }
 

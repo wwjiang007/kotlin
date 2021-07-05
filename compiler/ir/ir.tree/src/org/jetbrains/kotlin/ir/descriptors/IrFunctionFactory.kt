@@ -236,18 +236,18 @@ class IrFunctionFactory(private val irBuiltIns: IrBuiltIns, private val symbolTa
 
     private val kotlinPackageFragment: IrPackageFragment by lazy {
         irBuiltIns.builtIns.getFunction(0).let {
-            symbolTable.declareExternalPackageFragment(it.containingDeclaration as PackageFragmentDescriptor)
+            symbolTable.declareExternalPackageFragmentIfNotExists(it.containingDeclaration as PackageFragmentDescriptor)
         }
     }
     private val kotlinCoroutinesPackageFragment: IrPackageFragment by lazy {
         irBuiltIns.builtIns.getSuspendFunction(0).let {
-            symbolTable.declareExternalPackageFragment(it.containingDeclaration as PackageFragmentDescriptor)
+            symbolTable.declareExternalPackageFragmentIfNotExists(it.containingDeclaration as PackageFragmentDescriptor)
         }
     }
 
     private val kotlinReflectPackageFragment: IrPackageFragment by lazy {
         irBuiltIns.kPropertyClass.descriptor.let {
-            symbolTable.declareExternalPackageFragment(it.containingDeclaration as PackageFragmentDescriptor)
+            symbolTable.declareExternalPackageFragmentIfNotExists(it.containingDeclaration as PackageFragmentDescriptor)
         }
     }
 
@@ -268,10 +268,10 @@ class IrFunctionFactory(private val irBuiltIns: IrBuiltIns, private val symbolTa
         val vDeclaration = irFactory.createValueParameter(
             offset, offset, classOrigin, vSymbol, Name.special("<this>"), -1, type, null,
             isCrossinline = false,
-            isNoinline = false
+            isNoinline = false,
+            isHidden = false,
+            isAssignable = false
         )
-
-        if (vDescriptor is WrappedReceiverParameterDescriptor) vDescriptor.bind(vDeclaration)
 
         return vDeclaration
     }
@@ -332,10 +332,11 @@ class IrFunctionFactory(private val irBuiltIns: IrBuiltIns, private val symbolTa
                 val vDeclaration = irFactory.createValueParameter(
                     offset, offset, memberOrigin, vSymbol, Name.identifier("p$i"), i - 1, vType, null,
                     isCrossinline = false,
-                    isNoinline = false
+                    isNoinline = false,
+                    isHidden = false,
+                    isAssignable = false
                 )
                 vDeclaration.parent = fDeclaration
-                if (vDescriptor is WrappedValueParameterDescriptor) vDescriptor.bind(vDeclaration)
                 fDeclaration.valueParameters += vDeclaration
             }
 
@@ -364,7 +365,7 @@ class IrFunctionFactory(private val irBuiltIns: IrBuiltIns, private val symbolTa
     private fun IrFunction.createValueParameter(descriptor: ParameterDescriptor): IrValueParameter = with(descriptor) {
         irFactory.createValueParameter(
             offset, offset, memberOrigin, IrValueParameterSymbolImpl(this), name, indexOrMinusOne, toIrType(type),
-            (this as? ValueParameterDescriptor)?.varargElementType?.let(::toIrType), isCrossinline, isNoinline
+            (this as? ValueParameterDescriptor)?.varargElementType?.let(::toIrType), isCrossinline, isNoinline, false, false
         ).also {
             it.parent = this@createValueParameter
         }
@@ -381,7 +382,7 @@ class IrFunctionFactory(private val irBuiltIns: IrBuiltIns, private val symbolTa
                 descriptor.run {
                     irFactory.createFunction(
                         offset, offset, memberOrigin, it, name, visibility, modality, returnType,
-                        isInline, isExternal, isTailrec, isSuspend, isOperator, isInfix, isExpect, true
+                        isInline, isEffectivelyExternal(), isTailrec, isSuspend, isOperator, isInfix, isExpect, true
                     )
                 }
             }

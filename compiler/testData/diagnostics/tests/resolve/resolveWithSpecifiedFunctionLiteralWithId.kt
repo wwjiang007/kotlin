@@ -1,4 +1,4 @@
-// !WITH_NEW_INFERENCE
+// FIR_IDENTICAL
 //If this test hangs, it means something is broken.
 package a
 

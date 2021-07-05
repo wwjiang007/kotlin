@@ -12,22 +12,20 @@ import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
 import org.jetbrains.kotlin.ir.expressions.*
-import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrConstructorCallImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
+import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.*
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.SpecialNames
-import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
 import org.jetbrains.kotlin.utils.DFS
+import org.jetbrains.kotlin.utils.addIfNotNull
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 
 /**
  * Binds the arguments explicitly represented in the IR to the parameters of the accessed function.
  * The arguments are to be evaluated in the same order as they appear in the resulting list.
  */
+@Suppress("unused") // used in kotlin-native
 @ObsoleteDescriptorBasedAPI
 fun IrMemberAccessExpression<*>.getArguments(): List<Pair<ParameterDescriptor, IrExpression>> {
     val res = mutableListOf<Pair<ParameterDescriptor, IrExpression>>()
@@ -156,14 +154,12 @@ fun IrExpression.isFalseConst() = this is IrConst<*> && this.kind == IrConstKind
 
 fun IrExpression.isIntegerConst(value: Int) = this is IrConst<*> && this.kind == IrConstKind.Int && this.value == value
 
-@OptIn(ObsoleteDescriptorBasedAPI::class)
-fun IrExpression.coerceToUnit(builtins: IrBuiltIns): IrExpression {
-    return coerceToUnitIfNeeded(type.toKotlinType(), builtins)
+fun IrExpression.coerceToUnit(builtins: IrBuiltIns, typeSystem: IrTypeSystemContext): IrExpression {
+    return coerceToUnitIfNeeded(type, builtins, typeSystem)
 }
 
-@ObsoleteDescriptorBasedAPI
-fun IrExpression.coerceToUnitIfNeeded(valueType: KotlinType, irBuiltIns: IrBuiltIns): IrExpression {
-    return if (KotlinTypeChecker.DEFAULT.isSubtypeOf(valueType, irBuiltIns.unitType.toKotlinType()))
+fun IrExpression.coerceToUnitIfNeeded(valueType: IrType, irBuiltIns: IrBuiltIns, typeSystem: IrTypeSystemContext): IrExpression {
+    return if (valueType.isSubtypeOf(irBuiltIns.unitType, typeSystem))
         this
     else
         IrTypeOperatorCallImpl(
@@ -175,22 +171,8 @@ fun IrExpression.coerceToUnitIfNeeded(valueType: KotlinType, irBuiltIns: IrBuilt
         )
 }
 
-fun IrExpression.coerceToUnitIfNeeded(valueType: IrType, irBuiltIns: IrBuiltIns): IrExpression {
-    return if (valueType.isSubtypeOf(irBuiltIns.unitType, irBuiltIns))
-        this
-    else
-        IrTypeOperatorCallImpl(
-            startOffset, endOffset,
-            irBuiltIns.unitType,
-            IrTypeOperator.IMPLICIT_COERCION_TO_UNIT,
-            irBuiltIns.unitType,
-            this
-        )
-}
-
-@ObsoleteDescriptorBasedAPI
-fun IrMemberAccessExpression<*>.usesDefaultArguments(): Boolean =
-    (symbol.descriptor as CallableDescriptor).valueParameters.any { this.getValueArgument(it) == null }
+fun IrFunctionAccessExpression.usesDefaultArguments(): Boolean =
+    symbol.owner.valueParameters.any { this.getValueArgument(it.index) == null }
 
 val IrClass.functions: Sequence<IrSimpleFunction>
     get() = declarations.asSequence().filterIsInstance<IrSimpleFunction>()
@@ -216,8 +198,22 @@ val IrClass.primaryConstructor: IrConstructor?
 val IrDeclarationContainer.properties: Sequence<IrProperty>
     get() = declarations.asSequence().filterIsInstance<IrProperty>()
 
+fun IrFunction.addExplicitParametersTo(parametersList: MutableList<IrValueParameter>) {
+    parametersList.addIfNotNull(dispatchReceiverParameter)
+    parametersList.addIfNotNull(extensionReceiverParameter)
+    parametersList.addAll(valueParameters)
+}
+
+private fun Boolean.toInt(): Int = if (this) 1 else 0
+
+val IrFunction.explicitParametersCount: Int
+    get() = (dispatchReceiverParameter != null).toInt() + (extensionReceiverParameter != null).toInt() +
+            valueParameters.size
+
 val IrFunction.explicitParameters: List<IrValueParameter>
-    get() = (listOfNotNull(dispatchReceiverParameter, extensionReceiverParameter) + valueParameters)
+    get() = ArrayList<IrValueParameter>(explicitParametersCount).also {
+        addExplicitParametersTo(it)
+    }
 
 val IrBody.statements: List<IrStatement>
     get() = when (this) {
@@ -252,8 +248,6 @@ fun IrSimpleFunction.findInterfaceImplementation(): IrSimpleFunction? {
     return resolveFakeOverride()?.run { if (parentAsClass.isInterface) this else null }
 }
 
-fun IrProperty.resolveFakeOverride(): IrProperty? = getter?.resolveFakeOverride()?.correspondingPropertySymbol?.owner
-
 val IrClass.isAnnotationClass get() = kind == ClassKind.ANNOTATION_CLASS
 val IrClass.isEnumClass get() = kind == ClassKind.ENUM_CLASS
 val IrClass.isEnumEntry get() = kind == ClassKind.ENUM_ENTRY
@@ -261,6 +255,7 @@ val IrClass.isInterface get() = kind == ClassKind.INTERFACE
 val IrClass.isClass get() = kind == ClassKind.CLASS
 val IrClass.isObject get() = kind == ClassKind.OBJECT
 val IrClass.isAnonymousObject get() = isClass && name == SpecialNames.NO_NAME_PROVIDED
+val IrClass.isNonCompanionObject: Boolean get() = isObject && !isCompanion
 val IrDeclarationWithName.fqNameWhenAvailable: FqName?
     get() = when (val parent = parent) {
         is IrDeclarationWithName -> parent.fqNameWhenAvailable?.child(name)
@@ -280,14 +275,14 @@ tailrec fun IrElement.getPackageFragment(): IrPackageFragment? {
     }
 }
 
+fun IrConstructorCall.isAnnotation(name: FqName) = symbol.owner.parentAsClass.fqNameWhenAvailable == name
+
 fun IrAnnotationContainer.getAnnotation(name: FqName): IrConstructorCall? =
-    annotations.find {
-        it.symbol.owner.parentAsClass.fqNameWhenAvailable == name
-    }
+    annotations.find { it.isAnnotation(name) }
 
 fun IrAnnotationContainer.hasAnnotation(name: FqName) =
     annotations.any {
-        it.symbol.owner.parentAsClass.fqNameWhenAvailable == name
+        it.symbol.owner.parentAsClass.hasEqualFqName(name)
     }
 
 fun IrAnnotationContainer.hasAnnotation(symbol: IrClassSymbol) =
@@ -314,23 +309,12 @@ fun IrCall.isSuperToAny() = superQualifierSymbol?.let { this.symbol.owner.isFake
 fun IrDeclaration.hasInterfaceParent() =
     parent.safeAs<IrClass>()?.isInterface == true
 
-fun IrDeclaration.isEffectivelyExternal(): Boolean {
 
-    fun IrFunction.effectiveParentDeclaration(): IrDeclaration? =
-        when (this) {
-            is IrSimpleFunction -> correspondingPropertySymbol?.owner ?: parent as? IrDeclaration
-            else -> parent as? IrDeclaration
-        }
+fun IrPossiblyExternalDeclaration.isEffectivelyExternal(): Boolean =
+    this.isExternal
 
-    val parent = parent
-    return when (this) {
-        is IrFunction -> isExternal || (effectiveParentDeclaration()?.isEffectivelyExternal() ?: false)
-        is IrField -> isExternal || parent is IrDeclaration && parent.isEffectivelyExternal()
-        is IrProperty -> isExternal || parent is IrDeclaration && parent.isEffectivelyExternal()
-        is IrClass -> isExternal || parent is IrDeclaration && parent.isEffectivelyExternal()
-        else -> false
-    }
-}
+fun IrDeclaration.isEffectivelyExternal(): Boolean =
+    this is IrPossiblyExternalDeclaration && this.isExternal
 
 fun IrFunction.isExternalOrInheritedFromExternal(): Boolean {
     fun isExternalOrInheritedFromExternalImpl(f: IrSimpleFunction): Boolean =
@@ -352,6 +336,8 @@ fun ReferenceSymbolTable.referenceClassifier(classifier: ClassifierDescriptor): 
     when (classifier) {
         is TypeParameterDescriptor ->
             referenceTypeParameter(classifier)
+        is ScriptDescriptor ->
+            referenceScript(classifier)
         is ClassDescriptor ->
             referenceClass(classifier)
         else ->
@@ -403,14 +389,16 @@ fun irCall(
     newFunction: IrSimpleFunction,
     receiversAsArguments: Boolean = false,
     argumentsAsReceivers: Boolean = false,
-    newSuperQualifierSymbol: IrClassSymbol? = null
+    newSuperQualifierSymbol: IrClassSymbol? = null,
+    newReturnType: IrType? = null
 ): IrCall =
     irCall(
         call,
         newFunction.symbol,
         receiversAsArguments,
         argumentsAsReceivers,
-        newSuperQualifierSymbol
+        newSuperQualifierSymbol,
+        newReturnType
     )
 
 fun irCall(
@@ -418,13 +406,14 @@ fun irCall(
     newSymbol: IrSimpleFunctionSymbol,
     receiversAsArguments: Boolean = false,
     argumentsAsReceivers: Boolean = false,
-    newSuperQualifierSymbol: IrClassSymbol? = null
+    newSuperQualifierSymbol: IrClassSymbol? = null,
+    newReturnType: IrType? = null
 ): IrCall =
     call.run {
         IrCallImpl(
             startOffset,
             endOffset,
-            type,
+            newReturnType ?: type,
             newSymbol,
             typeArgumentsCount,
             valueArgumentsCount = newSymbol.owner.valueParameters.size,
@@ -514,10 +503,36 @@ val IrFunction.allTypeParameters: List<IrTypeParameter>
     else
         typeParameters
 
-fun IrMemberAccessExpression<*>.getTypeSubstitutionMap(irFunction: IrFunction): Map<IrTypeParameterSymbol, IrType> =
-    irFunction.allTypeParameters.withIndex().associate {
+
+fun IrMemberAccessExpression<*>.getTypeSubstitutionMap(irFunction: IrFunction): Map<IrTypeParameterSymbol, IrType> {
+    val typeParameters = irFunction.allTypeParameters
+    val dispatchReceiverTypeArguments = (dispatchReceiver?.type as? IrSimpleType)?.arguments ?: emptyList()
+    if (typeParameters.isEmpty() && dispatchReceiverTypeArguments.isEmpty()) {
+        return emptyMap()
+    }
+
+    val result = mutableMapOf<IrTypeParameterSymbol, IrType>()
+    if (dispatchReceiverTypeArguments.isNotEmpty()) {
+        val parentTypeParameters =
+            if (irFunction is IrConstructor) {
+                val constructedClass = irFunction.parentAsClass
+                if (!constructedClass.isInner && dispatchReceiver != null) {
+                    throw AssertionError("Non-inner class constructor reference with dispatch receiver:\n${this.dump()}")
+                }
+                extractTypeParameters(constructedClass.parent as IrClass)
+            } else {
+                extractTypeParameters(irFunction.parentClassOrNull!!)
+            }
+        parentTypeParameters.withIndex().forEach { (index, typeParam) ->
+            dispatchReceiverTypeArguments[index].typeOrNull?.let {
+                result[typeParam.symbol] = it
+            }
+        }
+    }
+    return typeParameters.withIndex().associateTo(result) {
         it.value.symbol to getTypeArgument(it.index)!!
     }
+}
 
 val IrFunctionReference.typeSubstitutionMap: Map<IrTypeParameterSymbol, IrType>
     get() = getTypeSubstitutionMap(symbol.owner)
@@ -526,16 +541,17 @@ val IrFunctionAccessExpression.typeSubstitutionMap: Map<IrTypeParameterSymbol, I
     get() = getTypeSubstitutionMap(symbol.owner)
 
 val IrDeclaration.isFileClass: Boolean
-    get() = origin == IrDeclarationOrigin.FILE_CLASS || origin == IrDeclarationOrigin.SYNTHETIC_FILE_CLASS
+    get() =
+        origin == IrDeclarationOrigin.FILE_CLASS ||
+                origin == IrDeclarationOrigin.SYNTHETIC_FILE_CLASS ||
+                origin == IrDeclarationOrigin.JVM_MULTIFILE_CLASS
+
+fun IrDeclaration.isFromJava(): Boolean =
+    origin == IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB ||
+            parent is IrDeclaration && (parent as IrDeclaration).isFromJava()
 
 val IrValueDeclaration.isImmutable: Boolean
     get() = this is IrValueParameter || this is IrVariable && !isVar
-
-fun IrExpression.isSafeToUseWithoutCopying() =
-    this is IrGetObjectValue ||
-            this is IrGetEnumValue ||
-            this is IrConst<*> ||
-            this is IrGetValue && symbol.isBound && symbol.owner.isImmutable
 
 val IrStatementOrigin?.isLambda: Boolean
     get() = this == IrStatementOrigin.LAMBDA || this == IrStatementOrigin.ANONYMOUS_FUNCTION
@@ -545,3 +561,49 @@ val IrFunction.originalFunction: IrFunction
 
 val IrProperty.originalProperty: IrProperty
     get() = attributeOwnerId as? IrProperty ?: this
+
+fun IrExpression.isTrivial() =
+    this is IrConst<*> ||
+            this is IrGetValue ||
+            this is IrGetObjectValue ||
+            this is IrErrorExpressionImpl
+
+fun IrExpression.shallowCopy(): IrExpression =
+    shallowCopyOrNull()
+        ?: error("Not a copyable expression: ${render()}")
+
+fun IrExpression.shallowCopyOrNull(): IrExpression? =
+    when (this) {
+        is IrConst<*> -> shallowCopy()
+        is IrGetObjectValue ->
+            IrGetObjectValueImpl(
+                startOffset,
+                endOffset,
+                type,
+                symbol
+            )
+        is IrGetValueImpl ->
+            IrGetValueImpl(
+                startOffset,
+                endOffset,
+                type,
+                symbol,
+                origin
+            )
+        is IrErrorExpressionImpl ->
+            IrErrorExpressionImpl(
+                startOffset,
+                endOffset,
+                type,
+                description
+            )
+        else -> null
+    }
+
+internal fun <T> IrConst<T>.shallowCopy() = IrConstImpl(
+    startOffset,
+    endOffset,
+    type,
+    kind,
+    value
+)

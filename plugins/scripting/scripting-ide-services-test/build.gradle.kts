@@ -3,7 +3,7 @@ plugins {
     kotlin("jvm")
 }
 
-jvmTarget = "1.8"
+project.updateJvmTarget("1.8")
 
 val allTestsRuntime by configurations.creating
 val testCompile by configurations
@@ -18,6 +18,7 @@ val embeddableTestRuntime by configurations.creating {
 
 dependencies {
     allTestsRuntime(commonDep("junit"))
+    testCompile(kotlinStdlib("jdk8"))
     testCompile(project(":kotlin-scripting-ide-services-unshaded"))
     testCompile(project(":kotlin-scripting-compiler"))
     testCompile(project(":kotlin-scripting-dependencies"))
@@ -33,6 +34,7 @@ dependencies {
     embeddableTestRuntime(project(":kotlin-scripting-dependencies", configuration="runtimeElements"))
     // For tests with IvyResolver
     embeddableTestRuntime(project(":kotlin-main-kts"))
+    embeddableTestRuntime(kotlinStdlib("jdk8"))
     embeddableTestRuntime(testSourceSet.output)
 }
 

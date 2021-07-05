@@ -1,10 +1,12 @@
 /*
- * Copyright 2010-2018 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package templates
 
+import templates.DocExtensions.collection
+import templates.DocExtensions.element
 import templates.Family.*
 import templates.SequenceClass.*
 
@@ -19,8 +21,8 @@ object Elements : TemplateGroupBase() {
             }
             specialFor(RangesOfPrimitives) {
                 if (primitive in PrimitiveType.unsignedPrimitives) {
-                    sinceAtLeast("1.3")
-                    annotation("@ExperimentalUnsignedTypes")
+                    sinceAtLeast("1.5")
+                    wasExperimental("ExperimentalUnsignedTypes")
                     sourceFile(SourceFile.URanges)
                 }
             }
@@ -567,13 +569,19 @@ object Elements : TemplateGroupBase() {
         body { "return firstOrNull(predicate)"}
     }
 
+    private val Family.sampleClass: String
+        get() = when (this) {
+            Strings, CharSequences -> "samples.text.Strings"
+            else -> "samples.collections.Collections.Elements"
+        }
 
     val f_last = fn("last()") {
         includeDefault()
         include(CharSequences, Lists, ArraysOfUnsigned)
     } builder {
-        doc { """Returns the last ${f.element}.
-        @throws [NoSuchElementException] if the ${f.collection} is empty.""" }
+        doc { "Returns the last ${f.element}." }
+        throws("NoSuchElementException", "if the ${f.collection} is empty.")
+        sample("${f.sampleClass}.last")
         returns("T")
         body {
             """
@@ -621,6 +629,7 @@ object Elements : TemplateGroupBase() {
         include(Lists, CharSequences, ArraysOfUnsigned)
     } builder {
         doc { "Returns the last ${f.element}, or `null` if the ${f.collection} is empty." }
+        sample("${f.sampleClass}.last")
         returns("T?")
         body {
             """
@@ -668,8 +677,9 @@ object Elements : TemplateGroupBase() {
         inline()
         specialFor(ArraysOfUnsigned) { inlineOnly() }
 
-        doc { """Returns the last ${f.element} matching the given [predicate].
-        @throws [NoSuchElementException] if no such ${f.element} is found.""" }
+        doc { "Returns the last ${f.element} matching the given [predicate]." }
+        throws("NoSuchElementException", "if no such ${f.element} is found.")
+        sample("${f.sampleClass}.last")
         returns("T")
         body {
             """
@@ -716,6 +726,7 @@ object Elements : TemplateGroupBase() {
         specialFor(ArraysOfUnsigned) { inlineOnly() }
 
         doc { "Returns the last ${f.element} matching the given [predicate], or `null` if no such ${f.element} was found." }
+        sample("${f.sampleClass}.last")
         returns("T?")
         body {
             """
@@ -933,7 +944,7 @@ object Elements : TemplateGroupBase() {
         include(Collections, ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned, CharSequences, RangesOfPrimitives)
     } builder {
         since("1.4")
-        annotation("@WasExperimental(ExperimentalStdlibApi::class)")
+        wasExperimental("ExperimentalStdlibApi")
         inlineOnly()
         returns("T?")
         doc {
@@ -977,7 +988,7 @@ object Elements : TemplateGroupBase() {
         specialFor(RangesOfPrimitives) {
             body {
                 val expr = when (primitive) {
-                    PrimitiveType.Char -> "nextInt(first.toInt(), last.toInt() + 1).toChar()"
+                    PrimitiveType.Char -> "nextInt(first.code, last.code + 1).toChar()"
                     else -> "next$primitive(this)"
                 }
                 """
@@ -995,7 +1006,7 @@ object Elements : TemplateGroupBase() {
         include(Collections, ArraysOfObjects, ArraysOfPrimitives, ArraysOfUnsigned, CharSequences, RangesOfPrimitives)
     } builder {
         since("1.4")
-        annotation("@WasExperimental(ExperimentalStdlibApi::class)")
+        wasExperimental("ExperimentalStdlibApi")
         returns("T?")
         doc {
             """
@@ -1022,7 +1033,7 @@ object Elements : TemplateGroupBase() {
         specialFor(RangesOfPrimitives) {
             body {
                 val expr = when (primitive) {
-                    PrimitiveType.Char -> "nextInt(first.toInt(), last.toInt() + 1).toChar()"
+                    PrimitiveType.Char -> "nextInt(first.code, last.code + 1).toChar()"
                     else -> "next$primitive(this)"
                 }
                 """
@@ -1067,6 +1078,58 @@ object Elements : TemplateGroupBase() {
             }
             returns("T")
             body { "return get(${n-1})" }
+        }
+    }
+
+    val f_firstNotNullOfOrNull = fn("firstNotNullOfOrNull(transform: (T) -> R?)") {
+        include(Iterables, Sequences, Maps, CharSequences, ArraysOfObjects)
+    } builder {
+        inlineOnly()
+        since("1.5")
+        typeParam("R : Any")
+        returns("R?")
+
+        sample("samples.collections.Collections.Transformations.firstNotNullOf")
+
+        doc {
+            """
+            Returns the first non-null value produced by [transform] function being applied to ${f.element.pluralize()} of this ${f.collection} in iteration order,
+            or `null` if no non-null value was produced.
+            """
+        }
+        body {
+            """
+            for (element in this) {
+                val result = transform(element)
+                if (result != null) {
+                    return result
+                }
+            }
+            return null
+            """
+        }
+    }
+
+    val f_firstNotNullOf = fn("firstNotNullOf(transform: (T) -> R?)") {
+        include(Iterables, Sequences, Maps, CharSequences, ArraysOfObjects)
+    } builder {
+        inlineOnly()
+        since("1.5")
+        typeParam("R : Any")
+        returns("R")
+
+        sample("samples.collections.Collections.Transformations.firstNotNullOf")
+
+        doc {
+            """
+            Returns the first non-null value produced by [transform] function being applied to ${f.element.pluralize()} of this ${f.collection} in iteration order,
+            or throws [NoSuchElementException] if no non-null value was produced.
+            """
+        }
+        body {
+            """
+            return firstNotNullOfOrNull(transform) ?: throw NoSuchElementException("No element of the ${f.collection} was transformed to a non-null value.")
+            """
         }
     }
 

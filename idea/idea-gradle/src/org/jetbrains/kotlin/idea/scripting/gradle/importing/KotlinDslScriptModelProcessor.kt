@@ -20,18 +20,20 @@ import org.jetbrains.plugins.gradle.service.project.DefaultProjectResolverContex
 import org.jetbrains.plugins.gradle.service.project.ProjectResolverContext
 import java.io.File
 
+
 fun saveGradleBuildEnvironment(resolverCtx: ProjectResolverContext) {
     val task = resolverCtx.externalSystemTaskId
     val tasks = KotlinDslSyncListener.instance.tasks
     val sync = synchronized(tasks) { tasks[task] }
     if (sync != null) {
-        val gradleHome = resolverCtx.getExtraProject(BuildScriptClasspathModel::class.java)?.gradleHomeDir?.canonicalPath
+        val gradleHome = resolverCtx.getExtraProject(BuildScriptClasspathModel::class.java)?.gradleHomeDir?.path
             ?: resolverCtx.settings?.gradleHome
         synchronized(sync) {
             sync.gradleVersion = resolverCtx.projectGradleVersion
+
             sync.javaHome = (resolverCtx as? DefaultProjectResolverContext)
                 ?.buildEnvironment
-                ?.java?.javaHome?.canonicalPath
+                ?.java?.javaHome?.path
                 ?.let { toSystemIndependentName(it) }
 
             if (gradleHome != null) {
@@ -45,14 +47,15 @@ fun processScriptModel(
     resolverCtx: ProjectResolverContext,
     model: KotlinDslScriptsModel,
     projectName: String
-) {
-    if (model is BrokenKotlinDslScriptsModel) {
+): Boolean {
+    return if (model is BrokenKotlinDslScriptsModel) {
         LOG.error(
             "Couldn't get KotlinDslScriptsModel for $projectName:\n${model.message}\n${model.stackTrace}"
         )
+        false
     } else {
         val task = resolverCtx.externalSystemTaskId
-        val project = task.findProject() ?: return
+        val project = task.findProject() ?: return false
         val models = model.toListOfScriptModels(project)
 
         val tasks = KotlinDslSyncListener.instance.tasks
@@ -65,9 +68,9 @@ fun processScriptModel(
 
         val errors = models.collectErrors()
         if (errors.isNotEmpty()) {
-            if (sync != null) {
-                synchronized(sync) {
-                    sync.failed = true
+            sync?.let {
+                synchronized(it) {
+                    it.failed = true
                 }
             }
             throw IllegalStateException(
@@ -76,6 +79,7 @@ fun processScriptModel(
                         + errors.joinToString("\n") { it.text + "\n" + it.details }
             )
         }
+        errors.isEmpty()
     }
 }
 
@@ -84,7 +88,7 @@ private fun Collection<KotlinDslScriptModel>.collectErrors(): List<KotlinDslScri
 }
 
 private fun KotlinDslScriptsModel.toListOfScriptModels(project: Project): List<KotlinDslScriptModel> =
-    scriptModels.map { (file, model) ->
+    scriptModels.mapNotNull { (file, model) ->
         val messages = mutableListOf<KotlinDslScriptModel.Message>()
 
         model.exceptions.forEach {
@@ -116,15 +120,15 @@ private fun KotlinDslScriptsModel.toListOfScriptModels(project: Project): List<K
             )
         }
 
-        // TODO: NPE
-        val virtualFile = VfsUtil.findFile(file.toPath(), true)!!
+        val virtualFile = VfsUtil.findFile(file.toPath(), true) ?: return@mapNotNull null
 
         // todo(KT-34440): take inputs snapshot before starting import
+        val gradleScriptInputsStamp = getGradleScriptInputsStamp(project, virtualFile) ?: return@mapNotNull null
         KotlinDslScriptModel(
-            toSystemIndependentName(file.absolutePath),
-            getGradleScriptInputsStamp(project, virtualFile)!!, // TODO: NPE
-            model.classPath.map { toSystemIndependentName(it.absolutePath) },
-            model.sourcePath.map { toSystemIndependentName(it.absolutePath) },
+            toSystemIndependentName(file.path),
+            gradleScriptInputsStamp,
+            model.classPath.map { toSystemIndependentName(it.path) },
+            model.sourcePath.map { toSystemIndependentName(it.path) },
             model.implicitImports,
             messages
         )

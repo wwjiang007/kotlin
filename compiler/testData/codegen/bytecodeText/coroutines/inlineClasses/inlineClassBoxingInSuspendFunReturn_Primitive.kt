@@ -1,5 +1,3 @@
-// IGNORE_BACKEND: JVM_IR
-
 inline class ICInt(val x: Int) // unbox-impl in generated 'equals'
 
 suspend fun suspendICInt(): ICInt = ICInt(1) // box-impl

@@ -5,18 +5,19 @@
 
 package org.jetbrains.kotlin.idea.frontend.api.fir.scopes
 
-import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.isSubstitutionOverride
 import org.jetbrains.kotlin.fir.scopes.FirContainingNamesAwareScope
 import org.jetbrains.kotlin.fir.scopes.FirScope
 import org.jetbrains.kotlin.fir.scopes.processClassifiersByName
 import org.jetbrains.kotlin.fir.symbols.impl.FirPropertySymbol
-import org.jetbrains.kotlin.idea.frontend.api.ValidityToken
+import org.jetbrains.kotlin.idea.frontend.api.tokens.ValidityToken
 import org.jetbrains.kotlin.idea.frontend.api.fir.KtSymbolByFirBuilder
 import org.jetbrains.kotlin.idea.frontend.api.fir.utils.cached
 import org.jetbrains.kotlin.idea.frontend.api.scopes.KtScope
+import org.jetbrains.kotlin.idea.frontend.api.scopes.KtScopeNameFilter
 import org.jetbrains.kotlin.idea.frontend.api.symbols.KtCallableSymbol
-import org.jetbrains.kotlin.idea.frontend.api.symbols.KtClassLikeSymbol
 import org.jetbrains.kotlin.idea.frontend.api.symbols.KtClassifierSymbol
+import org.jetbrains.kotlin.idea.frontend.api.symbols.KtConstructorSymbol
 import org.jetbrains.kotlin.idea.frontend.api.withValidityAssertion
 import org.jetbrains.kotlin.name.Name
 
@@ -28,29 +29,33 @@ internal abstract class KtFirDelegatingScope<S>(
     abstract val firScope: S
 
     private val allNamesCached by cached {
-        getCallableNames() + getClassifierNames()
+        getPossibleCallableNames() + getPossibleClassifierNames()
     }
 
-    override fun getAllNames(): Set<Name> = allNamesCached
+    override fun getAllPossibleNames(): Set<Name> = allNamesCached
 
-    override fun getCallableNames(): Set<Name> = withValidityAssertion {
+    override fun getPossibleCallableNames(): Set<Name> = withValidityAssertion {
         firScope.getCallableNames()
     }
 
-    override fun getClassifierNames(): Set<Name> = withValidityAssertion {
+    override fun getPossibleClassifierNames(): Set<Name> = withValidityAssertion {
         firScope.getClassifierNames()
     }
 
-    override fun getCallableSymbols(): Sequence<KtCallableSymbol> = withValidityAssertion {
-        firScope.getCallableSymbols(getCallableNames(), builder)
+    override fun getCallableSymbols(nameFilter: KtScopeNameFilter): Sequence<KtCallableSymbol> = withValidityAssertion {
+        firScope.getCallableSymbols(getPossibleCallableNames().filter(nameFilter), builder)
     }
 
-    override fun getClassifierSymbols(): Sequence<KtClassifierSymbol> = withValidityAssertion {
-        firScope.getClassifierSymbols(getClassifierNames(), builder)
+    override fun getClassifierSymbols(nameFilter: KtScopeNameFilter): Sequence<KtClassifierSymbol> = withValidityAssertion {
+        firScope.getClassifierSymbols(getPossibleClassifierNames().filter(nameFilter), builder)
     }
 
-    override fun containsName(name: Name): Boolean = withValidityAssertion {
-        name in getAllNames()
+    override fun getConstructors(): Sequence<KtConstructorSymbol> = withValidityAssertion {
+        firScope.getConstructors(builder)
+    }
+
+    override fun mayContainName(name: Name): Boolean = withValidityAssertion {
+        name in getAllPossibleNames()
     }
 
 }
@@ -59,16 +64,14 @@ internal fun FirScope.getCallableSymbols(callableNames: Collection<Name>, builde
     callableNames.forEach { name ->
         val callables = mutableListOf<KtCallableSymbol>()
         processFunctionsByName(name) { firSymbol ->
-            (firSymbol.fir as? FirSimpleFunction)?.let { fir ->
-                callables.add(builder.buildFunctionSymbol(fir))
-            }
+            callables.add(builder.functionLikeBuilder.buildFunctionSymbol(firSymbol.fir))
         }
         processPropertiesByName(name) { firSymbol ->
             val symbol = when {
-                firSymbol is FirPropertySymbol && firSymbol.isFakeOverride -> {
-                    builder.buildVariableSymbol(firSymbol.fir)
+                firSymbol is FirPropertySymbol && firSymbol.fir.isSubstitutionOverride -> {
+                    builder.variableLikeBuilder.buildVariableSymbol(firSymbol.fir)
                 }
-                else -> builder.buildCallableSymbol(firSymbol.fir)
+                else -> builder.callableBuilder.buildCallableSymbol(firSymbol.fir)
             }
             callables.add(symbol)
         }
@@ -76,13 +79,29 @@ internal fun FirScope.getCallableSymbols(callableNames: Collection<Name>, builde
     }
 }
 
+internal class KtFirDelegatingScopeImpl<S>(
+    override val firScope: S,
+    builder: KtSymbolByFirBuilder,
+    token: ValidityToken
+) : KtFirDelegatingScope<S>(builder, token) where S : FirContainingNamesAwareScope, S : FirScope
+
+
 internal fun FirScope.getClassifierSymbols(classLikeNames: Collection<Name>, builder: KtSymbolByFirBuilder): Sequence<KtClassifierSymbol> =
     sequence {
         classLikeNames.forEach { name ->
             val classifierSymbols = mutableListOf<KtClassifierSymbol>()
             processClassifiersByName(name) { firSymbol ->
-                classifierSymbols.add(builder.buildClassifierSymbol(firSymbol))
+                classifierSymbols.add(builder.classifierBuilder.buildClassifierSymbol(firSymbol))
             }
             yieldAll(classifierSymbols)
         }
+    }
+
+internal fun FirScope.getConstructors(builder: KtSymbolByFirBuilder): Sequence<KtConstructorSymbol> =
+    sequence {
+        val constructorSymbols = mutableListOf<KtConstructorSymbol>()
+        processDeclaredConstructors { firSymbol ->
+            constructorSymbols.add(builder.functionLikeBuilder.buildConstructorSymbol(firSymbol.fir))
+        }
+        yieldAll(constructorSymbols)
     }

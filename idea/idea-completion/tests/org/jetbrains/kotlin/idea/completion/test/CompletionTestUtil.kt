@@ -9,12 +9,12 @@ import com.intellij.codeInsight.CodeInsightSettings
 import com.intellij.codeInsight.completion.CompletionType
 import com.intellij.codeInsight.lookup.LookupElement
 import org.jetbrains.kotlin.platform.TargetPlatform
-import org.jetbrains.kotlin.test.KotlinTestUtils
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import org.junit.Assert
 
 val RELATIVE_COMPLETION_TEST_DATA_BASE_PATH = "idea/idea-completion/testData"
 
-val COMPLETION_TEST_DATA_BASE_PATH = KotlinTestUtils.getHomeDirectory() + "/" + RELATIVE_COMPLETION_TEST_DATA_BASE_PATH
+val COMPLETION_TEST_DATA_BASE_PATH = KtTestUtil.getHomeDirectory() + "/" + RELATIVE_COMPLETION_TEST_DATA_BASE_PATH
 
 fun testCompletion(
     fileText: String,
@@ -22,6 +22,7 @@ fun testCompletion(
     complete: (CompletionType, Int) -> Array<LookupElement>?,
     defaultCompletionType: CompletionType = CompletionType.BASIC,
     defaultInvocationCount: Int = 0,
+    ignoreProperties: Collection<String> = emptyList(),
     additionalValidDirectives: Collection<String> = emptyList()
 ) {
     testWithAutoCompleteSetting(fileText) {
@@ -40,8 +41,8 @@ fun testCompletion(
             "Should be some assertions about completion",
             expected.size != 0 || unexpected.size != 0 || itemsNumber != null || nothingElse
         )
-        ExpectedCompletionUtils.assertContainsRenderedItems(expected, items, ExpectedCompletionUtils.isWithOrder(fileText), nothingElse)
-        ExpectedCompletionUtils.assertNotContainsRenderedItems(unexpected, items)
+        ExpectedCompletionUtils.assertContainsRenderedItems(expected, items, ExpectedCompletionUtils.isWithOrder(fileText), nothingElse, ignoreProperties)
+        ExpectedCompletionUtils.assertNotContainsRenderedItems(unexpected, items, ignoreProperties)
 
         if (itemsNumber != null) {
             val expectedItems = ExpectedCompletionUtils.listToString(ExpectedCompletionUtils.getItemsInformation(items))

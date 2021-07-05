@@ -5,21 +5,13 @@
 
 package org.jetbrains.kotlin.fir
 
-import com.intellij.openapi.project.Project
-import org.jetbrains.kotlin.analyzer.ModuleInfo
 import org.jetbrains.kotlin.fir.types.impl.*
 import org.jetbrains.kotlin.fir.utils.ArrayMapAccessor
 import org.jetbrains.kotlin.fir.utils.ComponentArrayOwner
 import org.jetbrains.kotlin.fir.utils.NullableArrayMapAccessor
 import org.jetbrains.kotlin.fir.utils.TypeRegistry
-import org.jetbrains.kotlin.utils.Jsr305State
+import org.jetbrains.kotlin.utils.JavaTypeEnhancementState
 import kotlin.reflect.KClass
-
-@RequiresOptIn
-annotation class PrivateSessionConstructor
-
-@RequiresOptIn
-annotation class SessionConfiguration
 
 interface FirSessionComponent
 
@@ -34,11 +26,9 @@ abstract class FirSession @PrivateSessionConstructor constructor(val sessionProv
         }
     }
 
-    open val moduleInfo: ModuleInfo? get() = null
+    val javaTypeEnhancementState: JavaTypeEnhancementState? get() = null
 
-    val jsr305State: Jsr305State? get() = null
-
-    val builtinTypes: BuiltinTypes = BuiltinTypes()
+    open val builtinTypes: BuiltinTypes = BuiltinTypes()
 
     final override val typeRegistry: TypeRegistry<FirSessionComponent, FirSessionComponent> = Companion
 
@@ -48,10 +38,8 @@ abstract class FirSession @PrivateSessionConstructor constructor(val sessionProv
     }
 }
 
-interface FirSessionProvider {
-    val project: Project
-
-    fun getSession(moduleInfo: ModuleInfo): FirSession?
+abstract class FirSessionProvider {
+    abstract fun getSession(moduleData: FirModuleData): FirSession?
 }
 
 class BuiltinTypes {
@@ -71,4 +59,5 @@ class BuiltinTypes {
     val nullableNothingType: FirImplicitBuiltinTypeRef = FirImplicitNullableNothingTypeRef(null)
     val charType: FirImplicitBuiltinTypeRef = FirImplicitCharTypeRef(null)
     val stringType: FirImplicitBuiltinTypeRef = FirImplicitStringTypeRef(null)
+    val throwableType: FirImplicitThrowableTypeRef = FirImplicitThrowableTypeRef(null)
 }

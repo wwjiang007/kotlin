@@ -30,12 +30,16 @@ interface IrSymbol {
     @ObsoleteDescriptorBasedAPI
     val descriptor: DeclarationDescriptor
 
+    @ObsoleteDescriptorBasedAPI
+    val hasDescriptor: Boolean
+
     val isBound: Boolean
 
-    val signature: IdSignature
-
-    val isPublicApi: Boolean
+    val signature: IdSignature?
 }
+
+val IrSymbol.isPublicApi: Boolean
+    get() = signature != null
 
 interface IrBindableSymbol<out D : DeclarationDescriptor, B : IrSymbolOwner> : IrSymbol {
     override val owner: B
@@ -68,7 +72,7 @@ interface IrClassifierSymbol : IrSymbol, TypeConstructorMarker {
 
 interface IrClassSymbol : IrClassifierSymbol, IrBindableSymbol<ClassDescriptor, IrClass>
 
-interface IrScriptSymbol : IrSymbol, IrBindableSymbol<ScriptDescriptor, IrScript>
+interface IrScriptSymbol : IrClassifierSymbol, IrBindableSymbol<ScriptDescriptor, IrScript>
 
 interface IrTypeParameterSymbol : IrClassifierSymbol, IrBindableSymbol<TypeParameterDescriptor, IrTypeParameter>, TypeParameterMarker
 

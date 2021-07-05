@@ -1,5 +1,4 @@
 // !LANGUAGE: -SuspendConversion
-// !WITH_NEW_INFERENCE
 // !CHECK_TYPE
 // !DIAGNOSTICS: -UNUSED_PARAMETER -ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE -UNUSED_VALUE -UNUSED_VARIABLE
 
@@ -21,7 +20,7 @@ fun foo() {
     builder { 1 }
 
     val x = { 1 }
-    <!INAPPLICABLE_CANDIDATE!>builder<!>(x)
+    builder(x)
     builder({1} as (suspend () -> Int))
 
     var i: Int = 1
@@ -29,10 +28,10 @@ fun foo() {
     i = genericBuilder { 1 }
     genericBuilder { 1 }
     genericBuilder<Int> { 1 }
-    genericBuilder<Int> { "" }
+    genericBuilder<Int> { <!ARGUMENT_TYPE_MISMATCH!>""<!> }
 
     val y = { 1 }
-    <!INAPPLICABLE_CANDIDATE!>genericBuilder<!>(y)
+    genericBuilder(y)
 
     unitBuilder {}
     unitBuilder { 1 }
@@ -44,7 +43,7 @@ fun foo() {
     val s: String = manyArgumentsBuilder({}, { "" }) { 1 }
 
     manyArgumentsBuilder<String>({}, { "" }, { 1 })
-    manyArgumentsBuilder<String>({}, { 1 }, { 2 })
+    manyArgumentsBuilder<String>({}, { <!ARGUMENT_TYPE_MISMATCH!>1<!> }, { 2 })
 
     severalParamsInLambda { x, y ->
         x checkType { _<String>() }

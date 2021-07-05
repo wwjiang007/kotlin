@@ -6,12 +6,15 @@
 package org.jetbrains.kotlin.ir.backend.js.export
 
 import org.jetbrains.kotlin.backend.common.ir.isExpect
+import org.jetbrains.kotlin.backend.common.ir.isMethodOfAny
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.descriptors.ClassKind
-import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
-import org.jetbrains.kotlin.ir.backend.js.*
-import org.jetbrains.kotlin.ir.backend.js.lower.ES6AddInternalParametersToConstructorPhase.*
+import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
+import org.jetbrains.kotlin.ir.backend.js.JsLoweredDeclarationOrigin
+import org.jetbrains.kotlin.ir.backend.js.lower.ES6AddInternalParametersToConstructorPhase.ES6_INIT_BOX_PARAMETER
+import org.jetbrains.kotlin.ir.backend.js.lower.ES6AddInternalParametersToConstructorPhase.ES6_RESULT_TYPE_PARAMETER
 import org.jetbrains.kotlin.ir.backend.js.utils.getJsNameOrKotlinName
 import org.jetbrains.kotlin.ir.backend.js.utils.isJsExport
 import org.jetbrains.kotlin.ir.backend.js.utils.sanitizeName
@@ -80,7 +83,7 @@ class ExportModelGenerator(val context: JsIrBackendContext) {
     private fun exportConstructor(constructor: IrConstructor): ExportedDeclaration? {
         if (!constructor.isPrimary) return null
         val allValueParameters = listOfNotNull(constructor.extensionReceiverParameter) +
-            constructor.valueParameters.filterNot { it.origin === ES6_RESULT_TYPE_PARAMETER || it.origin === ES6_INIT_BOX_PARAMETER }
+                constructor.valueParameters.filterNot { it.origin === ES6_RESULT_TYPE_PARAMETER || it.origin === ES6_INIT_BOX_PARAMETER }
         return ExportedConstructor(allValueParameters.map { exportParameter(it) })
     }
 
@@ -171,8 +174,11 @@ class ExportModelGenerator(val context: JsIrBackendContext) {
                 }
 
                 is IrField -> {
-                    assert(candidate.correspondingPropertySymbol != null) {
-                        "Properties without fields are not supported ${candidate.fqNameWhenAvailable}"
+                    assert(
+                        candidate.origin == IrDeclarationOrigin.FIELD_FOR_OBJECT_INSTANCE
+                                || candidate.correspondingPropertySymbol != null
+                    ) {
+                        "Unexpected field without property ${candidate.fqNameWhenAvailable}"
                     }
                 }
 
@@ -189,7 +195,7 @@ class ExportModelGenerator(val context: JsIrBackendContext) {
             ?.let { exportType(it).takeIf { it !is ExportedType.ErrorType } }
 
         val superInterfaces = klass.superTypes
-            .filter {it.classifierOrFail.isInterface }
+            .filter { it.classifierOrFail.isInterface }
             .map { exportType(it) }
             .filter { it !is ExportedType.ErrorType }
 
@@ -321,18 +327,28 @@ class ExportModelGenerator(val context: JsIrBackendContext) {
             return Exportability.Prohibited("Suspend function")
         if (function.isFakeOverride)
             return Exportability.NotNeeded
-        if (function.origin == IrDeclarationOrigin.BRIDGE ||
-            function.origin == JsLoweredDeclarationOrigin.BRIDGE_TO_EXTERNAL_FUNCTION ||
+        if (function.origin == JsLoweredDeclarationOrigin.BRIDGE_WITHOUT_STABLE_NAME ||
+            function.origin == JsLoweredDeclarationOrigin.BRIDGE_WITH_STABLE_NAME ||
             function.origin == IrDeclarationOrigin.FUNCTION_FOR_DEFAULT_PARAMETER ||
-            function.origin == JsLoweredDeclarationOrigin.OBJECT_GET_INSTANCE_FUNCTION
+            function.origin == JsLoweredDeclarationOrigin.OBJECT_GET_INSTANCE_FUNCTION ||
+            function.origin == JsLoweredDeclarationOrigin.JS_SHADOWED_EXPORT
         ) {
             return Exportability.NotNeeded
         }
 
         if (function.isFakeOverriddenFromAny())
             return Exportability.NotNeeded
-        if (function.name.asString().endsWith("-impl"))
+
+        val nameString = function.name.asString()
+        if (nameString.endsWith("-impl"))
             return Exportability.NotNeeded
+
+
+        // Workaround in case IrDeclarationOrigin.FUNCTION_FOR_DEFAULT_PARAMETER is rewritten.
+        // TODO: Properly fix KT-41613
+        if (nameString.endsWith("\$") && function.valueParameters.any { "\$mask" in it.name.asString() }) {
+            return Exportability.NotNeeded
+        }
 
         val name = function.getExportedIdentifier()
         // TODO: Use [] syntax instead of prohibiting
@@ -378,9 +394,23 @@ private fun getExportCandidate(declaration: IrDeclaration): IrDeclarationWithNam
     return declaration
 }
 
-private fun shouldDeclarationBeExported(declaration: IrDeclarationWithName, context: JsIrBackendContext): Boolean {
-    if (declaration.fqNameWhenAvailable in context.additionalExportedDeclarations)
+private fun shouldDeclarationBeExported(declaration: IrDeclarationWithName, context: JsIrBackendContext?): Boolean {
+    if (context?.additionalExportedDeclarationNames?.contains(declaration.fqNameWhenAvailable) == true)
         return true
+
+    if (context?.additionalExportedDeclarations?.contains(declaration) == true)
+        return true
+
+    if (declaration is IrSimpleFunction) {
+        val overriddenNonEmpty = declaration
+            .overriddenSymbols
+            .isNotEmpty()
+
+        if (overriddenNonEmpty) {
+            return declaration.isOverriddenExported(context) ||
+                    declaration.isMethodOfAny() // Handle names for special functions
+        }
+    }
 
     if (declaration.isJsExport())
         return true
@@ -392,7 +422,11 @@ private fun shouldDeclarationBeExported(declaration: IrDeclarationWithName, cont
     }
 }
 
-fun IrDeclaration.isExported(context: JsIrBackendContext): Boolean {
+private fun IrSimpleFunction.isOverriddenExported(context: JsIrBackendContext?): Boolean =
+    overriddenSymbols
+        .any { shouldDeclarationBeExported(it.owner, context) }
+
+fun IrDeclaration.isExported(context: JsIrBackendContext?): Boolean {
     val candidate = getExportCandidate(this) ?: return false
     return shouldDeclarationBeExported(candidate, context)
 }

@@ -5,23 +5,27 @@
 
 package org.jetbrains.kotlin.fir.resolve.calls
 
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.*
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
 import org.jetbrains.kotlin.fir.declarations.FirSimpleFunction
-import org.jetbrains.kotlin.fir.declarations.isStatic
+import org.jetbrains.kotlin.fir.declarations.utils.isStatic
 import org.jetbrains.kotlin.fir.declarations.synthetic.buildSyntheticProperty
-import org.jetbrains.kotlin.fir.scopes.FirScope
-import org.jetbrains.kotlin.fir.scopes.FirTypeScope
-import org.jetbrains.kotlin.fir.scopes.ProcessorAction
-import org.jetbrains.kotlin.fir.scopes.processOverriddenFunctionsAndSelf
-import org.jetbrains.kotlin.fir.symbols.CallableId
-import org.jetbrains.kotlin.fir.symbols.StandardClassIds
+import org.jetbrains.kotlin.fir.scopes.*
 import org.jetbrains.kotlin.fir.symbols.SyntheticSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.*
-import org.jetbrains.kotlin.fir.types.*
+import org.jetbrains.kotlin.fir.symbols.impl.FirAccessorSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirFunctionSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirNamedFunctionSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirVariableSymbol
+import org.jetbrains.kotlin.fir.types.ConeClassLikeType
+import org.jetbrains.kotlin.fir.types.ConeNullability.NOT_NULL
+import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
+import org.jetbrains.kotlin.fir.types.withNullability
+import org.jetbrains.kotlin.name.CallableId
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.name.StandardClassIds
+import org.jetbrains.kotlin.types.AbstractTypeChecker
 
-class SyntheticPropertySymbol(
+class FirSyntheticPropertySymbol(
     callableId: CallableId,
     override val accessorId: CallableId
 ) : FirAccessorSymbol(callableId, accessorId), SyntheticSymbol
@@ -33,7 +37,7 @@ class FirSyntheticFunctionSymbol(
 class FirSyntheticPropertiesScope(
     val session: FirSession,
     private val baseScope: FirTypeScope
-) : FirScope() {
+) : FirScope(), FirContainingNamesAwareScope {
     private val syntheticNamesProvider = session.syntheticNamesProvider
 
     override fun processPropertiesByName(name: Name, processor: (FirVariableSymbol<*>) -> Unit) {
@@ -45,13 +49,20 @@ class FirSyntheticPropertiesScope(
         }
     }
 
+    override fun getCallableNames(): Set<Name> = baseScope.getCallableNames().flatMapTo(hashSetOf()) { propertyName ->
+        syntheticNamesProvider.possiblePropertyNamesByAccessorName(propertyName)
+    }
+
+    override fun getClassifierNames(): Set<Name> = emptySet()
+
     private fun checkGetAndCreateSynthetic(
         propertyName: Name,
         getterName: Name,
         getterSymbol: FirFunctionSymbol<*>,
         processor: (FirVariableSymbol<*>) -> Unit
     ) {
-        val getter = getterSymbol.fir as? FirSimpleFunction ?: return
+        if (getterSymbol !is FirNamedFunctionSymbol) return
+        val getter = getterSymbol.fir
 
         if (getter.typeParameters.isNotEmpty()) return
         if (getter.valueParameters.isNotEmpty()) return
@@ -64,34 +75,62 @@ class FirSyntheticPropertiesScope(
         var matchingSetter: FirSimpleFunction? = null
         if (getterReturnType != null) {
             val setterName = syntheticNamesProvider.setterNameByGetterName(getterName)
-            baseScope.processFunctionsByName(setterName, fun(setterSymbol: FirFunctionSymbol<*>) {
-                if (matchingSetter != null) return
-                val setter = setterSymbol.fir as? FirSimpleFunction ?: return
-                val parameter = setter.valueParameters.singleOrNull() ?: return
-                if (setter.typeParameters.isNotEmpty() || setter.isStatic) return
-                val parameterType = (parameter.returnTypeRef as? FirResolvedTypeRef)?.type ?: return
-                if (getterReturnType.withNullability(ConeNullability.NOT_NULL) != parameterType.withNullability(ConeNullability.NOT_NULL)) return
-                matchingSetter = setter
-            })
+            if (setterName != null) {
+                baseScope.processFunctionsByName(setterName, fun(setterSymbol: FirFunctionSymbol<*>) {
+                    if (matchingSetter != null) return
+                    val setter = setterSymbol.fir as? FirSimpleFunction ?: return
+                    val parameter = setter.valueParameters.singleOrNull() ?: return
+                    if (setter.typeParameters.isNotEmpty() || setter.isStatic) return
+                    val parameterType = (parameter.returnTypeRef as? FirResolvedTypeRef)?.type ?: return
+                    // TODO: at this moment it works for cases like
+                    // class Base {
+                    //     void setSomething(Object value) {}
+                    // }
+                    // class Derived extends Base {
+                    //     String getSomething() { return ""; }
+                    // }
+                    // In FE 1.0, we should have also Object getSomething() in class Base for this to work
+                    // I think details here are worth designing
+                    if (!AbstractTypeChecker.isSubtypeOf(
+                            session.typeContext,
+                            getterReturnType.withNullability(NOT_NULL, session.typeContext),
+                            parameterType.withNullability(NOT_NULL, session.typeContext)
+                        )
+                    ) {
+                        return
+                    }
+                    matchingSetter = setter
+                })
+            }
         }
 
+        val classLookupTag = getterSymbol.dispatchReceiverClassOrNull()
+        val packageName = classLookupTag?.classId?.packageFqName ?: getterSymbol.callableId.packageName
+        val className = classLookupTag?.classId?.relativeClassName
+
         val property = buildSyntheticProperty {
-            session = this@FirSyntheticPropertiesScope.session
+            moduleData = session.moduleData
             name = propertyName
-            symbol = SyntheticPropertySymbol(
+            symbol = FirSyntheticPropertySymbol(
                 accessorId = getterSymbol.callableId,
-                callableId = CallableId(getterSymbol.callableId.packageName, getterSymbol.callableId.className, propertyName)
+                callableId = CallableId(packageName, className, propertyName)
             )
             delegateGetter = getter
             delegateSetter = matchingSetter
         }
-        processor(property.symbol)
+        val syntheticSymbol = property.symbol
+        (baseScope as? FirUnstableSmartcastTypeScope)?.apply {
+            if (isSymbolFromUnstableSmartcast(getterSymbol)) {
+                markSymbolFromUnstableSmartcast(syntheticSymbol)
+            }
+        }
+        processor(syntheticSymbol)
     }
 
-    private fun FirFunctionSymbol<*>.hasJavaOverridden(): Boolean {
+    private fun FirNamedFunctionSymbol.hasJavaOverridden(): Boolean {
         var result = false
         baseScope.processOverriddenFunctionsAndSelf(this) {
-            if (it.unwrapSubstitutionOverrides().fir.origin == FirDeclarationOrigin.Enhancement) {
+            if (it.unwrapFakeOverrides().fir.origin == FirDeclarationOrigin.Enhancement) {
                 result = true
                 ProcessorAction.STOP
             } else {

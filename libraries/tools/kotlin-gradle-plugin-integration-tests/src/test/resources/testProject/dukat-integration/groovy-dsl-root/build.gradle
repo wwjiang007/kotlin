@@ -4,7 +4,7 @@ plugins {
 
 repositories {
     mavenLocal()
-    jcenter()
+    mavenCentral()
 }
 
 dependencies {
@@ -15,6 +15,7 @@ dependencies {
 
 kotlin {
     js {
+        useCommonJs()
         nodejs()
     }
 }

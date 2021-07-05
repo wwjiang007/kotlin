@@ -347,6 +347,8 @@ fun PsiElement.parameterIndex(): Int {
     }
 }
 
+val KtValueArgument.argumentIndex: Int get() = (parent as KtValueArgumentList).arguments.indexOf(this)
+
 fun KtModifierListOwner.isPrivate(): Boolean = hasModifier(KtTokens.PRIVATE_KEYWORD)
 
 fun KtModifierListOwner.isProtected(): Boolean = hasModifier(KtTokens.PROTECTED_KEYWORD)
@@ -672,4 +674,15 @@ fun getTrailingCommaByClosingElement(closingElement: PsiElement?): PsiElement? {
 fun getTrailingCommaByElementsList(elementList: PsiElement?): PsiElement? {
     val lastChild = elementList?.lastChild?.let { if (it !is PsiComment) it else it.getPrevSiblingIgnoringWhitespaceAndComments() }
     return lastChild?.takeIf { it.node.elementType == KtTokens.COMMA }
+}
+
+val KtNameReferenceExpression.isUnderscoreInBackticks
+    get() = getReferencedName() == "`_`"
+
+tailrec fun KtTypeElement.unwrapNullability(): KtTypeElement? {
+    return when (this) {
+        is KtNullableType -> this.innerType?.unwrapNullability()
+        is KtDefinitelyNotNullType -> this.innerType?.unwrapNullability()
+        else -> this
+    }
 }

@@ -34,6 +34,7 @@ interface TypeSystemCommonBackendContext : TypeSystemContext {
     fun TypeConstructorMarker.isInlineClass(): Boolean
     fun TypeConstructorMarker.isInnerClass(): Boolean
     fun TypeParameterMarker.getRepresentativeUpperBound(): KotlinTypeMarker
+    fun KotlinTypeMarker.getUnsubstitutedUnderlyingType(): KotlinTypeMarker?
     fun KotlinTypeMarker.getSubstitutedUnderlyingType(): KotlinTypeMarker?
 
     fun KotlinTypeMarker.makeNullable(): KotlinTypeMarker =
@@ -49,4 +50,30 @@ interface TypeSystemCommonBackendContext : TypeSystemContext {
     fun TypeParameterMarker.isReified(): Boolean
 
     fun KotlinTypeMarker.isInterfaceOrAnnotationClass(): Boolean
+}
+
+interface TypeSystemCommonBackendContextForTypeMapping : TypeSystemCommonBackendContext {
+    fun TypeConstructorMarker.isTypeParameter(): Boolean
+    fun TypeConstructorMarker.defaultType(): KotlinTypeMarker
+    fun TypeConstructorMarker.isScript(): Boolean
+
+    fun SimpleTypeMarker.isSuspendFunction(): Boolean
+    fun SimpleTypeMarker.isKClass(): Boolean
+
+    fun KotlinTypeMarker.isRawType(): Boolean
+
+    fun TypeConstructorMarker.typeWithArguments(arguments: List<KotlinTypeMarker>): SimpleTypeMarker
+    fun TypeConstructorMarker.typeWithArguments(vararg arguments: KotlinTypeMarker): SimpleTypeMarker {
+        return typeWithArguments(arguments.toList())
+    }
+
+    fun TypeArgumentMarker.adjustedType(): KotlinTypeMarker {
+        if (this.isStarProjection()) return nullableAnyType()
+        return getType()
+    }
+
+    fun TypeParameterMarker.representativeUpperBound(): KotlinTypeMarker
+
+    fun continuationTypeConstructor(): TypeConstructorMarker
+    fun functionNTypeConstructor(n: Int): TypeConstructorMarker
 }

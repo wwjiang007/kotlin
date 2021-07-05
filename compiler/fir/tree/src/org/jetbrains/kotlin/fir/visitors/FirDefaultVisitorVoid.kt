@@ -23,10 +23,6 @@ abstract class FirDefaultVisitorVoid : FirVisitorVoid() {
         return visitResolvedTypeRef(errorTypeRef)
     }
 
-    override fun visitResolvedFunctionTypeRef(resolvedFunctionTypeRef: FirResolvedFunctionTypeRef) {
-        return visitResolvedTypeRef(resolvedFunctionTypeRef)
-    }
-
     override fun visitTypeRefWithNullability(typeRefWithNullability: FirTypeRefWithNullability) {
         return visitTypeRef(typeRefWithNullability)
     }
@@ -94,5 +90,9 @@ abstract class FirDefaultVisitorVoid : FirVisitorVoid() {
 
     override fun visitErrorResolvedQualifier(errorResolvedQualifier: FirErrorResolvedQualifier) {
         return visitResolvedQualifier(errorResolvedQualifier)
+    }
+
+    override fun visitImplicitInvokeCall(implicitInvokeCall: FirImplicitInvokeCall) {
+        return visitFunctionCall(implicitInvokeCall)
     }
 }

@@ -1,7 +1,9 @@
-// !WITH_NEW_INFERENCE
+// FIR_IDENTICAL
 // !CHECK_TYPE
 
 package s
+
+import checkSubtype
 
 interface In<in T>
 
@@ -13,7 +15,7 @@ fun <T> foo(in1: In<T>, in2: In<T>): T = throw Exception("$in1 $in2")
 
 fun test(inA: In<A>, inB: In<B>, inC: In<C>) {
 
-    <!OI;TYPE_INFERENCE_CONFLICTING_SUBSTITUTIONS!>foo<!>(inA, inB)
+    foo(inA, inB)
 
     val r = foo(inA, inC)
     checkSubtype<C>(r)

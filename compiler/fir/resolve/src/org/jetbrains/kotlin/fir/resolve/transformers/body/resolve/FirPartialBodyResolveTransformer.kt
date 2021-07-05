@@ -8,7 +8,7 @@ package org.jetbrains.kotlin.fir.resolve.transformers.body.resolve
 import org.jetbrains.kotlin.fir.FirElement
 import org.jetbrains.kotlin.fir.PrivateForInline
 import org.jetbrains.kotlin.fir.resolve.ResolutionMode
-import org.jetbrains.kotlin.fir.visitors.CompositeTransformResult
+import org.jetbrains.kotlin.fir.resolve.calls.ResolutionContext
 
 abstract class FirPartialBodyResolveTransformer(
     val transformer: FirBodyResolveTransformer
@@ -21,6 +21,10 @@ abstract class FirPartialBodyResolveTransformer(
     final override inline val components: BodyResolveTransformerComponents
         get() = transformer.components
 
+    @Suppress("OVERRIDE_BY_INLINE")
+    final override inline val resolutionContext: ResolutionContext
+        get() = transformer.resolutionContext
+
     @set:PrivateForInline
     override var implicitTypeOnly: Boolean
         get() = transformer.implicitTypeOnly
@@ -28,7 +32,7 @@ abstract class FirPartialBodyResolveTransformer(
             transformer.implicitTypeOnly = value
         }
 
-    override fun <E : FirElement> transformElement(element: E, data: ResolutionMode): CompositeTransformResult<E> {
+    override fun <E : FirElement> transformElement(element: E, data: ResolutionMode): E {
         return element.transform(transformer, data)
     }
 }

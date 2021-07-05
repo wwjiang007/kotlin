@@ -1,4 +1,3 @@
-// !WITH_NEW_INFERENCE
 // !DIAGNOSTICS: -UNUSED_PARAMETER
 
 class A<T> {
@@ -8,7 +7,7 @@ class A<T> {
 }
 
 fun test(a: A<out CharSequence>) {
-    a + ""
-    a[1] = ""
-    a[""]
+    a + <!ARGUMENT_TYPE_MISMATCH!>""<!>
+    a[1] = <!ARGUMENT_TYPE_MISMATCH!>""<!>
+    a[<!ARGUMENT_TYPE_MISMATCH!>""<!>]
 }

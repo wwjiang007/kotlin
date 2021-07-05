@@ -315,8 +315,8 @@ class KotlinUastApiTest : AbstractKotlinUastTest() {
     @Test
     fun testSuperTypes() {
         doTest("SuperCalls") { _, file ->
-            file.checkUastSuperTypes("B", listOf("A"))
-            file.checkUastSuperTypes("O", listOf("A"))
+            file.checkUastSuperTypes("class B", listOf("A"))
+            file.checkUastSuperTypes("object O", listOf("A"))
             file.checkUastSuperTypes("InnerClass", listOf("A"))
             file.checkUastSuperTypes("object : A(\"textForAnon\")", listOf("A"))
         }
@@ -600,10 +600,9 @@ class KotlinUastApiTest : AbstractKotlinUastTest() {
             assertEquals("USimpleNameReferenceExpression (identifier = <init>, resolvesTo = PsiClass: Local)", classReference.asLogString())
             val localClass = classReference.resolve().toUElement() ?: kfail("uelement expected")
             assertEquals("UClass (name = Local)", localClass.asLogString())
-            assertEquals(localClass, localFunctionResolved.toUElement())
             val localPrimaryConstructor = localFunctionResolved.toUElementOfType<UMethod>() ?: kfail("constructor expected")
             assertTrue(localPrimaryConstructor.isConstructor)
-            assertEquals(localClass, localPrimaryConstructor.uastParent)
+            assertEquals(localClass.javaPsi, localPrimaryConstructor.javaPsi.cast<PsiMethod>().containingClass)
         }
     }
 

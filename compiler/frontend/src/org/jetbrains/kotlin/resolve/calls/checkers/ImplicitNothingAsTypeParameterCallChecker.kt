@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.calls.SPECIAL_FUNCTION_NAMES
 import org.jetbrains.kotlin.resolve.calls.callUtil.getParameterForArgument
 import org.jetbrains.kotlin.resolve.calls.callUtil.getResolvedCall
+import org.jetbrains.kotlin.resolve.calls.components.stableType
 import org.jetbrains.kotlin.resolve.calls.model.*
 import org.jetbrains.kotlin.resolve.calls.tower.NewResolvedCallImpl
 import org.jetbrains.kotlin.resolve.calls.tower.psiExpression
@@ -23,6 +24,7 @@ import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.TypeUtils
 import org.jetbrains.kotlin.types.typeUtil.isNothing
 import org.jetbrains.kotlin.types.typeUtil.isNothingOrNullableNothing
+import org.jetbrains.kotlin.types.typeUtil.isNullableNothing
 import org.jetbrains.kotlin.types.typeUtil.isTypeParameter
 
 object ImplicitNothingAsTypeParameterCallChecker : CallChecker {
@@ -60,9 +62,13 @@ object ImplicitNothingAsTypeParameterCallChecker : CallChecker {
             resolvedCall.candidateDescriptor.valueParameters.filter { it.type.isFunctionOrSuspendFunctionType }
                 .map { it.returnType?.arguments?.last()?.type }.toSet()
         val unsubstitutedReturnType = resultingDescriptor.original.returnType
-        val hasImplicitNothing = inferredReturnType?.isNothing() == true &&
+        val hasImplicitNothing = inferredReturnType?.isNothingOrNullableNothing() == true &&
                 unsubstitutedReturnType?.isTypeParameter() == true &&
                 (TypeUtils.noExpectedType(expectedType) || !expectedType.isNothing())
+
+        if (inferredReturnType?.isNullableNothing() == true && unsubstitutedReturnType?.isMarkedNullable == false) {
+            return false
+        }
 
         if (hasImplicitNothing && unsubstitutedReturnType !in lambdasFromArgumentsReturnTypes) {
             context.trace.reportDiagnosticOnceWrtDiagnosticFactoryList(
@@ -96,8 +102,15 @@ object ImplicitNothingAsTypeParameterCallChecker : CallChecker {
             }
 
             val resolvedCallAtom = resolvedAtom.getResolvedCallAtom(context.trace.bindingContext) ?: continue
+            val atom = resolvedAtom.atom
+
+            if (atom is SimpleKotlinCallArgument && !atom.receiver.stableType.isNothingOrNullableNothing())
+                continue
+
             val candidateDescriptor = resolvedCallAtom.candidateDescriptor
-            val isReturnTypeOwnTypeParameter = candidateDescriptor.typeParameters.any { it.defaultType == candidateDescriptor.returnType }
+            val isReturnTypeOwnTypeParameter = candidateDescriptor.typeParameters.any {
+                it.typeConstructor == candidateDescriptor.returnType?.constructor
+            }
             val isSpecialCall = candidateDescriptor.name in SPECIAL_FUNCTION_NAMES
             val hasExplicitTypeArguments = resolvedCallAtom.atom.psiKotlinCall.typeArguments.isNotEmpty() // not required
 

@@ -12,6 +12,7 @@ import kotlin.Unit;
 import kotlin.collections.CollectionsKt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.kotlin.backend.common.SamType;
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns;
 import org.jetbrains.kotlin.codegen.binding.CalculatedClosure;
 import org.jetbrains.kotlin.codegen.context.ClosureContext;
@@ -39,6 +40,7 @@ import org.jetbrains.kotlin.resolve.scopes.receivers.TransientReceiver;
 import org.jetbrains.kotlin.serialization.DescriptorSerializer;
 import org.jetbrains.kotlin.types.KotlinType;
 import org.jetbrains.kotlin.types.SimpleType;
+import org.jetbrains.kotlin.types.TypeUtils;
 import org.jetbrains.kotlin.types.expressions.ExpressionTypingUtils;
 import org.jetbrains.kotlin.util.OperatorNameConventions;
 import org.jetbrains.org.objectweb.asm.MethodVisitor;
@@ -50,8 +52,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import static org.jetbrains.kotlin.codegen.AsmUtil.*;
+import static org.jetbrains.kotlin.codegen.AsmUtil.CAPTURED_THIS_FIELD;
 import static org.jetbrains.kotlin.codegen.CallableReferenceUtilKt.*;
+import static org.jetbrains.kotlin.codegen.DescriptorAsmUtil.*;
 import static org.jetbrains.kotlin.codegen.JvmCodegenUtil.isConst;
 import static org.jetbrains.kotlin.codegen.binding.CodegenBinding.CLOSURE;
 import static org.jetbrains.kotlin.codegen.serialization.JvmSerializationBindings.METHOD_FOR_FUNCTION;
@@ -139,7 +142,7 @@ public class ClosureCodegen extends MemberCodegen<KtElement> {
 
         this.asmType = typeMapper.mapClass(classDescriptor);
 
-        visibilityFlag = AsmUtil.getVisibilityAccessFlagForClass(classDescriptor);
+        visibilityFlag = DescriptorAsmUtil.getVisibilityAccessFlagForClass(classDescriptor);
     }
 
     @Override
@@ -155,7 +158,14 @@ public class ClosureCodegen extends MemberCodegen<KtElement> {
         for (int i = 0; i < superInterfaceTypes.size(); i++) {
             KotlinType superInterfaceType = superInterfaceTypes.get(i);
             sw.writeInterface();
-            superInterfaceAsmTypes[i] = typeMapper.mapSupertype(superInterfaceType, sw).getInternalName();
+            Type superInterfaceAsmType;
+            if (samType != null && superInterfaceType.getConstructor() == samType.getType().getConstructor()) {
+                superInterfaceAsmType = typeMapper.mapSupertype(superInterfaceType, null);
+                sw.writeAsmType(superInterfaceAsmType);
+            } else {
+                superInterfaceAsmType = typeMapper.mapSupertype(superInterfaceType, sw);
+            }
+            superInterfaceAsmTypes[i] = superInterfaceAsmType.getInternalName();
             sw.writeInterfaceEnd();
         }
 
@@ -365,6 +375,13 @@ public class ClosureCodegen extends MemberCodegen<KtElement> {
                 Type type = bridgeParameterTypes[i];
                 value = StackValue.local(slot, type, bridgeParameterKotlinTypes.get(i));
                 slot += type.getSize();
+            }
+            if (InlineClassesCodegenUtilKt.isInlineClassWithUnderlyingTypeAnyOrAnyN(parameterType) && functionReferenceCall == null) {
+                ClassDescriptor descriptor = TypeUtils.getClassDescriptor(parameterType);
+                InlineClassRepresentation<SimpleType> representation =
+                        descriptor != null ? descriptor.getInlineClassRepresentation() : null;
+                assert representation != null : "Not an inline class type: " + parameterType;
+                parameterType = representation.getUnderlyingType();
             }
             value.put(typeMapper.mapType(calleeParameter), parameterType, iv);
         }
@@ -588,5 +605,9 @@ public class ClosureCodegen extends MemberCodegen<KtElement> {
         );
         MemberScope scope = functionClass.getDefaultType().getMemberScope();
         return scope.getContributedFunctions(OperatorNameConventions.INVOKE, NoLookupLocation.FROM_BACKEND).iterator().next();
+    }
+
+    public boolean isCallableReference() {
+        return functionReferenceTarget != null;
     }
 }

@@ -22,6 +22,7 @@ abstract class CommonCompilerPerformanceManager(private val presentableName: Str
     private var startGCData = mutableMapOf<String, GCData>()
 
     private var irTranslationStart: Long = 0
+    private var irLoweringStart: Long = 0
     private var irGenerationStart: Long = 0
 
     private var targetDescription: String? = null
@@ -88,6 +89,19 @@ abstract class CommonCompilerPerformanceManager(private val presentableName: Str
         )
     }
 
+    open fun notifyIRLoweringStarted() {
+        irLoweringStart = PerformanceCounter.currentTime()
+    }
+
+    open fun notifyIRLoweringFinished() {
+        val time = deltaTime(irLoweringStart)
+        measurements += IRMeasurement(
+            lines,
+            TimeUnit.NANOSECONDS.toMillis(time),
+            IRMeasurement.Kind.LOWERING
+        )
+    }
+
     open fun notifyIRGenerationStarted() {
         irGenerationStart = PerformanceCounter.currentTime()
     }
@@ -137,8 +151,8 @@ abstract class CommonCompilerPerformanceManager(private val presentableName: Str
     }
 
     private fun createPerformanceReport(): ByteArray = buildString {
-        appendln("$presentableName performance report")
-        measurements.map { it.render() }.sorted().forEach { appendln(it) }
+        append("$presentableName performance report\n")
+        measurements.map { it.render() }.sorted().forEach { append("$it\n") }
     }.toByteArray()
 
     open fun notifyRepeat(total: Int, number: Int) {}

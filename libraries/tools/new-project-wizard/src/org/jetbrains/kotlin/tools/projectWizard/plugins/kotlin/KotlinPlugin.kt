@@ -16,10 +16,10 @@ import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.BuildFileIR
 import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.RepositoryIR
 import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.withIrs
 import org.jetbrains.kotlin.tools.projectWizard.moduleConfigurators.ModuleConfigurator
-import org.jetbrains.kotlin.tools.projectWizard.moduleConfigurators.inContextOfModuleConfigurator
 import org.jetbrains.kotlin.tools.projectWizard.phases.GenerationPhase
 import org.jetbrains.kotlin.tools.projectWizard.plugins.StructurePlugin
 import org.jetbrains.kotlin.tools.projectWizard.plugins.buildSystem.BuildSystemPlugin
+import org.jetbrains.kotlin.tools.projectWizard.plugins.buildSystem.BuildSystemType
 import org.jetbrains.kotlin.tools.projectWizard.plugins.buildSystem.buildSystemType
 import org.jetbrains.kotlin.tools.projectWizard.plugins.pomIR
 import org.jetbrains.kotlin.tools.projectWizard.plugins.projectPath
@@ -55,14 +55,22 @@ class KotlinPlugin(context: Context) : Plugin(context) {
 
         val version by property(
             // todo do not hardcode kind & repository
-            WizardKotlinVersion(Versions.KOTLIN, KotlinVersionKind.M, Repositories.KOTLIN_EAP_BINTRAY)
+            WizardKotlinVersion(
+                Versions.KOTLIN,
+                KotlinVersionKind.M,
+                Repositories.KOTLIN_EAP_MAVEN_CENTRAL,
+                KotlinVersionProviderService.getBuildSystemPluginRepository(
+                    KotlinVersionKind.M,
+                    devRepository = Repositories.JETBRAINS_KOTLIN_DEV
+                )
+            )
         )
 
         val initKotlinVersions by pipelineTask(GenerationPhase.PREPARE_GENERATION) {
             title = KotlinNewProjectWizardBundle.message("plugin.kotlin.downloading.kotlin.versions")
 
             withAction {
-                val version = service<KotlinVersionProviderService>().getKotlinVersion()
+                val version = service<KotlinVersionProviderService>().getKotlinVersion(projectKind.settingValue)
                 KotlinPlugin.version.update { version.asSuccess() }
             }
         }
@@ -127,10 +135,10 @@ class KotlinPlugin(context: Context) : Plugin(context) {
             withAction {
                 val version = version.propertyValue
                 if (version.kind.isStable) return@withAction UNIT_SUCCESS
-                val pluginRepository = version.repository
+                val pluginRepository = version.buildSystemPluginRepository(buildSystemType) ?: return@withAction UNIT_SUCCESS
                 BuildSystemPlugin.pluginRepositoreis.addValues(pluginRepository) andThen
                         updateBuildFiles { buildFile ->
-                            buildFile.withIrs(RepositoryIR(pluginRepository)).asSuccess()
+                            buildFile.withIrs(RepositoryIR(version.repository)).asSuccess()
                         }
             }
         }
@@ -194,11 +202,25 @@ class KotlinPlugin(context: Context) : Plugin(context) {
 
 }
 
-enum class ProjectKind(override val text: String) : DisplayableSettingItem {
-    Singleplatform(KotlinNewProjectWizardBundle.message("project.kind.singleplatform")),
-    Multiplatform(KotlinNewProjectWizardBundle.message("project.kind.multiplatform")),
-    Android(KotlinNewProjectWizardBundle.message("project.kind.android")),
-    Js(KotlinNewProjectWizardBundle.message("project.kind.kotlin.js"))
+enum class ProjectKind(
+    override val text: String,
+    val supportedBuildSystems: Set<BuildSystemType>,
+    val shortName: String = text,
+    val message: String? = null,
+) : DisplayableSettingItem {
+    Singleplatform(
+        KotlinNewProjectWizardBundle.message("project.kind.singleplatform"),
+        supportedBuildSystems = BuildSystemType.values().toSet()
+    ),
+    Multiplatform(KotlinNewProjectWizardBundle.message("project.kind.multiplatform"), supportedBuildSystems = BuildSystemType.ALL_GRADLE),
+    Android(KotlinNewProjectWizardBundle.message("project.kind.android"), supportedBuildSystems = BuildSystemType.ALL_GRADLE),
+    Js(KotlinNewProjectWizardBundle.message("project.kind.kotlin.js"), supportedBuildSystems = BuildSystemType.ALL_GRADLE),
+    COMPOSE(
+        KotlinNewProjectWizardBundle.message("project.kind.compose"),
+        supportedBuildSystems = setOf(BuildSystemType.GradleKotlinDsl),
+        shortName = KotlinNewProjectWizardBundle.message("project.kind.compose.short.name"),
+        message = "uses Kotlin ${Versions.KOTLIN_VERSION_FOR_COMPOSE}"
+    )
 }
 
 fun List<Module>.withAllSubModules(includeSourcesets: Boolean = false): List<Module> = buildList {

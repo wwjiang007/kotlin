@@ -1,5 +1,5 @@
-// IGNORE_BACKEND_FIR: JVM_IR
 // IGNORE_BACKEND: JS
+// SKIP_MANGLE_VERIFICATION
 
 interface C<A : Any, B : Any> {
     fun foo(a: A): B

@@ -10,10 +10,7 @@ import org.jetbrains.kotlin.ir.builders.createTmpVariable
 import org.jetbrains.kotlin.ir.builders.irGet
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrVariable
-import org.jetbrains.kotlin.ir.expressions.IrConst
-import org.jetbrains.kotlin.ir.expressions.IrConstKind
-import org.jetbrains.kotlin.ir.expressions.IrExpression
-import org.jetbrains.kotlin.ir.expressions.IrGetValue
+import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstImpl
 import org.jetbrains.kotlin.ir.types.IrType
@@ -21,6 +18,7 @@ import org.jetbrains.kotlin.ir.types.getClass
 import org.jetbrains.kotlin.ir.types.isNothing
 import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.ir.util.functions
+import org.jetbrains.kotlin.ir.util.isTrivial
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.util.OperatorNameConventions
 
@@ -73,16 +71,17 @@ internal fun IrExpression.decrement(): IrExpression {
 }
 
 internal val IrExpression.canHaveSideEffects: Boolean
-    get() = this !is IrConst<*> && this !is IrGetValue
+    get() = !isTrivial()
+
+private fun Any?.toLong(): Long? =
+    when (this) {
+        is Number -> toLong()
+        is Char -> code.toLong()
+        else -> null
+    }
 
 internal val IrExpression.constLongValue: Long?
-    get() = if (this is IrConst<*>) {
-        when (val value = this.value) {
-            is Number -> value.toLong()
-            is Char -> value.toLong()
-            else -> null
-        }
-    } else null
+    get() = if (this is IrConst<*>) value.toLong() else null
 
 /**
  * If [expression] can have side effects ([IrExpression.canHaveSideEffects]), this function creates a temporary local variable for that

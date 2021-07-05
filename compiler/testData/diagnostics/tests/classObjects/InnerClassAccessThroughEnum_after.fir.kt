@@ -5,13 +5,13 @@ package a
 
 enum class C {
     E1, E2, E3 {
-        object O_O
+        <!LOCAL_OBJECT_NOT_ALLOWED!>object O_O<!>
 
         fun b() {
             O_O
         }
 
-        class G
+        <!NESTED_CLASS_NOT_ALLOWED!>class G<!>
     },
 
     E4 {
@@ -33,12 +33,12 @@ enum class C {
 }
 
 fun f() {
-    C.E1.A
+    C.E1.<!UNRESOLVED_REFERENCE!>A<!>
     C.E1.<!UNRESOLVED_REFERENCE!>A<!>()
     C.E2.B()
 
-    C.E2.O
-    C.E3.O.InO
+    C.E2.<!UNRESOLVED_REFERENCE!>O<!>
+    C.E3.<!UNRESOLVED_REFERENCE!>O<!>.InO
 
     C.O
     C.O.InO

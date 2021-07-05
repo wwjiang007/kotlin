@@ -35,6 +35,7 @@ interface IntersectionTypeConstructorMarker : TypeConstructorMarker
 
 interface TypeSubstitutorMarker
 
+interface AnnotationMarker
 
 enum class TypeVariance(val presentation: String) {
     IN("in"),
@@ -59,6 +60,9 @@ interface TypeSystemOptimizationContext {
     fun identicalArguments(a: SimpleTypeMarker, b: SimpleTypeMarker) = false
 }
 
+/**
+ * Context that allow type-impl agnostic access to common types
+ */
 interface TypeSystemBuiltInsContext {
     fun nullableNothingType(): SimpleTypeMarker
     fun nullableAnyType(): SimpleTypeMarker
@@ -66,13 +70,17 @@ interface TypeSystemBuiltInsContext {
     fun anyType(): SimpleTypeMarker
 }
 
-interface TypeSystemTypeFactoryContext {
+/**
+ * Context that allow construction of types
+ */
+interface TypeSystemTypeFactoryContext: TypeSystemBuiltInsContext {
     fun createFlexibleType(lowerBound: SimpleTypeMarker, upperBound: SimpleTypeMarker): KotlinTypeMarker
     fun createSimpleType(
         constructor: TypeConstructorMarker,
         arguments: List<TypeArgumentMarker>,
         nullable: Boolean,
-        isExtensionFunction: Boolean = false
+        isExtensionFunction: Boolean = false,
+        annotations: List<AnnotationMarker>? = null
     ): SimpleTypeMarker
 
     fun createTypeArgument(type: KotlinTypeMarker, variance: TypeVariance): TypeArgumentMarker
@@ -82,7 +90,10 @@ interface TypeSystemTypeFactoryContext {
     fun createErrorTypeWithCustomConstructor(debugName: String, constructor: TypeConstructorMarker): KotlinTypeMarker
 }
 
-
+/**
+ * Factory, that constructs [AbstractTypeCheckerContext], which defines type-checker behaviour
+ * Implementation is recommended to be [TypeSystemContext]
+ */
 interface TypeCheckerProviderContext {
     fun newBaseTypeCheckerContext(
         errorTypesEqualToAnything: Boolean,
@@ -90,6 +101,9 @@ interface TypeCheckerProviderContext {
     ): AbstractTypeCheckerContext
 }
 
+/**
+ * Extended type system context, which defines set of operations specific to common super-type calculation
+ */
 interface TypeSystemCommonSuperTypesContext : TypeSystemContext, TypeSystemTypeFactoryContext, TypeCheckerProviderContext {
 
     fun KotlinTypeMarker.anySuperTypeConstructor(predicate: (TypeConstructorMarker) -> Boolean) =
@@ -127,6 +141,9 @@ interface TypeSystemCommonSuperTypesContext : TypeSystemContext, TypeSystemTypeF
 // component implementation for TypeSystemInferenceExtensionContext
 interface TypeSystemInferenceExtensionContextDelegate : TypeSystemInferenceExtensionContext
 
+/**
+ * Extended type system context, which defines set of type operations specific for type inference
+ */
 interface TypeSystemInferenceExtensionContext : TypeSystemContext, TypeSystemBuiltInsContext, TypeSystemCommonSuperTypesContext {
     fun KotlinTypeMarker.contains(predicate: (KotlinTypeMarker) -> Boolean): Boolean
 
@@ -136,17 +153,13 @@ interface TypeSystemInferenceExtensionContext : TypeSystemContext, TypeSystemBui
 
     fun TypeConstructorMarker.isCapturedTypeConstructor(): Boolean
 
+    fun TypeConstructorMarker.isTypeParameterTypeConstructor(): Boolean
+
     fun Collection<KotlinTypeMarker>.singleBestRepresentative(): KotlinTypeMarker?
 
     fun KotlinTypeMarker.isUnit(): Boolean
 
     fun KotlinTypeMarker.isBuiltinFunctionalTypeOrSubtype(): Boolean
-
-    fun KotlinTypeMarker.withNullability(nullable: Boolean): KotlinTypeMarker
-
-
-    fun KotlinTypeMarker.makeDefinitelyNotNullOrNotNull(): KotlinTypeMarker
-    fun SimpleTypeMarker.makeSimpleTypeDefinitelyNotNullOrNotNull(): SimpleTypeMarker
 
     fun createCapturedType(
         constructorProjection: TypeArgumentMarker,
@@ -155,8 +168,8 @@ interface TypeSystemInferenceExtensionContext : TypeSystemContext, TypeSystemBui
         captureStatus: CaptureStatus
     ): CapturedTypeMarker
 
-    fun createStubType(typeVariable: TypeVariableMarker): StubTypeMarker
-
+    fun createStubTypeForBuilderInference(typeVariable: TypeVariableMarker): StubTypeMarker
+    fun createStubTypeForTypeVariablesInSubtyping(typeVariable: TypeVariableMarker): StubTypeMarker
 
     fun KotlinTypeMarker.removeAnnotations(): KotlinTypeMarker
     fun KotlinTypeMarker.removeExactAnnotation(): KotlinTypeMarker
@@ -171,8 +184,6 @@ interface TypeSystemInferenceExtensionContext : TypeSystemContext, TypeSystemBui
     fun CapturedTypeMarker.typeConstructorProjection(): TypeArgumentMarker
     fun CapturedTypeMarker.typeParameter(): TypeParameterMarker?
     fun CapturedTypeMarker.withNotNullProjection(): KotlinTypeMarker
-
-    fun DefinitelyNotNullTypeMarker.original(): SimpleTypeMarker
 
     fun typeSubstitutorByTypeConstructor(map: Map<TypeConstructorMarker, KotlinTypeMarker>): TypeSubstitutorMarker
     fun createEmptySubstitutor(): TypeSubstitutorMarker
@@ -193,12 +204,58 @@ interface TypeSystemInferenceExtensionContext : TypeSystemContext, TypeSystemBui
     fun TypeVariableTypeConstructorMarker.isContainedInInvariantOrContravariantPositions(): Boolean
 
     fun KotlinTypeMarker.isSignedOrUnsignedNumberType(): Boolean
+
+    fun KotlinTypeMarker.isFunctionOrKFunctionWithAnySuspendability(): Boolean
+
+    fun KotlinTypeMarker.isSuspendFunctionTypeOrSubtype(): Boolean
+
+    fun KotlinTypeMarker.isExtensionFunctionType(): Boolean
+
+    fun KotlinTypeMarker.extractArgumentsForFunctionalTypeOrSubtype(): List<KotlinTypeMarker>
+
+    fun KotlinTypeMarker.getFunctionalTypeFromSupertypes(): KotlinTypeMarker
+
+    fun getFunctionTypeConstructor(parametersNumber: Int, isSuspend: Boolean): TypeConstructorMarker
+
+    fun getKFunctionTypeConstructor(parametersNumber: Int, isSuspend: Boolean): TypeConstructorMarker
+
+    private fun KotlinTypeMarker.extractTypeVariables(to: MutableSet<TypeVariableTypeConstructorMarker>) {
+        for (i in 0 until argumentsCount()) {
+            val argument = getArgument(i)
+
+            if (argument.isStarProjection()) continue
+
+            val argumentType = argument.getType()
+            val argumentTypeConstructor = argumentType.typeConstructor()
+            if (argumentTypeConstructor is TypeVariableTypeConstructorMarker) {
+                to.add(argumentTypeConstructor)
+            } else if (argumentType.argumentsCount() != 0) {
+                argumentType.extractTypeVariables(to)
+            }
+        }
+    }
+
+    @OptIn(ExperimentalStdlibApi::class)
+    fun KotlinTypeMarker.extractTypeVariables() = buildSet { extractTypeVariables(this) }
+
+    /**
+     * For case Foo <: (T..T?) return LowerBound for new constraint LowerBound <: T
+     * In FE 1.0, in case nullable it was just Foo?, so constraint was Foo? <: T
+     * But it's not 100% correct because prevent having not-nullable upper constraint on T while initial (Foo? <: (T..T?)) is not violated
+     *
+     * In FIR, we try to have a correct one: (Foo!!..Foo?) <: T
+     *
+     * In future once we have only FIR (or FE 1.0 behavior is fixed) this method should be inlined to the use-site
+     */
+    fun SimpleTypeMarker.createConstraintPartForLowerBoundAndFlexibleTypeVariable(): KotlinTypeMarker
 }
 
 
 class ArgumentList(initialSize: Int) : ArrayList<TypeArgumentMarker>(initialSize), TypeArgumentListMarker
 
-
+/**
+ * Defines common kotlin type operations with types for abstract types
+ */
 interface TypeSystemContext : TypeSystemOptimizationContext {
     fun KotlinTypeMarker.asSimpleType(): SimpleTypeMarker?
     fun KotlinTypeMarker.asFlexibleType(): FlexibleTypeMarker?
@@ -206,7 +263,6 @@ interface TypeSystemContext : TypeSystemOptimizationContext {
     fun KotlinTypeMarker.isError(): Boolean
     fun TypeConstructorMarker.isError(): Boolean
     fun KotlinTypeMarker.isUninferredParameter(): Boolean
-
     fun FlexibleTypeMarker.asDynamicType(): DynamicTypeMarker?
 
     fun FlexibleTypeMarker.asRawType(): RawTypeMarker?
@@ -218,13 +274,18 @@ interface TypeSystemContext : TypeSystemOptimizationContext {
     fun KotlinTypeMarker.isCapturedType() = asSimpleType()?.asCapturedType() != null
 
     fun SimpleTypeMarker.asDefinitelyNotNullType(): DefinitelyNotNullTypeMarker?
+    fun DefinitelyNotNullTypeMarker.original(): SimpleTypeMarker
+    fun KotlinTypeMarker.makeDefinitelyNotNullOrNotNull(): KotlinTypeMarker
+    fun SimpleTypeMarker.makeSimpleTypeDefinitelyNotNullOrNotNull(): SimpleTypeMarker
     fun SimpleTypeMarker.isMarkedNullable(): Boolean
     fun KotlinTypeMarker.isMarkedNullable(): Boolean =
         this is SimpleTypeMarker && isMarkedNullable()
 
     fun SimpleTypeMarker.withNullability(nullable: Boolean): SimpleTypeMarker
     fun SimpleTypeMarker.typeConstructor(): TypeConstructorMarker
+    fun KotlinTypeMarker.withNullability(nullable: Boolean): KotlinTypeMarker
 
+    fun CapturedTypeMarker.isOldCapturedType(): Boolean
     fun CapturedTypeMarker.typeConstructor(): CapturedTypeConstructorMarker
     fun CapturedTypeMarker.captureStatus(): CaptureStatus
     fun CapturedTypeMarker.isProjectionNotNull(): Boolean
@@ -239,6 +300,8 @@ interface TypeSystemContext : TypeSystemOptimizationContext {
     }
 
     fun SimpleTypeMarker.isStubType(): Boolean
+    fun SimpleTypeMarker.isStubTypeForVariableInSubtyping(): Boolean
+    fun SimpleTypeMarker.isStubTypeForBuilderInference(): Boolean
 
     fun KotlinTypeMarker.asTypeArgument(): TypeArgumentMarker
 
@@ -253,14 +316,20 @@ interface TypeSystemContext : TypeSystemOptimizationContext {
     fun TypeConstructorMarker.supertypes(): Collection<KotlinTypeMarker>
     fun TypeConstructorMarker.isIntersection(): Boolean
     fun TypeConstructorMarker.isClassTypeConstructor(): Boolean
+    fun TypeConstructorMarker.isInterface(): Boolean
     fun TypeConstructorMarker.isIntegerLiteralTypeConstructor(): Boolean
+    fun TypeConstructorMarker.isLocalType(): Boolean
+
+    val TypeVariableTypeConstructorMarker.typeParameter: TypeParameterMarker?
 
     fun TypeParameterMarker.getVariance(): TypeVariance
     fun TypeParameterMarker.upperBoundCount(): Int
     fun TypeParameterMarker.getUpperBound(index: Int): KotlinTypeMarker
+    fun TypeParameterMarker.getUpperBounds(): List<KotlinTypeMarker>
     fun TypeParameterMarker.getTypeConstructor(): TypeConstructorMarker
+    fun TypeParameterMarker.hasRecursiveBounds(selfConstructor: TypeConstructorMarker): Boolean
 
-    fun isEqualTypeConstructors(c1: TypeConstructorMarker, c2: TypeConstructorMarker): Boolean
+    fun areEqualTypeConstructors(c1: TypeConstructorMarker, c2: TypeConstructorMarker): Boolean
 
     fun TypeConstructorMarker.isDenotable(): Boolean
 
@@ -326,6 +395,18 @@ interface TypeSystemContext : TypeSystemOptimizationContext {
         }
     }
 
+    operator fun TypeArgumentListMarker.iterator() = object : Iterator<TypeArgumentMarker> {
+        private var argumentIndex: Int = 0
+
+        override fun hasNext(): Boolean = argumentIndex < size()
+
+        override fun next(): TypeArgumentMarker {
+            val argument = get(argumentIndex)
+            argumentIndex += 1
+            return argument
+        }
+    }
+
     fun TypeConstructorMarker.isAnyConstructor(): Boolean
     fun TypeConstructorMarker.isNothingConstructor(): Boolean
 
@@ -345,9 +426,9 @@ interface TypeSystemContext : TypeSystemOptimizationContext {
 
     fun KotlinTypeMarker.isSimpleType(): Boolean = asSimpleType() != null
 
-    fun prepareType(type: KotlinTypeMarker): KotlinTypeMarker
-
     fun SimpleTypeMarker.isPrimitiveType(): Boolean
+
+    fun KotlinTypeMarker.getAnnotations(): List<AnnotationMarker>
 }
 
 enum class CaptureStatus {

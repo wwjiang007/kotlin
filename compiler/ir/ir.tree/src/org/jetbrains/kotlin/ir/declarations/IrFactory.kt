@@ -17,6 +17,8 @@ import org.jetbrains.kotlin.serialization.deserialization.descriptors.Deserializ
 import org.jetbrains.kotlin.types.Variance
 
 interface IrFactory {
+    val stageController: StageController
+
     fun createAnonymousInitializer(
         startOffset: Int,
         endOffset: Int,
@@ -26,37 +28,37 @@ interface IrFactory {
     ): IrAnonymousInitializer
 
     fun createClass(
-            startOffset: Int,
-            endOffset: Int,
-            origin: IrDeclarationOrigin,
-            symbol: IrClassSymbol,
-            name: Name,
-            kind: ClassKind,
-            visibility: DescriptorVisibility,
-            modality: Modality,
-            isCompanion: Boolean = false,
-            isInner: Boolean = false,
-            isData: Boolean = false,
-            isExternal: Boolean = false,
-            isInline: Boolean = false,
-            isExpect: Boolean = false,
-            isFun: Boolean = false,
-            source: SourceElement = SourceElement.NO_SOURCE,
+        startOffset: Int,
+        endOffset: Int,
+        origin: IrDeclarationOrigin,
+        symbol: IrClassSymbol,
+        name: Name,
+        kind: ClassKind,
+        visibility: DescriptorVisibility,
+        modality: Modality,
+        isCompanion: Boolean = false,
+        isInner: Boolean = false,
+        isData: Boolean = false,
+        isExternal: Boolean = false,
+        isInline: Boolean = false,
+        isExpect: Boolean = false,
+        isFun: Boolean = false,
+        source: SourceElement = SourceElement.NO_SOURCE,
     ): IrClass
 
     fun createConstructor(
-            startOffset: Int,
-            endOffset: Int,
-            origin: IrDeclarationOrigin,
-            symbol: IrConstructorSymbol,
-            name: Name,
-            visibility: DescriptorVisibility,
-            returnType: IrType,
-            isInline: Boolean,
-            isExternal: Boolean,
-            isPrimary: Boolean,
-            isExpect: Boolean,
-            containerSource: DeserializedContainerSource? = null
+        startOffset: Int,
+        endOffset: Int,
+        origin: IrDeclarationOrigin,
+        symbol: IrConstructorSymbol,
+        name: Name,
+        visibility: DescriptorVisibility,
+        returnType: IrType,
+        isInline: Boolean,
+        isExternal: Boolean,
+        isPrimary: Boolean,
+        isExpect: Boolean,
+        containerSource: DeserializedContainerSource? = null
     ): IrConstructor
 
     fun createEnumEntry(
@@ -70,57 +72,57 @@ interface IrFactory {
     fun createErrorDeclaration(
         startOffset: Int,
         endOffset: Int,
-        descriptor: DeclarationDescriptor,
+        descriptor: DeclarationDescriptor? = null,
     ): IrErrorDeclaration
 
     fun createField(
-            startOffset: Int,
-            endOffset: Int,
-            origin: IrDeclarationOrigin,
-            symbol: IrFieldSymbol,
-            name: Name,
-            type: IrType,
-            visibility: DescriptorVisibility,
-            isFinal: Boolean,
-            isExternal: Boolean,
-            isStatic: Boolean,
+        startOffset: Int,
+        endOffset: Int,
+        origin: IrDeclarationOrigin,
+        symbol: IrFieldSymbol,
+        name: Name,
+        type: IrType,
+        visibility: DescriptorVisibility,
+        isFinal: Boolean,
+        isExternal: Boolean,
+        isStatic: Boolean,
     ): IrField
 
     fun createFunction(
-            startOffset: Int,
-            endOffset: Int,
-            origin: IrDeclarationOrigin,
-            symbol: IrSimpleFunctionSymbol,
-            name: Name,
-            visibility: DescriptorVisibility,
-            modality: Modality,
-            returnType: IrType,
-            isInline: Boolean,
-            isExternal: Boolean,
-            isTailrec: Boolean,
-            isSuspend: Boolean,
-            isOperator: Boolean,
-            isInfix: Boolean,
-            isExpect: Boolean,
-            isFakeOverride: Boolean = origin == IrDeclarationOrigin.FAKE_OVERRIDE,
-            containerSource: DeserializedContainerSource? = null,
+        startOffset: Int,
+        endOffset: Int,
+        origin: IrDeclarationOrigin,
+        symbol: IrSimpleFunctionSymbol,
+        name: Name,
+        visibility: DescriptorVisibility,
+        modality: Modality,
+        returnType: IrType,
+        isInline: Boolean,
+        isExternal: Boolean,
+        isTailrec: Boolean,
+        isSuspend: Boolean,
+        isOperator: Boolean,
+        isInfix: Boolean,
+        isExpect: Boolean,
+        isFakeOverride: Boolean = origin == IrDeclarationOrigin.FAKE_OVERRIDE,
+        containerSource: DeserializedContainerSource? = null,
     ): IrSimpleFunction
 
     fun createFakeOverrideFunction(
-            startOffset: Int,
-            endOffset: Int,
-            origin: IrDeclarationOrigin,
-            name: Name,
-            visibility: DescriptorVisibility,
-            modality: Modality,
-            returnType: IrType,
-            isInline: Boolean,
-            isExternal: Boolean,
-            isTailrec: Boolean,
-            isSuspend: Boolean,
-            isOperator: Boolean,
-            isInfix: Boolean,
-            isExpect: Boolean,
+        startOffset: Int,
+        endOffset: Int,
+        origin: IrDeclarationOrigin,
+        name: Name,
+        visibility: DescriptorVisibility,
+        modality: Modality,
+        returnType: IrType,
+        isInline: Boolean,
+        isExternal: Boolean,
+        isTailrec: Boolean,
+        isSuspend: Boolean,
+        isOperator: Boolean,
+        isInfix: Boolean,
+        isExpect: Boolean,
     ): IrSimpleFunction
 
     fun createLocalDelegatedProperty(
@@ -134,47 +136,47 @@ interface IrFactory {
     ): IrLocalDelegatedProperty
 
     fun createProperty(
-            startOffset: Int,
-            endOffset: Int,
-            origin: IrDeclarationOrigin,
-            symbol: IrPropertySymbol,
-            name: Name,
-            visibility: DescriptorVisibility,
-            modality: Modality,
-            isVar: Boolean,
-            isConst: Boolean,
-            isLateinit: Boolean,
-            isDelegated: Boolean,
-            isExternal: Boolean,
-            isExpect: Boolean = false,
-            isFakeOverride: Boolean = origin == IrDeclarationOrigin.FAKE_OVERRIDE,
-            containerSource: DeserializedContainerSource? = null
+        startOffset: Int,
+        endOffset: Int,
+        origin: IrDeclarationOrigin,
+        symbol: IrPropertySymbol,
+        name: Name,
+        visibility: DescriptorVisibility,
+        modality: Modality,
+        isVar: Boolean,
+        isConst: Boolean,
+        isLateinit: Boolean,
+        isDelegated: Boolean,
+        isExternal: Boolean,
+        isExpect: Boolean = false,
+        isFakeOverride: Boolean = origin == IrDeclarationOrigin.FAKE_OVERRIDE,
+        containerSource: DeserializedContainerSource? = null
     ): IrProperty
 
     fun createFakeOverrideProperty(
-            startOffset: Int,
-            endOffset: Int,
-            origin: IrDeclarationOrigin,
-            name: Name,
-            visibility: DescriptorVisibility,
-            modality: Modality,
-            isVar: Boolean,
-            isConst: Boolean,
-            isLateinit: Boolean,
-            isDelegated: Boolean,
-            isExternal: Boolean,
-            isExpect: Boolean,
+        startOffset: Int,
+        endOffset: Int,
+        origin: IrDeclarationOrigin,
+        name: Name,
+        visibility: DescriptorVisibility,
+        modality: Modality,
+        isVar: Boolean,
+        isConst: Boolean,
+        isLateinit: Boolean,
+        isDelegated: Boolean,
+        isExternal: Boolean,
+        isExpect: Boolean,
     ): IrProperty
 
     fun createTypeAlias(
-            startOffset: Int,
-            endOffset: Int,
-            symbol: IrTypeAliasSymbol,
-            name: Name,
-            visibility: DescriptorVisibility,
-            expandedType: IrType,
-            isActual: Boolean,
-            origin: IrDeclarationOrigin,
+        startOffset: Int,
+        endOffset: Int,
+        symbol: IrTypeAliasSymbol,
+        name: Name,
+        visibility: DescriptorVisibility,
+        expandedType: IrType,
+        isActual: Boolean,
+        origin: IrDeclarationOrigin,
     ): IrTypeAlias
 
     fun createTypeParameter(
@@ -199,6 +201,8 @@ interface IrFactory {
         varargElementType: IrType?,
         isCrossinline: Boolean,
         isNoinline: Boolean,
+        isHidden: Boolean,
+        isAssignable: Boolean
     ): IrValueParameter
 
     // Bodies

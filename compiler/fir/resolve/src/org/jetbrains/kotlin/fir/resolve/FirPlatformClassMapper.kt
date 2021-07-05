@@ -7,17 +7,19 @@ package org.jetbrains.kotlin.fir.resolve
 
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.FirSessionComponent
+import org.jetbrains.kotlin.fir.NoMutableState
 import org.jetbrains.kotlin.fir.declarations.FirClassLikeDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirRegularClass
 
 abstract class FirPlatformClassMapper : FirSessionComponent {
+    @NoMutableState
     object Default : FirPlatformClassMapper() {
-        override fun getCorrespondingPlatformClass(declaration: FirClassLikeDeclaration<*>): FirRegularClass? {
+        override fun getCorrespondingPlatformClass(declaration: FirClassLikeDeclaration): FirRegularClass? {
             return null
         }
     }
 
-    abstract fun getCorrespondingPlatformClass(declaration: FirClassLikeDeclaration<*>): FirRegularClass?
+    abstract fun getCorrespondingPlatformClass(declaration: FirClassLikeDeclaration): FirRegularClass?
 }
 
 val FirSession.platformClassMapper: FirPlatformClassMapper by FirSession.sessionComponentAccessor()

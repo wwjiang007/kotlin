@@ -4,7 +4,10 @@ import org.jetbrains.kotlin.konan.CompilerVersion
 import org.jetbrains.kotlin.konan.file.File
 import org.jetbrains.kotlin.library.impl.createKotlinLibraryComponents
 import org.jetbrains.kotlin.library.impl.isPre_1_4_Library
-import org.jetbrains.kotlin.util.*
+import org.jetbrains.kotlin.util.Logger
+import org.jetbrains.kotlin.util.WithLogger
+import org.jetbrains.kotlin.util.removeSuffixIfPresent
+import org.jetbrains.kotlin.util.suffixIfNot
 import java.nio.file.InvalidPathException
 import java.nio.file.Paths
 
@@ -13,16 +16,17 @@ const val KOTLIN_STDLIB_NAME = "stdlib"
 interface SearchPathResolver<L : KotlinLibrary> : WithLogger {
     val searchRoots: List<File>
     fun resolutionSequence(givenPath: String): Sequence<File>
-    fun resolve(unresolved: UnresolvedLibrary, isDefaultLink: Boolean = false): L
+    fun resolve(unresolved: LenientUnresolvedLibrary, isDefaultLink: Boolean = false): L?
+    fun resolve(unresolved: RequiredUnresolvedLibrary, isDefaultLink: Boolean = false): L
     fun resolve(givenPath: String): L
     fun defaultLinks(noStdLib: Boolean, noDefaultLibs: Boolean, noEndorsedLibs: Boolean): List<L>
     fun libraryMatch(candidate: L, unresolved: UnresolvedLibrary): Boolean
     fun isProvidedByDefault(unresolved: UnresolvedLibrary): Boolean = false
 }
 
-interface SearchPathResolverWithAttributes<L : KotlinLibrary> : SearchPathResolver<L> {
-    val knownAbiVersions: List<KotlinAbiVersion>?
-    val knownCompilerVersions: List<CompilerVersion>?
+fun <L : KotlinLibrary> SearchPathResolver<L>.resolve(unresolved: UnresolvedLibrary): L? = when (unresolved) {
+    is LenientUnresolvedLibrary -> resolve(unresolved)
+    is RequiredUnresolvedLibrary -> resolve(unresolved)
 }
 
 // This is a simple library resolver that only cares for file names.
@@ -59,8 +63,10 @@ abstract class KotlinLibrarySearchPathResolver<L : KotlinLibrary>(
         (listOf(currentDirHead) + repoRoots + listOf(localHead, distHead, distPlatformHead)).filterNotNull()
     }
 
+    private val files: Set<String> by lazy { searchRoots.flatMap { it.listFilesOrEmpty }.map { it.absolutePath }.toSet() }
+
     private fun found(candidate: File): File? {
-        fun check(file: File): Boolean = file.exists
+        fun check(file: File): Boolean = files.contains(file.absolutePath) || file.exists
 
         val noSuffix = File(candidate.path.removeSuffixIfPresent(KLIB_FILE_EXTENSION_WITH_DOT))
         val withSuffix = File(candidate.path.suffixIfNot(KLIB_FILE_EXTENSION_WITH_DOT))
@@ -132,26 +138,45 @@ abstract class KotlinLibrarySearchPathResolver<L : KotlinLibrary>(
         }
     }
 
-    override fun resolve(unresolved: UnresolvedLibrary, isDefaultLink: Boolean): L {
-        val givenPath = unresolved.path
-        try {
-            val fileSequence = resolutionSequence(givenPath)
-            val matching = fileSequence
-                .filterOutPre_1_4_libraries()
-                .flatMap { libraryComponentBuilder(it, isDefaultLink).asSequence() }
-                .map { it.takeIf { libraryMatch(it, unresolved) } }
-                .filterNotNull()
+    // Default libraries could be resolved several times during findLibraries and resolveDependencies.
+    // Store already resolved libraries.
+    private inner class ResolvedLibrary(val library: L?)
 
-            return matching.firstOrNull() ?: run {
-                logger.fatal("Could not find \"$givenPath\" in ${searchRoots.map { it.absolutePath }}.")
+    private val resolvedLibraries = HashMap<UnresolvedLibrary, ResolvedLibrary>()
+
+    private fun resolveOrNull(unresolved: UnresolvedLibrary, isDefaultLink: Boolean): L? {
+        return resolvedLibraries.getOrPut(unresolved) {
+            val givenPath = unresolved.path
+            try {
+                resolutionSequence(givenPath)
+                    .filterOutPre_1_4_libraries()
+                    .flatMap { libraryComponentBuilder(it, isDefaultLink).asSequence() }
+                    .map { it.takeIf { libraryMatch(it, unresolved) } }
+                    .filterNotNull()
+                    .firstOrNull()
+                    .let(::ResolvedLibrary)
+            } catch (e: Throwable) {
+                logger.error("Failed to resolve Kotlin library: $givenPath")
+                throw e
             }
-        } catch (e: Throwable) {
-            logger.error("Failed to resolve Kotlin library: $givenPath")
-            throw e
+        }.library
+    }
+
+    override fun resolve(unresolved: LenientUnresolvedLibrary, isDefaultLink: Boolean): L? {
+        return resolveOrNull(unresolved, isDefaultLink).also { resolvedLibrary ->
+            if (resolvedLibrary == null) {
+                logger.warning("Could not find \"${unresolved.path}\" in ${searchRoots.map { it.absolutePath }}")
+            }
         }
     }
 
-    override fun libraryMatch(candidate: L, unresolved: UnresolvedLibrary) = true
+    override fun resolve(unresolved: RequiredUnresolvedLibrary, isDefaultLink: Boolean): L {
+        return resolveOrNull(unresolved, isDefaultLink)
+            ?: logger.fatal("Could not find \"${unresolved.path}\" in ${searchRoots.map { it.absolutePath }}")
+
+    }
+
+    override fun libraryMatch(candidate: L, unresolved: UnresolvedLibrary): Boolean = true
 
     override fun resolve(givenPath: String) = resolve(UnresolvedLibrary(givenPath, null), false)
 
@@ -209,15 +234,13 @@ fun CompilerVersion.compatible(other: CompilerVersion) =
 abstract class KotlinLibraryProperResolverWithAttributes<L : KotlinLibrary>(
     repositories: List<String>,
     directLibs: List<String>,
-    override val knownAbiVersions: List<KotlinAbiVersion>?,
-    override val knownCompilerVersions: List<CompilerVersion>?,
     distributionKlib: String?,
     localKotlinDir: String?,
     skipCurrentDir: Boolean,
     override val logger: Logger,
     private val knownIrProviders: List<String>
 ) : KotlinLibrarySearchPathResolver<L>(repositories, directLibs, distributionKlib, localKotlinDir, skipCurrentDir, logger),
-    SearchPathResolverWithAttributes<L> {
+    SearchPathResolver<L> {
     override fun libraryMatch(candidate: L, unresolved: UnresolvedLibrary): Boolean {
         val candidatePath = candidate.libraryFile.absolutePath
 
@@ -225,13 +248,8 @@ abstract class KotlinLibraryProperResolverWithAttributes<L : KotlinLibrary>(
         val candidateAbiVersion = candidate.versions.abiVersion
         val candidateLibraryVersion = candidate.versions.libraryVersion
 
-
-        val abiVersionMatch = candidateAbiVersion != null &&
-                knownAbiVersions != null &&
-                knownAbiVersions!!.contains(candidateAbiVersion)
-
-        if (!abiVersionMatch) {
-            logger.warning("skipping $candidatePath. The abi versions don't match. Expected '${knownAbiVersions}', found '${candidateAbiVersion}'. The library produced by ${candidateCompilerVersion} compiler")
+        if (candidateAbiVersion?.isCompatible() != true) {
+            logger.warning("skipping $candidatePath. Incompatible abi version. The current default is '${KotlinAbiVersion.CURRENT}', found '${candidateAbiVersion}'. The library produced by ${candidateCompilerVersion} compiler")
             return false
         }
 
@@ -256,11 +274,10 @@ abstract class KotlinLibraryProperResolverWithAttributes<L : KotlinLibrary>(
 
 class SingleKlibComponentResolver(
     klibFile: String,
-    knownAbiVersions: List<KotlinAbiVersion>?,
     logger: Logger,
     knownIrProviders: List<String>
 ) : KotlinLibraryProperResolverWithAttributes<KotlinLibrary>(
-    emptyList(), listOf(klibFile), knownAbiVersions, emptyList(),
+    emptyList(), listOf(klibFile),
     null, null, false, logger, knownIrProviders
 ) {
     override fun libraryComponentBuilder(file: File, isDefault: Boolean) = createKotlinLibraryComponents(file, isDefault)
@@ -281,7 +298,7 @@ class SingleKlibComponentResolver(
 object CompilerSingleFileKlibResolveStrategy : SingleFileKlibResolveStrategy {
     override fun resolve(libraryFile: File, logger: Logger) =
         SingleKlibComponentResolver(
-            libraryFile.absolutePath, listOf(KotlinAbiVersion.CURRENT), logger, emptyList()
+            libraryFile.absolutePath, logger, emptyList()
         ).resolve(libraryFile.absolutePath)
 }
 
@@ -297,6 +314,6 @@ class CompilerSingleFileKlibResolveAllowingIrProvidersStrategy(
 ) : SingleFileKlibResolveStrategy {
     override fun resolve(libraryFile: File, logger: Logger) =
         SingleKlibComponentResolver(
-            libraryFile.absolutePath, listOf(KotlinAbiVersion.CURRENT), logger, knownIrProviders
+            libraryFile.absolutePath, logger, knownIrProviders
         ).resolve(libraryFile.absolutePath)
 }

@@ -12,16 +12,19 @@ import org.jetbrains.kotlin.fir.declarations.FirProperty
 import org.jetbrains.kotlin.fir.declarations.FirRegularClass
 import org.jetbrains.kotlin.fir.declarations.FirSimpleFunction
 import org.jetbrains.kotlin.fir.declarations.FirVariable
-import org.jetbrains.kotlin.fir.resolve.PersistentMultimap
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
 import org.jetbrains.kotlin.fir.scopes.FirContainingNamesAwareScope
 import org.jetbrains.kotlin.fir.scopes.FirScope
-import org.jetbrains.kotlin.fir.symbols.impl.*
+import org.jetbrains.kotlin.fir.symbols.impl.FirClassifierSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirNamedFunctionSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
+import org.jetbrains.kotlin.fir.symbols.impl.FirVariableSymbol
+import org.jetbrains.kotlin.fir.util.PersistentMultimap
 import org.jetbrains.kotlin.name.Name
 
 class FirLocalScope private constructor(
     val properties: PersistentMap<Name, FirVariableSymbol<*>>,
-    val functions: PersistentMultimap<Name, FirFunctionSymbol<*>>,
+    val functions: PersistentMultimap<Name, FirNamedFunctionSymbol>,
     val classes: PersistentMap<Name, FirRegularClassSymbol>
 ) : FirScope(), FirContainingNamesAwareScope {
     constructor() : this(persistentMapOf(), PersistentMultimap(), persistentMapOf())
@@ -34,11 +37,11 @@ class FirLocalScope private constructor(
 
     fun storeFunction(function: FirSimpleFunction): FirLocalScope {
         return FirLocalScope(
-            properties, functions.put(function.name, function.symbol as FirNamedFunctionSymbol), classes
+            properties, functions.put(function.name, function.symbol), classes
         )
     }
 
-    fun storeVariable(variable: FirVariable<*>): FirLocalScope {
+    fun storeVariable(variable: FirVariable): FirLocalScope {
         return FirLocalScope(
             properties.put(variable.name, variable.symbol), functions, classes
         )
@@ -50,7 +53,7 @@ class FirLocalScope private constructor(
         )
     }
 
-    override fun processFunctionsByName(name: Name, processor: (FirFunctionSymbol<*>) -> Unit) {
+    override fun processFunctionsByName(name: Name, processor: (FirNamedFunctionSymbol) -> Unit) {
         for (function in functions[name]) {
             processor(function)
         }

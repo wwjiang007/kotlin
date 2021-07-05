@@ -1,9 +1,23 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.jetbrains.kotlin.gradle.tasks.UsesKotlinJavaToolchain
 
 plugins {
     kotlin("jvm")
     id("jps-compatible")
 }
+
+// Only compilation tasks should use JDK 1.6
+project.disableDeprecatedJvmTargetWarning()
+tasks
+    .matching { it.name == "compileKotlin" && it is UsesKotlinJavaToolchain }
+    .configureEach {
+        (this as UsesKotlinJavaToolchain).kotlinJavaToolchain.toolchain.use(project.getToolchainLauncherFor(JdkMajorVersion.JDK_1_6))
+    }
+
+tasks
+    .matching { it.name == "compileJava" && it is JavaCompile }
+    .configureEach {
+        (this as JavaCompile).javaCompiler.set(project.getToolchainCompilerFor(JdkMajorVersion.JDK_1_6))
+    }
 
 dependencies {
     compileOnly(project(":core:util.runtime"))
@@ -14,10 +28,8 @@ dependencies {
     testCompile(projectTests(":generators:test-generator"))
 
     testRuntimeOnly(intellijCoreDep()) { includeJars("intellij-core") }
-    Platform[192].orHigher {
-        testRuntimeOnly(intellijDep()) { includeJars("platform-concurrency") }
-        testRuntimeOnly(jpsStandalone()) { includeJars("jps-model") }
-    }
+    testRuntimeOnly(intellijDep()) { includeJars("platform-concurrency") }
+    testRuntimeOnly(jpsStandalone()) { includeJars("jps-model") }
 }
 
 sourceSets {
@@ -25,19 +37,10 @@ sourceSets {
     "test" { projectDefault() }
 }
 
-val compileJava by tasks.getting(JavaCompile::class) {
-    sourceCompatibility = "1.6"
-    targetCompatibility = "1.6"
-}
-
-val compileKotlin by tasks.getting(KotlinCompile::class) {
-    kotlinOptions.jvmTarget = "1.6"
-    kotlinOptions.jdkHome = rootProject.extra["JDK_16"] as String
-}
-
 val generateTests by generator("org.jetbrains.kotlin.generators.tests.GenerateRuntimeDescriptorTestsKt")
 
 projectTest(parallel = true) {
+    dependsOn(":dist")
     workingDir = rootDir
 }
 

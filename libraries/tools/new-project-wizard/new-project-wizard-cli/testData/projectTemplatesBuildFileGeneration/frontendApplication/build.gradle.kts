@@ -1,21 +1,21 @@
 plugins {
     kotlin("js") version "KOTLIN_VERSION"
 }
+
 group = "me.user"
 version = "1.0-SNAPSHOT"
 
 repositories {
-    mavenCentral()
     jcenter()
-    maven {
-        url = uri("https://dl.bintray.com/kotlin/kotlin-dev")
-    }
+    mavenCentral()
 }
+
 dependencies {
     testImplementation(kotlin("test-js"))
 }
+
 kotlin {
-    js {
+    js(LEGACY) {
         browser {
             binaries.executable()
             webpackTask {

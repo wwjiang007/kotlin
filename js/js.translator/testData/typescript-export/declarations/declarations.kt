@@ -89,8 +89,17 @@ object O0
 
 object O {
     val x = 10
+    @JsName("foo")  // TODO: Should work without JsName
     fun foo() = 20
 }
 
 fun takesO(o: O): Int =
     O.x + O.foo()
+
+// Test that JsExport with companion object compiles without error.
+// Usage is not supported yet.
+class KT_37829 {
+    companion object {
+        val x = 10
+    }
+}

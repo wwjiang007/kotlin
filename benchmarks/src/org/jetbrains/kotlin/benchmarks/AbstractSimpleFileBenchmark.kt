@@ -5,7 +5,6 @@
 package org.jetbrains.kotlin.benchmarks
 
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.extensions.Extensions
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.CharsetToolkit
 import com.intellij.psi.PsiElementFinder
@@ -13,6 +12,7 @@ import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.impl.PsiFileFactoryImpl
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.testFramework.LightVirtualFile
+import org.jetbrains.kotlin.ObsoleteTestInfrastructure
 import org.jetbrains.kotlin.asJava.finder.JavaElementFinder
 import org.jetbrains.kotlin.builtins.jvm.JvmBuiltIns
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
@@ -26,7 +26,7 @@ import org.jetbrains.kotlin.context.withProject
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
 import org.jetbrains.kotlin.diagnostics.Severity
 import org.jetbrains.kotlin.fir.builder.RawFirBuilder
-import org.jetbrains.kotlin.fir.createSession
+import org.jetbrains.kotlin.fir.createSessionForTests
 import org.jetbrains.kotlin.fir.java.FirJavaElementFinder
 import org.jetbrains.kotlin.fir.resolve.firProvider
 import org.jetbrains.kotlin.fir.resolve.providers.impl.FirProviderImpl
@@ -104,9 +104,7 @@ abstract class AbstractSimpleFileBenchmark {
         )
 
         if (isIR) {
-            Extensions.getArea(env.project)
-                .getExtensionPoint(PsiElementFinder.EP_NAME)
-                .unregisterExtension(JavaElementFinder::class.java)
+            PsiElementFinder.EP.getPoint(env.project).unregisterExtension(JavaElementFinder::class.java)
         }
 
         file = createFile(
@@ -150,12 +148,13 @@ abstract class AbstractSimpleFileBenchmark {
         bh.consume(result.shouldGenerateCode)
     }
 
+    @OptIn(ObsoleteTestInfrastructure::class)
     private fun analyzeGreenFileIr(bh: Blackhole) {
         val scope = GlobalSearchScope.filesScope(env.project, listOf(file.virtualFile))
             .uniteWith(TopDownAnalyzerFacadeForJVM.AllJavaSourcesInProjectScope(env.project))
-        val session = createSession(env, scope)
+        val session = createSessionForTests(env, scope)
         val firProvider = session.firProvider as FirProviderImpl
-        val builder = RawFirBuilder(session, firProvider.kotlinScopeProvider, stubMode = false)
+        val builder = RawFirBuilder(session, firProvider.kotlinScopeProvider)
 
         val totalTransformer = FirTotalResolveProcessor(session)
         val firFile = builder.buildFirFile(file).also(firProvider::recordFile)
@@ -163,8 +162,8 @@ abstract class AbstractSimpleFileBenchmark {
         totalTransformer.process(listOf(firFile))
 
         bh.consume(firFile.hashCode())
-        Extensions.getArea(env.project)
-            .getExtensionPoint(PsiElementFinder.EP_NAME)
+        env.project.extensionArea
+            .getExtensionPoint<PsiElementFinder>(PsiElementFinder.EP.name)
             .unregisterExtension(FirJavaElementFinder::class.java)
     }
 

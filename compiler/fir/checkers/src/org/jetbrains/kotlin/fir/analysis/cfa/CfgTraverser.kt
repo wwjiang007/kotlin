@@ -7,6 +7,8 @@ package org.jetbrains.kotlin.fir.analysis.cfa
 
 import org.jetbrains.kotlin.fir.resolve.dfa.cfg.*
 
+// ------------------------------ Graph Traversal ------------------------------
+
 enum class TraverseDirection {
     Forward, Backward
 }
@@ -29,10 +31,12 @@ fun ControlFlowGraph.traverse(
     traverse(direction, visitor, null)
 }
 
+// ---------------------- Path-sensitive data collection -----------------------
+
 fun <I : ControlFlowInfo<I, K, V>, K : Any, V : Any> ControlFlowGraph.collectDataForNode(
     direction: TraverseDirection,
     initialInfo: I,
-    visitor: ControlFlowGraphVisitor<I, Collection<I>>
+    visitor: ControlFlowGraphVisitor<I, Collection<Pair<EdgeLabel, I>>>
 ): Map<CFGNode<*>, I> {
     val nodeMap = LinkedHashMap<CFGNode<*>, I>()
     val startNode = getEnterNode(direction)
@@ -49,7 +53,7 @@ fun <I : ControlFlowInfo<I, K, V>, K : Any, V : Any> ControlFlowGraph.collectDat
 private fun <I : ControlFlowInfo<I, K, V>, K : Any, V : Any> ControlFlowGraph.collectDataForNodeInternal(
     direction: TraverseDirection,
     initialInfo: I,
-    visitor: ControlFlowGraphVisitor<I, Collection<I>>,
+    visitor: ControlFlowGraphVisitor<I, Collection<Pair<EdgeLabel, I>>>,
     nodeMap: MutableMap<CFGNode<*>, I>,
     changed: MutableMap<CFGNode<*>, Boolean>
 ) {
@@ -58,19 +62,26 @@ private fun <I : ControlFlowInfo<I, K, V>, K : Any, V : Any> ControlFlowGraph.co
         if (direction == TraverseDirection.Backward && node is CFGNodeWithCfgOwner<*>) {
             node.subGraphs.forEach { it.collectDataForNodeInternal(direction, initialInfo, visitor, nodeMap, changed) }
         }
-        if (!(node.isEnterNode(direction) && node.owner.owner == null)) {
-            val previousNodes = when (direction) {
-                TraverseDirection.Forward -> node.previousCfgNodes
-                TraverseDirection.Backward -> node.followingCfgNodes
+        val previousNodes = when (direction) {
+            TraverseDirection.Forward -> node.previousCfgNodes
+            TraverseDirection.Backward -> node.followingCfgNodes
+        }
+        // One noticeable different against the path-unaware version is, here, we pair the control-flow info with the label.
+        val previousData =
+            previousNodes.mapNotNull {
+                val k = when (direction) {
+                    TraverseDirection.Forward -> node.incomingEdges[it]?.label ?: NormalPath
+                    TraverseDirection.Backward -> node.outgoingEdges[it]?.label ?: NormalPath
+                }
+                val v = nodeMap[it] ?: return@mapNotNull null
+                k to v
             }
-            val previousData = previousNodes.mapNotNull { nodeMap[it] }
-            val data = nodeMap[node]
-            val newData = node.accept(visitor, previousData)
-            val hasChanged = newData != data
-            changed[node] = hasChanged
-            if (hasChanged) {
-                nodeMap[node] = newData
-            }
+        val data = nodeMap[node]
+        val newData = node.accept(visitor, previousData)
+        val hasChanged = newData != data
+        changed[node] = hasChanged
+        if (hasChanged) {
+            nodeMap[node] = newData
         }
         if (direction == TraverseDirection.Forward && node is CFGNodeWithCfgOwner<*>) {
             node.subGraphs.forEach { it.collectDataForNodeInternal(direction, initialInfo, visitor, nodeMap, changed) }

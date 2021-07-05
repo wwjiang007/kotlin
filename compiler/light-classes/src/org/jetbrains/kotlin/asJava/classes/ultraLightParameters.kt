@@ -5,6 +5,9 @@
 
 package org.jetbrains.kotlin.asJava.classes
 
+import com.intellij.navigation.ItemPresentation
+import com.intellij.navigation.ItemPresentationProviders
+import com.intellij.openapi.util.TextRange
 import com.intellij.psi.*
 import com.intellij.psi.search.LocalSearchScope
 import com.intellij.psi.search.SearchScope
@@ -17,13 +20,12 @@ import org.jetbrains.kotlin.codegen.AsmUtil
 import org.jetbrains.kotlin.codegen.coroutines.SUSPEND_FUNCTION_COMPLETION_PARAMETER_NAME
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.load.kotlin.TypeMappingMode
-import org.jetbrains.kotlin.psi.KtCallableDeclaration
-import org.jetbrains.kotlin.psi.KtDeclaration
-import org.jetbrains.kotlin.psi.KtFunction
-import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.codegen.AsmUtil.LABELED_THIS_PARAMETER
 import org.jetbrains.kotlin.codegen.AsmUtil.RECEIVER_PARAMETER_NAME
+import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
+import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.isPrivate
 
 internal class KtUltraLightSuspendContinuationParameter(
     private val ktFunction: KtFunction,
@@ -34,7 +36,7 @@ internal class KtUltraLightSuspendContinuationParameter(
     KtUltraLightElementWithNullabilityAnnotation<KtParameter, PsiParameter> {
 
     override val qualifiedNameForNullabilityAnnotation: String?
-        get() = computeQualifiedNameForNullabilityAnnotation(ktType)
+        get() = if (!ktFunction.isPrivate()) computeQualifiedNameForNullabilityAnnotation(ktType) else null
 
     override val psiTypeForNullabilityAnnotation: PsiType? get() = psiType
     override val kotlinOrigin: KtParameter? = null
@@ -107,7 +109,6 @@ internal abstract class KtUltraLightParameter(
     override val psiTypeForNullabilityAnnotation: PsiType?
         get() = type
 
-
     protected fun computeParameterType(kotlinType: KotlinType?, containingDeclaration: CallableDescriptor?): PsiType {
         kotlinType ?: return PsiType.NULL
 
@@ -115,9 +116,10 @@ internal abstract class KtUltraLightParameter(
             return kotlinType.asPsiType(support, TypeMappingMode.DEFAULT, this)
         } else {
             val containingDescriptor = containingDeclaration ?: return PsiType.NULL
-            val mappedType = support.mapType(this) { typeMapper, sw ->
+            val mappedType = support.mapType(kotlinType, this) { typeMapper, sw ->
                 typeMapper.writeParameterType(sw, kotlinType, containingDescriptor)
             }
+
             return if (ultraLightMethod.checkNeedToErasureParametersTypes) TypeConversionUtil.erasure(mappedType) else mappedType
         }
     }
@@ -144,7 +146,7 @@ internal abstract class KtAbstractUltraLightParameterForDeclaration(
 ) : KtUltraLightParameter(name, kotlinOrigin, support, method) {
 
     protected fun tryGetContainingDescriptor(): CallableDescriptor? =
-        containingDeclaration.resolve() as? CallableMemberDescriptor
+        containingDeclaration.resolve() as? CallableDescriptor
 
     protected abstract fun tryGetKotlinType(): KotlinType?
 
@@ -175,6 +177,27 @@ internal class KtUltraLightParameterForSource(
         kotlinOrigin.setName(name)
         return this
     }
+
+    override val givenAnnotations: List<KtLightAbstractAnnotation>?
+        get() {
+            return if (kotlinOrigin.hasValOrVar()) {
+                val entriesWithoutJvmField = kotlinOrigin.annotationEntries.filter { it.shortName?.identifier != "JvmField" }
+                entriesWithoutJvmField.toLightAnnotations(this, null) +
+                        entriesWithoutJvmField.toLightAnnotations(this, AnnotationUseSiteTarget.CONSTRUCTOR_PARAMETER)
+            } else {
+                kotlinOrigin.annotationEntries.toLightAnnotations(this, null)
+            }
+        }
+
+    override fun getText(): String? = kotlinOrigin.text
+    override fun getTextRange(): TextRange = kotlinOrigin.textRange
+    override fun getTextOffset(): Int = kotlinOrigin.textOffset
+    override fun getStartOffsetInParent(): Int = kotlinOrigin.startOffsetInParent
+    override fun isWritable(): Boolean = kotlinOrigin.isWritable
+    override fun getNavigationElement(): PsiElement = kotlinOrigin.navigationElement
+    override fun getContainingFile(): PsiFile = parent.containingFile
+    override fun getPresentation(): ItemPresentation? = kotlinOrigin.let { ItemPresentationProviders.getItemPresentation(it) }
+    override fun findElementAt(offset: Int): PsiElement? = kotlinOrigin.findElementAt(offset)
 }
 
 internal class KtUltraLightParameterForSetterParameter(
@@ -189,11 +212,7 @@ internal class KtUltraLightParameterForSetterParameter(
     override fun tryGetKotlinType(): KotlinType? = property.getKotlinType()
 
     override val givenAnnotations: List<KtLightAbstractAnnotation>?
-        get() = (property.resolve() as? PropertyDescriptor)
-            ?.setter
-            ?.valueParameters
-            ?.firstOrNull()
-            ?.obtainLightAnnotations(support, this)
+        get() = property.annotationEntries.toLightAnnotations(this, AnnotationUseSiteTarget.SETTER_PARAMETER)
 
     override fun isVarArgs(): Boolean = false
 }
@@ -210,6 +229,14 @@ internal class KtUltraLightReceiverParameter(
     method = method,
     containingDeclaration = containingDeclaration
 ) {
+
+    override val givenAnnotations: List<KtLightAbstractAnnotation>? =
+        containingDeclaration
+            .receiverTypeReference
+            ?.modifierList
+            ?.annotationEntries
+            ?.toLightAnnotations(this, AnnotationUseSiteTarget.RECEIVER)
+            ?: emptyList()
 
     override fun isVarArgs(): Boolean = false
 

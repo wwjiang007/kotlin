@@ -21,26 +21,27 @@ import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
+import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.name.Name
 
 class IrClassImpl(
-        override val startOffset: Int,
-        override val endOffset: Int,
-        override var origin: IrDeclarationOrigin,
-        override val symbol: IrClassSymbol,
-        override val name: Name,
-        override val kind: ClassKind,
-        override var visibility: DescriptorVisibility,
-        override var modality: Modality,
-        override val isCompanion: Boolean = false,
-        override val isInner: Boolean = false,
-        override val isData: Boolean = false,
-        override val isExternal: Boolean = false,
-        override val isInline: Boolean = false,
-        override val isExpect: Boolean = false,
-        override val isFun: Boolean = false,
-        override val source: SourceElement = SourceElement.NO_SOURCE
+    override val startOffset: Int,
+    override val endOffset: Int,
+    override var origin: IrDeclarationOrigin,
+    override val symbol: IrClassSymbol,
+    override val name: Name,
+    override val kind: ClassKind,
+    override var visibility: DescriptorVisibility,
+    override var modality: Modality,
+    override val isCompanion: Boolean = false,
+    override val isInner: Boolean = false,
+    override val isData: Boolean = false,
+    override val isExternal: Boolean = false,
+    override val isInline: Boolean = false,
+    override val isExpect: Boolean = false,
+    override val isFun: Boolean = false,
+    override val source: SourceElement = SourceElement.NO_SOURCE
 ) : IrClass() {
     init {
         symbol.bind(this)
@@ -63,6 +64,8 @@ class IrClassImpl(
     override var typeParameters: List<IrTypeParameter> = emptyList()
 
     override var superTypes: List<IrType> = emptyList()
+
+    override var inlineClassRepresentation: InlineClassRepresentation<IrSimpleType>? = null
 
     override var metadata: MetadataSource? = null
 

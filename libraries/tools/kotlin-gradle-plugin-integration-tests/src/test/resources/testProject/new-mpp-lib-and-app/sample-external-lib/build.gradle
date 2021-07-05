@@ -4,7 +4,7 @@ version = "1.2.3"
 buildscript {
 	repositories {
 		mavenLocal()
-		jcenter()
+		mavenCentral()
 	}
 	dependencies {
 		classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
@@ -15,22 +15,18 @@ apply plugin: 'kotlin-multiplatform'
 
 repositories {
     mavenLocal()
-    jcenter()
-    maven { url  "https://dl.bintray.com/kotlin/kotlinx.html/" }
+    mavenCentral()
 }
 
 kotlin {
 	// Check the new preset functions:
 	jvm('jvm6') { }
     js('nodeJs')
-    targetFromPreset(presets.wasm32) { println targetName }
     targetFromPreset(presets.jvm, 'jvm6') { println targetName } // access existing target
     
     targets {
     	// Also check that the old DSL (fromPreset) works:
         fromPreset(presets.linuxX64, 'linux64')
-        fromPreset(presets.mingwX64, 'mingw64')
-        fromPreset(presets.macosX64, 'macos64')
 
         // Check the DSL constructs in the Groovy DSL:
         fromPreset(presets.jvm, 'jvm6') {
@@ -69,7 +65,6 @@ kotlin {
         nodeJsMain {
         	dependencies {
                 api 'org.jetbrains.kotlin:kotlin-stdlib-js'
-        		implementation 'org.jetbrains.kotlinx:kotlinx-html-js:0.6.11'
         	}
         }
     }

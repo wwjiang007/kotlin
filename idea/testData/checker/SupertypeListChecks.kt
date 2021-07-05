@@ -47,4 +47,3 @@ class CTest4 : T1 {}
 class CTest5 : T1, <error>T1</error> {}
 
 class CTest6 : <error>C1</error> {}
-

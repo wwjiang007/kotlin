@@ -5,22 +5,24 @@
 
 package org.jetbrains.kotlin.gradle.targets.js.npm
 
-import org.gradle.api.Project
-import org.gradle.api.artifacts.ResolvedDependency
 import org.jetbrains.kotlin.gradle.targets.js.JS
 import org.jetbrains.kotlin.gradle.targets.js.JS_MAP
 import org.jetbrains.kotlin.gradle.targets.js.META_JS
 import org.jetbrains.kotlin.gradle.targets.js.ir.KLIB_TYPE
+import org.jetbrains.kotlin.gradle.utils.ArchiveOperationsCompat
+import org.jetbrains.kotlin.gradle.utils.FileSystemOperationsCompat
 import java.io.File
 
 /**
  * Creates fake NodeJS module directory from given gradle [dependency].
  */
 internal class GradleNodeModuleBuilder(
-    val project: Project,
-    val dependency: ResolvedDependency,
+    val fs: FileSystemOperationsCompat,
+    val archiveOperations: ArchiveOperationsCompat,
+    val moduleName: String,
+    val moduleVersion: String,
     val srcFiles: Collection<File>,
-    val cache: GradleNodeModulesCache
+    val cacheDir: File
 ) {
     private var srcPackageJsonFile: File? = null
     private val files = mutableListOf<File>()
@@ -29,10 +31,12 @@ internal class GradleNodeModuleBuilder(
         srcFiles.forEach { srcFile ->
             when {
                 isKotlinJsRuntimeFile(srcFile) -> files.add(srcFile)
-                srcFile.isCompatibleArchive -> project.zipTree(srcFile).forEach { innerFile ->
-                    when {
-                        innerFile.name == NpmProject.PACKAGE_JSON -> srcPackageJsonFile = innerFile
-                        isKotlinJsRuntimeFile(innerFile) -> files.add(innerFile)
+                srcFile.isCompatibleArchive -> {
+                    archiveOperations.zipTree(srcFile).forEach { innerFile ->
+                        when {
+                            innerFile.name == NpmProject.PACKAGE_JSON -> srcPackageJsonFile = innerFile
+                            isKotlinJsRuntimeFile(innerFile) -> files.add(innerFile)
+                        }
                     }
                 }
             }
@@ -45,8 +49,8 @@ internal class GradleNodeModuleBuilder(
         val packageJson = fromSrcPackageJson(srcPackageJsonFile)?.apply {
             // Gson set nulls reflectively no matter on default values and non-null types
             @Suppress("USELESS_ELVIS")
-            version = version ?: dependency.moduleVersion
-        } ?: PackageJson(dependency.moduleName, dependency.moduleVersion)
+            version = version ?: moduleVersion
+        } ?: PackageJson(moduleName, moduleVersion)
 
         val metaFiles = files.filter { it.name.endsWith(".$META_JS") }
         if (metaFiles.size == 1) {
@@ -61,8 +65,8 @@ internal class GradleNodeModuleBuilder(
 
         val actualFiles = files.filterNot { it.name.endsWith(".$META_JS") }
 
-        return makeNodeModule(cache.dir, packageJson) { nodeModule ->
-            project.copy { copy ->
+        return makeNodeModule(cacheDir, packageJson) { nodeModule ->
+            fs.copy { copy ->
                 copy.from(actualFiles)
                 copy.into(nodeModule)
             }
@@ -70,7 +74,7 @@ internal class GradleNodeModuleBuilder(
     }
 }
 
-private val File.isCompatibleArchive
+internal val File.isCompatibleArchive
     get() = isFile
             && (extension == "jar"
             || extension == "zip"

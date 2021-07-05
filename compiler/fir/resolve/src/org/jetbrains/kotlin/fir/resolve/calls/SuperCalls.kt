@@ -9,23 +9,24 @@ import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.fir.declarations.FirCallableMemberDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirProperty
-import org.jetbrains.kotlin.fir.declarations.FirSimpleFunction
-import org.jetbrains.kotlin.fir.declarations.modality
+import org.jetbrains.kotlin.fir.declarations.utils.modality
+import org.jetbrains.kotlin.fir.dispatchReceiverClassOrNull
 import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
 import org.jetbrains.kotlin.fir.expressions.FirQualifiedAccess
 import org.jetbrains.kotlin.fir.references.FirNamedReference
 import org.jetbrains.kotlin.fir.resolve.BodyResolveComponents
 import org.jetbrains.kotlin.fir.resolve.scope
 import org.jetbrains.kotlin.fir.resolve.toSymbol
-import org.jetbrains.kotlin.fir.symbols.StandardClassIds
+import org.jetbrains.kotlin.fir.scopes.FakeOverrideTypeCalculator
 import org.jetbrains.kotlin.fir.symbols.impl.FirRegularClassSymbol
-import org.jetbrains.kotlin.fir.symbols.impl.unwrapSubstitutionOverrides
 import org.jetbrains.kotlin.fir.typeContext
 import org.jetbrains.kotlin.fir.types.ConeClassLikeType
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.FirTypeRef
+import org.jetbrains.kotlin.fir.unwrapFakeOverrides
 import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.name.StandardClassIds
 import org.jetbrains.kotlin.types.AbstractTypeChecker
 import org.jetbrains.kotlin.utils.SmartList
 import org.jetbrains.kotlin.utils.addIfNotNull
@@ -35,12 +36,13 @@ fun BodyResolveComponents.findTypesForSuperCandidates(
     containingCall: FirQualifiedAccess,
 ): Collection<ConeKotlinType> {
     val supertypes = superTypeRefs.map { (it as FirResolvedTypeRef).type }
-    if (supertypes.size <= 1) return supertypes
+    val isMethodOfAny = containingCall is FirFunctionCall && isCallingMethodOfAny(containingCall)
+    if (supertypes.size <= 1 && !isMethodOfAny) return supertypes
 
     return when (containingCall) {
         is FirFunctionCall -> {
             val calleeName = containingCall.calleeReference.name
-            if (isCallingMethodOfAny(containingCall)) {
+            if (isMethodOfAny) {
                 resolveSupertypesForMethodOfAny(supertypes, calleeName)
             } else {
                 resolveSupertypesByCalleeName(supertypes, calleeName)
@@ -87,7 +89,7 @@ private fun BodyResolveComponents.resolveSupertypesByPropertyName(supertypes: Co
 private inline fun BodyResolveComponents.resolveSupertypesByMembers(
     supertypes: Collection<ConeKotlinType>,
     allowNonConcreteMembers: Boolean,
-    getMembers: (ConeKotlinType) -> Collection<FirCallableMemberDeclaration<*>>
+    getMembers: (ConeKotlinType) -> Collection<FirCallableMemberDeclaration>
 ): Collection<ConeKotlinType> {
     val typesWithConcreteMembers = SmartList<ConeKotlinType>()
     val typesWithNonConcreteMembers = SmartList<ConeKotlinType>()
@@ -119,21 +121,23 @@ private inline fun BodyResolveComponents.resolveSupertypesByMembers(
 }
 
 @OptIn(ExperimentalStdlibApi::class)
-private fun BodyResolveComponents.getFunctionMembers(type: ConeKotlinType, name: Name): Collection<FirCallableMemberDeclaration<*>> = buildList {
-    type.scope(session, scopeSession)?.processFunctionsByName(name) {
-        addIfNotNull(it.fir as? FirSimpleFunction)
+private fun BodyResolveComponents.getFunctionMembers(type: ConeKotlinType, name: Name): Collection<FirCallableMemberDeclaration> =
+    buildList {
+        type.scope(session, scopeSession, FakeOverrideTypeCalculator.DoNothing)?.processFunctionsByName(name) {
+            add(it.fir)
+        }
     }
-}
 
 @OptIn(ExperimentalStdlibApi::class)
-private fun BodyResolveComponents.getPropertyMembers(type: ConeKotlinType, name: Name): Collection<FirCallableMemberDeclaration<*>> = buildList {
-    type.scope(session, scopeSession)?.processPropertiesByName(name) {
-        addIfNotNull(it.fir as? FirProperty)
+private fun BodyResolveComponents.getPropertyMembers(type: ConeKotlinType, name: Name): Collection<FirCallableMemberDeclaration> =
+    buildList {
+        type.scope(session, scopeSession, FakeOverrideTypeCalculator.DoNothing)?.processPropertiesByName(name) {
+            addIfNotNull(it.fir as? FirProperty)
+        }
     }
-}
 
 
-private fun BodyResolveComponents.isConcreteMember(supertype: ConeKotlinType, member: FirCallableMemberDeclaration<*>): Boolean {
+private fun BodyResolveComponents.isConcreteMember(supertype: ConeKotlinType, member: FirCallableMemberDeclaration): Boolean {
     // "Concrete member" is a function or a property that is not abstract,
     // and is not an implicit fake override for a method of Any on an interface.
 
@@ -143,5 +147,5 @@ private fun BodyResolveComponents.isConcreteMember(supertype: ConeKotlinType, me
     val classSymbol =
         (supertype as? ConeClassLikeType)?.lookupTag?.toSymbol(session) as? FirRegularClassSymbol ?: return true
     if (classSymbol.fir.classKind != ClassKind.INTERFACE) return true
-    return member.symbol.unwrapSubstitutionOverrides().callableId.classId != StandardClassIds.Any
+    return member.symbol.unwrapFakeOverrides().dispatchReceiverClassOrNull()?.classId != StandardClassIds.Any
 }

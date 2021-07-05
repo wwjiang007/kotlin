@@ -414,7 +414,7 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
         receiver: IrExpression
     ): IrExpression {
         val originalSymbol = context.symbolTable.referenceSimpleFunction(functionDescriptor.original)
-        return IrCallImpl(
+        return IrCallImpl.fromSymbolDescriptor(
             startOffset,
             endOffset,
             functionDescriptor.returnType!!.toIrType(),
@@ -508,11 +508,11 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
             ) ?: throw AssertionError("Substitution failed for $checkNotNull: T=$argumentType")
 
         val checkNotNullSymbol = context.irBuiltIns.checkNotNullSymbol
-        return IrCallImpl(
+        return IrCallImpl.fromSymbolDescriptor(
             ktOperator.startOffsetSkippingComments, ktOperator.endOffset,
             expressionType.toIrType(),
             checkNotNullSymbol,
-            origin
+            origin = origin
         ).apply {
             context.callToSubstitutedDescriptorMap[this] = checkNotNullSubstituted
             putTypeArgument(0, argumentType.toIrType().makeNotNull())
@@ -524,7 +524,11 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
         if (isDynamicBinaryOperator(expression))
             generateDynamicBinaryExpression(expression)
         else
-            generateCall(getResolvedCall(expression)!!, expression, origin)
+            CallGenerator(statementGenerator)
+                .generateCall(
+                    expression.startOffsetSkippingComments, expression.endOffset,
+                    statementGenerator.pregenerateCall(getResolvedCall(expression)!!), origin
+                )
 
     private fun generatePrefixOperatorAsCall(expression: KtPrefixExpression, origin: IrStatementOrigin): IrExpression {
         val resolvedCall = getResolvedCall(expression)!!

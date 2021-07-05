@@ -25,14 +25,16 @@ import org.jetbrains.jps.builders.java.JavaBuilderUtil
 import org.jetbrains.jps.builders.java.JavaSourceRootDescriptor
 import org.jetbrains.jps.builders.storage.BuildDataCorruptedException
 import org.jetbrains.jps.incremental.*
+import org.jetbrains.jps.incremental.BuildOperations.deleteRecursively
 import org.jetbrains.jps.incremental.ModuleLevelBuilder.ExitCode.*
 import org.jetbrains.jps.incremental.java.JavaBuilder
 import org.jetbrains.jps.model.JpsProject
 import org.jetbrains.kotlin.build.GeneratedFile
+import org.jetbrains.kotlin.build.GeneratedJvmClass
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.*
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.ERROR
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.INFO
 import org.jetbrains.kotlin.cli.common.messages.MessageCollectorUtil
 import org.jetbrains.kotlin.compilerRunner.*
 import org.jetbrains.kotlin.config.IncrementalCompilation
@@ -42,12 +44,13 @@ import org.jetbrains.kotlin.daemon.common.isDaemonEnabled
 import org.jetbrains.kotlin.incremental.*
 import org.jetbrains.kotlin.incremental.components.ExpectActualTracker
 import org.jetbrains.kotlin.incremental.components.LookupTracker
-import org.jetbrains.kotlin.incremental.ICReporterBase
+import org.jetbrains.kotlin.build.report.ICReporterBase
 import org.jetbrains.kotlin.jps.incremental.JpsIncrementalCache
 import org.jetbrains.kotlin.jps.incremental.JpsLookupStorageManager
 import org.jetbrains.kotlin.jps.model.kotlinKind
 import org.jetbrains.kotlin.jps.targets.KotlinJvmModuleBuildTarget
 import org.jetbrains.kotlin.jps.targets.KotlinModuleBuildTarget
+import org.jetbrains.kotlin.load.kotlin.header.KotlinClassHeader
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.preloading.ClassCondition
 import org.jetbrains.kotlin.utils.KotlinPaths
@@ -250,7 +253,7 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
         removedClasses.forEach { changesCollector.collectSignature(FqName(it), areSubclassesAffected = true) }
         val affectedByRemovedClasses = changesCollector.getDirtyFiles(incrementalCaches.values, kotlinContext.lookupStorageManager)
 
-        fsOperations.markFilesForCurrentRound(affectedByRemovedClasses)
+        fsOperations.markFilesForCurrentRound(affectedByRemovedClasses.dirtyFiles + affectedByRemovedClasses.forceRecompileTogether)
     }
 
     override fun chunkBuildFinished(context: CompileContext, chunk: ModuleChunk) {
@@ -289,7 +292,7 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
         if (chunk.modules.any { it.kotlinKind == KotlinModuleKind.SOURCE_SET_HOLDER }) {
             if (chunk.modules.size > 1) {
                 messageCollector.report(
-                    CompilerMessageSeverity.ERROR,
+                    ERROR,
                     "Cyclically dependent modules are not supported in multiplatform projects"
                 )
                 return ABORT
@@ -408,6 +411,8 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
             kotlinDirtyFilesHolder.allRemovedFilesFiles
         )
 
+        cleanJsOutputs(context, kotlinChunk, incrementalCaches, kotlinDirtyFilesHolder)
+
         if (LOG.isDebugEnabled) {
             LOG.debug("Compiling files: ${kotlinDirtyFilesHolder.allDirtyFiles}")
         }
@@ -439,6 +444,9 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
         }
 
         val generatedFiles = getGeneratedFiles(context, chunk, environment.outputItemsCollector)
+
+        markDirtyComplementaryMultifileClasses(generatedFiles, kotlinContext, incrementalCaches, fsOperations)
+
         val kotlinTargets = kotlinContext.targetsBinding
         for ((target, outputItems) in generatedFiles) {
             val kotlinTarget = kotlinTargets[target] ?: error("Could not find Kotlin target for JPS target $target")
@@ -504,6 +512,43 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
         return OK
     }
 
+    private fun cleanJsOutputs(
+        context: CompileContext,
+        kotlinChunk: KotlinChunk,
+        incrementalCaches: Map<KotlinModuleBuildTarget<*>, JpsIncrementalCache>,
+        kotlinDirtyFilesHolder: KotlinDirtySourceFilesHolder
+    ) {
+        for (target in kotlinChunk.targets) {
+            val cache = incrementalCaches[target] ?: continue
+
+            if (cache is IncrementalJsCache) {
+                val filesToDelete = mutableListOf<File>()
+                val dirtyFiles = kotlinDirtyFilesHolder.getDirtyFiles(target.jpsModuleBuildTarget).keys
+                val removedFiles = kotlinDirtyFilesHolder.getRemovedFiles(target.jpsModuleBuildTarget)
+
+                for (file: File in dirtyFiles + removedFiles) {
+                    filesToDelete.addAll(cache.getOutputsBySource(file).filter { it !in filesToDelete })
+                }
+
+                if (filesToDelete.isNotEmpty()) {
+                    val deletedForThisSource = mutableSetOf<String>()
+                    val parentDirs = mutableSetOf<File>()
+
+                    for (kjsmFile in filesToDelete) {
+                        deleteRecursively(kjsmFile.path, deletedForThisSource, parentDirs)
+                    }
+
+                    FSOperations.pruneEmptyDirs(context, parentDirs)
+
+                    val logger = context.loggingManager.projectBuilderLogger
+                    if (logger.isEnabled && deletedForThisSource.isNotEmpty()) {
+                        logger.logDeletedFiles(deletedForThisSource)
+                    }
+                }
+            }
+        }
+    }
+
     // todo(1.2.80): got rid of ModuleChunk (replace with KotlinChunk)
     // todo(1.2.80): introduce KotlinRoundCompileContext, move dirtyFilesHolder, fsOperations, environment to it
     private fun doCompileModuleChunk(
@@ -526,14 +571,23 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
             for (target in kotlinChunk.targets) {
                 val cache = incrementalCaches[target]
                 val jpsTarget = target.jpsModuleBuildTarget
+
                 val targetDirtyFiles = dirtyFilesHolder.byTarget[jpsTarget]
-
                 if (cache != null && targetDirtyFiles != null) {
-                    val complementaryFiles = cache.getComplementaryFilesRecursive(
-                        targetDirtyFiles.dirty.keys + targetDirtyFiles.removed
-                    )
+                    val dirtyFiles = targetDirtyFiles.dirty.keys + targetDirtyFiles.removed
+                    val complementaryFiles = cache.getComplementaryFilesRecursive(dirtyFiles)
 
-                    fsOperations.markFilesForCurrentRound(jpsTarget, complementaryFiles)
+                    // Get all parts of @JvmMultifileClass file for simultaneous rebuild
+                    var dirtyMultifileClassFiles: Collection<File> = emptyList()
+                    if (cache is IncrementalJvmCache) {
+                        dirtyMultifileClassFiles = cache.classesBySources(dirtyFiles)
+                            .filter { cache.isMultifileFacade(it) }
+                            .flatMap { cache.getAllPartsOfMultifileFacade(it).orEmpty() }
+                            .flatMap { cache.sourcesByInternalName(it) }
+                            .distinct()
+                            .filter { !dirtyFiles.contains(it) }
+                    }
+                    fsOperations.markFilesForCurrentRound(jpsTarget, complementaryFiles + dirtyMultifileClassFiles)
 
                     cache.markDirty(targetDirtyFiles.dirty.keys + targetDirtyFiles.removed)
                 }
@@ -666,6 +720,28 @@ class KotlinBuilder : ModuleLevelBuilder(BuilderCategory.SOURCE_PROCESSOR) {
             lookupStorage.addAll(lookupTracker.lookups, lookupTracker.pathInterner.values)
         }
     }
+
+    private fun markDirtyComplementaryMultifileClasses(
+        generatedFiles: Map<ModuleBuildTarget, List<GeneratedFile>>,
+        kotlinContext: KotlinCompileContext,
+        incrementalCaches: Map<KotlinModuleBuildTarget<*>, JpsIncrementalCache>,
+        fsOperations: FSOperationsHelper
+    ) {
+        for ((target, files) in generatedFiles) {
+            val kotlinModuleBuilderTarget = kotlinContext.targetsBinding[target] ?: continue
+            val cache = incrementalCaches[kotlinModuleBuilderTarget] as? IncrementalJvmCache ?: continue
+            val generated = files.filterIsInstance<GeneratedJvmClass>()
+            val multifileClasses = generated.filter { it.outputClass.classHeader.kind == KotlinClassHeader.Kind.MULTIFILE_CLASS }
+            val expectedAllParts = multifileClasses.flatMap { cache.getAllPartsOfMultifileFacade(it.outputClass.className).orEmpty() }
+            if (multifileClasses.isEmpty()) continue
+            val actualParts = generated.filter { it.outputClass.classHeader.kind == KotlinClassHeader.Kind.MULTIFILE_CLASS_PART }
+                .map { it.outputClass.className.toString() }
+            if (!actualParts.containsAll(expectedAllParts)) {
+                fsOperations.markFiles(expectedAllParts.flatMap { cache.sourcesByInternalName(it) }
+                                               + multifileClasses.flatMap { it.sourceFiles })
+            }
+        }
+    }
 }
 
 private class JpsICReporter : ICReporterBase() {
@@ -695,21 +771,36 @@ private fun ChangesCollector.processChangesUsingLookups(
     reporter.reportVerbose { "Start processing changes" }
 
     val dirtyFiles = getDirtyFiles(allCaches, lookupStorageManager)
-    fsOperations.markInChunkOrDependents(dirtyFiles.asIterable(), excludeFiles = compiledFiles)
+    // if list of inheritors of sealed class has changed it should be recompiled with all the inheritors
+    // Here we have a small optimization. Do not recompile the bunch if ALL these files were recompiled during the previous round.
+    val excludeFiles = if (compiledFiles.containsAll(dirtyFiles.forceRecompileTogether))
+        compiledFiles
+    else
+        compiledFiles.minus(dirtyFiles.forceRecompileTogether)
+    fsOperations.markInChunkOrDependents(
+        (dirtyFiles.dirtyFiles + dirtyFiles.forceRecompileTogether).asIterable(),
+        excludeFiles = excludeFiles
+    )
 
     reporter.reportVerbose { "End of processing changes" }
 }
 
+data class FilesToRecompile(val dirtyFiles: Set<File>, val forceRecompileTogether: Set<File>)
+
 private fun ChangesCollector.getDirtyFiles(
     caches: Iterable<IncrementalCacheCommon>,
     lookupStorageManager: JpsLookupStorageManager
-): Set<File> {
+): FilesToRecompile {
     val reporter = JpsICReporter()
-    val (dirtyLookupSymbols, dirtyClassFqNames) = getDirtyData(caches, reporter)
+    val (dirtyLookupSymbols, dirtyClassFqNames, forceRecompile) = getDirtyData(caches, reporter)
     val dirtyFilesFromLookups = lookupStorageManager.withLookupStorage {
         mapLookupSymbolsToFiles(it, dirtyLookupSymbols, reporter)
     }
-    return dirtyFilesFromLookups + mapClassesFqNamesToFiles(caches, dirtyClassFqNames, reporter)
+    return FilesToRecompile(
+        dirtyFilesFromLookups + mapClassesFqNamesToFiles(caches, dirtyClassFqNames, reporter),
+        mapClassesFqNamesToFiles(caches, forceRecompile, reporter)
+    )
+
 }
 
 private fun getLookupTracker(project: JpsProject, representativeTarget: KotlinModuleBuildTarget<*>): LookupTracker {

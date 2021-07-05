@@ -1,11 +1,15 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.jetbrains.kotlin.pill.PillExtension
 
 description = "Kotlin JVM metadata manipulation library"
 
 plugins {
     kotlin("jvm")
     id("jps-compatible")
+}
+
+pill {
+    variant = PillExtension.Variant.FULL
 }
 
 /*
@@ -22,8 +26,7 @@ group = "org.jetbrains.kotlinx"
 val deployVersion = findProperty("kotlinxMetadataDeployVersion") as String?
 version = deployVersion ?: "0.1-SNAPSHOT"
 
-jvmTarget = "1.6"
-javaHome = rootProject.extra["JDK_16"] as String
+project.configureJvmToolchain(JdkMajorVersion.JDK_1_6)
 
 sourceSets {
     "main" { projectDefault() }
@@ -37,15 +40,22 @@ configurations.getByName("compileOnly").extendsFrom(shadows)
 configurations.getByName("testCompile").extendsFrom(shadows)
 
 dependencies {
-    compile(kotlinStdlib())
+    api(kotlinStdlib())
     shadows(project(":kotlinx-metadata"))
     shadows(project(":core:metadata"))
     shadows(project(":core:metadata.jvm"))
     shadows(protobufLite())
-    testCompile(commonDep("junit:junit"))
-    testCompile(intellijDep()) { includeJars("asm-all", rootProject = rootProject) }
+    testImplementation(project(":kotlin-test:kotlin-test-junit"))
+    testImplementation(commonDep("junit:junit"))
+    testImplementation(intellijDep()) { includeJars("asm-all", rootProject = rootProject) }
     testCompileOnly(project(":kotlin-reflect-api"))
-    testRuntime(project(":kotlin-reflect"))
+    testRuntimeOnly(project(":kotlin-reflect"))
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.dsl.KotlinCompile<*>> {
+    kotlinOptions {
+        freeCompilerArgs += "-Xsuppress-deprecated-jvm-target-warning"
+    }
 }
 
 if (deployVersion != null) {
@@ -54,7 +64,7 @@ if (deployVersion != null) {
 
 noDefaultJar()
 
-val shadowJar = tasks.register<ShadowJar>("shadowJar") {
+runtimeJar(tasks.register<ShadowJar>("shadowJar")) {
     callGroovy("manifestAttributes", manifest, project)
     manifest.attributes["Implementation-Version"] = version
 
@@ -63,8 +73,6 @@ val shadowJar = tasks.register<ShadowJar>("shadowJar") {
     configurations = listOf(shadows)
     relocate("org.jetbrains.kotlin", "kotlinx.metadata.internal")
 }
-
-runtimeJarArtifactBy(shadowJar, shadowJar)
 
 val test by tasks
 test.dependsOn("shadowJar")

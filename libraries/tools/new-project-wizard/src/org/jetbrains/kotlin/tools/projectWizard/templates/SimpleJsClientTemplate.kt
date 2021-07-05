@@ -20,7 +20,6 @@ import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.DependencyType
 import org.jetbrains.kotlin.tools.projectWizard.ir.buildsystem.ModuleIR
 import org.jetbrains.kotlin.tools.projectWizard.library.MavenArtifact
 import org.jetbrains.kotlin.tools.projectWizard.phases.GenerationPhase
-import org.jetbrains.kotlin.tools.projectWizard.plugins.kotlin.KotlinPlugin
 import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.Repositories
 import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.SourcesetType
 
@@ -45,8 +44,8 @@ class SimpleJsClientTemplate : JsClientTemplate() {
         buildList {
             if (useKotlinxHtml.reference.settingValue()) {
                 +ArtifactBasedLibraryDependencyIR(
-                    MavenArtifact(Repositories.KOTLINX, "org.jetbrains.kotlinx", "kotlinx-html"),
-                    Versions.KOTLINX.KOTLINX_HTML(KotlinPlugin.version.propertyValue.version),
+                    MavenArtifact(Repositories.KOTLINX_HTML, "org.jetbrains.kotlinx", "kotlinx-html"),
+                    Versions.KOTLINX.KOTLINX_HTML,
                     DependencyType.MAIN
                 )
             }
@@ -63,6 +62,9 @@ class SimpleJsClientTemplate : JsClientTemplate() {
                 if (useKotlinxHtml.reference.settingValue()) {
                     +(FileTemplateDescriptor("$id/client.kt.vm") asSrcOf SourcesetType.main)
                     +(FileTemplateDescriptor("$id/TestClient.kt.vm", "TestClient.kt".asPath()) asSrcOf SourcesetType.test)
+                } else {
+                    +(FileTemplateDescriptor("$id/simple.kt.vm") asSrcOf SourcesetType.main)
+                    +(FileTemplateDescriptor("$id/SimpleTest.kt.vm", "TestClient.kt".asPath()) asSrcOf SourcesetType.test)
                 }
             }
         }

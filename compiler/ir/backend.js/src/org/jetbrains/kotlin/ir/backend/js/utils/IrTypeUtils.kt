@@ -5,15 +5,21 @@
 
 package org.jetbrains.kotlin.ir.backend.js.utils
 
+import org.jetbrains.kotlin.ir.declarations.IrClass
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationWithName
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrClassifierSymbol
+import org.jetbrains.kotlin.ir.symbols.IrScriptSymbol
 import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
+import org.jetbrains.kotlin.ir.util.getInlineClassUnderlyingType
+import org.jetbrains.kotlin.ir.util.isEffectivelyExternal
+import org.jetbrains.kotlin.js.backend.ast.JsNameRef
 import org.jetbrains.kotlin.types.Variance
 import org.jetbrains.kotlin.utils.addToStdlib.ifNotEmpty
 
-fun IrType.asString(): String = when(this) {
+fun IrType.asString(): String = when (this) {
     // TODO: should each IrErrorType have own string representation?
     is IrErrorType -> "\$ErrorType\$"
     // TODO: should we prohibit user classes called dynamic?
@@ -27,7 +33,7 @@ fun IrType.asString(): String = when(this) {
     else -> error("Unexpected kind of IrType: " + javaClass.typeName)
 }
 
-private fun IrTypeArgument.asString(): String = when(this) {
+private fun IrTypeArgument.asString(): String = when (this) {
     is IrStarProjection -> "*"
     is IrTypeProjection -> variance.label + (if (variance != Variance.INVARIANT) " " else "") + type.asString()
     else -> error("Unexpected kind of IrTypeArgument: " + javaClass.simpleName)
@@ -38,3 +44,51 @@ private fun IrClassifierSymbol.asString() = when (this) {
     is IrClassSymbol -> this.owner.fqNameWhenAvailable!!.asString()
     else -> error("Unexpected kind of IrClassifierSymbol: " + javaClass.typeName)
 }
+
+/**
+ * Returns inline class for given class or null of type is not inlined
+ */
+fun IrType.getJsInlinedClass(): IrClass? {
+    if (this is IrSimpleType) {
+        val erased = erase(this) ?: return null
+        if (erased.isInline) {
+            if (this.isMarkedNullable()) {
+                var fieldType: IrType
+                var fieldInlinedClass = erased
+                while (true) {
+                    fieldType = getInlineClassUnderlyingType(fieldInlinedClass)
+                    if (fieldType.isMarkedNullable()) {
+                        return null
+                    }
+
+                    fieldInlinedClass = fieldType.getJsInlinedClass() ?: break
+                }
+            }
+
+            return erased
+        }
+    }
+    return null
+}
+
+tailrec fun erase(type: IrType): IrClass? {
+    val classifier = type.classifierOrFail
+
+    return when (classifier) {
+        is IrClassSymbol -> classifier.owner
+        is IrTypeParameterSymbol -> erase(classifier.owner.superTypes.first())
+        is IrScriptSymbol -> null
+        else -> error(classifier)
+    }
+}
+
+fun IrType.getClassRef(context: JsGenerationContext): JsNameRef =
+    when (val klass = classifierOrFail.owner) {
+        is IrClass ->
+            if (klass.isEffectivelyExternal())
+                context.getRefForExternalClass(klass)
+            else
+                context.getNameForClass(klass).makeRef()
+
+        else -> context.getNameForStaticDeclaration(klass as IrDeclarationWithName).makeRef()
+    }

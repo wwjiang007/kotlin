@@ -1,6 +1,10 @@
+// DONT_TARGET_EXACT_BACKEND: WASM
+// WASM_MUTE_REASON: STDLIB_COLLECTIONS
 // KJS_WITH_FULL_RUNTIME
 // !LANGUAGE: +InlineClasses
 // WITH_RUNTIME
+
+fun <T> eval(fn: () -> T) = fn()
 
 fun box(): String {
     var uint1 = 1u
@@ -8,11 +12,11 @@ fun box(): String {
     var uint3 = 3u
     val uintSet = mutableSetOf(uint1)
     uintSet.add(uint2);
-    {
+    eval {
         uintSet.add(uint3)
         if (!uintSet.contains(1u)) throw AssertionError()
         if (!uintSet.contains(2u)) throw AssertionError()
         if (!uintSet.contains(3u)) throw AssertionError()
-    }()
+    }
     return "OK"
 }

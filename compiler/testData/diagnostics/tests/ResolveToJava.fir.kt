@@ -1,9 +1,8 @@
-// !WITH_NEW_INFERENCE
 // !CHECK_TYPE
-// JAVAC_SKIP
+// SKIP_JAVAC
 // FULL_JDK
 
-// FILE: f.kt
+// FILE: a.kt
 
 import java.*
 import java.util.*
@@ -22,15 +21,15 @@ fun test(l : java.util.List<Int>) {
 
   val f : java.io.File? = null
 
-  Collections.<!UNRESOLVED_REFERENCE!>emptyList<!>
-  Collections.<!UNRESOLVED_REFERENCE!>emptyList<!><Int>
+  Collections.<!FUNCTION_CALL_EXPECTED!>emptyList<!>
+  Collections.<!FUNCTION_CALL_EXPECTED!>emptyList<!><<!CANNOT_INFER_PARAMETER_TYPE!>Int<!>>
   Collections.emptyList<Int>()
-  Collections.emptyList()
+  Collections.<!NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>emptyList<!>()
 
   checkSubtype<Set<Int>?>(Collections.singleton<Int>(1))
-  Collections.<!INAPPLICABLE_CANDIDATE!>singleton<!><Int>(1.0)
+  Collections.singleton<Int>(<!ARGUMENT_TYPE_MISMATCH!>1.0<!>)
 
-  List<Int>
+  <!NO_COMPANION_OBJECT!>List<!><Int>
 
 
   val o = "sdf" as Object
@@ -53,6 +52,6 @@ fun test(l : java.util.List<Int>) {
 }
 
 
-// FILE: f.kt
+// FILE: b.kt
 package xxx
   import java.lang.Class;

@@ -16,26 +16,29 @@
 
 package org.jetbrains.kotlin.resolve.diagnostics
 
-import org.jetbrains.kotlin.diagnostics.Diagnostic
-import java.util.ArrayList
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.util.CompositeModificationTracker
-import com.intellij.util.CachedValueImpl
-import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.PsiElement
+import com.intellij.psi.util.CachedValueProvider
+import com.intellij.util.CachedValueImpl
 import org.jetbrains.annotations.TestOnly
-import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.diagnostics.Diagnostic
+import org.jetbrains.kotlin.diagnostics.DiagnosticSink
+import org.jetbrains.kotlin.psi.KtAnnotated
+import org.jetbrains.kotlin.psi.KtStubbedPsiUtil
 
-class MutableDiagnosticsWithSuppression @JvmOverloads constructor(
-    private val bindingContext: BindingContext,
-    private val delegateDiagnostics: Diagnostics = Diagnostics.EMPTY
+class MutableDiagnosticsWithSuppression(
+    private val suppressCache: KotlinSuppressCache,
+    private val delegateDiagnostics: Diagnostics,
 ) : Diagnostics {
     private val diagnosticList = ArrayList<Diagnostic>()
+    private var diagnosticsCallback: DiagnosticSink.DiagnosticsCallback? = null
 
     //NOTE: CachedValuesManager is not used because it requires Project passed to this object
-    private val cache = CachedValueImpl(CachedValueProvider {
+    private val cache = CachedValueImpl {
         val allDiagnostics = delegateDiagnostics.noSuppression().all() + diagnosticList
-        CachedValueProvider.Result(DiagnosticsWithSuppression(bindingContext, allDiagnostics), modificationTracker)
-    })
+        CachedValueProvider.Result(DiagnosticsWithSuppression(suppressCache, allDiagnostics), modificationTracker)
+    }
 
     private fun readonlyView(): DiagnosticsWithSuppression = cache.value!!
 
@@ -45,15 +48,40 @@ class MutableDiagnosticsWithSuppression @JvmOverloads constructor(
     override fun forElement(psiElement: PsiElement) = readonlyView().forElement(psiElement)
     override fun noSuppression() = readonlyView().noSuppression()
 
+    override fun setCallback(callback: DiagnosticSink.DiagnosticsCallback) {
+        diagnosticsCallback?.let {
+            Logger.getInstance(MutableDiagnosticsWithSuppression::class.java).error("diagnostic callback has been already registered")
+            return
+        }
+        diagnosticsCallback = callback
+        delegateDiagnostics.setCallback(callback)
+    }
+
+    override fun resetCallback() {
+        diagnosticsCallback = null
+        delegateDiagnostics.resetCallback()
+    }
+
     //essential that this list is readonly
     fun getOwnDiagnostics(): List<Diagnostic> {
         return diagnosticList
     }
 
     fun report(diagnostic: Diagnostic) {
+        onTheFlyDiagnosticsCallback(diagnostic)?.callback(diagnostic)
+
         diagnosticList.add(diagnostic)
         modificationTracker.incModificationCount()
     }
+
+    private fun onTheFlyDiagnosticsCallback(diagnostic: Diagnostic): DiagnosticSink.DiagnosticsCallback? =
+        diagnosticsCallback.takeIf {
+            diagnosticsCallback != null &&
+                    // Due to a potential recursion in filter.invoke (via LazyAnnotations) do not try to report
+                    // diagnostic on-the-fly if it happened in annotations, and do not report any potentially suppressed elements
+                    KtStubbedPsiUtil.getPsiOrStubParent(diagnostic.psiElement, KtAnnotated::class.java, false) == null &&
+                    suppressCache.filter.invoke(diagnostic)
+        }
 
     fun clear() {
         diagnosticList.clear()

@@ -15,11 +15,8 @@ import org.jetbrains.kotlin.incremental.record
 import org.jetbrains.kotlin.metadata.ProtoBuf
 import org.jetbrains.kotlin.metadata.deserialization.*
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.resolve.DescriptorFactory
-import org.jetbrains.kotlin.resolve.NonReportingOverrideStrategy
-import org.jetbrains.kotlin.resolve.OverridingUtil
+import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.descriptorUtil.classId
-import org.jetbrains.kotlin.resolve.descriptorUtil.computeSealedSubclasses
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.resolve.scopes.StaticScopeForKotlinEnum
@@ -46,7 +43,7 @@ class DeserializedClassDescriptor(
     private val classId = nameResolver.getClassId(classProto.fqName)
 
     private val modality = ProtoEnumFlags.modality(Flags.MODALITY.get(classProto.flags))
-    private val visibility = ProtoEnumFlags.visibility(Flags.VISIBILITY.get(classProto.flags))
+    private val visibility = ProtoEnumFlags.descriptorVisibility(Flags.VISIBILITY.get(classProto.flags))
     private val kind = ProtoEnumFlags.classKind(Flags.CLASS_KIND.get(classProto.flags))
 
     val c = outerContext.childContext(
@@ -68,6 +65,7 @@ class DeserializedClassDescriptor(
     private val constructors = c.storageManager.createLazyValue { computeConstructors() }
     private val companionObjectDescriptor = c.storageManager.createNullableLazyValue { computeCompanionObjectDescriptor() }
     private val sealedSubclasses = c.storageManager.createLazyValue { computeSubclassesForSealedClass() }
+    private val inlineClassRepresentation = c.storageManager.createNullableLazyValue { computeInlineClassRepresentation() }
 
     internal val thisAsProtoContainer: ProtoContainer.Class = ProtoContainer.Class(
         classProto, c.nameResolver, c.typeTable, sourceElement,
@@ -98,7 +96,7 @@ class DeserializedClassDescriptor(
 
     override fun isData() = Flags.IS_DATA.get(classProto.flags)
 
-    override fun isInline() = Flags.IS_INLINE_CLASS.get(classProto.flags)
+    override fun isInline() = Flags.IS_INLINE_CLASS.get(classProto.flags) && metadataVersion.isAtMost(1, 4, 1)
 
     override fun isExpect() = Flags.IS_EXPECT_CLASS.get(classProto.flags)
 
@@ -107,6 +105,8 @@ class DeserializedClassDescriptor(
     override fun isExternal() = Flags.IS_EXTERNAL_CLASS.get(classProto.flags)
 
     override fun isFun() = Flags.IS_FUN_INTERFACE.get(classProto.flags)
+
+    override fun isValue() = Flags.IS_INLINE_CLASS.get(classProto.flags) && metadataVersion.isAtLeast(1, 4, 2)
 
     override fun getUnsubstitutedMemberScope(kotlinTypeRefiner: KotlinTypeRefiner): MemberScope =
         memberScopeHolder.getScope(kotlinTypeRefiner)
@@ -163,12 +163,42 @@ class DeserializedClassDescriptor(
         }
 
         // This is needed because classes compiled with Kotlin 1.0 did not contain the sealed_subclass_fq_name field
-        return computeSealedSubclasses(this)
+        return CliSealedClassInheritorsProvider.computeSealedSubclasses(this, allowSealedInheritorsInDifferentFilesOfSamePackage = false)
     }
 
     override fun getSealedSubclasses() = sealedSubclasses()
 
-    override fun toString() = "deserialized ${if (isExpect()) "expect" else ""} class $name" // not using descriptor render to preserve laziness
+    override fun getInlineClassRepresentation(): InlineClassRepresentation<SimpleType>? = inlineClassRepresentation()
+
+    private fun computeInlineClassRepresentation(): InlineClassRepresentation<SimpleType>? {
+        if (!isInlineClass()) return null
+
+        val propertyName = when {
+            classProto.hasInlineClassUnderlyingPropertyName() ->
+                c.nameResolver.getName(classProto.inlineClassUnderlyingPropertyName)
+            !metadataVersion.isAtLeast(1, 5, 1) -> {
+                // Before 1.5, inline classes did not have underlying property name & type in the metadata.
+                // However, they were experimental, so supposedly this logic can be removed at some point in the future.
+                val constructor = unsubstitutedPrimaryConstructor ?: error("Inline class has no primary constructor: $this")
+                constructor.valueParameters.first().name
+            }
+            else -> error("Inline class has no underlying property name in metadata: $this")
+        }
+
+        val type = classProto.inlineClassUnderlyingType(c.typeTable)?.let(c.typeDeserializer::simpleType)
+            ?: run {
+                val underlyingProperty =
+                    memberScope.getContributedVariables(propertyName, NoLookupLocation.FROM_DESERIALIZATION)
+                        .singleOrNull { it.extensionReceiverParameter == null }
+                        ?: error("Inline class has no underlying property: $this")
+                underlyingProperty.type as SimpleType
+            }
+
+        return InlineClassRepresentation(propertyName, type)
+    }
+
+    override fun toString() =
+        "deserialized ${if (isExpect) "expect " else ""}class $name" // not using descriptor renderer to preserve laziness
 
     override fun getSource() = sourceElement
 
@@ -246,21 +276,21 @@ class DeserializedClassDescriptor(
             return super.getContributedVariables(name, location)
         }
 
-        override fun computeNonDeclaredFunctions(name: Name, functions: MutableCollection<SimpleFunctionDescriptor>) {
+        override fun isDeclaredFunctionAvailable(function: SimpleFunctionDescriptor): Boolean {
+            return c.components.platformDependentDeclarationFilter.isFunctionAvailable(this@DeserializedClassDescriptor, function)
+        }
+
+        override fun computeNonDeclaredFunctions(name: Name, functions: MutableList<SimpleFunctionDescriptor>) {
             val fromSupertypes = ArrayList<SimpleFunctionDescriptor>()
             for (supertype in refinedSupertypes()) {
                 fromSupertypes.addAll(supertype.memberScope.getContributedFunctions(name, NoLookupLocation.FOR_ALREADY_TRACKED))
-            }
-
-            functions.retainAll {
-                c.components.platformDependentDeclarationFilter.isFunctionAvailable(this@DeserializedClassDescriptor, it)
             }
 
             functions.addAll(c.components.additionalClassPartsProvider.getFunctions(name, this@DeserializedClassDescriptor))
             generateFakeOverrides(name, fromSupertypes, functions)
         }
 
-        override fun computeNonDeclaredProperties(name: Name, descriptors: MutableCollection<PropertyDescriptor>) {
+        override fun computeNonDeclaredProperties(name: Name, descriptors: MutableList<PropertyDescriptor>) {
             val fromSupertypes = ArrayList<PropertyDescriptor>()
             for (supertype in refinedSupertypes()) {
                 fromSupertypes.addAll(supertype.memberScope.getContributedVariables(name, NoLookupLocation.FOR_ALREADY_TRACKED))
@@ -271,7 +301,7 @@ class DeserializedClassDescriptor(
         private fun <D : CallableMemberDescriptor> generateFakeOverrides(
             name: Name,
             fromSupertypes: Collection<D>,
-            result: MutableCollection<D>
+            result: MutableList<D>
         ) {
             val fromCurrent = ArrayList<CallableMemberDescriptor>(result)
             c.components.kotlinTypeChecker.overridingUtil.generateOverridesInFunctionGroup(

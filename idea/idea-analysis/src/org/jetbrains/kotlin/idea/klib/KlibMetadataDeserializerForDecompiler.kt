@@ -42,9 +42,7 @@ class KlibMetadataDeserializerForDecompiler(
             storageManager, moduleDescriptor, DeserializationConfiguration.Default,
             KlibMetadataClassDataFinder(proto, nameResolver),
             AnnotationAndConstantLoaderImpl(moduleDescriptor, notFoundClasses, serializerProtocol), packageFragmentProvider,
-            ResolveEverythingToKotlinAnyLocalClassifierResolver(builtIns), createLoggingErrorReporter(
-                LOG
-            ),
+            ResolveEverythingToKotlinAnyLocalClassifierResolver(builtIns), LoggingErrorReporter(LOG),
             LookupTracker.DO_NOTHING, flexibleTypeDeserializer, emptyList(), notFoundClasses, ContractDeserializer.DEFAULT,
             extensionRegistryLite = serializerProtocol.extensionRegistry,
             samConversionResolver = SamConversionResolverImpl(storageManager, samWithReceiverResolvers = emptyList())
@@ -62,8 +60,11 @@ class KlibMetadataDeserializerForDecompiler(
             nameResolver,
             KlibMetadataVersion.INSTANCE,
             containerSource = null,
-            components = deserializationComponents
-        ) { emptyList() }
+            components = deserializationComponents,
+            classNames = { emptyList() },
+            debugName = "scope of dummyPackageFragment $facadeFqName in ${deserializationComponents.moduleDescriptor} " +
+                    "@KlibMetadataDeserializerForDecompiler"
+        )
 
         return membersScope.getContributedDescriptors().toList()
     }
@@ -72,5 +73,3 @@ class KlibMetadataDeserializerForDecompiler(
         private val LOG = Logger.getInstance(KlibMetadataDeserializerForDecompiler::class.java)
     }
 }
-
-fun createLoggingErrorReporter(log: Logger) = LoggingErrorReporter(log)

@@ -1,6 +1,5 @@
 // KOTLIN_CONFIGURATION_FLAGS: +JVM.EMIT_JVM_TYPE_ANNOTATIONS
-// TYPE_ANNOTATIONS
-// IGNORE_BACKEND_FIR: JVM_IR
+// RENDER_ANNOTATIONS
 // TARGET_BACKEND: JVM
 // JVM_TARGET: 1.8
 package foo
@@ -53,5 +52,9 @@ class Kotlin {
     fun <T> fooGenericOut(s: @Ann Bar<out @Ann2 T>) {
     }
 
+    fun <T: Bar<Outer.Inner<@Ann Outer>>> innerClassInBound() {
+    }
 
 }
+
+class WithBound<T: Bar<Outer.Inner<@Ann Outer>>>()

@@ -8,9 +8,11 @@ dependencies {
     compile(project(":compiler:cli-common"))
     compile(project(":compiler:frontend"))
     compile(project(":compiler:frontend.java"))
+    compile(project(":compiler:frontend:cfg"))
     compile(project(":compiler:backend-common"))
     compile(project(":compiler:backend"))
     compile(project(":compiler:backend.jvm"))
+    implementation(project(":compiler:backend.jvm:backend.jvm.entrypoint"))
     compile(project(":compiler:ir.backend.common"))
     compile(project(":compiler:light-classes"))
     compile(project(":compiler:serialization"))
@@ -28,9 +30,9 @@ dependencies {
     compile(project(":compiler:fir:fir2ir"))
     compile(project(":compiler:fir:fir2ir:jvm-backend"))
     compile(project(":compiler:fir:checkers"))
+    compile(project(":compiler:fir:checkers:checkers.jvm"))
     compile(project(":kotlin-util-klib"))
     compile(project(":kotlin-util-io"))
-    compile(project(":compiler:ir.serialization.common"))
 
     // TODO: as soon as cli-jvm is extracted out of this module, move this dependency there
     compileOnly(project(":compiler:ir.tree.impl"))
@@ -55,9 +57,11 @@ sourceSets {
 
 tasks.withType<org.jetbrains.kotlin.gradle.dsl.KotlinCompile<*>> {
     kotlinOptions {
-        languageVersion = "1.2"
-        apiVersion = "1.2"
-        freeCompilerArgs += "-Xskip-metadata-version-check"
+        languageVersion = "1.3"
+        apiVersion = "1.3"
+        freeCompilerArgs = freeCompilerArgs - "-progressive" + listOf(
+            "-Xskip-prerelease-check", "-Xsuppress-version-warnings"
+        )
     }
 }
 

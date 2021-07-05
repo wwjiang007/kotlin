@@ -8,12 +8,8 @@ package org.jetbrains.kotlin.backend.jvm.ir
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.backend.jvm.codegen.isInlineFunctionCall
 import org.jetbrains.kotlin.backend.jvm.codegen.isInlineIrExpression
-import org.jetbrains.kotlin.ir.util.isLambda
 import org.jetbrains.kotlin.ir.IrElement
-import org.jetbrains.kotlin.ir.declarations.IrDeclaration
-import org.jetbrains.kotlin.ir.declarations.IrDeclarationBase
-import org.jetbrains.kotlin.ir.declarations.IrFunction
-import org.jetbrains.kotlin.ir.declarations.IrValueParameter
+import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrBlock
 import org.jetbrains.kotlin.ir.expressions.IrCallableReference
 import org.jetbrains.kotlin.ir.expressions.IrFunctionAccessExpression
@@ -26,7 +22,8 @@ internal open class IrInlineReferenceLocator(private val context: JvmBackendCont
     }
 
     override fun visitDeclaration(declaration: IrDeclarationBase, data: IrDeclaration?) {
-        declaration.acceptChildren(this, declaration)
+        val scope = if (declaration is IrVariable) data else declaration
+        declaration.acceptChildren(this, scope)
     }
 
     override fun visitFunctionAccess(expression: IrFunctionAccessExpression, data: IrDeclaration?) {
@@ -37,12 +34,11 @@ internal open class IrInlineReferenceLocator(private val context: JvmBackendCont
                     continue
 
                 val valueArgument = expression.getValueArgument(parameter.index) ?: continue
-                if (!isInlineIrExpression(valueArgument))
+                if (!valueArgument.isInlineIrExpression())
                     continue
 
-                if (valueArgument is IrBlock && valueArgument.origin.isLambda) {
-                    val reference = valueArgument.statements.last() as IrFunctionReference
-                    visitInlineLambda(reference, function, parameter, data!!)
+                if (valueArgument is IrBlock) {
+                    visitInlineLambda(valueArgument.statements.last() as IrFunctionReference, function, parameter, data!!)
                 } else if (valueArgument is IrCallableReference<*>) {
                     visitInlineReference(valueArgument)
                 }

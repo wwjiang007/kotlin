@@ -46,7 +46,7 @@ import java.util.*
 import com.intellij.codeInsight.daemon.impl.quickfix.ClassKind as IdeaClassKind
 
 enum class ClassKind(@NonNls val keyword: String, @Nls val description: String) {
-    PLAIN_CLASS("class", KotlinBundle.message("find.usages.class")),
+    PLAIN_CLASS("class", KotlinBundle.message("text.class")),
     ENUM_CLASS("enum class", KotlinBundle.message("text.enum")),
     ENUM_ENTRY("", KotlinBundle.message("text.enum.constant")),
     ANNOTATION_CLASS("annotation class", KotlinBundle.message("text.annotation")),
@@ -55,7 +55,7 @@ enum class ClassKind(@NonNls val keyword: String, @Nls val description: String) 
     DEFAULT("", "") // Used as a placeholder and must be replaced with one of the kinds above
 }
 
-fun ClassKind.toIdeaClassKind() = IdeaClassKind { this@toIdeaClassKind.description.capitalize() }
+fun ClassKind.toIdeaClassKind() = IdeaClassKind { this@toIdeaClassKind.description.replaceFirstChar(Char::uppercaseChar) }
 
 val ClassKind.actionPriority: IntentionActionPriority
     get() = if (this == ANNOTATION_CLASS) IntentionActionPriority.LOW else IntentionActionPriority.NORMAL
@@ -185,7 +185,7 @@ open class CreateClassFromUsageFix<E : KtElement> protected constructor(
             val defaultPackageFqName = file.packageFqName
             val dialog = object : CreateKotlinClassDialog(
                 file.project,
-                KotlinBundle.message("create.0", ideaClassKind.description.capitalize()),
+                KotlinBundle.message("create.0", ideaClassKind.description.replaceFirstChar(Char::uppercaseChar)),
                 className,
                 defaultPackageFqName.asString(),
                 ideaClassKind,

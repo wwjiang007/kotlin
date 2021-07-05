@@ -1,10 +1,9 @@
-// IGNORE_BACKEND_FIR: JVM_IR
+// NB This test depends on line numbers
 // TARGET_BACKEND: JVM
 // WITH_RUNTIME
 // FULL_JDK
 // WITH_COROUTINES
-// IGNORE_BACKEND:
-package test // NB This test depends on line numbers
+package test
 
 import helpers.*
 import kotlin.coroutines.*
@@ -49,14 +48,14 @@ fun box(): String {
     builder {
         foo()
     }
-    if (!"$continuation".contains("21")) return "$continuation"
+    if (!"$continuation".contains("20")) return "$continuation"
     continuation!!.resumeWith(Result.success(Unit))
-    if (!"$continuation".contains("22")) return "$continuation"
+    if (!"$continuation".contains("21")) return "$continuation"
     builder {
         lambda()
     }
-    if (!"$continuation".contains("33")) return "$continuation"
+    if (!"$continuation".contains("32")) return "$continuation"
     continuation!!.resumeWith(Result.success(Unit))
-    if (!"$continuation".contains("34")) return "$continuation"
+    if (!"$continuation".contains("33")) return "$continuation"
     return "OK"
 }

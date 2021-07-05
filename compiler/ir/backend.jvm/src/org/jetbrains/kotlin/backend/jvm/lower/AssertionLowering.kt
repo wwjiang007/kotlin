@@ -6,12 +6,13 @@
 package org.jetbrains.kotlin.backend.jvm.lower
 
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
-import org.jetbrains.kotlin.backend.common.ir.asSimpleLambda
+import org.jetbrains.kotlin.backend.common.ir.asInlinable
 import org.jetbrains.kotlin.backend.common.ir.inline
 import org.jetbrains.kotlin.backend.common.lower.*
 import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.backend.jvm.JvmLoweredDeclarationOrigin
+import org.jetbrains.kotlin.backend.jvm.ir.createJvmIrBuilder
 import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.codegen.ASSERTIONS_DISABLED_FIELD_NAME
 import org.jetbrains.kotlin.config.JVMAssertionsMode
@@ -26,12 +27,10 @@ import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.impl.IrCompositeImpl
-import org.jetbrains.kotlin.ir.types.getClass
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformer
 import org.jetbrains.kotlin.load.java.JavaDescriptorVisibilities
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.util.OperatorNameConventions
 
 internal val assertionPhase = makeIrFilePhase(
     ::AssertionLowering,
@@ -48,7 +47,7 @@ private class AssertionLowering(private val context: JvmBackendContext) :
 {
     // Keeps track of the $assertionsDisabled field, which we generate lazily for classes containing
     // assertions when compiled with -Xassertions=jvm.
-    private class ClassInfo(val irClass: IrClass, val topLevelClass: IrClass, var assertionsDisabledField: IrField? = null)
+    class ClassInfo(val irClass: IrClass, val topLevelClass: IrClass, var assertionsDisabledField: IrField? = null)
 
     override fun lower(irFile: IrFile) {
         // In legacy mode we treat assertions as inline function calls
@@ -101,23 +100,12 @@ private class AssertionLowering(private val context: JvmBackendContext) :
 
     private fun IrBuilderWithScope.checkAssertion(assertCondition: IrExpression, lambdaArgument: IrExpression?) =
         irBlock {
-            val lambda = lambdaArgument?.asSimpleLambda()
-            val invokeVar = if (lambda == null && lambdaArgument != null) irTemporary(lambdaArgument) else null
-
+            val generator = lambdaArgument?.asInlinable(this)
             val constructor = this@AssertionLowering.context.ir.symbols.assertionErrorConstructor
             val throwError = irThrow(irCall(constructor).apply {
-                putValueArgument(
-                    0,
-                    when {
-                        lambda != null -> lambda.inline(parent)
-                        lambdaArgument != null -> {
-                            val invoke =
-                                lambdaArgument.type.getClass()!!.functions.single { it.name == OperatorNameConventions.INVOKE }
-                            irCallOp(invoke.symbol, invoke.returnType, irGet(invokeVar!!))
-                        }
-                        else -> irString("Assertion failed")
-                    }
-                )
+                val message = generator?.inline(parent)?.patchDeclarationParents(scope.getLocalDeclarationParent())
+                    ?: irString("Assertion failed")
+                putValueArgument(0, message)
             })
             +irIfThen(irNot(assertCondition), throwError)
         }
@@ -145,11 +133,11 @@ fun IrClass.buildAssertionsDisabledField(backendContext: JvmBackendContext, topL
         type = backendContext.irBuiltIns.booleanType
         isFinal = true
         isStatic = true
-    }.apply {
-        parent = this@buildAssertionsDisabledField
-        initializer = backendContext.createIrBuilder(this@buildAssertionsDisabledField.symbol).run {
-            at(this@apply)
-            irExprBody(irNot(irCall(backendContext.ir.symbols.desiredAssertionStatus).apply {
+    }.also { field ->
+        field.parent = this
+        field.initializer = backendContext.createJvmIrBuilder(this.symbol).run {
+            at(field)
+            irExprBody(irNot(irCall(irSymbols.desiredAssertionStatus).apply {
                 dispatchReceiver = getJavaClass(backendContext, topLevelClass)
             }))
         }

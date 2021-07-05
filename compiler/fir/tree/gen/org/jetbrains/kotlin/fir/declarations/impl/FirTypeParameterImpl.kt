@@ -1,11 +1,11 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
 package org.jetbrains.kotlin.fir.declarations.impl
 
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.FirModuleData
 import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationAttributes
 import org.jetbrains.kotlin.fir.declarations.FirDeclarationOrigin
@@ -25,9 +25,10 @@ import org.jetbrains.kotlin.fir.visitors.*
 
 internal class FirTypeParameterImpl(
     override val source: FirSourceElement?,
-    override val session: FirSession,
+    override val moduleData: FirModuleData,
     override var resolvePhase: FirResolvePhase,
     override val origin: FirDeclarationOrigin,
+    override val attributes: FirDeclarationAttributes,
     override val name: Name,
     override val symbol: FirTypeParameterSymbol,
     override val variance: Variance,
@@ -35,8 +36,6 @@ internal class FirTypeParameterImpl(
     override val bounds: MutableList<FirTypeRef>,
     override val annotations: MutableList<FirAnnotationCall>,
 ) : FirTypeParameter() {
-    override val attributes: FirDeclarationAttributes = FirDeclarationAttributes()
-
     init {
         symbol.bind(this)
     }

@@ -26,7 +26,6 @@ import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.hasExpectModifier
 import org.jetbrains.kotlin.psi.psiUtil.hasSuspendModifier
-import org.jetbrains.kotlin.psi.psiUtil.isPrivate
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.descriptorUtil.isPublishedApi
@@ -58,11 +57,12 @@ internal class UltraLightMembersCreator(
         usedPropertyNames: HashSet<String>,
         forceStatic: Boolean
     ): KtLightField? {
-        val property = variable as? KtProperty
-        if (property != null && !hasBackingField(property)) return null
+
+        if (!hasBackingField(variable)) return null
 
         if (variable.hasAnnotation(JVM_SYNTHETIC_ANNOTATION_FQ_NAME) || variable.hasExpectModifier()) return null
 
+        val property = variable as? KtProperty
         val hasDelegate = property?.hasDelegate() == true
         val fieldName = generateUniqueFieldName((variable.name ?: "") + (if (hasDelegate) "\$delegate" else ""), usedPropertyNames)
 
@@ -93,9 +93,11 @@ internal class UltraLightMembersCreator(
         return KtUltraLightFieldForSourceDeclaration(variable, fieldName, containingClass, support, modifiers)
     }
 
-    private fun hasBackingField(property: KtProperty): Boolean {
+    private fun hasBackingField(property: KtCallableDeclaration): Boolean {
         if (property.hasModifier(ABSTRACT_KEYWORD)) return false
-        if (property.hasModifier(LATEINIT_KEYWORD) || property.accessors.isEmpty()) return true
+        if (property.hasModifier(LATEINIT_KEYWORD)) return true
+        if (property is KtParameter) return true
+        if ((property as? KtProperty)?.accessors?.isEmpty() == true) return true
 
         val context = LightClassGenerationSupport.getInstance(containingClass.project).analyze(property)
         val descriptor = context.get(BindingContext.DECLARATION_TO_DESCRIPTOR, property)
@@ -112,11 +114,6 @@ internal class UltraLightMembersCreator(
             || ktFunction.hasReifiedParameters()
             || ktFunction.hasAnnotation(JVM_SYNTHETIC_ANNOTATION_FQ_NAME)
         ) return emptyList()
-
-
-        if (ktFunction.modifierList?.hasSuspendModifier() == true && ktFunction.isPrivate()) {
-            return emptyList()
-        }
 
         var methodIndex = METHOD_INDEX_BASE
         val basicMethod = asJavaMethod(ktFunction, forceStatic, forcePrivate, methodIndex = methodIndex)
@@ -237,10 +234,10 @@ internal class UltraLightMembersCreator(
         ) return PsiType.VOID
 
         val desc =
-            ktDeclaration.resolve()?.getterIfProperty() as? FunctionDescriptor
+            ktDeclaration.resolve()?.getterIfProperty() as? CallableDescriptor
                 ?: return PsiType.NULL
 
-        return support.mapType(wrapper) { typeMapper, signatureWriter ->
+        return support.mapType(desc.returnType, wrapper) { typeMapper, signatureWriter ->
             typeMapper.mapReturnType(desc, signatureWriter)
         }
     }
@@ -402,7 +399,8 @@ internal class UltraLightMembersCreator(
         mutable: Boolean,
         forceStatic: Boolean,
         onlyJvmStatic: Boolean,
-        createAsAnnotationMethod: Boolean = false
+        createAsAnnotationMethod: Boolean = false,
+        isJvmRecord: Boolean = false,
     ): List<KtLightMethod> {
 
         val propertyName = declaration.name ?: return emptyList()
@@ -418,17 +416,17 @@ internal class UltraLightMembersCreator(
         if (isPrivate && declaration !is KtProperty) return emptyList()
 
         fun needsAccessor(accessor: KtPropertyAccessor?, type: MethodType): Boolean {
-
             if (onlyJvmStatic && !declaration.isJvmStatic(support) && !(accessor != null && accessor.isJvmStatic(support)))
                 return false
 
             if (declaration is KtProperty && declaration.hasDelegate())
                 return true
 
-            if (accessor?.hasModifier(PRIVATE_KEYWORD) == true || accessor?.hasAnnotation(JVM_SYNTHETIC_ANNOTATION_FQ_NAME) == true)
-                return false
-
-            if (isPrivate && accessor?.hasBody() != true) return false
+            if (accessor?.hasBody() != true &&
+                (accessor?.hasModifier(PRIVATE_KEYWORD) == true ||
+                        accessor?.hasAnnotation(JVM_SYNTHETIC_ANNOTATION_FQ_NAME) == true ||
+                        isPrivate)
+            ) return false
 
             if (!declaration.hasAnnotation(JVM_SYNTHETIC_ANNOTATION_FQ_NAME)) return true
 
@@ -451,7 +449,7 @@ internal class UltraLightMembersCreator(
                 auxiliaryOriginalElement = auxiliaryOrigin
             )
 
-            val defaultGetterName = if (createAsAnnotationMethod) propertyName else JvmAbi.getterName(propertyName)
+            val defaultGetterName = if (createAsAnnotationMethod || isJvmRecord) propertyName else JvmAbi.getterName(propertyName)
             val getterName = computeMethodName(auxiliaryOrigin, defaultGetterName, MethodType.GETTER)
             val getterPrototype = lightMethod(getterName, auxiliaryOrigin, forceStatic = onlyJvmStatic || forceStatic)
             val getterWrapper = KtUltraLightMethodForSourceDeclaration(

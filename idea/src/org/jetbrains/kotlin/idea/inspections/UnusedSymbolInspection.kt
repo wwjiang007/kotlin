@@ -1,5 +1,5 @@
 /*
- * Copyright 2000-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -16,7 +16,6 @@ import com.intellij.codeInspection.ex.EntryPointsManagerBase
 import com.intellij.codeInspection.ex.EntryPointsManagerImpl
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiClass
@@ -38,6 +37,7 @@ import org.jetbrains.kotlin.asJava.classes.KtLightClass
 import org.jetbrains.kotlin.asJava.toLightClass
 import org.jetbrains.kotlin.asJava.toLightMethods
 import org.jetbrains.kotlin.config.AnalysisFlags
+import org.jetbrains.kotlin.config.ExplicitApiMode
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.idea.KotlinBundle
 import org.jetbrains.kotlin.idea.caches.project.implementingDescriptors
@@ -62,12 +62,10 @@ import org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinReferencesSearchOpt
 import org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinReferencesSearchParameters
 import org.jetbrains.kotlin.idea.search.isCheapEnoughToSearchConsideringOperators
 import org.jetbrains.kotlin.idea.search.projectScope
-import org.jetbrains.kotlin.idea.search.usagesSearch.getAccessorNames
 import org.jetbrains.kotlin.idea.search.usagesSearch.getClassNameForCompanionObject
 import org.jetbrains.kotlin.idea.search.usagesSearch.isDataClassProperty
 import org.jetbrains.kotlin.idea.stubindex.KotlinSourceFilterScope
 import org.jetbrains.kotlin.idea.util.ProjectRootsUtil
-import org.jetbrains.kotlin.idea.util.application.isUnitTestMode
 import org.jetbrains.kotlin.idea.util.hasActualsFor
 import org.jetbrains.kotlin.js.resolve.diagnostics.findPsi
 import org.jetbrains.kotlin.lexer.KtTokens
@@ -78,7 +76,10 @@ import org.jetbrains.kotlin.psi.psiUtil.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.bindingContextUtil.isUsedAsExpression
+import org.jetbrains.kotlin.resolve.checkers.explicitApiEnabled
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
+import org.jetbrains.kotlin.resolve.descriptorUtil.isEffectivelyPublicApi
+import org.jetbrains.kotlin.resolve.isInlineClass
 import org.jetbrains.kotlin.resolve.isInlineClassType
 import org.jetbrains.kotlin.resolve.lazy.BodyResolveMode
 import org.jetbrains.kotlin.util.findCallableMemberBySignature
@@ -91,10 +92,6 @@ import javax.swing.JPanel
 
 class UnusedSymbolInspection : AbstractKotlinInspection() {
     companion object {
-        private val log = Logger.getInstance(
-            UnusedSymbolInspection::class.java
-        )
-
         private val javaInspection = UnusedDeclarationInspection()
 
         private val KOTLIN_ADDITIONAL_ANNOTATIONS = listOf("kotlin.test.*", "kotlin.js.JsExport")
@@ -118,7 +115,7 @@ class UnusedSymbolInspection : AbstractKotlinInspection() {
             // that is not an actual entry point from Java language point of view
             if (declaration.isMainFunction()) return true
 
-            val lightElement: PsiElement? = when (declaration) {
+            val lightElement: PsiElement = when (declaration) {
                 is KtClassOrObject -> declaration.toLightClass()
                 is KtNamedFunction, is KtSecondaryConstructor -> LightClassUtil.getLightClassMethod(declaration as KtFunction)
                 is KtProperty, is KtParameter -> {
@@ -131,9 +128,7 @@ class UnusedSymbolInspection : AbstractKotlinInspection() {
                     )
                 }
                 else -> return false
-            }
-
-            if (lightElement == null) return false
+            } ?: return false
 
             if (isCheapEnough.value == TOO_MANY_OCCURRENCES) return false
 
@@ -155,7 +150,9 @@ class UnusedSymbolInspection : AbstractKotlinInspection() {
             val useScope = psiSearchHelper.getUseScope(declaration)
             if (useScope is GlobalSearchScope) {
                 var zeroOccurrences = true
-                for (name in listOf(declaration.name) + declarationAccessorNames(declaration) + listOfNotNull(declaration.getClassNameForCompanionObject())) {
+                val list = listOf(declaration.name) + declarationAccessorNames(declaration) +
+                        listOfNotNull(declaration.getClassNameForCompanionObject())
+                for (name in list) {
                     if (name == null) continue
                     when (psiSearchHelper.isCheapEnoughToSearchConsideringOperators(name, useScope, null, null)) {
                         ZERO_OCCURRENCES -> {
@@ -170,23 +167,21 @@ class UnusedSymbolInspection : AbstractKotlinInspection() {
             return FEW_OCCURRENCES
         }
 
-        fun declarationAccessorNames(declaration: KtNamedDeclaration): List<String> {
-            val accessors =
-                when (declaration) {
-                    is KtProperty -> listOfPropertyAccessorNames(declaration)
-                    is KtParameter -> listOfParameterAccessorNames(declaration)
-                    else -> emptyList()
-                }
-            if (log.isDebugEnabled && !isUnitTestMode()) {
-                val resolverAccessors = declaration.getAccessorNames()
-                if (accessors != resolverAccessors)
-                    log.error(
-                        "Accessor names for declaration ${declaration.text} differs: " +
-                                "$accessors vs $resolverAccessors in ${declaration.containingFile.name}"
-                    )
+        /**
+         * returns list of declaration accessor names e.g. pair of getter/setter for property declaration
+         *
+         * note: could be more than declaration.getAccessorNames()
+         * as declaration.getAccessorNames() relies on LightClasses and therefore some of them could be not available
+         * (as not accessible outside of class)
+         *
+         * e.g.: private setter w/o body is not visible outside of class and could not be used
+         */
+        private fun declarationAccessorNames(declaration: KtNamedDeclaration): List<String> =
+            when (declaration) {
+                is KtProperty -> listOfPropertyAccessorNames(declaration)
+                is KtParameter -> listOfParameterAccessorNames(declaration)
+                else -> emptyList()
             }
-            return accessors
-        }
 
         fun listOfParameterAccessorNames(parameter: KtParameter): List<String> {
             val accessors = mutableListOf<String>()
@@ -274,6 +269,10 @@ class UnusedSymbolInspection : AbstractKotlinInspection() {
 
             // More expensive, resolve-based checks
             val descriptor = declaration.resolveToDescriptorIfAny() ?: return
+            if (declaration.languageVersionSettings.explicitApiEnabled
+                && (descriptor as? DeclarationDescriptorWithVisibility)?.isEffectivelyPublicApi == true) {
+                return
+            }
             if (descriptor is FunctionDescriptor && descriptor.isOperator) return
             val isCheapEnough = lazy(LazyThreadSafetyMode.NONE) {
                 isCheapEnoughToSearchUsages(declaration)
@@ -332,7 +331,11 @@ class UnusedSymbolInspection : AbstractKotlinInspection() {
         return hasNonTrivialUsages(declaration, isCheapEnough, descriptor)
     }
 
-    private fun hasNonTrivialUsages(declaration: KtNamedDeclaration, enoughToSearchUsages: Lazy<SearchCostResult>, descriptor: DeclarationDescriptor? = null): Boolean {
+    private fun hasNonTrivialUsages(
+        declaration: KtNamedDeclaration,
+        enoughToSearchUsages: Lazy<SearchCostResult>,
+        descriptor: DeclarationDescriptor? = null
+    ): Boolean {
         val project = declaration.project
         val psiSearchHelper = PsiSearchHelper.getInstance(project)
 
@@ -518,7 +521,7 @@ class UnusedSymbolInspection : AbstractKotlinInspection() {
         return when {
             descriptor is ConstructorDescriptor -> {
                 val classDescriptor = descriptor.constructedClass
-                !classDescriptor.isInline && classDescriptor.visibility != DescriptorVisibilities.LOCAL
+                !classDescriptor.isInlineClass() && classDescriptor.visibility != DescriptorVisibilities.LOCAL
             }
             hasModifier(KtTokens.INTERNAL_KEYWORD) -> false
             descriptor !is FunctionDescriptor -> true

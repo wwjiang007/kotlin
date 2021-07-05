@@ -34,10 +34,7 @@ import org.jetbrains.kotlin.checkers.diagnostics.factories.SyntaxErrorDiagnostic
 import org.jetbrains.kotlin.checkers.utils.CheckerTestUtil
 import org.jetbrains.kotlin.checkers.utils.DiagnosticsRenderingConfiguration
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
-import org.jetbrains.kotlin.config.JvmTarget
-import org.jetbrains.kotlin.config.LanguageFeature
-import org.jetbrains.kotlin.config.LanguageVersionSettings
-import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
+import org.jetbrains.kotlin.config.*
 import org.jetbrains.kotlin.descriptors.DeclarationDescriptor
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
 import org.jetbrains.kotlin.diagnostics.*
@@ -55,7 +52,7 @@ import org.jetbrains.kotlin.resolve.calls.smartcasts.DataFlowValueFactoryImpl
 import org.jetbrains.kotlin.test.Directives
 import org.jetbrains.kotlin.test.InTextDirectivesUtils.isDirectiveDefined
 import org.jetbrains.kotlin.test.KotlinBaseTest
-import org.jetbrains.kotlin.test.KotlinTestUtils
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import org.jetbrains.kotlin.utils.addIfNotNull
 import org.junit.Assert
 import java.io.File
@@ -86,12 +83,15 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
     override fun createTestFile(module: TestModule?, fileName: String, text: String, directives: Directives): TestFile =
         TestFile(module, fileName, text, directives)
 
-
-    override fun doMultiFileTest(
+    fun doMultiFileTest(
         wholeFile: File,
-        files: List<TestFile>
+        files: List<TestFile>,
+        additionalClasspath: File? = null,
+        usePsiClassFilesReading: Boolean = true,
+        excludeNonTypeUseJetbrainsAnnotations: Boolean = false
     ) {
-        environment = createEnvironment(wholeFile, files)
+        environment =
+            createEnvironment(wholeFile, files, additionalClasspath, usePsiClassFilesReading, excludeNonTypeUseJetbrainsAnnotations)
         //after environment initialization cause of `tearDown` logic, maybe it's obsolete
         if (shouldSkipTest(wholeFile, files)) {
             println("${wholeFile.name} test is skipped")
@@ -99,6 +99,10 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
         }
         setupEnvironment(environment)
         analyzeAndCheck(wholeFile, files)
+    }
+
+    override fun doMultiFileTest(wholeFile: File, files: List<TestFile>) {
+        doMultiFileTest(wholeFile, files, null)
     }
 
     protected open fun shouldSkipTest(wholeFile: File, files: List<TestFile>): Boolean = false
@@ -117,12 +121,24 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
 
         if (includeExtras) {
             if (declareFlexibleType) {
-                ktFiles.add(KotlinTestUtils.createFile("EXPLICIT_FLEXIBLE_TYPES.kt", EXPLICIT_FLEXIBLE_TYPES_DECLARATIONS, project))
+                ktFiles.add(
+                    KtTestUtil.createFile(
+                        "EXPLICIT_FLEXIBLE_TYPES.kt",
+                        EXPLICIT_FLEXIBLE_TYPES_DECLARATIONS,
+                        project
+                    )
+                )
             }
             if (declareCheckType) {
                 val checkTypeDeclarations = File("$HELPERS_PATH/types/checkType.kt").readText()
 
-                ktFiles.add(KotlinTestUtils.createFile("CHECK_TYPE.kt", checkTypeDeclarations, project))
+                ktFiles.add(
+                    KtTestUtil.createFile(
+                        "CHECK_TYPE.kt",
+                        checkTypeDeclarations,
+                        project
+                    )
+                )
             }
         }
 
@@ -189,9 +205,6 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
         private val imports: String
             get() = buildString {
                 // Line separator is "\n" intentionally here (see DocumentImpl.assertValidSeparators)
-                if (declareCheckType) {
-                    append(CHECK_TYPE_IMPORT + "\n")
-                }
                 if (declareFlexibleType) {
                     append(EXPLICIT_FLEXIBLE_TYPES_IMPORT + "\n")
                 }
@@ -265,6 +278,8 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
                     platform = null,
                     withNewInference,
                     languageVersionSettings,
+                    // When using JVM IR, binding context is empty at the end of compilation, so debug info markers can't be computed.
+                    environment.configuration.getBoolean(JVMConfigurationKeys.IR),
                 ),
                 DataFlowValueFactoryImpl(languageVersionSettings),
                 moduleDescriptor,
@@ -272,6 +287,18 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
             )
             val filteredDiagnostics = ContainerUtil.filter(diagnostics + jvmSignatureDiagnostics) {
                 whatDiagnosticsToConsider.value(it.diagnostic)
+            }
+
+            filteredDiagnostics.map { it.diagnostic }.forEach { diagnostic ->
+                val diagnosticElementTextRange = diagnostic.psiElement.textRange
+                diagnostic.textRanges.forEach {
+                    check(diagnosticElementTextRange.contains(it)) {
+                        "Annotation API violation:" +
+                                " diagnostic text range $it has to be in range of" +
+                                " diagnostic element ${diagnostic.psiElement} '${diagnostic.psiElement.text}'" +
+                                " (factory ${diagnostic.factory.name}): $diagnosticElementTextRange"
+                    }
+                }
             }
 
             actualDiagnostics.addAll(filteredDiagnostics)
@@ -388,8 +415,6 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
         )
 
         val CHECK_TYPE_DIRECTIVE = "CHECK_TYPE"
-        val CHECK_TYPE_PACKAGE = "tests._checkType"
-        val CHECK_TYPE_IMPORT = "import $CHECK_TYPE_PACKAGE.*"
 
         val EXPLICIT_FLEXIBLE_TYPES_DIRECTIVE = "EXPLICIT_FLEXIBLE_TYPES"
         val EXPLICIT_FLEXIBLE_PACKAGE = InternalFlexibleTypeTransformer.FLEXIBLE_TYPE_CLASSIFIER.packageFqName.asString()
@@ -511,7 +536,7 @@ abstract class BaseDiagnosticsTest : KotlinMultiFileTestWithJava<TestModule, Tes
     private fun parseJvmTarget(directiveMap: Directives) = directiveMap[JVM_TARGET]?.let { JvmTarget.fromString(it) }
 
     protected fun parseModulePlatformByName(moduleName: String): TargetPlatform? {
-        val nameSuffix = moduleName.substringAfterLast("-", "").toUpperCase()
+        val nameSuffix = moduleName.substringAfterLast("-", "").uppercase()
         return when {
             nameSuffix == "COMMON" -> CommonPlatforms.defaultCommonPlatform
             nameSuffix == "JVM" -> JvmPlatforms.unspecifiedJvmPlatform // TODO(dsavvinov): determine JvmTarget precisely

@@ -17,10 +17,7 @@ import org.jetbrains.kotlin.ir.declarations.IrVariable
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
-import org.jetbrains.kotlin.ir.types.IrType
-import org.jetbrains.kotlin.ir.types.defaultType
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
-import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 
 internal enum class ProgressionDirection {
     DECREASING {
@@ -67,10 +64,10 @@ internal sealed class NumericHeaderInfo(
     val first: IrExpression,
     val last: IrExpression,
     val step: IrExpression,
+    val isLastInclusive: Boolean,
     val canCacheLast: Boolean,
     val isReversed: Boolean,
-    val direction: ProgressionDirection,
-    val additionalNotEmptyCondition: IrExpression?
+    val direction: ProgressionDirection
 ) : HeaderInfo()
 
 /** Information about a for-loop over a progression. */
@@ -79,17 +76,16 @@ internal class ProgressionHeaderInfo(
     first: IrExpression,
     last: IrExpression,
     step: IrExpression,
+    isLastInclusive: Boolean = true,
     isReversed: Boolean = false,
     canOverflow: Boolean? = null,
     direction: ProgressionDirection,
-    additionalNotEmptyCondition: IrExpression? = null,
     val additionalStatements: List<IrStatement> = listOf()
 ) : NumericHeaderInfo(
-    progressionType, first, last, step,
+    progressionType, first, last, step, isLastInclusive,
     canCacheLast = true,
     isReversed = isReversed,
-    direction = direction,
-    additionalNotEmptyCondition = additionalNotEmptyCondition
+    direction = direction
 ) {
 
     val canOverflow: Boolean by lazy {
@@ -152,16 +148,21 @@ internal class ProgressionHeaderInfo(
         }
     }
 
-    override fun asReversed() = ProgressionHeaderInfo(
-        progressionType = progressionType,
-        first = last,
-        last = first,
-        step = step.negate(),
-        isReversed = !isReversed,
-        direction = direction.asReversed(),
-        additionalNotEmptyCondition = additionalNotEmptyCondition,
-        additionalStatements = additionalStatements
-    )
+    override fun asReversed() = if (isLastInclusive) {
+        ProgressionHeaderInfo(
+            progressionType = progressionType,
+            first = last,
+            last = first,
+            step = step.negate(),
+            isReversed = !isReversed,
+            direction = direction.asReversed(),
+            additionalStatements = additionalStatements
+        )
+    } else {
+        // If reversed, we would have a "first-exclusive" loop. We are currently not supporting this since it would add more complexity
+        // due to possible overflow when pre-incrementing the loop variable (see KT-42533).
+        null
+    }
 }
 
 /**
@@ -177,14 +178,11 @@ internal class IndexedGetHeaderInfo(
     val objectVariable: IrVariable,
     val expressionHandler: IndexedGetIterationHandler
 ) : NumericHeaderInfo(
-    IntProgressionType(symbols),
-    first,
-    last,
-    step,
+    IntProgressionType(symbols), first, last, step,
+    isLastInclusive = false,
     canCacheLast = canCacheLast,
     isReversed = false,
-    direction = ProgressionDirection.INCREASING,
-    additionalNotEmptyCondition = null
+    direction = ProgressionDirection.INCREASING
 ) {
     // Technically one can easily iterate over an array in reverse by swapping first/last and
     // negating the step. However, Array.reversed() and Array.reversedArray() return a collection
@@ -283,21 +281,21 @@ internal abstract class HeaderInfoBuilder(
     override fun visitCall(expression: IrCall, data: IrCall?): HeaderInfo? {
         // Return the HeaderInfo from the first successful match.
         // First, try to match a `reversed()` or `withIndex()` call.
-        val callHeaderInfo = callHandlers.firstNotNullResult { it.handle(expression, data, null, scopeOwnerSymbol()) }
+        val callHeaderInfo = callHandlers.firstNotNullOfOrNull { it.handle(expression, data, null, scopeOwnerSymbol()) }
         if (callHeaderInfo != null)
             return callHeaderInfo
 
         // Try to match a call to build a progression (e.g., `.indices`, `downTo`).
         val progressionType = ProgressionType.fromIrType(expression.type, symbols, allowUnsignedBounds)
         val progressionHeaderInfo =
-            progressionType?.run { progressionHandlers.firstNotNullResult { it.handle(expression, data, this, scopeOwnerSymbol()) } }
+            progressionType?.run { progressionHandlers.firstNotNullOfOrNull { it.handle(expression, data, this, scopeOwnerSymbol()) } }
 
         return progressionHeaderInfo ?: super.visitCall(expression, data)
     }
 
     /** Builds a [HeaderInfo] for iterable expressions not handled in [visitCall]. */
     override fun visitExpression(expression: IrExpression, data: IrCall?): HeaderInfo? {
-        return expressionHandlers.firstNotNullResult { it.handle(expression, data, null, scopeOwnerSymbol()) }
+        return expressionHandlers.firstNotNullOfOrNull { it.handle(expression, data, null, scopeOwnerSymbol()) }
             ?: super.visitExpression(expression, data)
     }
 }
@@ -349,6 +347,3 @@ internal class NestedHeaderInfoBuilderForWithIndex(context: CommonBackendContext
         DefaultSequenceHandler(context),
     )
 }
-
-internal val Symbols<*>.progressionElementTypes: Collection<IrType>
-    get() = listOfNotNull(byte, short, int, long, char, uByte, uShort, uInt, uLong).map { it.defaultType }

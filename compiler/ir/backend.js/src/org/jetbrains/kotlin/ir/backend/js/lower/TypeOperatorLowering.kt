@@ -6,15 +6,15 @@
 package org.jetbrains.kotlin.ir.backend.js.lower
 
 import org.jetbrains.kotlin.backend.common.BodyLoweringPass
+import org.jetbrains.kotlin.backend.common.ir.isPure
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.backend.js.JsIrBackendContext
 import org.jetbrains.kotlin.ir.backend.js.ir.JsIrArithBuilder
 import org.jetbrains.kotlin.ir.backend.js.ir.JsIrBuilder
-import org.jetbrains.kotlin.ir.backend.js.utils.isPure
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
-import org.jetbrains.kotlin.ir.declarations.IrDeclarationParent
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationBase
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationParent
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrCompositeImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
@@ -47,6 +47,7 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
     private val isInterfaceSymbol get() = context.intrinsics.isInterfaceSymbol
     private val isArraySymbol get() = context.intrinsics.isArraySymbol
     private val isSuspendFunctionSymbol = context.intrinsics.isSuspendFunctionSymbol
+
     //    private val isCharSymbol get() = context.intrinsics.isCharSymbol
     private val isObjectSymbol get() = context.intrinsics.isObjectSymbol
 
@@ -62,6 +63,8 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
     private val litTrue: IrExpression get() = JsIrBuilder.buildBoolean(context.irBuiltIns.booleanType, true)
     private val litFalse: IrExpression get() = JsIrBuilder.buildBoolean(context.irBuiltIns.booleanType, false)
     private val litNull: IrExpression get() = JsIrBuilder.buildNull(context.irBuiltIns.nothingNType)
+
+    private val icUtils = context.inlineClassesUtils
 
     override fun lower(irBody: IrBody, container: IrDeclaration) {
         irBody.transformChildren(object : IrElementTransformer<IrDeclarationParent> {
@@ -101,7 +104,7 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
             }
 
             private fun needBoxingOrUnboxing(fromType: IrType, toType: IrType): Boolean {
-                return ((fromType.getInlinedClass() != null) xor (toType.getInlinedClass() != null)) || (fromType.isUnit() && !toType.isUnit())
+                return ((icUtils.getInlinedClass(fromType) != null) xor (icUtils.getInlinedClass(toType) != null)) || (fromType.isUnit() && !toType.isUnit())
             }
 
             private fun IrTypeOperatorCall.wrapWithUnsafeCast(arg: IrExpression): IrExpression {
@@ -267,8 +270,9 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
                 // assert(!typeParameter.isReified) { "reified parameters have to be lowered before" }
 
                 return typeParameter.superTypes.fold<IrType, IrExpression?>(null) { r, t ->
-                    require(argument is IrExpressionWithCopy) { "Not a copyable expression: ${argument.render()}" }
-                    val check = generateTypeCheckNonNull(argument.copy(), t.makeNotNull())
+                    val copy = argument.shallowCopyOrNull()
+                        ?: argument.deepCopyWithSymbols()
+                    val check = generateTypeCheckNonNull(copy, t.makeNotNull())
 
                     if (r == null) {
                         check
@@ -355,7 +359,7 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
                 val toType = expression.typeOperand
 
                 fun maskOp(arg: IrExpression, mask: IrExpression, shift: IrConst<*>) = calculator.run {
-                    shr(shl(and(arg, mask), shift), shift.copy())
+                    shr(shl(and(arg, mask), shift), shift.shallowCopy())
                 }
 
                 val newStatements = mutableListOf<IrStatement>()

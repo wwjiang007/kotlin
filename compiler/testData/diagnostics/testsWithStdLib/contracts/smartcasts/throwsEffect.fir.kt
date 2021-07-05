@@ -26,7 +26,7 @@ fun testSpilling(x: Any?) {
         myAssert(x is String)
         x.length
     }
-    x.<!UNRESOLVED_REFERENCE!>length<!>
+    x<!UNSAFE_CALL!>.<!>length
 }
 
 fun testAssertInIf(x: Any?) {
@@ -45,7 +45,7 @@ fun testTryCatch(x: Any?) {
     } catch (e: kotlin.IllegalArgumentException) {
 
     }
-    x.length
+    x.<!UNRESOLVED_REFERENCE!>length<!>
 }
 
 fun testUncertainFlow(x: Any?) {

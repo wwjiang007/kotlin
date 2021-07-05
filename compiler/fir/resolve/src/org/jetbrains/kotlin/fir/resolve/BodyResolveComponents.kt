@@ -10,55 +10,58 @@ import kotlinx.collections.immutable.persistentListOf
 import org.jetbrains.kotlin.fir.FirCallResolver
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.expressions.FirCallableReferenceAccess
+import org.jetbrains.kotlin.fir.resolve.FirTowerDataMode.*
 import org.jetbrains.kotlin.fir.resolve.calls.ImplicitDispatchReceiverValue
 import org.jetbrains.kotlin.fir.resolve.calls.ImplicitExtensionReceiverValue
 import org.jetbrains.kotlin.fir.resolve.calls.ImplicitReceiverValue
 import org.jetbrains.kotlin.fir.resolve.calls.ResolutionStageRunner
 import org.jetbrains.kotlin.fir.resolve.dfa.FirDataFlowAnalyzer
 import org.jetbrains.kotlin.fir.resolve.inference.FirCallCompleter
-import org.jetbrains.kotlin.fir.resolve.inference.InferenceComponents
 import org.jetbrains.kotlin.fir.resolve.providers.FirSymbolProvider
 import org.jetbrains.kotlin.fir.resolve.transformers.FirSyntheticCallGenerator
-import org.jetbrains.kotlin.fir.resolve.transformers.IntegerLiteralTypeApproximationTransformer
-import org.jetbrains.kotlin.fir.resolve.transformers.IntegerOperatorsTypeUpdater
 import org.jetbrains.kotlin.fir.resolve.transformers.ReturnTypeCalculator
 import org.jetbrains.kotlin.fir.scopes.FirScope
 import org.jetbrains.kotlin.fir.scopes.impl.FirLocalScope
+import org.jetbrains.kotlin.fir.scopes.impl.wrapNestedClassifierScopeWithSubstitutionForSuperType
 import org.jetbrains.kotlin.fir.symbols.impl.FirAnonymousFunctionSymbol
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.utils.addIfNotNull
+import java.util.*
 
 interface SessionHolder {
     val session: FirSession
     val scopeSession: ScopeSession
 }
 
-interface BodyResolveComponents : SessionHolder {
-    val returnTypeCalculator: ReturnTypeCalculator
-    val implicitReceiverStack: ImplicitReceiverStack
-    val containingDeclarations: List<FirDeclaration>
-    val fileImportsScope: List<FirScope>
-    val towerDataElements: List<FirTowerDataElement>
-    val towerDataContext: FirTowerDataContext
-    val localScopes: FirLocalScopes
-    val towerDataContextForAnonymousFunctions: TowerDataContextForAnonymousFunctions
-    val noExpectedType: FirTypeRef
-    val symbolProvider: FirSymbolProvider
-    val file: FirFile
-    val container: FirDeclaration
-    val inferenceComponents: InferenceComponents
-    val resolutionStageRunner: ResolutionStageRunner
-    val samResolver: FirSamResolver
-    val callResolver: FirCallResolver
-    val callCompleter: FirCallCompleter
-    val doubleColonExpressionResolver: FirDoubleColonExpressionResolver
-    val syntheticCallGenerator: FirSyntheticCallGenerator
-    val dataFlowAnalyzer: FirDataFlowAnalyzer<*>
-    val integerLiteralTypeApproximator: IntegerLiteralTypeApproximationTransformer
-    val integerOperatorsTypeUpdater: IntegerOperatorsTypeUpdater
-    val outerClassManager: FirOuterClassManager
+data class SessionHolderImpl(override val session: FirSession, override val scopeSession: ScopeSession) : SessionHolder {
+    companion object {
+        fun createWithEmptyScopeSession(session: FirSession): SessionHolderImpl = SessionHolderImpl(session, ScopeSession())
+    }
+}
+
+abstract class BodyResolveComponents : SessionHolder {
+    abstract val returnTypeCalculator: ReturnTypeCalculator
+    abstract val implicitReceiverStack: ImplicitReceiverStack
+    abstract val containingDeclarations: List<FirDeclaration>
+    abstract val fileImportsScope: List<FirScope>
+    abstract val towerDataElements: List<FirTowerDataElement>
+    abstract val towerDataContext: FirTowerDataContext
+    abstract val localScopes: FirLocalScopes
+    abstract val noExpectedType: FirTypeRef
+    abstract val symbolProvider: FirSymbolProvider
+    abstract val file: FirFile
+    abstract val container: FirDeclaration
+    abstract val resolutionStageRunner: ResolutionStageRunner
+    abstract val samResolver: FirSamResolver
+    abstract val callResolver: FirCallResolver
+    abstract val callCompleter: FirCallCompleter
+    abstract val doubleColonExpressionResolver: FirDoubleColonExpressionResolver
+    abstract val syntheticCallGenerator: FirSyntheticCallGenerator
+    abstract val dataFlowAnalyzer: FirDataFlowAnalyzer<*>
+    abstract val outerClassManager: FirOuterClassManager
 }
 
 typealias FirLocalScopes = PersistentList<FirLocalScope>
@@ -144,13 +147,63 @@ fun ImplicitReceiverValue<*>.asTowerDataElement(): FirTowerDataElement =
 fun FirScope.asTowerDataElement(isLocal: Boolean): FirTowerDataElement =
     FirTowerDataElement(this, implicitReceiver = null, isLocal)
 
-typealias TowerDataContextForAnonymousFunctions = Map<FirAnonymousFunctionSymbol, FirTowerDataContext>
+enum class FirTowerDataMode {
+    MEMBER_DECLARATION,
+    NESTED_CLASS,
+    COMPANION_OBJECT,
+    CONSTRUCTOR_HEADER,
+    ENUM_ENTRY,
+    SPECIAL,
+}
 
 class FirTowerDataContextsForClassParts(
-    val forNestedClasses: FirTowerDataContext,
-    val forConstructorHeaders: FirTowerDataContext,
-    val primaryConstructorParametersScope: FirLocalScope?,
-)
+    forMemberDeclarations: FirTowerDataContext,
+    forNestedClasses: FirTowerDataContext? = null,
+    forCompanionObject: FirTowerDataContext? = null,
+    forConstructorHeaders: FirTowerDataContext? = null,
+    forEnumEntries: FirTowerDataContext? = null,
+    val primaryConstructorPureParametersScope: FirLocalScope? = null,
+    val primaryConstructorAllParametersScope: FirLocalScope? = null,
+) {
+    private val modeMap = EnumMap<FirTowerDataMode, FirTowerDataContext>(FirTowerDataMode::class.java)
+
+    init {
+        modeMap[MEMBER_DECLARATION] = forMemberDeclarations
+        modeMap[NESTED_CLASS] = forNestedClasses
+        modeMap[COMPANION_OBJECT] = forCompanionObject
+        modeMap[CONSTRUCTOR_HEADER] = forConstructorHeaders
+        modeMap[ENUM_ENTRY] = forEnumEntries
+    }
+
+    var mode: FirTowerDataMode = MEMBER_DECLARATION
+
+    val forMemberDeclaration: FirTowerDataContext get() = modeMap.getValue(MEMBER_DECLARATION)
+
+    val towerDataContextForAnonymousFunctions: MutableMap<FirAnonymousFunctionSymbol, FirTowerDataContext> = mutableMapOf()
+    val towerDataContextForCallableReferences: MutableMap<FirCallableReferenceAccess, FirTowerDataContext> = mutableMapOf()
+
+    var currentContext: FirTowerDataContext
+        get() = modeMap.getValue(mode)
+        set(value) {
+            modeMap[mode] = value
+        }
+
+    fun setAnonymousFunctionContextIfAny(symbol: FirAnonymousFunctionSymbol) {
+        val context = towerDataContextForAnonymousFunctions[symbol]
+        if (context != null) {
+            mode = SPECIAL
+            modeMap[SPECIAL] = context
+        }
+    }
+
+    fun setCallableReferenceContextIfAny(access: FirCallableReferenceAccess) {
+        val context = towerDataContextForCallableReferences[access]
+        if (context != null) {
+            mode = SPECIAL
+            modeMap[SPECIAL] = context
+        }
+    }
+}
 
 // --------------------------------------- Utils ---------------------------------------
 
@@ -167,26 +220,26 @@ fun SessionHolder.collectImplicitReceivers(
 
     val implicitCompanionValues = mutableListOf<ImplicitReceiverValue<*>>()
     val implicitReceiverValue = when (owner) {
-        is FirClass<*> -> {
+        is FirClass -> {
             val towerElementsForClass = collectTowerDataElementsForClass(owner, type)
             implicitCompanionValues.addAll(towerElementsForClass.implicitCompanionValues)
 
             towerElementsForClass.thisReceiver
         }
-        is FirFunction<*> -> {
+        is FirFunction -> {
             ImplicitExtensionReceiverValue(owner.symbol, type, session, scopeSession)
         }
-        is FirVariable<*> -> {
+        is FirVariable -> {
             ImplicitExtensionReceiverValue(owner.symbol, type, session, scopeSession)
         }
         else -> {
             throw IllegalArgumentException("Incorrect label & receiver owner: ${owner.javaClass}")
         }
     }
-    return ImplicitReceivers(implicitReceiverValue, implicitCompanionValues.asReversed())
+    return ImplicitReceivers(implicitReceiverValue, implicitCompanionValues)
 }
 
-fun SessionHolder.collectTowerDataElementsForClass(owner: FirClass<*>, defaultType: ConeKotlinType): TowerElementsForClass {
+fun SessionHolder.collectTowerDataElementsForClass(owner: FirClass, defaultType: ConeKotlinType): TowerElementsForClass {
     val allImplicitCompanionValues = mutableListOf<ImplicitReceiverValue<*>>()
 
     val companionObject = (owner as? FirRegularClass)?.companionObject
@@ -199,9 +252,13 @@ fun SessionHolder.collectTowerDataElementsForClass(owner: FirClass<*>, defaultTy
 
     val superClassesStaticsAndCompanionReceivers = mutableListOf<FirTowerDataElement>()
     for (superType in lookupSuperTypes(owner, lookupInterfaces = false, deep = true, useSiteSession = session)) {
-        val superClass = superType.fullyExpandedType(session).lookupTag.toSymbol(session)?.fir as? FirRegularClass ?: continue
+        val expandedType = superType.fullyExpandedType(session)
+        val superClass = expandedType.lookupTag.toSymbol(session)?.fir as? FirRegularClass ?: continue
 
-        superClass.staticScope(this)?.asTowerDataElement(isLocal = false)?.let(superClassesStaticsAndCompanionReceivers::add)
+        superClass.staticScope(this)
+            ?.wrapNestedClassifierScopeWithSubstitutionForSuperType(expandedType, session)
+            ?.asTowerDataElement(isLocal = false)
+            ?.let(superClassesStaticsAndCompanionReceivers::add)
 
         (superClass as? FirRegularClass)?.companionObject?.let { companion ->
             val superCompanionReceiver = ImplicitDispatchReceiverValue(
@@ -220,12 +277,12 @@ fun SessionHolder.collectTowerDataElementsForClass(owner: FirClass<*>, defaultTy
         owner.staticScope(this),
         companionReceiver,
         companionObject?.staticScope(this),
-        superClassesStaticsAndCompanionReceivers,
-        allImplicitCompanionValues
+        superClassesStaticsAndCompanionReceivers.asReversed(),
+        allImplicitCompanionValues.asReversed()
     )
 }
 
-private fun FirClass<*>.staticScope(sessionHolder: SessionHolder) =
+private fun FirClass.staticScope(sessionHolder: SessionHolder) =
     scopeProvider.getStaticScope(this, sessionHolder.session, sessionHolder.scopeSession)
 
 class TowerElementsForClass(
@@ -233,6 +290,8 @@ class TowerElementsForClass(
     val staticScope: FirScope?,
     val companionReceiver: ImplicitReceiverValue<*>?,
     val companionStaticScope: FirScope?,
+    // Ordered from inner scopes to outer scopes.
     val superClassesStaticsAndCompanionReceivers: List<FirTowerDataElement>,
+    // Ordered from inner scopes to outer scopes.
     val implicitCompanionValues: List<ImplicitReceiverValue<*>>
 )

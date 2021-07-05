@@ -88,10 +88,6 @@ class CallableReferenceAdaptation(
     val suspendConversionStrategy: SuspendConversionStrategy
 )
 
-enum class SuspendConversionStrategy {
-    SUSPEND_CONVERSION, NO_CONVERSION
-}
-
 /**
  * cases: class A {}, class B { companion object }, object C, enum class D { E }
  * A::foo <-> Type
@@ -491,7 +487,7 @@ class CallableReferencesCandidateFactory(
         val descriptorReturnType = descriptor.returnType
             ?: ErrorUtils.createErrorType("Error return type for descriptor: $descriptor")
 
-        when (descriptor) {
+        return when (descriptor) {
             is PropertyDescriptor -> {
                 val mutable = descriptor.isVar && run {
                     val setter = descriptor.setter
@@ -501,7 +497,7 @@ class CallableReferencesCandidateFactory(
                     )
                 }
 
-                return callComponents.reflectionTypes.getKPropertyType(
+                callComponents.reflectionTypes.getKPropertyType(
                     Annotations.EMPTY,
                     argumentsAndReceivers,
                     descriptorReturnType,
@@ -532,12 +528,15 @@ class CallableReferencesCandidateFactory(
                 val suspendConversionStrategy = callableReferenceAdaptation?.suspendConversionStrategy
                 val isSuspend = descriptor.isSuspend || suspendConversionStrategy == SuspendConversionStrategy.SUSPEND_CONVERSION
 
-                return callComponents.reflectionTypes.getKFunctionType(
+                callComponents.reflectionTypes.getKFunctionType(
                     Annotations.EMPTY, null, argumentsAndReceivers, null,
                     returnType, descriptor.builtIns, isSuspend
                 ) to callableReferenceAdaptation
             }
-            else -> return ErrorUtils.createErrorType("Unsupported descriptor type: $descriptor") to null
+            else -> {
+                assert(!descriptor.isSupportedForCallableReference()) { "${descriptor::class} isn't supported to use in callable references actually, but it's listed in `isSupportedForCallableReference` method" }
+                ErrorUtils.createErrorType("Unsupported descriptor type: $descriptor") to null
+            }
         }
     }
 

@@ -5,36 +5,37 @@
 
 package org.jetbrains.kotlin.ir.declarations.impl
 
+import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.Modality
-import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
-import org.jetbrains.kotlin.ir.descriptors.WrappedSimpleFunctionDescriptor
+import org.jetbrains.kotlin.ir.descriptors.toIrBasedDescriptor
 import org.jetbrains.kotlin.ir.expressions.IrBody
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.symbols.IrPropertySymbol
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.impl.IrUninitializedType
+import org.jetbrains.kotlin.ir.types.impl.ReturnTypeIsNotInitializedException
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedContainerSource
 
 abstract class IrFunctionCommonImpl(
-        override val startOffset: Int,
-        override val endOffset: Int,
-        override var origin: IrDeclarationOrigin,
-        override val name: Name,
-        override var visibility: DescriptorVisibility,
-        returnType: IrType,
-        override val isInline: Boolean,
-        override val isExternal: Boolean,
-        override val isTailrec: Boolean,
-        override val isSuspend: Boolean,
-        override val isOperator: Boolean,
-        override val isInfix: Boolean,
-        override val isExpect: Boolean,
-        override val containerSource: DeserializedContainerSource?,
+    override val startOffset: Int,
+    override val endOffset: Int,
+    override var origin: IrDeclarationOrigin,
+    override val name: Name,
+    override var visibility: DescriptorVisibility,
+    returnType: IrType,
+    override val isInline: Boolean,
+    override val isExternal: Boolean,
+    override val isTailrec: Boolean,
+    override val isSuspend: Boolean,
+    override val isOperator: Boolean,
+    override val isInfix: Boolean,
+    override val isExpect: Boolean,
+    override val containerSource: DeserializedContainerSource?,
 ) : IrSimpleFunction() {
     override val factory: IrFactory
         get() = IrFactoryImpl
@@ -44,7 +45,7 @@ abstract class IrFunctionCommonImpl(
 
     override var returnType: IrType = returnType
         get() = if (field === IrUninitializedType) {
-            error("Return type is not initialized")
+            throw ReturnTypeIsNotInitializedException(this)
         } else {
             field
         }
@@ -68,23 +69,23 @@ abstract class IrFunctionCommonImpl(
 }
 
 class IrFunctionImpl(
-        startOffset: Int,
-        endOffset: Int,
-        origin: IrDeclarationOrigin,
-        override val symbol: IrSimpleFunctionSymbol,
-        name: Name,
-        visibility: DescriptorVisibility,
-        override val modality: Modality,
-        returnType: IrType,
-        isInline: Boolean,
-        isExternal: Boolean,
-        isTailrec: Boolean,
-        isSuspend: Boolean,
-        isOperator: Boolean,
-        isInfix: Boolean,
-        isExpect: Boolean,
-        override val isFakeOverride: Boolean = origin == IrDeclarationOrigin.FAKE_OVERRIDE,
-        containerSource: DeserializedContainerSource? = null,
+    startOffset: Int,
+    endOffset: Int,
+    origin: IrDeclarationOrigin,
+    override val symbol: IrSimpleFunctionSymbol,
+    name: Name,
+    visibility: DescriptorVisibility,
+    override val modality: Modality,
+    returnType: IrType,
+    isInline: Boolean,
+    isExternal: Boolean,
+    isTailrec: Boolean,
+    isSuspend: Boolean,
+    isOperator: Boolean,
+    isInfix: Boolean,
+    isExpect: Boolean,
+    override val isFakeOverride: Boolean = origin == IrDeclarationOrigin.FAKE_OVERRIDE,
+    containerSource: DeserializedContainerSource? = null,
 ) : IrFunctionCommonImpl(
     startOffset, endOffset, origin, name, visibility, returnType, isInline,
     isExternal, isTailrec, isSuspend, isOperator, isInfix, isExpect,
@@ -100,20 +101,20 @@ class IrFunctionImpl(
 }
 
 class IrFakeOverrideFunctionImpl(
-        startOffset: Int,
-        endOffset: Int,
-        origin: IrDeclarationOrigin,
-        name: Name,
-        override var visibility: DescriptorVisibility,
-        override var modality: Modality,
-        returnType: IrType,
-        isInline: Boolean,
-        isExternal: Boolean,
-        isTailrec: Boolean,
-        isSuspend: Boolean,
-        isOperator: Boolean,
-        isInfix: Boolean,
-        isExpect: Boolean,
+    startOffset: Int,
+    endOffset: Int,
+    origin: IrDeclarationOrigin,
+    name: Name,
+    visibility: DescriptorVisibility,
+    override var modality: Modality,
+    returnType: IrType,
+    isInline: Boolean,
+    isExternal: Boolean,
+    isTailrec: Boolean,
+    isSuspend: Boolean,
+    isOperator: Boolean,
+    isInfix: Boolean,
+    isExpect: Boolean,
 ) : IrFunctionCommonImpl(
     startOffset, endOffset, origin, name, visibility, returnType, isInline,
     isExternal, isTailrec, isSuspend, isOperator, isInfix, isExpect,
@@ -129,14 +130,13 @@ class IrFakeOverrideFunctionImpl(
 
     @ObsoleteDescriptorBasedAPI
     override val descriptor
-        get() = _symbol?.descriptor ?: WrappedSimpleFunctionDescriptor()
+        get() = _symbol?.descriptor ?: this.toIrBasedDescriptor()
 
     @OptIn(ObsoleteDescriptorBasedAPI::class)
     override fun acquireSymbol(symbol: IrSimpleFunctionSymbol): IrSimpleFunction {
         assert(_symbol == null) { "$this already has symbol _symbol" }
         _symbol = symbol
         symbol.bind(this)
-        (symbol.descriptor as? WrappedSimpleFunctionDescriptor)?.bind(this)
         return this
     }
 }

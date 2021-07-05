@@ -20,6 +20,7 @@ import com.intellij.extapi.psi.StubBasedPsiElementBase;
 import com.intellij.lang.ASTNode;
 import com.intellij.lang.Language;
 import com.intellij.psi.*;
+import com.intellij.psi.impl.source.PsiFileImpl;
 import com.intellij.psi.stubs.IStubElementType;
 import com.intellij.psi.stubs.StubElement;
 import com.intellij.util.IncorrectOperationException;
@@ -69,9 +70,21 @@ public class KtElementImplStub<T extends StubElement<?>> extends StubBasedPsiEle
         PsiFile file = getContainingFile();
         if (!(file instanceof KtFile)) {
             // KtElementImpl.copy() might be the reason for this exception
-            String fileString = file.isValid() ? (" " + file.getText()) : "";
-            throw new IllegalStateException("KtElement not inside KtFile: " + file + fileString +
-                                            " for element " + this + " of type " + this.getClass() + " node = " + getNode());
+            String fileString = "";
+            if (file.isValid()) {
+                try {
+                    fileString = " " + file.getText();
+                }
+                catch (Exception e) {
+                    // ignore when failed to get file text
+                }
+            }
+            // getNode() will fail if getContainingFile() returns not PsiFileImpl instance
+            String nodeString = (file instanceof PsiFileImpl ? (" node = " + getNode()) : "");
+
+            throw new IllegalStateException("KtElement not inside KtFile: " +
+                                            file + fileString + " of type " + file.getClass() +
+                                            " for element " + this + " of type " + this.getClass() + nodeString);
         }
         return (KtFile) file;
     }

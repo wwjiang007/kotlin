@@ -9,7 +9,7 @@ FILE fqName:<root> fileName:/enhancedNullabilityInForLoop.kt
           CALL 'public abstract fun iterator (): kotlin.collections.MutableIterator<E of kotlin.collections.MutableList> [fake_override,operator] declared in kotlin.collections.MutableList' type=kotlin.collections.MutableIterator<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> origin=FOR_LOOP_ITERATOR
             $this: TYPE_OP type=kotlin.collections.MutableList<*> origin=IMPLICIT_CAST typeOperand=kotlin.collections.MutableList<*>
               TYPE_OP type=kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> origin=IMPLICIT_NOTNULL typeOperand=kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>
-                CALL 'public open fun listOfNotNull (): @[FlexibleNullability] kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? declared in <root>.J' type=@[FlexibleNullability] kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? origin=null
+                CALL 'public open fun listOfNotNull (): @[FlexibleNullability] @[FlexibleMutability] kotlin.collections.MutableList<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? declared in <root>.J' type=@[FlexibleNullability] @[FlexibleMutability] kotlin.collections.MutableList<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? origin=null
         WHILE label=null origin=FOR_LOOP_INNER_WHILE
           condition: CALL 'public abstract fun hasNext (): kotlin.Boolean [fake_override,operator] declared in kotlin.collections.MutableIterator' type=kotlin.Boolean origin=FOR_LOOP_HAS_NEXT
             $this: GET_VAR 'val tmp_0: kotlin.collections.MutableIterator<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> [val] declared in <root>.testForInListUnused' type=kotlin.collections.MutableIterator<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> origin=null
@@ -25,7 +25,7 @@ FILE fqName:<root> fileName:/enhancedNullabilityInForLoop.kt
           CALL 'public abstract fun iterator (): kotlin.collections.MutableIterator<E of kotlin.collections.MutableList> [fake_override,operator] declared in kotlin.collections.MutableList' type=kotlin.collections.MutableIterator<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> origin=FOR_LOOP_ITERATOR
             $this: TYPE_OP type=kotlin.collections.MutableList<*> origin=IMPLICIT_CAST typeOperand=kotlin.collections.MutableList<*>
               TYPE_OP type=kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> origin=IMPLICIT_NOTNULL typeOperand=kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>
-                CALL 'public open fun listOfNotNull (): @[FlexibleNullability] kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? declared in <root>.J' type=@[FlexibleNullability] kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? origin=null
+                CALL 'public open fun listOfNotNull (): @[FlexibleNullability] @[FlexibleMutability] kotlin.collections.MutableList<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? declared in <root>.J' type=@[FlexibleNullability] @[FlexibleMutability] kotlin.collections.MutableList<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? origin=null
         WHILE label=null origin=FOR_LOOP_INNER_WHILE
           condition: CALL 'public abstract fun hasNext (): kotlin.Boolean [fake_override,operator] declared in kotlin.collections.MutableIterator' type=kotlin.Boolean origin=FOR_LOOP_HAS_NEXT
             $this: GET_VAR 'val tmp_1: kotlin.collections.MutableIterator<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> [val] declared in <root>.testForInListDestructured' type=kotlin.collections.MutableIterator<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> origin=null
@@ -48,7 +48,7 @@ FILE fqName:<root> fileName:/enhancedNullabilityInForLoop.kt
         CALL 'public abstract fun iterator (): kotlin.collections.MutableIterator<E of kotlin.collections.MutableList> [fake_override,operator] declared in kotlin.collections.MutableList' type=kotlin.collections.MutableIterator<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> origin=null
           $this: TYPE_OP type=kotlin.collections.MutableList<*> origin=IMPLICIT_CAST typeOperand=kotlin.collections.MutableList<*>
             TYPE_OP type=kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> origin=IMPLICIT_NOTNULL typeOperand=kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>
-              CALL 'public open fun listOfNotNull (): @[FlexibleNullability] kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? declared in <root>.J' type=@[FlexibleNullability] kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? origin=null
+              CALL 'public open fun listOfNotNull (): @[FlexibleNullability] @[FlexibleMutability] kotlin.collections.MutableList<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? declared in <root>.J' type=@[FlexibleNullability] @[FlexibleMutability] kotlin.collections.MutableList<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? origin=null
       WHILE label=null origin=WHILE_LOOP
         condition: CALL 'public abstract fun hasNext (): kotlin.Boolean [fake_override,operator] declared in kotlin.collections.MutableIterator' type=kotlin.Boolean origin=null
           $this: GET_VAR 'val iterator: kotlin.collections.MutableIterator<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> [val] declared in <root>.testDesugaredForInList' type=kotlin.collections.MutableIterator<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> origin=null
@@ -82,7 +82,7 @@ FILE fqName:<root> fileName:/enhancedNullabilityInForLoop.kt
           CALL 'public abstract fun iterator (): kotlin.collections.MutableIterator<E of kotlin.collections.MutableList> [fake_override,operator] declared in kotlin.collections.MutableList' type=kotlin.collections.MutableIterator<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> origin=FOR_LOOP_ITERATOR
             $this: TYPE_OP type=kotlin.collections.MutableList<*> origin=IMPLICIT_CAST typeOperand=kotlin.collections.MutableList<*>
               TYPE_OP type=kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> origin=IMPLICIT_NOTNULL typeOperand=kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>
-                CALL 'public open fun listOfNotNull (): @[FlexibleNullability] kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? declared in <root>.J' type=@[FlexibleNullability] kotlin.collections.List<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? origin=null
+                CALL 'public open fun listOfNotNull (): @[FlexibleNullability] @[FlexibleMutability] kotlin.collections.MutableList<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? declared in <root>.J' type=@[FlexibleNullability] @[FlexibleMutability] kotlin.collections.MutableList<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P>? origin=null
         WHILE label=null origin=FOR_LOOP_INNER_WHILE
           condition: CALL 'public abstract fun hasNext (): kotlin.Boolean [fake_override,operator] declared in kotlin.collections.MutableIterator' type=kotlin.Boolean origin=FOR_LOOP_HAS_NEXT
             $this: GET_VAR 'val tmp_4: kotlin.collections.MutableIterator<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> [val] declared in <root>.testForInListUse' type=kotlin.collections.MutableIterator<@[NotNull(value = <null>)] @[EnhancedNullability] <root>.P> origin=null
@@ -214,16 +214,20 @@ FILE fqName:<root> fileName:/enhancedNullabilityInForLoop.kt
         public open fun hashCode (): kotlin.Int declared in kotlin.Any
       $this: VALUE_PARAMETER name:<this> type:<root>.P
       BLOCK_BODY
-        RETURN type=kotlin.Nothing from='public open fun hashCode (): kotlin.Int declared in <root>.P'
+        VAR name:result type:kotlin.Int [var]
+          CALL 'public open fun hashCode (): kotlin.Int [fake_override] declared in kotlin.Int' type=kotlin.Int origin=null
+            $this: GET_FIELD 'FIELD PROPERTY_BACKING_FIELD name:x type:kotlin.Int visibility:private [final]' type=kotlin.Int origin=null
+              receiver: GET_VAR '<this>: <root>.P declared in <root>.P.hashCode' type=<root>.P origin=null
+        SET_VAR 'var result: kotlin.Int [var] declared in <root>.P.hashCode' type=kotlin.Unit origin=EQ
           CALL 'public final fun plus (other: kotlin.Int): kotlin.Int [operator] declared in kotlin.Int' type=kotlin.Int origin=null
             $this: CALL 'public final fun times (other: kotlin.Int): kotlin.Int [operator] declared in kotlin.Int' type=kotlin.Int origin=null
-              $this: CALL 'public open fun hashCode (): kotlin.Int [fake_override] declared in kotlin.Int' type=kotlin.Int origin=null
-                $this: GET_FIELD 'FIELD PROPERTY_BACKING_FIELD name:x type:kotlin.Int visibility:private [final]' type=kotlin.Int origin=null
-                  receiver: GET_VAR '<this>: <root>.P declared in <root>.P.hashCode' type=<root>.P origin=null
+              $this: GET_VAR 'var result: kotlin.Int [var] declared in <root>.P.hashCode' type=kotlin.Int origin=null
               other: CONST Int type=kotlin.Int value=31
             other: CALL 'public open fun hashCode (): kotlin.Int [fake_override] declared in kotlin.Int' type=kotlin.Int origin=null
               $this: GET_FIELD 'FIELD PROPERTY_BACKING_FIELD name:y type:kotlin.Int visibility:private [final]' type=kotlin.Int origin=null
                 receiver: GET_VAR '<this>: <root>.P declared in <root>.P.hashCode' type=<root>.P origin=null
+        RETURN type=kotlin.Nothing from='public open fun hashCode (): kotlin.Int declared in <root>.P'
+          GET_VAR 'var result: kotlin.Int [var] declared in <root>.P.hashCode' type=kotlin.Int origin=null
     FUN GENERATED_DATA_CLASS_MEMBER name:equals visibility:public modality:OPEN <> ($this:<root>.P, other:kotlin.Any?) returnType:kotlin.Boolean [operator]
       overridden:
         public open fun equals (other: kotlin.Any?): kotlin.Boolean [operator] declared in kotlin.Any

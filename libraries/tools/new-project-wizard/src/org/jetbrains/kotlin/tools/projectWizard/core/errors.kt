@@ -58,7 +58,7 @@ data class ConfiguratorNotFoundError(val id: String) : Error() {
 
 data class ValidationError(val validationMessage: String) : Error() {
     override val message: String
-        get() = validationMessage.capitalize()
+        get() = validationMessage.replaceFirstChar(Char::uppercaseChar)
 }
 
 data class ProjectImportingError(val kotlinVersion: String, @Nls val reason: String) : Error() {
@@ -73,5 +73,5 @@ data class InvalidModuleDependencyError(val from: String, val to: String, @Nls v
     constructor(from: Module, to: Module, reason: String? = null) : this(from.name, to.name, reason)
 
     override val message: String
-        get() = KotlinNewProjectWizardBundle.message("error.invalid.module.dependency", from, to) + reason?.let { ": $it" }
+        get() = KotlinNewProjectWizardBundle.message("error.invalid.module.dependency", from, to) + reason?.let { ": $it" }.orEmpty()
 }

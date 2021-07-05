@@ -12,12 +12,7 @@ import org.jetbrains.kotlin.idea.frontend.api.symbols.KtTypeParameterSymbol
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.Name
 
-interface KtType : ValidityTokenOwner {
-    fun isEqualTo(other: KtType): Boolean
-    fun isSubTypeOf(superType: KtType): Boolean
-
-    val isBuiltInFunctionalType: Boolean
-
+sealed interface KtType : ValidityTokenOwner {
     fun asStringForDebugging(): String
 }
 
@@ -25,40 +20,65 @@ interface KtTypeWithNullability : KtType {
     val nullability: KtTypeNullability
 }
 
-enum class KtTypeNullability {
-    NULLABLE, NON_NULLABLE;
+enum class KtTypeNullability(val isNullable: Boolean) {
+    NULLABLE(true), NON_NULLABLE(false);
 
     companion object {
         fun create(isNullable: Boolean) = if (isNullable) NULLABLE else NON_NULLABLE
     }
 }
 
-sealed class KtDenotableType : KtType {
-    abstract fun asString(): String
+sealed class KtClassType : KtType {
+    override fun toString(): String = asStringForDebugging()
 }
 
-abstract class KtClassType : KtDenotableType(), KtTypeWithNullability {
+sealed class KtNonErrorClassType : KtClassType(), KtTypeWithNullability {
     abstract val classId: ClassId
     abstract val classSymbol: KtClassLikeSymbol
     abstract val typeArguments: List<KtTypeArgument>
 }
 
-abstract class KtErrorType : KtType {
+abstract class KtFunctionalType : KtNonErrorClassType() {
+    abstract val isSuspend: Boolean
+    abstract val arity: Int
+    abstract val receiverType: KtType?
+    abstract val hasReceiver: Boolean
+    abstract val parameterTypes: List<KtType>
+    abstract val returnType: KtType
+}
+
+abstract class KtUsualClassType : KtNonErrorClassType()
+
+abstract class KtClassErrorType : KtClassType() {
     abstract val error: String
 }
 
-abstract class KtTypeParameterType : KtDenotableType(), KtTypeWithNullability {
+abstract class KtTypeParameterType : KtTypeWithNullability {
     abstract val name: Name
     abstract val symbol: KtTypeParameterSymbol
 }
 
-sealed class KtNonDenotableType : KtType
-
-abstract class KtFlexibleType : KtNonDenotableType() {
-    abstract val lowerBound: KtType
-    abstract val upperBound: KtType
+abstract class KtCapturedType : KtType {
+    override fun toString(): String = asStringForDebugging()
 }
 
-abstract class KtIntersectionType : KtNonDenotableType() {
+abstract class KtDefinitelyNotNullType : KtType, KtTypeWithNullability {
+    abstract val original: KtType
+
+    final override val nullability: KtTypeNullability get() = KtTypeNullability.NON_NULLABLE
+
+    override fun toString(): String = asStringForDebugging()
+}
+
+abstract class KtFlexibleType : KtType {
+    abstract val lowerBound: KtType
+    abstract val upperBound: KtType
+
+    override fun toString(): String = asStringForDebugging()
+}
+
+abstract class KtIntersectionType : KtType {
     abstract val conjuncts: List<KtType>
+
+    override fun toString(): String = asStringForDebugging()
 }

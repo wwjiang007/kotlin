@@ -72,6 +72,8 @@ public interface ClassDescriptor extends ClassifierDescriptorWithTypeParameters,
 
     boolean isFun();
 
+    boolean isValue();
+
     @NotNull
     ReceiverParameterDescriptor getThisAsReceiverParameter();
 
@@ -94,6 +96,9 @@ public interface ClassDescriptor extends ClassifierDescriptorWithTypeParameters,
     @ReadOnly
     @NotNull
     Collection<ClassDescriptor> getSealedSubclasses();
+
+    @Nullable
+    InlineClassRepresentation<SimpleType> getInlineClassRepresentation();
 
     @NotNull
     @Override

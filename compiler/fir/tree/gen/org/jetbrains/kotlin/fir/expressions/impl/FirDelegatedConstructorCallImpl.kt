@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -27,9 +27,9 @@ internal class FirDelegatedConstructorCallImpl(
     override var argumentList: FirArgumentList,
     override var constructedTypeRef: FirTypeRef,
     override var dispatchReceiver: FirExpression,
+    override var calleeReference: FirReference,
     override val isThis: Boolean,
 ) : FirDelegatedConstructorCall() {
-    override var calleeReference: FirReference = if (isThis) FirExplicitThisReference(source, null) else FirExplicitSuperReference(source, null, constructedTypeRef)
     override val isSuper: Boolean get() = !isThis
 
     override fun <R, D> acceptChildren(visitor: FirVisitor<R, D>, data: D) {
@@ -41,8 +41,8 @@ internal class FirDelegatedConstructorCallImpl(
 
     override fun <D> transformChildren(transformer: FirTransformer<D>, data: D): FirDelegatedConstructorCallImpl {
         transformAnnotations(transformer, data)
-        argumentList = argumentList.transformSingle(transformer, data)
-        constructedTypeRef = constructedTypeRef.transformSingle(transformer, data)
+        argumentList = argumentList.transform(transformer, data)
+        constructedTypeRef = constructedTypeRef.transform(transformer, data)
         transformCalleeReference(transformer, data)
         return this
     }
@@ -53,12 +53,12 @@ internal class FirDelegatedConstructorCallImpl(
     }
 
     override fun <D> transformDispatchReceiver(transformer: FirTransformer<D>, data: D): FirDelegatedConstructorCallImpl {
-        dispatchReceiver = dispatchReceiver.transformSingle(transformer, data)
+        dispatchReceiver = dispatchReceiver.transform(transformer, data)
         return this
     }
 
     override fun <D> transformCalleeReference(transformer: FirTransformer<D>, data: D): FirDelegatedConstructorCallImpl {
-        calleeReference = calleeReference.transformSingle(transformer, data)
+        calleeReference = calleeReference.transform(transformer, data)
         return this
     }
 

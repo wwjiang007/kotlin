@@ -9,13 +9,13 @@ import org.jetbrains.kotlin.backend.common.CommonBackendContext
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
 import org.jetbrains.kotlin.backend.common.IrElementTransformerVoidWithContext
 import org.jetbrains.kotlin.backend.common.ScopeWithIr
-import org.jetbrains.kotlin.backend.common.ir.addFakeOverridesViaIncorrectHeuristic
+import org.jetbrains.kotlin.backend.common.ir.addFakeOverrides
 import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.backend.common.ir.createImplicitParameterDeclarationWithWrappedDescriptor
 import org.jetbrains.kotlin.descriptors.ClassKind
-import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.descriptors.DescriptorVisibility
+import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.builders.*
@@ -32,7 +32,6 @@ import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.util.OperatorNameConventions
-import org.jetbrains.kotlin.ir.util.functions
 
 abstract class SingleAbstractMethodLowering(val context: CommonBackendContext) : FileLoweringPass, IrElementTransformerVoidWithContext() {
     // SAM wrappers are cached, either in the file class (if it exists), or in a top-level enclosing class.
@@ -65,6 +64,13 @@ abstract class SingleAbstractMethodLowering(val context: CommonBackendContext) :
     abstract fun getWrapperVisibility(expression: IrTypeOperatorCall, scopes: List<ScopeWithIr>): DescriptorVisibility
 
     abstract fun getSuperTypeForWrapper(typeOperand: IrType): IrType
+
+    protected open fun getWrappedFunctionType(klass: IrClass): IrType =
+        klass.defaultType
+
+    protected open fun IrFunctionBuilder.setConstructorSourceRange(createFor: IrElement) {
+        setSourceRange(createFor)
+    }
 
     abstract val IrType.needEqualsHashCodeMethods: Boolean
 
@@ -161,7 +167,7 @@ abstract class SingleAbstractMethodLowering(val context: CommonBackendContext) :
                 context.ir.symbols.suspendFunctionN(superMethod.valueParameters.size + extensionReceiversCount).owner
             else
                 context.ir.symbols.functionN(superMethod.valueParameters.size + extensionReceiversCount).owner
-        val wrappedFunctionType = wrappedFunctionClass.defaultType
+        val wrappedFunctionType = getWrappedFunctionType(wrappedFunctionClass)
 
         val subclass = context.irFactory.buildClass {
             name = wrapperName
@@ -177,16 +183,17 @@ abstract class SingleAbstractMethodLowering(val context: CommonBackendContext) :
         val field = subclass.addField {
             name = Name.identifier(FUNCTION_FIELD_NAME)
             type = wrappedFunctionType
-            origin = subclass.origin
+            origin = IrDeclarationOrigin.SYNTHETIC_GENERATED_SAM_IMPLEMENTATION
             visibility = DescriptorVisibilities.PRIVATE
+            isFinal = true
             setSourceRange(createFor)
         }
 
         subclass.addConstructor {
-            origin = subclass.origin
+            origin = IrDeclarationOrigin.GENERATED_SAM_IMPLEMENTATION
             isPrimary = true
             visibility = wrapperVisibility
-            setSourceRange(createFor)
+            setConstructorSourceRange(createFor)
         }.apply {
             val parameter = addValueParameter {
                 name = field.name
@@ -205,7 +212,8 @@ abstract class SingleAbstractMethodLowering(val context: CommonBackendContext) :
             name = superMethod.name
             returnType = superMethod.returnType
             visibility = superMethod.visibility
-            origin = subclass.origin
+            modality = Modality.FINAL
+            origin = IrDeclarationOrigin.SYNTHETIC_GENERATED_SAM_IMPLEMENTATION
             isSuspend = superMethod.isSuspend
             setSourceRange(createFor)
         }.apply {
@@ -225,7 +233,7 @@ abstract class SingleAbstractMethodLowering(val context: CommonBackendContext) :
         if (superType.needEqualsHashCodeMethods)
             generateEqualsHashCode(subclass, superType, field)
 
-        subclass.addFakeOverridesViaIncorrectHeuristic()
+        subclass.addFakeOverrides(context.typeSystem)
 
         return subclass
     }
@@ -323,7 +331,7 @@ class SamEqualsHashCodeMethodsGenerator(
             overriddenSymbols = klass.superTypes.mapNotNull {
                 it.getClass()?.functions?.singleOrNull(::isHashCode)?.symbol
             }
-            val hashCode = builtIns.anyClass.owner.functions.single(::isHashCode).symbol
+            val hashCode = context.irBuiltIns.functionClass.owner.functions.single(::isHashCode).symbol
             body = context.createIrBuilder(symbol).run {
                 irExprBody(
                     irCall(hashCode).also {

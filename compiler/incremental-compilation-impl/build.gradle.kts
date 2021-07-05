@@ -24,12 +24,9 @@ dependencies {
     testCompile(projectTests(":compiler:tests-common"))
     testCompile(intellijCoreDep()) { includeJars("intellij-core") }
     testCompile(intellijDep()) { includeJars("log4j", "jdom") }
-
-    if (Platform.P192.orHigher()) {
-        testRuntime(intellijDep()) { includeJars("lz4-java", rootProject = rootProject) }
-    } else {
-        testRuntime(intellijDep()) { includeJars("lz4-1.3.0") }
-    }
+    testRuntime(project(":kotlin-reflect"))
+    testRuntime(project(":core:descriptors.runtime"))
+    testRuntime(intellijDep()) { includeJars("lz4-java", rootProject = rootProject) }
 }
 
 sourceSets {
@@ -40,6 +37,14 @@ sourceSets {
 projectTest(parallel = true) {
     workingDir = rootDir
     dependsOn(":kotlin-stdlib-js-ir:packFullRuntimeKLib")
+}
+
+projectTest("testJvmICWithJdk11", parallel = true) {
+    workingDir = rootDir
+    filter {
+        includeTestsMatching("org.jetbrains.kotlin.incremental.IncrementalJvmCompilerRunnerTestGenerated*")
+    }
+    javaLauncher.set(project.getToolchainLauncherFor(JdkMajorVersion.JDK_11))
 }
 
 testsJar()

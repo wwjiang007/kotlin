@@ -5,19 +5,24 @@
 
 package org.jetbrains.kotlin.fir.declarations
 
-sealed class FirDeclarationOrigin {
+sealed class FirDeclarationOrigin(private val displayName: String? = null, val fromSupertypes: Boolean = false) {
     object Source : FirDeclarationOrigin()
     object Library : FirDeclarationOrigin()
+    object BuiltIns : FirDeclarationOrigin()
     object Java : FirDeclarationOrigin()
     object Synthetic : FirDeclarationOrigin()
     object SamConstructor : FirDeclarationOrigin()
-    object FakeOverride : FirDeclarationOrigin()
     object Enhancement : FirDeclarationOrigin()
     object ImportedFromObject : FirDeclarationOrigin()
-    object IntersectionOverride : FirDeclarationOrigin()
+    object SubstitutionOverride : FirDeclarationOrigin(fromSupertypes = true)
+    object IntersectionOverride : FirDeclarationOrigin(fromSupertypes = true)
     object Delegated : FirDeclarationOrigin()
 
-    class Plugin(val key: FirPluginKey) : FirDeclarationOrigin()
+    class Plugin(val key: FirPluginKey) : FirDeclarationOrigin(displayName = "Plugin[$key]")
+
+    override fun toString(): String {
+        return displayName ?: this::class.simpleName!!
+    }
 }
 
 abstract class FirPluginKey

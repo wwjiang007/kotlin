@@ -22,7 +22,6 @@ import org.jetbrains.kotlin.ir.builders.declarations.buildValueParameter
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrEnumEntryImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrExternalPackageFragmentImpl
-import org.jetbrains.kotlin.ir.descriptors.WrappedEnumEntryDescriptor
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrGetEnumValue
@@ -37,9 +36,11 @@ import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.ir.util.getAnnotation
 import org.jetbrains.kotlin.ir.util.hasAnnotation
 import org.jetbrains.kotlin.ir.util.isAnnotationClass
+import org.jetbrains.kotlin.load.java.JvmAnnotationNames
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
+import java.lang.annotation.ElementType
 
 internal val additionalClassAnnotationPhase = makeIrFilePhase(
     ::AdditionalClassAnnotationLowering,
@@ -81,14 +82,15 @@ private class AdditionalClassAnnotationLowering(private val context: JvmBackendC
         returnType = annotationClass.defaultType
     }
 
-    private fun buildEnumEntry(enumClass: IrClass, entryName: String): IrEnumEntry = IrEnumEntryImpl(
-        UNDEFINED_OFFSET, UNDEFINED_OFFSET, IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB,
-        IrEnumEntrySymbolImpl(WrappedEnumEntryDescriptor()),
-        Name.identifier(entryName)
-    ).apply {
-        (descriptor as WrappedEnumEntryDescriptor).bind(this)
-        parent = enumClass
-        enumClass.addChild(this)
+    private fun buildEnumEntry(enumClass: IrClass, entryName: String): IrEnumEntry {
+        return IrEnumEntryImpl(
+            UNDEFINED_OFFSET, UNDEFINED_OFFSET, IrDeclarationOrigin.IR_EXTERNAL_JAVA_DECLARATION_STUB,
+            IrEnumEntrySymbolImpl(),
+            Name.identifier(entryName)
+        ).apply {
+            parent = enumClass
+            enumClass.addChild(this)
+        }
     }
 
     private val documentedConstructor = buildAnnotationConstructor(buildAnnotationClass("Documented"))
@@ -187,12 +189,14 @@ private class AdditionalClassAnnotationLowering(private val context: JvmBackendC
         }
 
     private fun generateTargetAnnotation(irClass: IrClass) {
-        if (irClass.hasAnnotation(FqName("java.lang.annotation.Target"))) return
+        if (irClass.hasAnnotation(JvmAnnotationNames.TARGET_ANNOTATION)) return
         val annotationTargetMap = annotationTargetMaps[jvmTarget]
             ?: throw AssertionError("No annotation target map for JVM target $jvmTarget")
 
         val targets = irClass.applicableTargetSet() ?: return
-        val javaTargets = targets.mapNotNull { annotationTargetMap[it] }.toSet()
+        val javaTargets = targets.mapNotNullTo(HashSet()) { annotationTargetMap[it] }.sortedBy {
+            ElementType.valueOf(it.symbol.owner.name.asString())
+        }
 
         val vararg = IrVarargImpl(
             UNDEFINED_OFFSET, UNDEFINED_OFFSET,

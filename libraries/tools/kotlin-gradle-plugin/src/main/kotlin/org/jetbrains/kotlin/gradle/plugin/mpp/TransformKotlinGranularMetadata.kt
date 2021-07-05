@@ -11,10 +11,13 @@ import org.gradle.api.tasks.*
 import org.jetbrains.kotlin.gradle.dsl.kotlinExtension
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
 import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
+import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.TransformKotlinGranularMetadataForFragment
 import org.jetbrains.kotlin.gradle.plugin.sources.KotlinDependencyScope.*
-import org.jetbrains.kotlin.gradle.plugin.sources.getSourceSetHierarchy
+import org.jetbrains.kotlin.gradle.plugin.sources.withAllDependsOnSourceSets
 import org.jetbrains.kotlin.gradle.targets.metadata.ALL_COMPILE_METADATA_CONFIGURATION_NAME
 import org.jetbrains.kotlin.gradle.targets.metadata.KotlinMetadataTargetConfigurator
+import org.jetbrains.kotlin.gradle.targets.metadata.ResolvedMetadataFilesProvider
+import org.jetbrains.kotlin.gradle.targets.metadata.dependsOnClosureWithInterCompilationDependencies
 import org.jetbrains.kotlin.gradle.utils.getValue
 import java.io.File
 import javax.inject.Inject
@@ -39,7 +42,7 @@ open class TransformKotlinGranularMetadata
     }
 
     private val participatingSourceSets: Set<KotlinSourceSet>
-        get() = transformation.kotlinSourceSet.getSourceSetHierarchy().toMutableSet().apply {
+        get() = transformation.kotlinSourceSet.withAllDependsOnSourceSets().toMutableSet().apply {
             if (any { it.name == KotlinSourceSet.COMMON_MAIN_SOURCE_SET_NAME })
                 add(project.kotlinExtension.sourceSets.getByName(KotlinSourceSet.COMMON_MAIN_SOURCE_SET_NAME))
         }
@@ -77,9 +80,8 @@ open class TransformKotlinGranularMetadata
             project,
             kotlinSourceSet,
             listOf(API_SCOPE, IMPLEMENTATION_SCOPE, COMPILE_ONLY_SCOPE),
-            project.configurations.getByName(ALL_COMPILE_METADATA_CONFIGURATION_NAME),
             lazy {
-                KotlinMetadataTargetConfigurator.dependsOnWithInterCompilationDependencies(project, kotlinSourceSet).map {
+                dependsOnClosureWithInterCompilationDependencies(project, kotlinSourceSet).map {
                     project.tasks.withType(TransformKotlinGranularMetadata::class.java)
                         .getByName(KotlinMetadataTargetConfigurator.transformGranularMetadataTaskName(it.name))
                         .transformation
@@ -94,33 +96,18 @@ open class TransformKotlinGranularMetadata
         transformation.metadataDependencyResolutions
     }
 
-    //TODO avoid using it
-    @get:Internal
-    internal val filesByResolution: Map<out MetadataDependencyResolution, FileCollection>
-        get() = metadataDependencyResolutions.filterIsInstance<MetadataDependencyResolution.ChooseVisibleSourceSets>()
-            .associate { it to project.files(it.getMetadataFilesBySourceSet(outputsDir, doProcessFiles = false).values) }
-
-//    @get:Internal
-//    internal val filesByOriginalFiles: Map<out Iterable<File>, FileCollection> by project.provider {
-//        metadataDependencyResolutions.associate {
-//            it.originalArtifactFiles to project.files(
-//                when (it) {
-//                    is MetadataDependencyResolution.ChooseVisibleSourceSets ->
-//                        it.getMetadataFilesBySourceSet(outputsDir, doProcessFiles = false).values
-//                    is MetadataDependencyResolution.ExcludeAsUnrequested ->
-//                        emptyList()
-//                    is MetadataDependencyResolution.KeepOriginalDependency ->
-//                        it.originalArtifactFiles
-//                }
-//            )
-//        }
-//    }
-
-    private val extractableFiles by project.provider {
-        transformation.metadataDependencyResolutions
+    private val extractableFilesByResolution: Map<out MetadataDependencyResolution, ExtractableMetadataFiles>
+        get() = metadataDependencyResolutions
             .filterIsInstance<MetadataDependencyResolution.ChooseVisibleSourceSets>()
-            .map { it.getExtractableMetadataFiles(outputsDir) }
-    }
+            .associateWith { it.getExtractableMetadataFiles(outputsDir) }
+
+    @get:Internal
+    internal val filesByResolution: Map<MetadataDependencyResolution, FileCollection>
+        get() = extractableFilesByResolution.mapValues { (_, value) ->
+            project.files(value.getMetadataFilesPerSourceSet(false).values).builtBy(this)
+        }
+
+    private val extractableFiles by project.provider { extractableFilesByResolution.values }
 
     @TaskAction
     fun transformMetadata() {
@@ -131,4 +118,12 @@ open class TransformKotlinGranularMetadata
 
         extractableFiles.forEach { it.getMetadataFilesPerSourceSet(doProcessFiles = true) }
     }
+}
+
+internal class SourceSetResolvedMetadataProvider(
+    taskProvider: TaskProvider<out TransformKotlinGranularMetadata>
+) : ResolvedMetadataFilesProvider {
+    override val buildDependencies: Iterable<TaskProvider<*>> = listOf(taskProvider)
+    override val metadataResolutions: Iterable<MetadataDependencyResolution> by taskProvider.map { it.metadataDependencyResolutions }
+    override val metadataFilesByResolution: Map<MetadataDependencyResolution, FileCollection> by taskProvider.map { it.filesByResolution }
 }

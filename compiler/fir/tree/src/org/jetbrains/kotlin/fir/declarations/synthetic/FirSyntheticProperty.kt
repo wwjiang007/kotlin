@@ -5,7 +5,7 @@
 
 package org.jetbrains.kotlin.fir.declarations.synthetic
 
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.FirModuleData
 import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.expressions.FirAnnotationCall
@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.fir.references.FirControlFlowGraphReference
 import org.jetbrains.kotlin.fir.symbols.impl.FirAccessorSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirBackingFieldSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirDelegateFieldSymbol
+import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.fir.visitors.FirTransformer
 import org.jetbrains.kotlin.fir.visitors.FirVisitor
@@ -21,7 +22,7 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedContainerSource
 
 class FirSyntheticProperty(
-    override val session: FirSession,
+    override val moduleData: FirModuleData,
     override val name: Name,
     override val isVar: Boolean,
     override val symbol: FirAccessorSymbol,
@@ -37,6 +38,9 @@ class FirSyntheticProperty(
     override val returnTypeRef: FirTypeRef
         get() = getter.returnTypeRef
 
+    override val dispatchReceiverType: ConeKotlinType?
+        get() = getter.dispatchReceiverType
+
     override val source: FirSourceElement?
         get() = null
 
@@ -49,7 +53,7 @@ class FirSyntheticProperty(
     override val delegate: FirExpression?
         get() = null
 
-    override val delegateFieldSymbol: FirDelegateFieldSymbol<FirProperty>?
+    override val delegateFieldSymbol: FirDelegateFieldSymbol?
         get() = null
 
     override val isLocal: Boolean
@@ -76,6 +80,9 @@ class FirSyntheticProperty(
 
     // ???
     override val backingFieldSymbol: FirBackingFieldSymbol = FirBackingFieldSymbol(symbol.callableId)
+
+    override val initializerAndAccessorsAreResolved: Boolean
+        get() = true
 
     override fun <R, D> acceptChildren(visitor: FirVisitor<R, D>, data: D) {
         returnTypeRef.accept(visitor, data)
@@ -139,6 +146,14 @@ class FirSyntheticProperty(
     }
 
     override fun replaceControlFlowGraphReference(newControlFlowGraphReference: FirControlFlowGraphReference?) {
+        throw AssertionError("Mutation of synthetic property isn't supported")
+    }
+
+    override fun replaceInitializer(newInitializer: FirExpression?) {
+        throw AssertionError("Mutation of synthetic property isn't supported")
+    }
+
+    override fun replaceInitializerAndAccessorsAreResolved(newInitializerAndAccessorsAreResolved: Boolean) {
         throw AssertionError("Mutation of synthetic property isn't supported")
     }
 }

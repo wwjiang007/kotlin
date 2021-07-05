@@ -25,10 +25,10 @@ import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.kapt3.base.javac.kaptError
 import org.jetbrains.kotlin.kapt3.base.mapJList
 import org.jetbrains.kotlin.kapt3.base.mapJListIndexed
-import org.jetbrains.kotlin.kapt3.stubs.ErrorTypeCorrector.TypeKind.METHOD_PARAMETER_TYPE
-import org.jetbrains.kotlin.kapt3.stubs.ErrorTypeCorrector.TypeKind.RETURN_TYPE
-import org.jetbrains.kotlin.kapt3.stubs.ErrorTypeCorrector.TypeKind.SUPER_TYPE
+import org.jetbrains.kotlin.kapt3.stubs.ErrorTypeCorrector.TypeKind.*
 import org.jetbrains.kotlin.load.kotlin.TypeMappingMode
+import org.jetbrains.kotlin.load.kotlin.getOptimalModeForReturnType
+import org.jetbrains.kotlin.load.kotlin.getOptimalModeForValueParameter
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.source.getPsi
@@ -141,12 +141,13 @@ class ErrorTypeCorrector(
         val typeReference = PsiTreeUtil.getParentOfType(type, KtTypeReference::class.java, true)
         val kotlinType = bindingContext[BindingContext.TYPE, typeReference] ?: ErrorUtils.createErrorType("Kapt error type")
 
+        val typeSystem = SimpleClassicTypeSystemContext
         val typeMappingMode = when (typeKind) {
             //TODO figure out if the containing method is an annotation method
-            RETURN_TYPE -> TypeMappingMode.getOptimalModeForReturnType(kotlinType, false)
-            METHOD_PARAMETER_TYPE -> TypeMappingMode.getOptimalModeForValueParameter(kotlinType)
+            RETURN_TYPE -> typeSystem.getOptimalModeForReturnType(kotlinType, false)
+            METHOD_PARAMETER_TYPE -> typeSystem.getOptimalModeForValueParameter(kotlinType)
             SUPER_TYPE -> TypeMappingMode.SUPER_TYPE
-        }.updateArgumentModeFromAnnotations(kotlinType, SimpleClassicTypeSystemContext)
+        }.updateArgumentModeFromAnnotations(kotlinType, typeSystem)
 
         val typeParameters = (target as? ClassifierDescriptor)?.typeConstructor?.parameters
         return treeMaker.TypeApply(baseExpression, mapJListIndexed(arguments) { index, projection ->

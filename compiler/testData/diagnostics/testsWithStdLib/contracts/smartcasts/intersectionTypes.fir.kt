@@ -1,7 +1,6 @@
 // !LANGUAGE: +AllowContractsForCustomFunctions +UseReturnsEffect
 // !USE_EXPERIMENTAL: kotlin.contracts.ExperimentalContracts
 // !DIAGNOSTICS: -INVISIBLE_REFERENCE -INVISIBLE_MEMBER
-// !WITH_NEW_INFERENCE
 
 import kotlin.contracts.*
 
@@ -28,7 +27,7 @@ fun testDeMorgan(x: Any?) {
     }
     else {
         x.<!UNRESOLVED_REFERENCE!>length<!>
-        x.<!AMBIGUITY!>inc<!>()
+        x.<!UNRESOLVED_REFERENCE!>inc<!>()
     }
 }
 
@@ -36,7 +35,7 @@ fun testDeMorgan2(x: Any?) {
         // x !is String || x !is Int
     if (notIsString(x) || notIsInt(x)) {
         x.<!UNRESOLVED_REFERENCE!>length<!>
-        x.<!AMBIGUITY!>inc<!>()
+        x.<!UNRESOLVED_REFERENCE!>inc<!>()
     }
     else {
         x.length

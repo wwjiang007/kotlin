@@ -9,18 +9,10 @@ dependencies {
     compileOnly(project(":compiler:psi"))
     compileOnly(project(":compiler:frontend"))
     compileOnly(project(":core:compiler.common"))
-    compileOnly(project(":idea:idea-frontend-independent"))
-    compileOnly(project(":compiler:psi"))
-    compileOnly(intellijCoreDep())
-    compileOnly(intellijDep())
+    compileOnly(project(":core:compiler.common.jvm"))
+    compileOnly(project(":idea-frontend-fir:idea-fir-low-level-api"))
 
-    Platform[191].orLower {
-        compileOnly(intellijDep()) { includeJars("java-api", "java-impl") }
-    }
-
-    Platform[192].orHigher {
-        compileOnly(intellijPluginDep("java")) { includeJars("java-api", "java-impl") }
-    }
+    compile(intellijCoreDep()) { includeJars("intellij-core", "guava", rootProject = rootProject) }
 }
 
 sourceSets {

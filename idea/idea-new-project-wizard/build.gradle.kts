@@ -13,9 +13,7 @@ dependencies {
     compileOnly(intellijCoreDep())
     compileOnly(intellijDep())
     compileOnly(intellijPluginDep("gradle"))
-    Platform[193].orHigher {
-        compileOnly(intellijPluginDep("gradle-java"))
-    }
+    compileOnly(intellijPluginDep("gradle-java"))
 
     testImplementation(projectTests(":idea"))
     testImplementation(project(":libraries:tools:new-project-wizard:new-project-wizard-cli"))
@@ -36,8 +34,11 @@ dependencies {
     testRuntimeOnly(project(":kotlinx-serialization-ide-plugin"))
     testRuntimeOnly(project(":kotlin-reflect"))
     testRuntimeOnly(project(":plugins:annotation-based-compiler-plugins-ide-support"))
+    testRuntimeOnly(project(":plugins:base-compiler-plugins-ide-support"))
     testRuntimeOnly(project(":kotlin-gradle-statistics"))
     testRuntimeOnly(project(":kotlin-scripting-idea"))
+    testRuntimeOnly(project(":plugins:parcelize:parcelize-ide"))
+    testRuntimeOnly(project(":plugins:lombok:lombok-ide-plugin"))
     testRuntimeOnly(intellijRuntimeAnnotations())
 
 
@@ -46,11 +47,9 @@ dependencies {
         compileOnly(intellijPluginDep("maven"))
     }
 
-    Platform[192].orHigher {
-        compileOnly(intellijPluginDep("java"))
-        testCompileOnly(intellijPluginDep("java"))
-        testRuntimeOnly(intellijPluginDep("java"))
-    }
+    compileOnly(intellijPluginDep("java"))
+    testCompileOnly(intellijPluginDep("java"))
+    testRuntimeOnly(intellijPluginDep("java"))
 }
 
 sourceSets {

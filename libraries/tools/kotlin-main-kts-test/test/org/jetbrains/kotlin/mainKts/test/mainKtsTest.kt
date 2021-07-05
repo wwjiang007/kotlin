@@ -39,7 +39,7 @@ fun evalFile(scriptFile: File, cacheDir: File? = null): ResultWithDiagnostics<Ev
 
 
 const val TEST_DATA_ROOT = "libraries/tools/kotlin-main-kts-test/testData"
-val OUT_FROM_IMPORT_TEST = listOf("Hi from common", "Hi from middle", "sharedVar == 5")
+val OUT_FROM_IMPORT_TEST = listOf("Hi from common", "Hi from middle", "Hi from main", "sharedVar == 5")
 
 
 class MainKtsTest {
@@ -69,7 +69,8 @@ class MainKtsTest {
 
         val resultValue = resOk.valueOrThrow().returnValue
         assertTrue(resultValue is ResultValue.Value) { "Result value should be of type Value" }
-        assertEquals("John Smith", (resultValue as ResultValue.Value).value)
+        val value = (resultValue as ResultValue.Value).value!!
+        assertEquals("MimeTypedResult", value::class.simpleName)
     }
 
 //    @Test

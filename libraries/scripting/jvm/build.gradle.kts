@@ -1,10 +1,9 @@
-
 plugins {
     kotlin("jvm")
     id("jps-compatible")
 }
 
-jvmTarget = "1.6"
+project.configureJvmToolchain(JdkMajorVersion.JDK_1_6)
 
 dependencies {
     compile(project(":kotlin-script-runtime"))
@@ -19,7 +18,10 @@ sourceSets {
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.dsl.KotlinCompile<*>> {
-    kotlinOptions.freeCompilerArgs += "-Xallow-kotlin-package"
+    kotlinOptions.freeCompilerArgs += listOf(
+        "-Xallow-kotlin-package",
+        "-Xsuppress-deprecated-jvm-target-warning"
+    )
 }
 
 publish()

@@ -22,7 +22,7 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintSystemError
 import org.jetbrains.kotlin.resolve.calls.model.DiagnosticReporter
 import org.jetbrains.kotlin.resolve.calls.model.KotlinCallDiagnostic
-import org.jetbrains.kotlin.resolve.calls.tower.ResolutionCandidateApplicability.*
+import org.jetbrains.kotlin.resolve.calls.tower.CandidateApplicability.*
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
 import org.jetbrains.kotlin.resolve.scopes.ResolutionScope
@@ -90,14 +90,14 @@ class CandidateWithBoundDispatchReceiver(
 )
 
 @JvmName("getResultApplicabilityForConstraintErrors")
-fun getResultApplicability(diagnostics: Collection<ConstraintSystemError>): ResolutionCandidateApplicability =
-    diagnostics.maxByOrNull { it.applicability }?.applicability ?: RESOLVED
+fun getResultApplicability(diagnostics: Collection<ConstraintSystemError>): CandidateApplicability =
+    diagnostics.minByOrNull { it.applicability }?.applicability ?: RESOLVED
 
 @JvmName("getResultApplicabilityForCallDiagnostics")
-fun getResultApplicability(diagnostics: Collection<KotlinCallDiagnostic>): ResolutionCandidateApplicability =
-    diagnostics.maxByOrNull { it.candidateApplicability }?.candidateApplicability ?: RESOLVED
+fun getResultApplicability(diagnostics: Collection<KotlinCallDiagnostic>): CandidateApplicability =
+    diagnostics.minByOrNull { it.candidateApplicability }?.candidateApplicability ?: RESOLVED
 
-abstract class ResolutionDiagnostic(candidateApplicability: ResolutionCandidateApplicability) :
+abstract class ResolutionDiagnostic(candidateApplicability: CandidateApplicability) :
     KotlinCallDiagnostic(candidateApplicability) {
     override fun report(reporter: DiagnosticReporter) {
         // do nothing
@@ -120,7 +120,7 @@ object ErrorDescriptorDiagnostic : ResolutionDiagnostic(RESOLVED) // todo discus
 object LowPriorityDescriptorDiagnostic : ResolutionDiagnostic(RESOLVED_LOW_PRIORITY)
 object DynamicDescriptorDiagnostic : ResolutionDiagnostic(RESOLVED_LOW_PRIORITY)
 object ResolvedUsingNewFeatures : ResolutionDiagnostic(RESOLVED_NEED_PRESERVE_COMPATIBILITY)
-object UnstableSmartCastDiagnostic : ResolutionDiagnostic(MAY_THROW_RUNTIME_ERROR)
+object UnstableSmartCastDiagnostic : ResolutionDiagnostic(UNSTABLE_SMARTCAST)
 object HiddenExtensionRelatedToDynamicTypes : ResolutionDiagnostic(HIDDEN)
 object HiddenDescriptor : ResolutionDiagnostic(HIDDEN)
 

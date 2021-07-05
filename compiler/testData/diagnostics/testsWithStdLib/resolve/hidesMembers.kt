@@ -1,6 +1,5 @@
 // !CHECK_TYPE
 // !DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER -UNUSED_VARIABLE
-// !WITH_NEW_INFERENCE
 
 // FILE: 2.kt
 package b
@@ -20,6 +19,8 @@ fun A.forEach(s: String) {}
 package a
 
 import b.*
+import checkType
+import _
 
 class A {
     fun forEach() = this

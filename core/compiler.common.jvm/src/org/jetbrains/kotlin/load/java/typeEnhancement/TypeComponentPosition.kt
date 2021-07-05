@@ -10,3 +10,5 @@ enum class TypeComponentPosition {
     FLEXIBLE_UPPER,
     INFLEXIBLE
 }
+
+fun TypeComponentPosition.shouldEnhance(): Boolean = this != TypeComponentPosition.INFLEXIBLE

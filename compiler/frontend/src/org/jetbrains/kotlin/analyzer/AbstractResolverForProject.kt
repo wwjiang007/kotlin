@@ -8,14 +8,10 @@ package org.jetbrains.kotlin.analyzer
 import com.intellij.openapi.util.ModificationTracker
 import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.context.ProjectContext
-import org.jetbrains.kotlin.descriptors.ModuleDescriptor
-import org.jetbrains.kotlin.descriptors.PackageFragmentDescriptor
-import org.jetbrains.kotlin.descriptors.PackageFragmentProvider
+import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.ModuleDescriptorImpl
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.resolve.RESOLUTION_ANCHOR_PROVIDER_CAPABILITY
-import org.jetbrains.kotlin.resolve.ResolutionAnchorProvider
 import org.jetbrains.kotlin.utils.checkWithAttachment
 
 abstract class AbstractResolverForProject<M : ModuleInfo>(
@@ -24,8 +20,7 @@ abstract class AbstractResolverForProject<M : ModuleInfo>(
     modules: Collection<M>,
     protected val fallbackModificationTracker: ModificationTracker? = null,
     private val delegateResolver: ResolverForProject<M> = EmptyResolverForProject(),
-    private val packageOracleFactory: PackageOracleFactory = PackageOracleFactory.OptimisticFactory,
-    protected val resolutionAnchorProvider: ResolutionAnchorProvider = ResolutionAnchorProvider.Default,
+    private val packageOracleFactory: PackageOracleFactory = PackageOracleFactory.OptimisticFactory
 ) : ResolverForProject<M>() {
 
     protected class ModuleData(
@@ -198,13 +193,15 @@ abstract class AbstractResolverForProject<M : ModuleInfo>(
         return moduleData
     }
 
+    protected open fun getAdditionalCapabilities(): Map<ModuleCapability<*>, Any?> = emptyMap()
+
     private fun createModuleDescriptor(module: M): ModuleData {
         val moduleDescriptor = ModuleDescriptorImpl(
             module.name,
             projectContext.storageManager,
             builtInsForModule(module),
             module.platform,
-            module.capabilities + listOf(RESOLUTION_ANCHOR_PROVIDER_CAPABILITY to resolutionAnchorProvider),
+            module.capabilities + getAdditionalCapabilities(),
             module.stableName,
         )
         moduleInfoByDescriptor[moduleDescriptor] = module
@@ -238,13 +235,27 @@ private class DelegatingPackageFragmentProvider<M : ModuleInfo>(
     private val module: ModuleDescriptor,
     moduleContent: ModuleContent<M>,
     private val packageOracle: PackageOracle
-) : PackageFragmentProvider {
+) : PackageFragmentProviderOptimized {
     private val syntheticFilePackages = moduleContent.syntheticFiles.map { it.packageFqName }.toSet()
 
+    @Suppress("OverridingDeprecatedMember")
     override fun getPackageFragments(fqName: FqName): List<PackageFragmentDescriptor> {
         if (certainlyDoesNotExist(fqName)) return emptyList()
 
+        @Suppress("DEPRECATION")
         return resolverForProject.resolverForModuleDescriptor(module).packageFragmentProvider.getPackageFragments(fqName)
+    }
+
+    override fun collectPackageFragments(fqName: FqName, packageFragments: MutableCollection<PackageFragmentDescriptor>) {
+        if (certainlyDoesNotExist(fqName)) return
+
+        resolverForProject.resolverForModuleDescriptor(module).packageFragmentProvider.collectPackageFragmentsOptimizedIfPossible(fqName, packageFragments)
+    }
+
+    override fun isEmpty(fqName: FqName): Boolean {
+        if (certainlyDoesNotExist(fqName)) return true
+
+        return resolverForProject.resolverForModuleDescriptor(module).packageFragmentProvider.isEmpty(fqName)
     }
 
     override fun getSubPackagesOf(fqName: FqName, nameFilter: (Name) -> Boolean): Collection<FqName> {
@@ -257,6 +268,10 @@ private class DelegatingPackageFragmentProvider<M : ModuleInfo>(
         if (resolverForProject.isResolverForModuleDescriptorComputed(module)) return false // let this request get cached inside delegate
 
         return !packageOracle.packageExists(fqName) && fqName !in syntheticFilePackages
+    }
+
+    override fun toString(): String {
+        return "DelegatingProvider for $module in ${resolverForProject.name}"
     }
 }
 
@@ -277,7 +292,7 @@ private object DiagnoseUnknownModuleInfoReporter {
                             else -> errorInModulesResolver(message)
                         }
                     }
-                    else -> throw errorInModulesResolver(message)
+                    else -> errorInModulesResolver(message)
                 }
             }
             name.contains(ResolverForProject.resolverForScriptDependenciesName) -> errorInScriptDependenciesInfoResolver(message)

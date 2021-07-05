@@ -13,8 +13,12 @@ inline class UInt(val a: Int) {
 
 fun takeNullable(a: UInt?) {}
 
-// 2 INVOKESTATIC UInt\.box
-// 0 INVOKEVIRTUAL Foo.unbox
-
 // 1 valueOf
 // 0 intValue
+
+// -- 1 before takeNullable
+// -- 1 before takeAnyInside
+// 2 INVOKESTATIC UInt\.box
+
+// -- equals-impl
+// 1 INVOKEVIRTUAL UInt\.unbox

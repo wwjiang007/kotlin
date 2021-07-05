@@ -7,7 +7,6 @@ package org.jetbrains.kotlin.backend.jvm.lower
 
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
 import org.jetbrains.kotlin.backend.common.IrElementTransformerVoidWithContext
-import org.jetbrains.kotlin.backend.common.ir.allParameters
 import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
 import org.jetbrains.kotlin.backend.common.lower.irBlock
 import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
@@ -15,15 +14,16 @@ import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.backend.jvm.ir.IrInlineReferenceLocator
 import org.jetbrains.kotlin.backend.jvm.ir.createJvmIrBuilder
 import org.jetbrains.kotlin.backend.jvm.ir.irArray
-import org.jetbrains.kotlin.codegen.AsmUtil.BOUND_REFERENCE_RECEIVER
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.ir.builders.*
+import org.jetbrains.kotlin.ir.builders.declarations.addExtensionReceiver
 import org.jetbrains.kotlin.ir.builders.declarations.addValueParameter
 import org.jetbrains.kotlin.ir.builders.declarations.buildFun
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrFunctionReferenceImpl
 import org.jetbrains.kotlin.ir.types.IrSimpleType
+import org.jetbrains.kotlin.ir.types.IrTypeProjection
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 import org.jetbrains.kotlin.name.Name
@@ -42,20 +42,34 @@ internal val inlineCallableReferenceToLambdaPhase = makeIrFilePhase(
 //
 //      foo(::smth) -> foo { a -> smth(a) }
 //
-internal class InlineCallableReferenceToLambdaPhase(val context: JvmBackendContext) : FileLoweringPass,
-    IrElementTransformerVoidWithContext() {
-
-    private var inlinableReferences = mutableSetOf<IrCallableReference<*>>()
-
+internal class InlineCallableReferenceToLambdaPhase(val context: JvmBackendContext) : FileLoweringPass {
     override fun lower(irFile: IrFile) {
-        inlinableReferences.addAll(IrInlineReferenceLocator.scan(context, irFile))
-        irFile.transformChildrenVoid(this)
-    }
+        val inlinableReferences = mutableSetOf<IrCallableReference<*>>()
+        irFile.accept(object : IrInlineReferenceLocator(context) {
+            override fun visitInlineReference(argument: IrCallableReference<*>) {
+                inlinableReferences.add(argument)
+            }
 
+            override fun visitInlineLambda(
+                argument: IrFunctionReference, callee: IrFunction, parameter: IrValueParameter, scope: IrDeclaration
+            ) {
+                // Obviously needs no extra wrapping.
+            }
+        }, null)
+        irFile.transformChildrenVoid(InlineCallableReferenceToLambdaTransformer(context, inlinableReferences))
+    }
+}
+
+const val STUB_FOR_INLINING = "stub_for_inlining"
+
+private class InlineCallableReferenceToLambdaTransformer(
+    val context: JvmBackendContext,
+    val inlinableReferences: Set<IrCallableReference<*>>
+) : IrElementTransformerVoidWithContext() {
     override fun visitFunctionReference(expression: IrFunctionReference): IrExpression {
         expression.transformChildrenVoid(this)
-        if (expression !in inlinableReferences || expression.origin.isLambda) return expression
-        return context.expandInlineFunctionReferenceToLambda(expression, expression.symbol.owner)
+        if (expression !in inlinableReferences) return expression
+        return expandInlineFunctionReferenceToLambda(expression, expression.symbol.owner)
     }
 
     override fun visitPropertyReference(expression: IrPropertyReference): IrExpression {
@@ -64,19 +78,18 @@ internal class InlineCallableReferenceToLambdaPhase(val context: JvmBackendConte
 
         return if (expression.field?.owner == null) {
             // Use getter if field is absent ...
-            context.expandInlineFunctionReferenceToLambda(expression, expression.getter!!.owner)
+            expandInlineFunctionReferenceToLambda(expression, expression.getter!!.owner)
         } else {
             // ... else use field itself
-            context.expandInlineFieldReferenceToLambda(expression, expression.field!!.owner)
+            expandInlineFieldReferenceToLambda(expression, expression.field!!.owner)
         }
     }
 
-    private fun JvmBackendContext.expandInlineFieldReferenceToLambda(
-        expression: IrPropertyReference, field: IrField
-    ): IrExpression {
-        val irBuilder = createJvmIrBuilder(currentScope!!.scope.scopeOwnerSymbol, expression.startOffset, expression.endOffset)
+    private fun expandInlineFieldReferenceToLambda(expression: IrPropertyReference, field: IrField): IrExpression {
+        val irBuilder = context.createJvmIrBuilder(currentScope!!.scope.scopeOwnerSymbol, expression.startOffset, expression.endOffset)
         return irBuilder.irBlock(expression, IrStatementOrigin.LAMBDA) {
-            val function = irFactory.buildFun {
+            val boundReceiver = expression.dispatchReceiver ?: expression.extensionReceiver
+            val function = context.irFactory.buildFun {
                 setSourceRange(expression)
                 origin = IrDeclarationOrigin.LOCAL_FUNCTION_FOR_LAMBDA
                 name = Name.identifier("stub_for_inline")
@@ -85,66 +98,50 @@ internal class InlineCallableReferenceToLambdaPhase(val context: JvmBackendConte
                 isSuspend = false
             }.apply {
                 parent = currentDeclarationParent ?: error("No current declaration parent at ${expression.dump()}")
-                val boundReceiver = expression.dispatchReceiver ?: expression.extensionReceiver
-
-                val receiver =
-                    when {
-                        field.isStatic -> null
-                        boundReceiver != null -> irGet(irTemporary(boundReceiver, BOUND_REFERENCE_RECEIVER))
-                        else -> irGet(addValueParameter("receiver", field.parentAsClass.defaultType))
-                    }
-
-                body = createIrBuilder(symbol).run {
+                val receiver = when {
+                    field.isStatic -> null
+                    boundReceiver != null -> irGet(addExtensionReceiver(boundReceiver.type))
+                    else -> irGet(addValueParameter("receiver", field.parentAsClass.defaultType))
+                }
+                body = this@InlineCallableReferenceToLambdaTransformer.context.createIrBuilder(symbol).run {
                     irExprBody(irGetField(receiver, field))
                 }
             }
 
             +function
-            +IrFunctionReferenceImpl(
+            +IrFunctionReferenceImpl.fromSymbolOwner(
                 expression.startOffset,
                 expression.endOffset,
-                field.type,
+                expression.type,
                 function.symbol,
                 typeArgumentsCount = 0,
                 reflectionTarget = null,
                 origin = IrStatementOrigin.LAMBDA
             ).apply {
                 copyAttributes(expression)
+                extensionReceiver = boundReceiver
             }
         }
     }
 
-    private fun JvmBackendContext.expandInlineFunctionReferenceToLambda(
-        expression: IrCallableReference<*>, referencedFunction: IrFunction
-    ): IrExpression {
-        val irBuilder =
-            createJvmIrBuilder(currentScope!!.scope.scopeOwnerSymbol, expression.startOffset, expression.endOffset)
+    private fun expandInlineFunctionReferenceToLambda(expression: IrCallableReference<*>, referencedFunction: IrFunction): IrExpression {
+        val irBuilder = context.createJvmIrBuilder(currentScope!!.scope.scopeOwnerSymbol, expression.startOffset, expression.endOffset)
         return irBuilder.irBlock(expression, IrStatementOrigin.LAMBDA) {
+            val (receiverParameter, receiverValue) = expression.getArgumentsWithIr().singleOrNull() ?: (null to null)
+            val argumentTypes = (expression.type as IrSimpleType).arguments.dropLast(1).map { (it as IrTypeProjection).type }
 
-            // We find the number of parameters for constructed lambda from the type of the function reference,
-            // but the actual types have to be copied from referencedFunction; function reference argument type may be too
-            // specific because of approximation. See compiler/testData/codegen/box/callableReference/function/argumentTypes.kt
-            val boundReceiver: Pair<IrValueParameter, IrExpression>? = expression.getArgumentsWithIr().singleOrNull()
-            val nParams = (expression.type as IrSimpleType).arguments.size - 1
-            var toDropAtStart = 0
-            if (boundReceiver != null) toDropAtStart++
-            if (referencedFunction is IrConstructor) toDropAtStart++
-            val argumentTypes = referencedFunction.allParameters.drop(toDropAtStart).take(nParams).map { parameter ->
-                parameter.type.substitute(
-                    referencedFunction.typeParameters,
-                    referencedFunction.typeParameters.indices.map { expression.getTypeArgument(it)!! }
-                )
-            }
-
-            val function = irFactory.buildFun {
+            val function = context.irFactory.buildFun {
                 setSourceRange(expression)
                 origin = IrDeclarationOrigin.LOCAL_FUNCTION_FOR_LAMBDA
-                name = Name.identifier("stub_for_inlining")
+                name = Name.identifier(STUB_FOR_INLINING)
                 visibility = DescriptorVisibilities.LOCAL
                 returnType = referencedFunction.returnType
                 isSuspend = referencedFunction.isSuspend
             }.apply {
                 parent = currentDeclarationParent!!
+                if (receiverValue != null) {
+                    addExtensionReceiver(receiverValue.type)
+                }
                 for ((index, argumentType) in argumentTypes.withIndex()) {
                     addValueParameter {
                         name = Name.identifier("p$index")
@@ -152,7 +149,7 @@ internal class InlineCallableReferenceToLambdaPhase(val context: JvmBackendConte
                     }
                 }
 
-                body = this@InlineCallableReferenceToLambdaPhase.context.createJvmIrBuilder(
+                body = this@InlineCallableReferenceToLambdaTransformer.context.createJvmIrBuilder(
                     symbol,
                     expression.startOffset,
                     expression.endOffset
@@ -165,8 +162,8 @@ internal class InlineCallableReferenceToLambdaPhase(val context: JvmBackendConte
                         var unboundIndex = 0
                         for (parameter in referencedFunction.explicitParameters) {
                             when {
-                                boundReceiver?.first == parameter ->
-                                    irGet(irTemporary(boundReceiver.second))
+                                receiverParameter == parameter ->
+                                    irGet(extensionReceiverParameter!!)
                                 parameter.isVararg && unboundIndex < argumentTypes.size && parameter.type == valueParameters[unboundIndex].type ->
                                     irGet(valueParameters[unboundIndex++])
                                 parameter.isVararg && (unboundIndex < argumentTypes.size || !parameter.hasDefaultValue()) ->
@@ -184,16 +181,17 @@ internal class InlineCallableReferenceToLambdaPhase(val context: JvmBackendConte
             }
 
             +function
-            +IrFunctionReferenceImpl(
+            +IrFunctionReferenceImpl.fromSymbolOwner(
                 expression.startOffset,
                 expression.endOffset,
-                function.returnType,
+                expression.type,
                 function.symbol,
                 typeArgumentsCount = function.typeParameters.size,
                 reflectionTarget = null,
                 origin = IrStatementOrigin.LAMBDA
             ).apply {
                 copyAttributes(expression)
+                extensionReceiver = receiverValue
             }
         }
     }

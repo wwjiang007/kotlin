@@ -8,21 +8,14 @@ version = "1.0"
 
 repositories {
     mavenLocal()
-    jcenter()
-    maven { setUrl("https://dl.bintray.com/kotlin/kotlinx.html/") }
+    mavenCentral()
 }
 
 kotlin {
     val jvm = jvm("jvm6")
     val js = js("nodeJs")
-    wasm32()
     linuxX64("linux64")
-    mingwX64("mingw64")
-    macosX64("macos64")
 
-    // We use this library in the cinterop test which includes a Windows x86 target.
-    mingwX86("mingw86")
-      
     targets.all {
         mavenPublication(Action<MavenPublication> {
             pom.withXml(Action<XmlProvider> {
@@ -46,7 +39,6 @@ kotlin {
         js.compilations["main"].defaultSourceSet {
         	dependencies {
                 api(kotlin("stdlib-js"))
-        		implementation("org.jetbrains.kotlinx:kotlinx-html-js:0.6.11")
         	}
         }
     }

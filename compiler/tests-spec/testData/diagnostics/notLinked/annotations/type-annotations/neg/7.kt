@@ -1,4 +1,3 @@
-// !WITH_NEW_INFERENCE
 
 /*
  * KOTLIN DIAGNOSTICS NOT LINKED SPEC TEST (NEGATIVE)
@@ -19,7 +18,7 @@ annotation class Ann
  */
 open class TypeToken<T>
 
-val case_1 = object : TypeToken<@<!OI;DEBUG_INFO_MISSING_UNRESOLVED!>Ann<!>(<!DEBUG_INFO_MISSING_UNRESOLVED!>unresolved_reference<!>) String>() {}
+val case_1 = object : TypeToken<@<!DEBUG_INFO_MISSING_UNRESOLVED!>Ann<!>(<!DEBUG_INFO_MISSING_UNRESOLVED!>unresolved_reference<!>) String>() {}
 
 /*
  * TESTCASE NUMBER: 2

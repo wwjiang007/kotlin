@@ -5,28 +5,32 @@
 
 package org.jetbrains.kotlin.fir.resolve.inference
 
+import org.jetbrains.kotlin.fir.FirElement
+import org.jetbrains.kotlin.fir.declarations.FirAnnotatedDeclaration
+import org.jetbrains.kotlin.fir.declarations.hasAnnotation
+import org.jetbrains.kotlin.fir.expressions.FirArgumentList
 import org.jetbrains.kotlin.fir.expressions.FirResolvable
 import org.jetbrains.kotlin.fir.expressions.FirStatement
-import org.jetbrains.kotlin.fir.resolve.BodyResolveComponents
 import org.jetbrains.kotlin.fir.resolve.calls.Candidate
+import org.jetbrains.kotlin.fir.resolve.calls.ResolutionContext
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
-import org.jetbrains.kotlin.fir.types.ConeKotlinType
-import org.jetbrains.kotlin.fir.types.ConeStubType
-import org.jetbrains.kotlin.fir.types.ConeTypeVariable
-import org.jetbrains.kotlin.fir.types.ConeTypeVariableTypeConstructor
+import org.jetbrains.kotlin.fir.types.*
+import org.jetbrains.kotlin.fir.visitors.FirDefaultTransformer
 import org.jetbrains.kotlin.fir.visitors.transformSingle
+import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.resolve.calls.inference.buildAbstractResultingSubstitutor
 import org.jetbrains.kotlin.resolve.calls.inference.components.ConstraintSystemCompletionMode
 import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintKind
 import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintStorage
 import org.jetbrains.kotlin.resolve.calls.inference.model.CoroutinePosition
 import org.jetbrains.kotlin.resolve.calls.inference.model.NewConstraintSystemImpl
+import org.jetbrains.kotlin.resolve.descriptorUtil.BUILDER_INFERENCE_ANNOTATION_FQ_NAME
 import org.jetbrains.kotlin.types.model.TypeConstructorMarker
 
 class FirBuilderInferenceSession(
-    components: BodyResolveComponents,
+    resolutionContext: ResolutionContext,
     private val stubsForPostponedVariables: Map<ConeTypeVariable, ConeStubType>,
-) : AbstractManyCandidatesInferenceSession(components) {
+) : AbstractManyCandidatesInferenceSession(resolutionContext) {
     private val commonCalls: MutableList<Pair<FirStatement, Candidate>> = mutableListOf()
 
     override fun <T> shouldRunCompletion(call: T): Boolean where T : FirResolvable, T : FirStatement {
@@ -34,14 +38,35 @@ class FirBuilderInferenceSession(
         val system = candidate.system
 
         if (system.hasContradiction) return true
+        if (!candidate.isSuitableForBuilderInference()) return true
+
 
         val storage = system.getBuilder().currentStorage()
 
-        return !storage.notFixedTypeVariables.keys.any {
+        if (call.hasPostponed()) return true
+
+        return storage.notFixedTypeVariables.keys.all {
             val variable = storage.allTypeVariables[it]
             val isPostponed = variable != null && variable in storage.postponedTypeVariables
-            !isPostponed && !components.callCompleter.completer.variableFixationFinder.isTypeVariableHasProperConstraint(system, it)
-        } || call.hasPostponed()
+            isPostponed || components.callCompleter.completer.variableFixationFinder.isTypeVariableHasProperConstraint(system, it)
+        }
+    }
+
+    private fun Candidate.isSuitableForBuilderInference(): Boolean {
+        val extensionReceiver = extensionReceiverValue
+        val dispatchReceiver = dispatchReceiverValue
+        return when {
+            extensionReceiver == null && dispatchReceiver == null -> false
+            dispatchReceiver?.type?.containsStubType() == true -> true
+            extensionReceiver?.type?.containsStubType() == true -> symbol.fir.hasBuilderInferenceAnnotation()
+            else -> false
+        }
+    }
+
+    private fun ConeKotlinType.containsStubType(): Boolean {
+        return this.contains {
+            it is ConeStubType
+        }
     }
 
     private fun FirStatement.hasPostponed(): Boolean {
@@ -65,6 +90,7 @@ class FirBuilderInferenceSession(
         return !skipCall(call)
     }
 
+    @Suppress("UNUSED_PARAMETER")
     private fun <T> skipCall(call: T): Boolean where T : FirResolvable, T : FirStatement {
         // TODO: what is FIR analog?
         // if (descriptor is FakeCallableDescriptorForObject) return true
@@ -82,7 +108,8 @@ class FirBuilderInferenceSession(
 
     override fun inferPostponedVariables(
         lambda: ResolvedLambdaAtom,
-        initialStorage: ConstraintStorage
+        initialStorage: ConstraintStorage,
+        completionMode: ConstraintSystemCompletionMode
     ): Map<ConeTypeVariableTypeConstructor, ConeKotlinType>? {
         val (commonSystem, effectivelyEmptyConstraintSystem) = buildCommonSystem(initialStorage)
         if (effectivelyEmptyConstraintSystem) {
@@ -94,9 +121,9 @@ class FirBuilderInferenceSession(
         @Suppress("UNCHECKED_CAST")
         components.callCompleter.completer.complete(
             context,
-            ConstraintSystemCompletionMode.FULL,
+            completionMode,
             partiallyResolvedCalls.map { it.first as FirStatement },
-            components.session.builtinTypes.unitType.type,
+            components.session.builtinTypes.unitType.type, resolutionContext,
             collectVariablesFromContext = true
         ) {
             error("Shouldn't be called in complete constraint system mode")
@@ -109,7 +136,7 @@ class FirBuilderInferenceSession(
     }
 
     private fun buildCommonSystem(initialStorage: ConstraintStorage): Pair<NewConstraintSystemImpl, Boolean> {
-        val commonSystem = components.inferenceComponents.createConstraintSystem()
+        val commonSystem = components.session.inferenceComponents.createConstraintSystem()
         val nonFixedToVariablesSubstitutor = createNonFixedTypeToVariableSubstitutor()
 
         integrateConstraints(commonSystem, initialStorage, nonFixedToVariablesSubstitutor, false)
@@ -136,7 +163,7 @@ class FirBuilderInferenceSession(
     }
 
     private fun createNonFixedTypeToVariableSubstitutor(): ConeSubstitutor {
-        val ctx = components.inferenceComponents.ctx
+        val ctx = components.session.inferenceComponents.ctx
 
         val bindings = mutableMapOf<TypeConstructorMarker, ConeKotlinType>()
         for ((variable, nonFixedType) in stubsForPostponedVariables) {
@@ -198,14 +225,22 @@ class FirBuilderInferenceSession(
         return introducedConstraint
     }
 
+    // TODO: besides calls, perhaps use the stub type substitutor for all top-level expressions inside the lambda
     private fun updateCalls(commonSystem: NewConstraintSystemImpl) {
         val nonFixedToVariablesSubstitutor = createNonFixedTypeToVariableSubstitutor()
         val commonSystemSubstitutor = commonSystem.buildCurrentSubstitutor() as ConeSubstitutor
         val nonFixedTypesToResultSubstitutor = ConeComposedSubstitutor(commonSystemSubstitutor, nonFixedToVariablesSubstitutor)
         val completionResultsWriter = components.callCompleter.createCompletionResultsWriter(nonFixedTypesToResultSubstitutor)
+
+        val stubTypeSubstitutor = FirStubTypeTransformer(nonFixedTypesToResultSubstitutor)
+        for ((completedCall, _) in commonCalls) {
+            completedCall.transformSingle(stubTypeSubstitutor, null)
+            // TODO: support diagnostics, see [CoroutineInferenceSession#updateCalls]
+        }
+
         for ((call, _) in partiallyResolvedCalls) {
             call.transformSingle(completionResultsWriter, null)
-            // TODO: support diagnostics, see CoroutineInferenceSession.kt:286
+            // TODO: support diagnostics, see [CoroutineInferenceSession#updateCalls]
         }
     }
 }
@@ -216,3 +251,26 @@ class ConeComposedSubstitutor(val left: ConeSubstitutor, val right: ConeSubstitu
         return left.substituteOrNull(rightSubstitution ?: type)
     }
 }
+
+class FirStubTypeTransformer(
+    private val substitutor: ConeSubstitutor
+) : FirDefaultTransformer<Nothing?>() {
+
+    override fun <E : FirElement> transformElement(element: E, data: Nothing?): E {
+        @Suppress("UNCHECKED_CAST")
+        return (element.transformChildren(this, data) as E)
+    }
+
+    override fun transformResolvedTypeRef(resolvedTypeRef: FirResolvedTypeRef, data: Nothing?): FirTypeRef =
+        substitutor.substituteOrNull(resolvedTypeRef.type)?.let {
+            resolvedTypeRef.withReplacedConeType(it)
+        } ?: resolvedTypeRef
+
+    override fun transformArgumentList(argumentList: FirArgumentList, data: Nothing?): FirArgumentList =
+        argumentList.transformArguments(this, data)
+}
+
+private val BUILDER_INFERENCE_ANNOTATION_CLASS_ID = ClassId.topLevel(BUILDER_INFERENCE_ANNOTATION_FQ_NAME)
+
+fun FirElement.hasBuilderInferenceAnnotation(): Boolean =
+    (this as? FirAnnotatedDeclaration)?.hasAnnotation(BUILDER_INFERENCE_ANNOTATION_CLASS_ID) == true

@@ -188,13 +188,13 @@ public interface IrOperationOrBuilder extends
   org.jetbrains.kotlin.backend.common.serialization.proto.IrSetField getSetField();
 
   /**
-   * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrSetVariable set_variable = 21;</code>
+   * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrSetValue set_value = 21;</code>
    */
-  boolean hasSetVariable();
+  boolean hasSetValue();
   /**
-   * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrSetVariable set_variable = 21;</code>
+   * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrSetValue set_value = 21;</code>
    */
-  org.jetbrains.kotlin.backend.common.serialization.proto.IrSetVariable getSetVariable();
+  org.jetbrains.kotlin.backend.common.serialization.proto.IrSetValue getSetValue();
 
   /**
    * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrStringConcat string_concat = 22;</code>
@@ -303,4 +303,57 @@ public interface IrOperationOrBuilder extends
    * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrFunctionExpression function_expression = 33;</code>
    */
   org.jetbrains.kotlin.backend.common.serialization.proto.IrFunctionExpression getFunctionExpression();
+
+  /**
+   * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrErrorExpression error_expression = 34;</code>
+   *
+   * <pre>
+   * Error code
+   * </pre>
+   */
+  boolean hasErrorExpression();
+  /**
+   * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrErrorExpression error_expression = 34;</code>
+   *
+   * <pre>
+   * Error code
+   * </pre>
+   */
+  org.jetbrains.kotlin.backend.common.serialization.proto.IrErrorExpression getErrorExpression();
+
+  /**
+   * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrErrorCallExpression error_call_expression = 35;</code>
+   */
+  boolean hasErrorCallExpression();
+  /**
+   * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrErrorCallExpression error_call_expression = 35;</code>
+   */
+  org.jetbrains.kotlin.backend.common.serialization.proto.IrErrorCallExpression getErrorCallExpression();
+
+  /**
+   * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrRawFunctionReference raw_function_reference = 36;</code>
+   */
+  boolean hasRawFunctionReference();
+  /**
+   * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrRawFunctionReference raw_function_reference = 36;</code>
+   */
+  org.jetbrains.kotlin.backend.common.serialization.proto.IrRawFunctionReference getRawFunctionReference();
+
+  /**
+   * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrReturnableBlock returnable_block = 37;</code>
+   */
+  boolean hasReturnableBlock();
+  /**
+   * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrReturnableBlock returnable_block = 37;</code>
+   */
+  org.jetbrains.kotlin.backend.common.serialization.proto.IrReturnableBlock getReturnableBlock();
+
+  /**
+   * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrReturnableBlockReturn returnable_block_return = 38;</code>
+   */
+  boolean hasReturnableBlockReturn();
+  /**
+   * <code>optional .org.jetbrains.kotlin.backend.common.serialization.proto.IrReturnableBlockReturn returnable_block_return = 38;</code>
+   */
+  org.jetbrains.kotlin.backend.common.serialization.proto.IrReturnableBlockReturn getReturnableBlockReturn();
 }

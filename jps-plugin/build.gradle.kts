@@ -18,9 +18,6 @@ dependencies {
     compile(project(":js:js.frontend"))
     compile(projectRuntimeJar(":kotlin-preloader"))
     compile(project(":idea:idea-jps-common"))
-    Platform[193].orLower {
-        compileOnly(intellijDep()) { includeJars("openapi", rootProject = rootProject) }
-    }
     compileOnly(intellijDep()) {
         includeJars("jdom", "trove4j", "jps-model", "platform-api", "util", "asm-all", rootProject = rootProject)
     }
@@ -44,9 +41,7 @@ dependencies {
         testRuntime(project(it))
     }
 
-    Platform[192].orHigher {
-        testRuntimeOnly(intellijPluginDep("java"))
-    }
+    testRuntimeOnly(intellijPluginDep("java"))
 
     testRuntimeOnly(toolsJar())
     testRuntime(project(":kotlin-reflect"))

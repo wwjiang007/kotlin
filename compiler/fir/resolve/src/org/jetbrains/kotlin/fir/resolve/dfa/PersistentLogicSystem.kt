@@ -11,7 +11,6 @@ import org.jetbrains.kotlin.fir.types.ConeInferenceContext
 import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.utils.addIfNotNull
 import java.util.*
-import kotlin.NoSuchElementException
 
 data class PersistentTypeStatement(
     override val variable: RealVariable,
@@ -43,7 +42,6 @@ class PersistentFlow : Flow {
     var logicStatements: PersistentImplications
     val level: Int
     var approvedTypeStatementsDiff: PersistentApprovedTypeStatements = persistentHashMapOf()
-    var updatedAliasDiff: PersistentSet<RealVariable> = persistentSetOf()
 
     /*
      * val x = a
@@ -55,6 +53,8 @@ class PersistentFlow : Flow {
     override var directAliasMap: PersistentMap<RealVariable, RealVariableAndType>
     override var backwardsAliasMap: PersistentMap<RealVariable, PersistentList<RealVariable>>
 
+    override var assignmentIndex: PersistentMap<RealVariable, Int>
+
     constructor(previousFlow: PersistentFlow) {
         this.previousFlow = previousFlow
         approvedTypeStatements = previousFlow.approvedTypeStatements
@@ -63,6 +63,7 @@ class PersistentFlow : Flow {
 
         directAliasMap = previousFlow.directAliasMap
         backwardsAliasMap = previousFlow.backwardsAliasMap
+        assignmentIndex = previousFlow.assignmentIndex
     }
 
     constructor() {
@@ -73,6 +74,7 @@ class PersistentFlow : Flow {
 
         directAliasMap = persistentMapOf()
         backwardsAliasMap = persistentMapOf()
+        assignmentIndex = persistentMapOf()
     }
 
     override fun getTypeStatement(variable: RealVariable): TypeStatement? {
@@ -109,11 +111,6 @@ abstract class PersistentLogicSystem(context: ConeInferenceContext) : LogicSyste
         return foldFlow(
             flows,
             mergeOperation = { statements -> this.or(statements).takeIf { it.isNotEmpty } },
-            computeVariables = { computeVariablesDiffWithCommonFlow ->
-                flows.map {
-                    computeVariablesDiffWithCommonFlow(it).toList()
-                }.intersectSets().takeIf { it.isNotEmpty() }
-            }
         )
     }
 
@@ -121,18 +118,12 @@ abstract class PersistentLogicSystem(context: ConeInferenceContext) : LogicSyste
         return foldFlow(
             flows,
             this::and,
-            computeVariables = { computeVariablesDiffWithCommonFlow ->
-                flows.flatMapTo(mutableSetOf()) {
-                    computeVariablesDiffWithCommonFlow(it)
-                }
-            }
         )
     }
 
     private inline fun foldFlow(
         flows: Collection<PersistentFlow>,
         mergeOperation: (Collection<TypeStatement>) -> MutableTypeStatement?,
-        computeVariables: (computeVariablesDiffWithCommonFlow: (PersistentFlow) -> Iterable<RealVariable>) -> Collection<RealVariable>?
     ): PersistentFlow {
         if (flows.isEmpty()) return createEmptyFlow()
         flows.singleOrNull()?.let { return it }
@@ -140,19 +131,30 @@ abstract class PersistentLogicSystem(context: ConeInferenceContext) : LogicSyste
         val aliasedVariablesThatDontChangeAlias = computeAliasesThatDontChange(flows)
 
         val commonFlow = flows.reduce(::lowestCommonFlow)
-        val variables =
-            computeVariables { it.diffVariablesIterable(commonFlow, aliasedVariablesThatDontChangeAlias.keys) } ?: return commonFlow
 
+        val variables = flows.flatMap { it.approvedTypeStatements.keys }.toSet()
         for (variable in variables) {
-            val info = mergeOperation(flows.map { it.getApprovedTypeStatementsDiff(variable, commonFlow) }) ?: continue
+            val info = mergeOperation(flows.map { it.getApprovedTypeStatements(variable) }) ?: continue
+            removeTypeStatementsAboutVariable(commonFlow, variable)
+            val thereWereReassignments = variable.hasDifferentReassignments(flows)
+            if (thereWereReassignments) {
+                removeLogicStatementsAboutVariable(commonFlow, variable)
+                removeAliasInformationAboutVariable(commonFlow, variable)
+            }
             commonFlow.addApprovedStatements(info)
         }
 
         commonFlow.addVariableAliases(aliasedVariablesThatDontChangeAlias)
-
-        updateAllReceivers(commonFlow)
-
         return commonFlow
+    }
+
+    private fun RealVariable.hasDifferentReassignments(flows: Collection<PersistentFlow>): Boolean {
+        val firstIndex = flows.first().assignmentIndex[this] ?: -1
+        for (flow in flows) {
+            val index = flow.assignmentIndex[this] ?: -1
+            if (index != firstIndex) return true
+        }
+        return false
     }
 
     private fun computeAliasesThatDontChange(
@@ -201,7 +203,6 @@ abstract class PersistentLogicSystem(context: ConeInferenceContext) : LogicSyste
     }
 
     override fun removeLocalVariableAlias(flow: PersistentFlow, alias: RealVariable) {
-        flow.updatedAliasDiff += alias
         val original = flow.directAliasMap[alias]?.variable ?: return
         flow.directAliasMap = flow.directAliasMap.remove(alias)
         val variables = flow.backwardsAliasMap.getValue(original)
@@ -209,70 +210,19 @@ abstract class PersistentLogicSystem(context: ConeInferenceContext) : LogicSyste
     }
 
     @OptIn(DfaInternals::class)
-    private fun PersistentFlow.getApprovedTypeStatementsDiff(variable: RealVariable, parentFlow: PersistentFlow): MutableTypeStatement {
+    private fun PersistentFlow.getApprovedTypeStatements(variable: RealVariable): MutableTypeStatement {
         var flow = this
         val result = MutableTypeStatement(variable)
         val variableUnderAlias = directAliasMap[variable]
         if (variableUnderAlias == null) {
-            while (flow != parentFlow) {
-                flow.approvedTypeStatementsDiff[variable]?.let {
-                    result += it
-                }
-                flow = flow.previousFlow!!
+            flow.approvedTypeStatements[variable]?.let {
+                result += it
             }
         } else {
             result.exactType.addIfNotNull(variableUnderAlias.originalType)
             flow.approvedTypeStatements[variableUnderAlias.variable]?.let { result += it }
         }
         return result
-    }
-
-    /**
-     * This is an iterable over real variable that has known facts in flow range
-     *   from [this] to [parentFlow]
-     */
-    private fun PersistentFlow.diffVariablesIterable(
-        parentFlow: PersistentFlow,
-        aliasedVariablesThatDontChangeAlias: Set<RealVariable>
-    ): Iterable<RealVariable> =
-        object : DiffIterable<RealVariable>(parentFlow, this) {
-            override fun extractIterator(flow: PersistentFlow): Iterator<RealVariable> {
-                val variablesWithNewInfo = flow.approvedTypeStatementsDiff.keys
-                val updatedVariables = ArrayList(variablesWithNewInfo)
-                updatedVariables += flow.updatedAliasDiff
-                variablesWithNewInfo.flatMapTo(updatedVariables) { variableWithNewInfo ->
-                    flow.backwardsAliasMap[variableWithNewInfo]?.filter { it !in aliasedVariablesThatDontChangeAlias } ?: emptyList()
-                }
-                return updatedVariables.iterator()
-            }
-        }
-
-    private abstract class DiffIterable<T>(private val parentFlow: PersistentFlow, private var currentFlow: PersistentFlow) : Iterable<T> {
-        @Suppress("LeakingThis")
-        private var currentIterator = extractIterator(currentFlow)
-
-        abstract fun extractIterator(flow: PersistentFlow): Iterator<T>
-
-        override fun iterator(): Iterator<T> {
-            return object : Iterator<T> {
-                override fun hasNext(): Boolean {
-                    if (currentIterator.hasNext()) return true
-                    while (currentFlow != parentFlow) {
-                        currentFlow = currentFlow.previousFlow!!
-                        currentIterator = extractIterator(currentFlow)
-                        if (currentIterator.hasNext()) return true
-                    }
-                    return false
-                }
-
-                override fun next(): T {
-                    if (!hasNext()) {
-                        throw NoSuchElementException()
-                    }
-                    return currentIterator.next()
-                }
-            }
-        }
     }
 
     override fun addTypeStatement(flow: PersistentFlow, statement: TypeStatement) {
@@ -302,11 +252,43 @@ abstract class PersistentLogicSystem(context: ConeInferenceContext) : LogicSyste
         }
     }
 
-    override fun removeAllAboutVariable(flow: PersistentFlow, variable: RealVariable) {
-        flow.logicStatements -= variable
+    override fun removeTypeStatementsAboutVariable(flow: PersistentFlow, variable: RealVariable) {
         flow.approvedTypeStatements -= variable
         flow.approvedTypeStatementsDiff -= variable
-        // TODO: should we search variable in all logic statements?
+    }
+
+    override fun removeLogicStatementsAboutVariable(flow: PersistentFlow, variable: DataFlowVariable) {
+        flow.logicStatements -= variable
+        var newLogicStatements = flow.logicStatements
+        for ((key, implications) in flow.logicStatements) {
+            val implicationsToDelete = mutableListOf<Implication>()
+            implications.forEach { implication ->
+                if (implication.effect.variable == variable) {
+                    implicationsToDelete += implication
+                }
+            }
+            if (implicationsToDelete.isEmpty()) continue
+            val newImplications = implications.removeAll(implicationsToDelete)
+            newLogicStatements = if (newImplications.isNotEmpty()) {
+                newLogicStatements.put(key, newImplications)
+            } else {
+                newLogicStatements.remove(key)
+            }
+        }
+        flow.logicStatements = newLogicStatements
+    }
+
+    override fun removeAliasInformationAboutVariable(flow: PersistentFlow, variable: RealVariable) {
+        val existedAlias = flow.directAliasMap[variable]?.variable
+        if (existedAlias != null) {
+            flow.directAliasMap = flow.directAliasMap.remove(variable)
+            val updatedBackwardsAliasList = flow.backwardsAliasMap.getValue(existedAlias).remove(variable)
+            flow.backwardsAliasMap = if (updatedBackwardsAliasList.isEmpty()) {
+                flow.backwardsAliasMap.remove(existedAlias)
+            } else {
+                flow.backwardsAliasMap.put(existedAlias, updatedBackwardsAliasList)
+            }
+        }
     }
 
     override fun translateVariableFromConditionInStatements(
@@ -446,6 +428,10 @@ abstract class PersistentLogicSystem(context: ConeInferenceContext) : LogicSyste
 
     override fun getImplicationsWithVariable(flow: PersistentFlow, variable: DataFlowVariable): Collection<Implication> {
         return flow.logicStatements[variable] ?: emptyList()
+    }
+
+    override fun recordNewAssignment(flow: PersistentFlow, variable: RealVariable, index: Int) {
+        flow.assignmentIndex = flow.assignmentIndex.put(variable, index)
     }
 
     // --------------------------------------------------------------------\

@@ -7,23 +7,33 @@ package org.jetbrains.kotlin.backend.wasm
 
 import org.jetbrains.kotlin.backend.common.ir.Ir
 import org.jetbrains.kotlin.backend.common.ir.Symbols
+import org.jetbrains.kotlin.backend.common.ir.addChild
+import org.jetbrains.kotlin.backend.wasm.lower.WasmSharedVariablesManager
+import org.jetbrains.kotlin.backend.wasm.utils.WasmInlineClassesUtils
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
+import org.jetbrains.kotlin.descriptors.impl.EmptyPackageFragmentDescriptor
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.IrFileEntry
+import org.jetbrains.kotlin.ir.SourceRangeInfo
+import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.backend.js.JsCommonBackendContext
 import org.jetbrains.kotlin.ir.backend.js.JsMapping
-import org.jetbrains.kotlin.ir.backend.js.JsSharedVariablesManager
 import org.jetbrains.kotlin.ir.backend.js.lower.JsInnerClassesSupport
-import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.builders.declarations.buildFun
+import org.jetbrains.kotlin.ir.declarations.IrFactory
+import org.jetbrains.kotlin.ir.declarations.IrFile
+import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import org.jetbrains.kotlin.ir.declarations.IrPackageFragment
 import org.jetbrains.kotlin.ir.declarations.impl.IrExternalPackageFragmentImpl
-import org.jetbrains.kotlin.ir.declarations.persistent.PersistentIrFactory
+import org.jetbrains.kotlin.ir.declarations.impl.IrFileImpl
 import org.jetbrains.kotlin.ir.descriptors.IrBuiltIns
-import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
-import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
-import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.impl.DescriptorlessExternalPackageFragmentSymbol
+import org.jetbrains.kotlin.ir.types.IrTypeSystemContext
+import org.jetbrains.kotlin.ir.types.IrTypeSystemContextImpl
 import org.jetbrains.kotlin.ir.util.SymbolTable
 import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
 
 class WasmBackendContext(
     val module: ModuleDescriptor,
@@ -31,42 +41,74 @@ class WasmBackendContext(
     @Suppress("UNUSED_PARAMETER") symbolTable: SymbolTable,
     @Suppress("UNUSED_PARAMETER") irModuleFragment: IrModuleFragment,
     val additionalExportedDeclarations: Set<FqName>,
-    override val configuration: CompilerConfiguration
+    override val configuration: CompilerConfiguration,
 ) : JsCommonBackendContext {
     override val builtIns = module.builtIns
+    override val typeSystem: IrTypeSystemContext = IrTypeSystemContextImpl(irBuiltIns)
     override var inVerbosePhase: Boolean = false
     override val scriptMode = false
-    override val transformedFunction = mutableMapOf<IrFunctionSymbol, IrSimpleFunctionSymbol>()
-    override val lateinitNullableFields = mutableMapOf<IrField, IrField>()
-    override val extractedLocalClasses: MutableSet<IrClass> = hashSetOf()
-    override val irFactory: IrFactory = PersistentIrFactory
+    override val irFactory: IrFactory = symbolTable.irFactory
 
     // Place to store declarations excluded from code generation
-    val excludedDeclarations: IrPackageFragment by lazy {
+    private val excludedDeclarations = mutableMapOf<FqName, IrPackageFragment>()
+
+    fun getExcludedPackageFragment(fqName: FqName): IrPackageFragment = excludedDeclarations.getOrPut(fqName) {
         IrExternalPackageFragmentImpl(
             DescriptorlessExternalPackageFragmentSymbol(),
-            FqName("kotlin")
+            fqName
         )
     }
 
-    override val mapping = JsMapping()
+    override val mapping = JsMapping(irFactory)
 
     val innerClassesSupport = JsInnerClassesSupport(mapping, irFactory)
 
-    val objectToGetInstanceFunction = mutableMapOf<IrClassSymbol, IrSimpleFunction>()
     override val internalPackageFqn = FqName("kotlin.wasm")
 
-    private val internalPackageFragment = IrExternalPackageFragmentImpl.createEmptyExternalPackageFragment(
-        builtIns.builtInsModule, FqName("kotlin.wasm.internal")
-    )
+    private val internalPackageFragmentDescriptor = EmptyPackageFragmentDescriptor(builtIns.builtInsModule, FqName("kotlin.wasm.internal"))
+    // TODO: Merge with JS IR Backend context lazy file
+    val internalPackageFragment by lazy {
+        IrFileImpl(object : IrFileEntry {
+            override val name = "<implicitDeclarations>"
+            override val maxOffset = UNDEFINED_OFFSET
 
-    override val sharedVariablesManager = JsSharedVariablesManager(TODO("..."))
+            override fun getSourceRangeInfo(beginOffset: Int, endOffset: Int) =
+                SourceRangeInfo(
+                    "",
+                    UNDEFINED_OFFSET,
+                    UNDEFINED_OFFSET,
+                    UNDEFINED_OFFSET,
+                    UNDEFINED_OFFSET,
+                    UNDEFINED_OFFSET,
+                    UNDEFINED_OFFSET
+                )
+
+            override fun getLineNumber(offset: Int) = UNDEFINED_OFFSET
+            override fun getColumnNumber(offset: Int) = UNDEFINED_OFFSET
+        }, internalPackageFragmentDescriptor, irModuleFragment).also {
+            irModuleFragment.files += it
+        }
+    }
+
+
+    val startFunction = irFactory.buildFun {
+        name = Name.identifier("startFunction")
+        returnType = irBuiltIns.unitType
+    }.apply {
+        body = irFactory.createBlockBody(UNDEFINED_OFFSET, UNDEFINED_OFFSET)
+        internalPackageFragment.addChild(this)
+    }
+
+    override val sharedVariablesManager =
+        WasmSharedVariablesManager(this, irBuiltIns, internalPackageFragment)
 
     val wasmSymbols: WasmSymbols = WasmSymbols(this@WasmBackendContext, symbolTable)
     override val ir = object : Ir<WasmBackendContext>(this, irModuleFragment) {
         override val symbols: Symbols<WasmBackendContext> = wasmSymbols
         override fun shouldGenerateHandlerParameterForDefaultBodyFun() = true
     }
+
+    override val inlineClassesUtils = WasmInlineClassesUtils(wasmSymbols)
 
     override fun log(message: () -> String) {
         /*TODO*/

@@ -32,9 +32,9 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.platform.TargetPlatform
 import org.jetbrains.kotlin.platform.TargetPlatformVersion
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.resolve.SealedClassInheritorsProvider
 import org.jetbrains.kotlin.storage.StorageManager
 import org.jetbrains.kotlin.storage.getValue
-import java.util.*
 
 class ResolverForModule(
     val packageFragmentProvider: PackageFragmentProvider,
@@ -119,39 +119,52 @@ abstract class ResolverForModuleFactory {
         moduleContext: ModuleContext,
         moduleContent: ModuleContent<M>,
         resolverForProject: ResolverForProject<M>,
-        languageVersionSettings: LanguageVersionSettings
+        languageVersionSettings: LanguageVersionSettings,
+        sealedInheritorsProvider: SealedClassInheritorsProvider,
     ): ResolverForModule
 }
 
 class LazyModuleDependencies<M : ModuleInfo>(
     storageManager: StorageManager,
     private val module: M,
-    firstDependency: M? = null,
+    firstDependency: M?,
     private val resolverForProject: AbstractResolverForProject<M>
 ) : ModuleDependencies {
+
     private val dependencies = storageManager.createLazyValue {
+
+        val moduleDescriptors = mutableSetOf<ModuleDescriptorImpl>()
+        firstDependency?.let {
+            moduleDescriptors.add(resolverForProject.descriptorForModule(it))
+        }
         val moduleDescriptor = resolverForProject.descriptorForModule(module)
-        sequence {
-            if (firstDependency != null) {
-                yield(resolverForProject.descriptorForModule(firstDependency))
-            }
-            if (module.dependencyOnBuiltIns() == ModuleInfo.DependencyOnBuiltIns.AFTER_SDK) {
-                yield(moduleDescriptor.builtIns.builtInsModule)
-            }
-            for (dependency in module.dependencies()) {
-                @Suppress("UNCHECKED_CAST")
-                yield(resolverForProject.descriptorForModule(dependency as M))
-            }
-            if (module.dependencyOnBuiltIns() == ModuleInfo.DependencyOnBuiltIns.LAST) {
-                yield(moduleDescriptor.builtIns.builtInsModule)
-            }
-        }.toList()
+        val dependencyOnBuiltIns = module.dependencyOnBuiltIns()
+        if (dependencyOnBuiltIns == ModuleInfo.DependencyOnBuiltIns.AFTER_SDK) {
+            moduleDescriptors.add(moduleDescriptor.builtIns.builtInsModule)
+        }
+        for (dependency in module.dependencies()) {
+            if (dependency == firstDependency) continue
+
+            @Suppress("UNCHECKED_CAST")
+            moduleDescriptors.add(resolverForProject.descriptorForModule(dependency as M))
+        }
+        if (dependencyOnBuiltIns == ModuleInfo.DependencyOnBuiltIns.LAST) {
+            moduleDescriptors.add(moduleDescriptor.builtIns.builtInsModule)
+        }
+        moduleDescriptors.toList()
     }
 
     override val allDependencies: List<ModuleDescriptorImpl> get() = dependencies()
 
-    override val expectedByDependencies by storageManager.createLazyValue {
+    override val directExpectedByDependencies by storageManager.createLazyValue {
         module.expectedBy.map {
+            @Suppress("UNCHECKED_CAST")
+            resolverForProject.descriptorForModule(it as M)
+        }
+    }
+
+    override val allExpectedByDependencies: Set<ModuleDescriptorImpl> by storageManager.createLazyValue {
+        collectAllExpectedByModules(module).mapTo(HashSet<ModuleDescriptorImpl>()) {
             @Suppress("UNCHECKED_CAST")
             resolverForProject.descriptorForModule(it as M)
         }
@@ -185,8 +198,7 @@ interface PackageOracleFactory {
 interface LanguageSettingsProvider {
     fun getLanguageVersionSettings(
         moduleInfo: ModuleInfo,
-        project: Project,
-        isReleaseCoroutines: Boolean? = null
+        project: Project
     ): LanguageVersionSettings
 
     fun getTargetPlatform(moduleInfo: ModuleInfo, project: Project): TargetPlatformVersion
@@ -194,8 +206,7 @@ interface LanguageSettingsProvider {
     object Default : LanguageSettingsProvider {
         override fun getLanguageVersionSettings(
             moduleInfo: ModuleInfo,
-            project: Project,
-            isReleaseCoroutines: Boolean?
+            project: Project
         ) = LanguageVersionSettingsImpl.DEFAULT
 
         override fun getTargetPlatform(moduleInfo: ModuleInfo, project: Project): TargetPlatformVersion = TargetPlatformVersion.NoVersion

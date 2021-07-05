@@ -7,7 +7,6 @@ package org.jetbrains.kotlin.gradle
 
 import org.jetbrains.kotlin.gradle.util.modify
 import org.jetbrains.kotlin.konan.target.HostManager
-import org.junit.Assume
 import java.io.File
 import java.util.zip.ZipFile
 import kotlin.test.Test
@@ -15,8 +14,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class KlibBasedMppIT : BaseGradleIT() {
-    override val defaultGradleVersion = GradleVersionRequired.AtLeast("6.0")
-
     companion object {
         private const val MODULE_GROUP = "com.example"
     }
@@ -93,11 +90,12 @@ class KlibBasedMppIT : BaseGradleIT() {
         checkTaskCompileClasspath(
             "compile${hostSpecificSourceSet.capitalize()}KotlinMetadata",
             listOf(
-                "published-producer-metadata-$hostSpecificSourceSet.klib",
-                "published-producer-metadata-commonMain.klib",
-                "published-dependency-metadata-$hostSpecificSourceSet.klib",
-                "published-dependency-metadata-commonMain.klib"
-            )
+                "published-producer-$hostSpecificSourceSet.klib",
+                "published-producer-commonMain.klib",
+                "published-dependency-$hostSpecificSourceSet.klib",
+                "published-dependency-commonMain.klib"
+            ),
+            isNative = true
         )
     }
 
@@ -176,7 +174,7 @@ class KlibBasedMppIT : BaseGradleIT() {
 
             assertFileExists("build/classes/kotlin/metadata/commonMain/default/manifest")
             assertFileExists("build/classes/kotlin/metadata/jvmAndJsMain/default/manifest")
-            assertFileExists("build/classes/kotlin/metadata/linuxMain/${projectName}_linuxMain.klib")
+            assertFileExists("build/classes/kotlin/metadata/linuxMain/klib/${projectName}_linuxMain.klib")
 
             // Check that the common and JVM+JS source sets don't receive the Kotlin/Native stdlib in the classpath:
             run {
@@ -209,7 +207,7 @@ class KlibBasedMppIT : BaseGradleIT() {
         // Check that the metadata JAR doesn't contain the host-specific source set entries, but contains the shared-Native source set
         // that can be built on every host:
 
-        ZipFile(groupDir.resolve("$dependencyModuleName-metadata/1.0/$dependencyModuleName-metadata-1.0-all.jar")).use { metadataJar ->
+        ZipFile(groupDir.resolve("$dependencyModuleName/1.0/$dependencyModuleName-1.0-all.jar")).use { metadataJar ->
             assertTrue { metadataJar.entries().asSequence().none { it.name.startsWith(hostSpecificSourceSet) } }
             assertTrue { metadataJar.entries().asSequence().any { it.name.startsWith("linuxMain") } }
         }

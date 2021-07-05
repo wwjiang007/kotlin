@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -7,7 +7,7 @@ package org.jetbrains.kotlin.fir.declarations.builder
 
 import kotlin.contracts.*
 import org.jetbrains.kotlin.descriptors.ClassKind
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.FirModuleData
 import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.fir.builder.FirAnnotationContainerBuilder
 import org.jetbrains.kotlin.fir.builder.FirBuilderDsl
@@ -37,15 +37,16 @@ import org.jetbrains.kotlin.name.Name
 @FirBuilderDsl
 open class FirRegularClassBuilder : FirClassBuilder, FirTypeParameterRefsOwnerBuilder, FirAnnotationContainerBuilder {
     override var source: FirSourceElement? = null
-    override lateinit var session: FirSession
-    open var resolvePhase: FirResolvePhase = FirResolvePhase.RAW_FIR
+    override lateinit var moduleData: FirModuleData
+    override var resolvePhase: FirResolvePhase = FirResolvePhase.RAW_FIR
     override lateinit var origin: FirDeclarationOrigin
-    override val annotations: MutableList<FirAnnotationCall> = mutableListOf()
+    override var attributes: FirDeclarationAttributes = FirDeclarationAttributes()
     override val typeParameters: MutableList<FirTypeParameterRef> = mutableListOf()
-    open lateinit var status: FirDeclarationStatus
     override lateinit var classKind: ClassKind
     override val declarations: MutableList<FirDeclaration> = mutableListOf()
+    override val annotations: MutableList<FirAnnotationCall> = mutableListOf()
     override lateinit var scopeProvider: FirScopeProvider
+    open lateinit var status: FirDeclarationStatus
     open lateinit var name: Name
     open lateinit var symbol: FirRegularClassSymbol
     open var companionObject: FirRegularClass? = null
@@ -54,15 +55,16 @@ open class FirRegularClassBuilder : FirClassBuilder, FirTypeParameterRefsOwnerBu
     override fun build(): FirRegularClass {
         return FirRegularClassImpl(
             source,
-            session,
+            moduleData,
             resolvePhase,
             origin,
-            annotations,
+            attributes,
             typeParameters,
-            status,
             classKind,
             declarations,
+            annotations,
             scopeProvider,
+            status,
             name,
             symbol,
             companionObject,
@@ -78,4 +80,28 @@ inline fun buildRegularClass(init: FirRegularClassBuilder.() -> Unit): FirRegula
         callsInPlace(init, kotlin.contracts.InvocationKind.EXACTLY_ONCE)
     }
     return FirRegularClassBuilder().apply(init).build()
+}
+
+@OptIn(ExperimentalContracts::class)
+inline fun buildRegularClassCopy(original: FirRegularClass, init: FirRegularClassBuilder.() -> Unit): FirRegularClass {
+    contract {
+        callsInPlace(init, kotlin.contracts.InvocationKind.EXACTLY_ONCE)
+    }
+    val copyBuilder = FirRegularClassBuilder()
+    copyBuilder.source = original.source
+    copyBuilder.moduleData = original.moduleData
+    copyBuilder.resolvePhase = original.resolvePhase
+    copyBuilder.origin = original.origin
+    copyBuilder.attributes = original.attributes.copy()
+    copyBuilder.typeParameters.addAll(original.typeParameters)
+    copyBuilder.classKind = original.classKind
+    copyBuilder.declarations.addAll(original.declarations)
+    copyBuilder.annotations.addAll(original.annotations)
+    copyBuilder.scopeProvider = original.scopeProvider
+    copyBuilder.status = original.status
+    copyBuilder.name = original.name
+    copyBuilder.symbol = original.symbol
+    copyBuilder.companionObject = original.companionObject
+    copyBuilder.superTypeRefs.addAll(original.superTypeRefs)
+    return copyBuilder.apply(init).build()
 }

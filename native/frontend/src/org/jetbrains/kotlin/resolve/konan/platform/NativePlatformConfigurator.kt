@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.resolve.konan.platform
 
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.container.StorageComponentContainer
 import org.jetbrains.kotlin.container.useImpl
 import org.jetbrains.kotlin.container.useInstance
@@ -24,14 +25,13 @@ import org.jetbrains.kotlin.resolve.konan.diagnostics.NativeTopLevelSingletonChe
 object NativePlatformConfigurator : PlatformConfiguratorBase(
     additionalCallCheckers = listOf(
         SuperCallWithDefaultArgumentsChecker(),
-        TypeOfChecker,
     ),
     additionalDeclarationCheckers = listOf(
         NativeThrowsChecker, NativeSharedImmutableChecker,
         NativeTopLevelSingletonChecker, NativeThreadLocalChecker
     )
 ) {
-    override fun configureModuleComponents(container: StorageComponentContainer) {
+    override fun configureModuleComponents(container: StorageComponentContainer, languageVersionSettings: LanguageVersionSettings) {
         container.useInstance(NativeInliningRule)
     }
 

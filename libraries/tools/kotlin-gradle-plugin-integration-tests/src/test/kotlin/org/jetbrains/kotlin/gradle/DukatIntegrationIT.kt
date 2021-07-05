@@ -5,8 +5,15 @@
 
 package org.jetbrains.kotlin.gradle
 
+import com.google.gson.Gson
+import org.gradle.api.logging.configuration.WarningMode
+import org.jetbrains.kotlin.gradle.targets.js.dukat.ExternalsOutputFormat
+import org.jetbrains.kotlin.gradle.targets.js.npm.NpmProject
+import org.jetbrains.kotlin.gradle.targets.js.npm.PackageJson
 import org.jetbrains.kotlin.gradle.util.modify
 import org.junit.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class DukatIntegrationIT : BaseGradleIT() {
     @Test
@@ -100,9 +107,12 @@ class DukatIntegrationIT : BaseGradleIT() {
         )
         project.setupWorkingDir()
         project.gradleBuildScript().modify(::transformBuildScriptWithPluginsDsl)
+        project.gradleProperties().modify {
+            "${ExternalsOutputFormat.externalsOutputFormatProperty}=${ExternalsOutputFormat.SOURCE}"
+        }
 
         val externalSrcs = "build/externals/$projectName/src"
-        project.build("generateExternalsIntegrated") {
+        project.build("compileKotlinJs") {
             assertSuccessful()
 
             assertSingleFileExists(externalSrcs, "index.module_decamelize.kt")
@@ -152,9 +162,12 @@ class DukatIntegrationIT : BaseGradleIT() {
         )
         project.setupWorkingDir()
         project.gradleBuildScript().modify(::transformBuildScriptWithPluginsDsl)
+        project.gradleProperties().modify {
+            "${ExternalsOutputFormat.externalsOutputFormatProperty}=${ExternalsOutputFormat.SOURCE}"
+        }
 
         val externalSrcs = "build/externals/$projectName/src"
-        project.build("generateExternalsIntegrated") {
+        project.build("compileKotlinJs") {
             assertSuccessful()
 
             assertSingleFileExists(externalSrcs, "index.module_decamelize.kt")
@@ -223,7 +236,10 @@ class DukatIntegrationIT : BaseGradleIT() {
         project.setupWorkingDir()
         project.gradleBuildScript().modify(::transformBuildScriptWithPluginsDsl)
         project.gradleProperties().modify {
-            "kotlin.js.generate.externals=true"
+            """
+                kotlin.js.generate.externals=true
+                ${ExternalsOutputFormat.externalsOutputFormatProperty}=${ExternalsOutputFormat.SOURCE}
+            """.trimIndent()
         }
 
         project.gradleBuildScript().modify { buildScript ->
@@ -239,6 +255,175 @@ class DukatIntegrationIT : BaseGradleIT() {
             assertSuccessful()
 
             assertSingleFileExists(externalSrcs, "index.module_left-pad.kt")
+        }
+    }
+
+    @Test
+    fun testBothOnlyOnceGenerateDependencies() {
+        val project = Project(
+            projectName = "both",
+            directoryPrefix = "dukat-integration"
+        )
+        project.setupWorkingDir()
+        project.gradleBuildScript().modify(::transformBuildScriptWithPluginsDsl)
+        project.gradleProperties().modify {
+            "${ExternalsOutputFormat.externalsOutputFormatProperty}=${ExternalsOutputFormat.SOURCE}"
+        }
+
+        val externalSrcs = "build/externals/both-js-ir/src"
+        project.build("compileKotlinJsLegacy") {
+            assertSuccessful()
+            assertTasksExecuted(":irGenerateExternalsIntegrated")
+
+            assertSingleFileExists(externalSrcs, "index.module_decamelize.kt")
+            val legacyExternals = "build/externals/both-js-legacy/src"
+            val directoryFile = fileInWorkingDir(legacyExternals)
+            assertTrue(
+                !directoryFile.exists(),
+                "[$legacyExternals] should not contain files"
+            )
+        }
+
+        project.build(
+            "compileKotlinJsLegacy",
+            "--rerun-tasks"
+        ) {
+            assertSuccessful()
+            assertTasksExecuted(":irGenerateExternalsIntegrated")
+
+            assertSingleFileExists(externalSrcs, "index.module_decamelize.kt")
+        }
+    }
+
+    @Test
+    fun testCompilationLegacyBinariesGroovyDsl() {
+        testCompilationLegacyBinaries(
+            DslType.GROOVY
+        )
+    }
+
+    @Test
+    fun testCompilationLegacyBinariesKotlinDsl() {
+        testCompilationLegacyBinaries(
+            DslType.KOTLIN
+        )
+    }
+
+    private fun testCompilationLegacyBinaries(
+        dslType: DslType
+    ) {
+        val projectName = projectName(dslType, DependenciesLocation.EXTENSION)
+        val project = Project(
+            projectName = projectName,
+            directoryPrefix = "dukat-integration"
+        )
+        project.setupWorkingDir()
+        project.gradleBuildScript().modify(::transformBuildScriptWithPluginsDsl)
+
+        project.build("compileKotlinJs") {
+            assertSuccessful()
+        }
+    }
+
+    @Test
+    fun testAssembleBothBinaries() {
+        val projectName = "both"
+        val project = Project(
+            projectName = projectName,
+            directoryPrefix = "dukat-integration"
+        )
+        project.setupWorkingDir()
+        project.gradleBuildScript().modify(::transformBuildScriptWithPluginsDsl)
+
+        project.build("assemble", options = defaultBuildOptions().copy(warningMode = WarningMode.Summary)) {
+            assertSuccessful()
+        }
+    }
+
+    @Test
+    fun testCompileLegacyBothBinaries() {
+        val projectName = "both"
+        val project = Project(
+            projectName = projectName,
+            directoryPrefix = "dukat-integration"
+        )
+        project.setupWorkingDir()
+        project.gradleBuildScript().modify(::transformBuildScriptWithPluginsDsl)
+        project.gradleProperties().modify {
+            """
+                ${ExternalsOutputFormat.externalsOutputFormatProperty}=${ExternalsOutputFormat.BINARY}
+            """.trimIndent()
+        }
+
+        val externalSrcs = "build/externals/both-js-legacy/src"
+        project.build("compileKotlinJsLegacy") {
+            assertSuccessful()
+
+            assertSingleFileExists(externalSrcs, "index.d.jar")
+
+            val irExternals = "build/externals/both-js-ir/src"
+            val directoryFile = fileInWorkingDir(irExternals)
+            assertTrue(
+                !directoryFile.exists(),
+                "[$irExternals] should not contain files"
+            )
+        }
+    }
+
+    @Test
+    fun testAssembleBothSource() {
+        val projectName = "both"
+        val project = Project(
+            projectName = projectName,
+            directoryPrefix = "dukat-integration"
+        )
+        project.setupWorkingDir()
+        project.gradleBuildScript().modify(::transformBuildScriptWithPluginsDsl)
+        project.gradleProperties().modify {
+            """
+                ${ExternalsOutputFormat.externalsOutputFormatProperty}=${ExternalsOutputFormat.SOURCE}
+            """.trimIndent()
+        }
+
+        val externalSrcs = "build/externals/both-js-ir/src"
+        project.build("assemble", options = defaultBuildOptions().copy(warningMode = WarningMode.Summary)) {
+            assertSuccessful()
+
+            assertTasksExecuted(":irGenerateExternalsIntegrated")
+
+            assertSingleFileExists(externalSrcs, "index.module_decamelize.kt")
+            val legacyExternals = "build/externals/both-js-legacy/src"
+            val directoryFile = fileInWorkingDir(legacyExternals)
+            assertTrue(
+                !directoryFile.exists(),
+                "[$legacyExternals] should not contain files"
+            )
+        }
+    }
+
+    @Test
+    fun testWithoutGenerateExternals() {
+        val projectName = "without-generate-externals"
+        val project = Project(
+            projectName = projectName,
+            directoryPrefix = "dukat-integration"
+        )
+        project.setupWorkingDir()
+
+        project.gradleBuildScript().modify(::transformBuildScriptWithPluginsDsl)
+
+        project.build("assemble", options = defaultBuildOptions().copy(warningMode = WarningMode.Summary)) {
+            assertSuccessful()
+
+            assertTasksNotExecuted(":generateExternalsIntegrated")
+
+            assertFalse("Dukat don't need to be dependency for thus project") {
+                fileInWorkingDir("build/js/packages/without-generate-externals")
+                    .resolve(NpmProject.PACKAGE_JSON)
+                    .let {
+                        Gson().fromJson(it.readText(), PackageJson::class.java)
+                    }.dependencies.containsKey("dukat")
+            }
         }
     }
 

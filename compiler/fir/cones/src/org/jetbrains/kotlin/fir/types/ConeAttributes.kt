@@ -6,23 +6,25 @@
 package org.jetbrains.kotlin.fir.types
 
 import org.jetbrains.kotlin.fir.utils.AttributeArrayOwner
-import org.jetbrains.kotlin.fir.utils.Protected
 import org.jetbrains.kotlin.fir.utils.TypeRegistry
-import org.jetbrains.kotlin.fir.utils.isEmpty
+import org.jetbrains.kotlin.types.model.AnnotationMarker
 import org.jetbrains.kotlin.utils.addIfNotNull
 import kotlin.properties.ReadOnlyProperty
 import kotlin.reflect.KClass
 
-abstract class ConeAttribute<T : ConeAttribute<T>> {
+abstract class ConeAttribute<T : ConeAttribute<T>> : AnnotationMarker {
     abstract fun union(other: @UnsafeVariance T?): T?
     abstract fun intersect(other: @UnsafeVariance T?): T?
     abstract fun isSubtypeOf(other: @UnsafeVariance T?): Boolean
 
+    abstract override fun toString(): String
+
     abstract val key: KClass<out T>
 }
 
-@OptIn(Protected::class)
-class ConeAttributes private constructor(attributes: List<ConeAttribute<*>>) : AttributeArrayOwner<ConeAttribute<*>, ConeAttribute<*>>() {
+class ConeAttributes private constructor(attributes: List<ConeAttribute<*>>) : AttributeArrayOwner<ConeAttribute<*>, ConeAttribute<*>>(),
+    Iterable<ConeAttribute<*>> {
+
     companion object : TypeRegistry<ConeAttribute<*>, ConeAttribute<*>>() {
         inline fun <reified T : ConeAttribute<T>> attributeAccessor(): ReadOnlyProperty<ConeAttributes, T?> {
             @Suppress("UNCHECKED_CAST")
@@ -30,6 +32,13 @@ class ConeAttributes private constructor(attributes: List<ConeAttribute<*>>) : A
         }
 
         val Empty: ConeAttributes = ConeAttributes(emptyList())
+        val WithExtensionFunctionType: ConeAttributes = ConeAttributes(listOf(CompilerConeAttributes.ExtensionFunctionType))
+
+        private val predefinedAttributes: Map<ConeAttribute<*>, ConeAttributes> = mapOf(
+            CompilerConeAttributes.EnhancedNullability.predefined()
+        )
+
+        private fun ConeAttribute<*>.predefined(): Pair<ConeAttribute<*>, ConeAttributes> = this to ConeAttributes(this)
 
         fun create(attributes: List<ConeAttribute<*>>): ConeAttributes {
             return if (attributes.isEmpty()) {
@@ -39,6 +48,8 @@ class ConeAttributes private constructor(attributes: List<ConeAttribute<*>>) : A
             }
         }
     }
+
+    private constructor(attribute: ConeAttribute<*>) : this(listOf(attribute))
 
     init {
         for (attribute in attributes) {
@@ -54,16 +65,36 @@ class ConeAttributes private constructor(attributes: List<ConeAttribute<*>>) : A
         return perform(other) { this.intersect(it) }
     }
 
+    operator fun contains(attribute: ConeAttribute<*>): Boolean {
+        val index = getId(attribute.key)
+        return arrayMap[index] != null
+    }
+
+    @OptIn(ExperimentalStdlibApi::class)
+    operator fun plus(attribute: ConeAttribute<*>): ConeAttributes {
+        if (attribute in this) return this
+        if (isEmpty()) return predefinedAttributes[attribute] ?: ConeAttributes(attribute)
+        val newAttributes = buildList {
+            addAll(this)
+            add(attribute)
+        }
+        return ConeAttributes(newAttributes)
+    }
+
+    fun remove(attribute: ConeAttribute<*>): ConeAttributes {
+        if (isEmpty()) return this
+        val attributes = arrayMap.filter { it != attribute }
+        if (attributes.size == arrayMap.size) return this
+        return create(attributes)
+    }
+
     private inline fun perform(other: ConeAttributes, op: ConeAttribute<*>.(ConeAttribute<*>?) -> ConeAttribute<*>?): ConeAttributes {
         if (this.isEmpty() && other.isEmpty()) return this
         val attributes = mutableListOf<ConeAttribute<*>>()
         for (index in indices) {
             val a = arrayMap[index]
             val b = other.arrayMap[index]
-            val res = when {
-                a == null -> b?.op(a)
-                else -> a.op(b)
-            }
+            val res = if (a == null) b?.op(a) else a.op(b)
             attributes.addIfNotNull(res)
         }
         return create(attributes)
@@ -71,8 +102,4 @@ class ConeAttributes private constructor(attributes: List<ConeAttribute<*>>) : A
 
     override val typeRegistry: TypeRegistry<ConeAttribute<*>, ConeAttribute<*>>
         get() = Companion
-
-    private fun isEmpty(): Boolean {
-        return arrayMap.isEmpty()
-    }
 }

@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.resolve.calls.inference
 import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintKind
 import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintPosition
 import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintStorage
+import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintSystemError
 import org.jetbrains.kotlin.types.model.*
 
 interface ConstraintSystemOperation {
@@ -17,11 +18,23 @@ interface ConstraintSystemOperation {
     fun unmarkPostponedVariable(variable: TypeVariableMarker)
     fun removePostponedVariables()
 
-    fun getRevisedVariableForParameter(expectedType: TypeVariableMarker, index: Int): TypeVariableMarker?
-    fun getRevisedVariableForReturnType(expectedType: TypeVariableMarker): TypeVariableMarker?
+    fun getBuiltFunctionalExpectedTypeForPostponedArgument(
+        topLevelVariable: TypeConstructorMarker,
+        pathToExpectedType: List<Pair<TypeConstructorMarker, Int>>
+    ): KotlinTypeMarker?
 
-    fun putRevisedVariableForParameter(expectedType: TypeVariableMarker, index: Int, newVariable: TypeVariableMarker)
-    fun putRevisedVariableForReturnType(expectedType: TypeVariableMarker, newVariable: TypeVariableMarker)
+    fun getBuiltFunctionalExpectedTypeForPostponedArgument(expectedTypeVariable: TypeConstructorMarker): KotlinTypeMarker?
+
+    fun putBuiltFunctionalExpectedTypeForPostponedArgument(
+        topLevelVariable: TypeConstructorMarker,
+        pathToExpectedType: List<Pair<TypeConstructorMarker, Int>>,
+        builtFunctionalType: KotlinTypeMarker
+    )
+
+    fun putBuiltFunctionalExpectedTypeForPostponedArgument(
+        expectedTypeVariable: TypeConstructorMarker,
+        builtFunctionalType: KotlinTypeMarker
+    )
 
     fun addSubtypeConstraint(lowerType: KotlinTypeMarker, upperType: KotlinTypeMarker, position: ConstraintPosition)
     fun addEqualityConstraint(a: KotlinTypeMarker, b: KotlinTypeMarker, position: ConstraintPosition)
@@ -33,6 +46,8 @@ interface ConstraintSystemOperation {
     fun getProperSuperTypeConstructors(type: KotlinTypeMarker): List<TypeConstructorMarker>
 
     fun addOtherSystem(otherSystem: ConstraintStorage)
+
+    val errors: List<ConstraintSystemError>
 }
 
 interface ConstraintSystemBuilder : ConstraintSystemOperation {

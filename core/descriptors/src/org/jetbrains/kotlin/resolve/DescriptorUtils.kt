@@ -24,16 +24,15 @@ import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.DescriptorUtils.getContainingClass
 import org.jetbrains.kotlin.resolve.constants.ConstantValue
 import org.jetbrains.kotlin.resolve.constants.EnumValue
+import org.jetbrains.kotlin.resolve.isInlineClass
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
 import org.jetbrains.kotlin.resolve.scopes.MemberScope
-import org.jetbrains.kotlin.types.KotlinType
-import org.jetbrains.kotlin.types.TypeProjection
-import org.jetbrains.kotlin.types.TypeSubstitutor
-import org.jetbrains.kotlin.types.Variance
+import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.checker.KotlinTypeChecker
 import org.jetbrains.kotlin.types.checker.KotlinTypeRefiner
 import org.jetbrains.kotlin.types.checker.REFINER_CAPABILITY
 import org.jetbrains.kotlin.types.refinement.TypeRefinement
+import org.jetbrains.kotlin.types.typeUtil.contains
 import org.jetbrains.kotlin.types.typeUtil.isAnyOrNullableAny
 import org.jetbrains.kotlin.types.typeUtil.makeNullable
 import org.jetbrains.kotlin.utils.DFS
@@ -208,9 +207,11 @@ fun Annotated.isDocumentedAnnotation(): Boolean =
     annotations.findAnnotation(StandardNames.FqNames.mustBeDocumented) != null
 
 fun Annotated.getAnnotationRetention(): KotlinRetention? {
-    val retentionArgumentValue =
-        annotations.findAnnotation(StandardNames.FqNames.retention)?.allValueArguments?.get(RETENTION_PARAMETER_NAME)
-                as? EnumValue ?: return null
+    return annotations.findAnnotation(StandardNames.FqNames.retention)?.getAnnotationRetention()
+}
+
+fun AnnotationDescriptor.getAnnotationRetention(): KotlinRetention? {
+    val retentionArgumentValue = allValueArguments[RETENTION_PARAMETER_NAME] as? EnumValue ?: return null
 
     val retentionArgumentValueName = retentionArgumentValue.enumEntryName.asString()
     return KotlinRetention.values().firstOrNull { it.name == retentionArgumentValueName }
@@ -373,36 +374,6 @@ fun ClassifierDescriptor.getAllSuperClassifiers(): Sequence<ClassifierDescriptor
     return doGetAllSuperClassesAndInterfaces()
 }
 
-// Note this is a generic and slow implementation which would work almost for any subclass of ClassDescriptor.
-// Please avoid using it in new code.
-// TODO: do something more clever instead at call sites of this function
-fun computeSealedSubclasses(sealedClass: ClassDescriptor): Collection<ClassDescriptor> {
-    if (sealedClass.modality != Modality.SEALED) return emptyList()
-
-    val result = linkedSetOf<ClassDescriptor>()
-
-    fun collectSubclasses(scope: MemberScope, collectNested: Boolean) {
-        for (descriptor in scope.getContributedDescriptors(DescriptorKindFilter.CLASSIFIERS)) {
-            if (descriptor !is ClassDescriptor) continue
-
-            if (DescriptorUtils.isDirectSubclass(descriptor, sealedClass)) {
-                result.add(descriptor)
-            }
-
-            if (collectNested) {
-                collectSubclasses(descriptor.unsubstitutedInnerClassesScope, collectNested)
-            }
-        }
-    }
-
-    val container = sealedClass.containingDeclaration
-    if (container is PackageFragmentDescriptor) {
-        collectSubclasses(container.getMemberScope(), collectNested = false)
-    }
-    collectSubclasses(sealedClass.unsubstitutedInnerClassesScope, collectNested = true)
-    return result
-}
-
 fun DeclarationDescriptor.isPublishedApi(): Boolean {
     val descriptor = if (this is CallableMemberDescriptor) DescriptorUtils.getDirectMember(this) else this
     return descriptor.annotations.hasAnnotation(StandardNames.FqNames.publishedApi)
@@ -445,10 +416,26 @@ fun DeclarationDescriptor.isAnnotationConstructor(): Boolean =
     this is ConstructorDescriptor && DescriptorUtils.isAnnotationClass(this.constructedClass)
 
 fun DeclarationDescriptor.isPrimaryConstructorOfInlineClass(): Boolean =
-    this is ConstructorDescriptor && this.isPrimary && this.constructedClass.isInline
+    this is ConstructorDescriptor && this.isPrimary && this.constructedClass.isInlineClass()
 
 @TypeRefinement
 fun ModuleDescriptor.getKotlinTypeRefiner(): KotlinTypeRefiner = getCapability(REFINER_CAPABILITY)?.value ?: KotlinTypeRefiner.Default
 
 @OptIn(TypeRefinement::class)
 fun ModuleDescriptor.isTypeRefinementEnabled(): Boolean = getCapability(REFINER_CAPABILITY)?.value != null
+
+val VariableDescriptor.isUnderscoreNamed
+    get() = !name.isSpecial && name.identifier == "_"
+
+private fun <D : CallableDescriptor> D.containsStubTypes() =
+    valueParameters.any { parameter -> parameter.type.contains { it is StubTypeForBuilderInference } }
+            || returnType?.contains { it is StubTypeForBuilderInference } == true
+            || dispatchReceiverParameter?.type?.contains { it is StubTypeForBuilderInference } == true
+            || extensionReceiverParameter?.type?.contains { it is StubTypeForBuilderInference } == true
+
+fun <D : CallableDescriptor> D.shouldBeSubstituteWithStubTypes() =
+    valueParameters.none { it.type.isError }
+            && returnType?.isError != true
+            && dispatchReceiverParameter?.type?.isError != true
+            && extensionReceiverParameter?.type?.isError != true
+            && containsStubTypes()

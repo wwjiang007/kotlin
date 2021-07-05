@@ -1,36 +1,11 @@
 import kotlinx.benchmark.gradle.benchmark
 
-val benchmarks_version = "0.2.0-dev-7"
-buildscript {
-    val benchmarks_version = "0.2.0-dev-7"
-
-    repositories {
-        val cacheRedirectorEnabled = findProperty("cacheRedirectorEnabled")?.toString()?.toBoolean() == true
-        if (cacheRedirectorEnabled) {
-            maven("https://cache-redirector.jetbrains.com/dl.bintray.com/kotlin/kotlinx")
-        } else {
-            maven("https://dl.bintray.com/kotlin/kotlinx")
-        }
-    }
-    dependencies {
-        classpath("org.jetbrains.kotlinx:kotlinx.benchmark.gradle:$benchmarks_version")
-    }
-}
-
-apply(plugin = "kotlinx.benchmark")
+val benchmarks_version = "0.3.1"
 
 plugins {
     java
     kotlin("jvm")
-}
-
-repositories {
-    val cacheRedirectorEnabled = findProperty("cacheRedirectorEnabled")?.toString()?.toBoolean() == true
-    if (cacheRedirectorEnabled) {
-        maven("https://cache-redirector.jetbrains.com/dl.bintray.com/kotlin/kotlinx")
-   } else {
-        maven("https://dl.bintray.com/kotlin/kotlinx")
-    }
+    id("org.jetbrains.kotlinx.benchmark") version "0.3.1"
 }
 
 dependencies {
@@ -40,11 +15,9 @@ dependencies {
     compile(project(":compiler:cli"))
     compile(intellijCoreDep()) { includeJars("intellij-core") }
     compile(jpsStandalone()) { includeJars("jps-model") }
-    Platform[192].orHigher {
-        compile(intellijPluginDep("java"))
-    }
+    compile(intellijPluginDep("java"))
     compile(intellijDep()) { includeIntellijCoreJarDependencies(project) }
-    compile("org.jetbrains.kotlinx:kotlinx.benchmark.runtime-jvm:$benchmarks_version")
+    compile("org.jetbrains.kotlinx:kotlinx-benchmark-runtime:$benchmarks_version")
 }
 
 sourceSets {
@@ -94,18 +67,16 @@ benchmark {
     }
 }
 
-tasks.named("classes") {
-    doLast {
-        tasks.named("mainBenchmarkJar", Zip::class.java) {
-            isZip64 = true
-            archiveName = "benchmarks.jar"
-        }
-        listOf("mainBenchmark", "mainFirBenchmark", "mainNiBenchmark").forEach {
-            tasks.named(it, JavaExec::class.java) {
-                systemProperty("idea.home.path", intellijRootDir().canonicalPath)
-            }
-        }
-    }
+tasks.matching { it is Zip && it.name == "mainBenchmarkJar" }.configureEach {
+    this as Zip
+    isZip64 = true
+    archiveFileName.set("benchmarks.jar")
+}
+
+val benchmarkTasks = listOf("mainBenchmark", "mainFirBenchmark", "mainNiBenchmark")
+tasks.matching { it is JavaExec && it.name in benchmarkTasks }.configureEach {
+    this as JavaExec
+    systemProperty("idea.home.path", intellijRootDir().canonicalPath)
 }
 
 tasks.register<JavaExec>("runBenchmark") {

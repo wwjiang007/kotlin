@@ -5,15 +5,21 @@ plugins {
 
 dependencies {
     testCompile(projectTests(":compiler"))
-    Platform[192].orHigher {
-        testCompileOnly(intellijDep()) {
-            includeJars("gson", "groovy-all", rootProject = rootProject)
-        }
-        testCompileOnly(intellijCoreDep()) { includeJars("intellij-core") }
-        testRuntimeOnly(intellijPluginDep("java"))
+    testImplementation(projectTests(":compiler:test-infrastructure"))
+    testImplementation(projectTests(":compiler:tests-common-new"))
+    testRuntimeOnly(platform("org.junit:junit-bom:5.7.0"))
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter")
+
+    testCompileOnly(intellijDep()) {
+        includeJars("groovy", "groovy-xml", rootProject = rootProject)
     }
+    testCompile(intellijDep()) {
+        includeJars("gson", rootProject = rootProject)
+    }
+    testCompileOnly(intellijCoreDep()) { includeJars("intellij-core") }
+    testRuntimeOnly(intellijPluginDep("java"))
     compile("org.jsoup:jsoup:1.10.3")
-    if (System.getProperty("idea.active") != null) testRuntimeOnly(files("${rootProject.projectDir}/dist/kotlinc/lib/kotlin-reflect.jar"))
+    if (isIdeaActive) testRuntimeOnly(files("${rootProject.projectDir}/dist/kotlinc/lib/kotlin-reflect.jar"))
     testRuntime(project(":kotlin-reflect"))
 }
 
@@ -21,6 +27,8 @@ sourceSets {
     "main" { }
     "test" { projectDefault() }
 }
+
+testsJar()
 
 projectTest(parallel = true) {
     workingDir = rootDir

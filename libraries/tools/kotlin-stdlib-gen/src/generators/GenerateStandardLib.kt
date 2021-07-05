@@ -5,8 +5,8 @@
 
 package generators
 
-import java.io.*
 import templates.*
+import java.io.File
 import kotlin.system.exitProcess
 
 /**
@@ -46,16 +46,12 @@ fun main(args: Array<String>) {
             targetBaseDirs[KotlinTarget.JVM] = baseDir.resolveExistingDir("libraries/stdlib/jvm/src/generated")
             targetBaseDirs[KotlinTarget.JS] = baseDir.resolveExistingDir("libraries/stdlib/js/src/generated")
             targetBaseDirs[KotlinTarget.JS_IR] = baseDir.resolveExistingDir("libraries/stdlib/js-ir/src/generated")
-        }
-        2 -> {
-            val (targetName, targetDir) = args
-            val target = KotlinTarget.values.singleOrNull { it.name.equals(targetName, ignoreCase = true) } ?: error("Invalid target: $targetName")
-            targetBaseDirs[target] = File(targetDir).also { it.requireExistingDir() }
+            targetBaseDirs[KotlinTarget.WASM] = baseDir.resolveExistingDir("libraries/stdlib/wasm/src/generated")
+            targetBaseDirs[KotlinTarget.Native] = baseDir.resolveExistingDir("kotlin-native/runtime/src/main/kotlin/generated")
         }
         else -> {
             println("""Parameters:
-    <kotlin-base-dir> - generates sources for common, jvm, js, ir-js targets using paths derived from specified base path
-    <target> <target-dir> - generates source for the specified target in the specified target directory
+    <kotlin-base-dir> - generates sources for common, jvm, js, ir-js, native targets using paths derived from specified base path
 """)
             exitProcess(1)
         }
@@ -65,6 +61,7 @@ fun main(args: Array<String>) {
         val targetDir = targetBaseDirs[target] ?: error("Target $target directory is not configured")
         val platformSuffix = when (val platform = target.platform) {
             Platform.Common -> ""
+            Platform.Native -> if (target.backend == Backend.Wasm) "Wasm" else "Native"
             else -> platform.name.toLowerCase().capitalize()
         }
         targetDir.resolve("_${source.name.capitalize()}$platformSuffix.kt")

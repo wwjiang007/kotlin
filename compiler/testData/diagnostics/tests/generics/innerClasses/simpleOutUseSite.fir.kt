@@ -1,4 +1,3 @@
-// !WITH_NEW_INFERENCE
 // !CHECK_TYPE
 // !DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER
 
@@ -29,9 +28,9 @@ fun main() {
     checkSubtype<Outer<out CharSequence>.Inner>(outer.bar())
     checkSubtype<Outer<out CharSequence>.Inner>(outer.Inner())
 
-    outer.set(outer.bar())
-    outer.set(outer.Inner())
+    outer.set(<!ARGUMENT_TYPE_MISMATCH!>outer.bar()<!>)
+    outer.set(<!ARGUMENT_TYPE_MISMATCH!>outer.Inner()<!>)
 
     val x: Outer<String>.Inner = factoryString()
-    outer.set(x)
+    outer.set(<!ARGUMENT_TYPE_MISMATCH!>x<!>)
 }

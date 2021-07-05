@@ -5,19 +5,21 @@
 package org.jetbrains.kotlin.scripting.compiler.plugin.impl
 
 import org.jetbrains.kotlin.analyzer.AnalysisResult
+import org.jetbrains.kotlin.backend.common.phaser.PhaseConfig
+import org.jetbrains.kotlin.backend.jvm.JvmIrCodegenFactory
+import org.jetbrains.kotlin.backend.jvm.jvmPhases
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.messages.AnalyzerWithCompilerReport
-import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.compiler.NoScopeRecordCliBindingTrace
 import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM
 import org.jetbrains.kotlin.cli.jvm.config.JvmClasspathRoot
-import org.jetbrains.kotlin.cli.jvm.config.JvmContentRoot
-import org.jetbrains.kotlin.cli.jvm.config.jvmClasspathRoots
 import org.jetbrains.kotlin.codegen.ClassBuilderFactories
+import org.jetbrains.kotlin.codegen.DefaultCodegenFactory
 import org.jetbrains.kotlin.codegen.KotlinCodegenFacade
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.config.JVMConfigurationKeys
 import org.jetbrains.kotlin.config.languageVersionSettings
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.jvm.extensions.PackageFragmentProviderExtension
@@ -48,7 +50,7 @@ class ScriptJvmCompilerIsolated(val hostConfiguration: ScriptingHostConfiguratio
                     initialConfiguration, hostConfiguration, messageCollector, disposable
                 )
 
-                compileImpl(script, context, messageCollector)
+                compileImpl(script, context, initialConfiguration, messageCollector)
             }
         }
 }
@@ -72,7 +74,7 @@ class ScriptJvmCompilerFromEnvironment(val environment: KotlinCoreEnvironment) :
                 try {
                     environment.configuration.put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, messageCollector)
 
-                    compileImpl(script, context, messageCollector)
+                    compileImpl(script, context, initialConfiguration, messageCollector)
                 } finally {
                     if (parentMessageCollector != null)
                         environment.configuration.put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, parentMessageCollector)
@@ -103,6 +105,7 @@ private fun withScriptCompilationCache(
 private fun compileImpl(
     script: SourceCode,
     context: SharedScriptCompilationContext,
+    initialConfiguration: ScriptCompilationConfiguration,
     messageCollector: ScriptDiagnosticsMessageCollector
 ): ResultWithDiagnostics<CompiledScript> {
     val mainKtFile =
@@ -119,6 +122,7 @@ private fun compileImpl(
     val (sourceFiles, sourceDependencies) = collectRefinedSourcesAndUpdateEnvironment(
         context,
         mainKtFile,
+        initialConfiguration,
         messageCollector
     )
 
@@ -231,4 +235,11 @@ private fun generate(
     analysisResult.bindingContext,
     sourceFiles,
     kotlinCompilerConfiguration
-).build().also(KotlinCodegenFacade::compileCorrectFiles)
+).codegenFactory(
+    if (kotlinCompilerConfiguration.getBoolean(JVMConfigurationKeys.IR))
+        JvmIrCodegenFactory(
+            kotlinCompilerConfiguration.get(CLIConfigurationKeys.PHASE_CONFIG) ?: PhaseConfig(jvmPhases)
+        ) else DefaultCodegenFactory
+).build().also {
+    KotlinCodegenFacade.compileCorrectFiles(it)
+}

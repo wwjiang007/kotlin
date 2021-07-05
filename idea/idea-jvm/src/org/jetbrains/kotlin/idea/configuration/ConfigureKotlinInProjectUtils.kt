@@ -10,6 +10,7 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.extensions.Extensions
 import com.intellij.openapi.module.Module
+import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.projectRoots.JavaSdkVersion
 import com.intellij.openapi.roots.DependencyScope
@@ -27,16 +28,14 @@ import org.jetbrains.annotations.CalledInBackground
 import org.jetbrains.kotlin.builtins.StandardNames
 import org.jetbrains.kotlin.idea.KotlinFileType
 import org.jetbrains.kotlin.idea.KotlinJvmBundle
+import org.jetbrains.kotlin.idea.actions.internal.refactoringTesting.readAction
 import org.jetbrains.kotlin.idea.core.util.getKotlinJvmRuntimeMarkerClass
 import org.jetbrains.kotlin.idea.framework.JSLibraryKind
 import org.jetbrains.kotlin.idea.framework.effectiveKind
 import org.jetbrains.kotlin.idea.quickfix.KotlinAddRequiredModuleFix
+import org.jetbrains.kotlin.idea.util.*
 import org.jetbrains.kotlin.idea.util.application.isUnitTestMode
 import org.jetbrains.kotlin.idea.util.application.runReadAction
-import org.jetbrains.kotlin.idea.util.findFirstPsiJavaModule
-import org.jetbrains.kotlin.idea.util.isDev
-import org.jetbrains.kotlin.idea.util.isEap
-import org.jetbrains.kotlin.idea.util.isSnapshot
 import org.jetbrains.kotlin.idea.util.projectStructure.allModules
 import org.jetbrains.kotlin.idea.util.projectStructure.sdk
 import org.jetbrains.kotlin.idea.util.projectStructure.version
@@ -50,7 +49,7 @@ private val LOG = Logger.getInstance("#org.jetbrains.kotlin.idea.configuration.C
 
 data class RepositoryDescription(val id: String, val name: String, val url: String, val bintrayUrl: String?, val isSnapshot: Boolean)
 
-const val LAST_SNAPSHOT_VERSION = "1.4.255-SNAPSHOT"
+const val LAST_SNAPSHOT_VERSION = "1.5.255-SNAPSHOT"
 
 val SNAPSHOT_REPOSITORY = RepositoryDescription(
     "sonatype.oss.snapshots",
@@ -58,14 +57,6 @@ val SNAPSHOT_REPOSITORY = RepositoryDescription(
     "https://oss.sonatype.org/content/repositories/snapshots",
     null,
     isSnapshot = true
-)
-
-val EAP_REPOSITORY = RepositoryDescription(
-    "bintray.kotlin.eap",
-    "Bintray Kotlin EAP Repository",
-    "https://dl.bintray.com/kotlin/kotlin-eap",
-    "https://bintray.com/kotlin/kotlin-eap/kotlin/",
-    isSnapshot = false
 )
 
 val DEFAULT_GRADLE_PLUGIN_REPOSITORY = RepositoryDescription(
@@ -79,7 +70,7 @@ val DEFAULT_GRADLE_PLUGIN_REPOSITORY = RepositoryDescription(
 fun devRepository(version: String) = RepositoryDescription(
     "teamcity.kotlin.dev",
     "Teamcity Repository of Kotlin Development Builds",
-    "https://teamcity.jetbrains.com/guestAuth/app/rest/builds/buildType:(id:Kotlin_KotlinPublic_Compiler),number:$version,branch:(default:any)/artifacts/content/maven",
+    "https://teamcity.jetbrains.com/guestAuth/app/rest/builds/buildType:(id:Kotlin_KotlinPublic_Aggregate),number:$version,branch:(default:any)/artifacts/content/maven",
     null,
     isSnapshot = false
 )
@@ -114,7 +105,6 @@ fun RepositoryDescription.toKotlinRepositorySnippet() = "maven(\"$url\")"
 
 fun getRepositoryForVersion(version: String): RepositoryDescription? = when {
     isSnapshot(version) -> SNAPSHOT_REPOSITORY
-    isEap(version) -> EAP_REPOSITORY
     isDev(version) -> devRepository(version)
     else -> null
 }
@@ -136,7 +126,8 @@ fun getModulesWithKotlinFiles(project: Project): Collection<Module> {
     if (!isUnitTestMode() && ApplicationManager.getApplication().isDispatchThread) {
         LOG.error("getModulesWithKotlinFiles could be a heavy operation and should not be call on AWT thread")
     }
-    if (!runReadAction {
+
+    if (!project.runReadActionInSmartMode {
             !project.isDisposed &&
                     FileTypeIndex.containsFileOfType(KotlinFileType.INSTANCE, GlobalSearchScope.projectScope(project))
         }) {
@@ -145,7 +136,7 @@ fun getModulesWithKotlinFiles(project: Project): Collection<Module> {
 
     return project.allModules()
         .filter { module ->
-            runReadAction {
+            project.runReadActionInSmartMode {
                 !project.isDisposed && !module.isDisposed
                         && FileTypeIndex.containsFileOfType(KotlinFileType.INSTANCE, module.getModuleScope(true))
             }
@@ -164,10 +155,19 @@ fun getConfigurableModulesWithKotlinFiles(project: Project): List<ModuleSourceRo
 }
 
 fun showConfigureKotlinNotificationIfNeeded(module: Module) {
-    val moduleGroup = module.toModuleGroup()
-    if (!isNotConfiguredNotificationRequired(moduleGroup)) return
+    val action: () -> Unit = {
+        val moduleGroup = module.toModuleGroup()
+        if (isNotConfiguredNotificationRequired(moduleGroup)) {
+            ConfigureKotlinNotificationManager.notify(module.project)
+        }
+    }
 
-    ConfigureKotlinNotificationManager.notify(module.project)
+    val dumbService = DumbService.getInstance(module.project)
+    if (dumbService.isDumb) {
+        dumbService.smartInvokeLater { action() }
+    } else {
+        action()
+    }
 }
 
 fun isNotConfiguredNotificationRequired(moduleGroup: ModuleSourceRootGroup): Boolean {
@@ -267,7 +267,7 @@ fun findApplicableConfigurator(module: Module): KotlinProjectConfigurator {
 }
 
 fun hasAnyKotlinRuntimeInScope(module: Module): Boolean {
-    return runReadAction {
+    return module.project.runReadActionInSmartMode {
         val scope = module.getModuleWithDependenciesAndLibrariesScope(hasKotlinFilesOnlyInTests(module))
         getKotlinJvmRuntimeMarkerClass(module.project, scope) != null ||
                 hasKotlinJsKjsmFile(module.project, LibraryKindSearchScope(module, scope, JSLibraryKind)) ||
@@ -283,7 +283,7 @@ fun hasKotlinJvmRuntimeInScope(module: Module): Boolean {
 }
 
 fun hasKotlinJsRuntimeInScope(module: Module): Boolean {
-    return runReadAction {
+    return module.project.runReadActionInSmartMode {
         val scope = module.getModuleWithDependenciesAndLibrariesScope(hasKotlinFilesOnlyInTests(module))
         hasKotlinJsKjsmFile(module.project, LibraryKindSearchScope(module, scope, JSLibraryKind))
     }

@@ -7,7 +7,7 @@
 
     <groupId>org.jetbrains.kotlin</groupId>
     <artifactId>kotlin-project</artifactId>
-    <version>1.4.255-SNAPSHOT</version>
+    <version>1.5.255-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Kotlin</name>
@@ -42,7 +42,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project-root>../../..</project-root>
 
-        <junit-version>4.11</junit-version>
+        <junit-version>4.13.1</junit-version>
         <pegdown.version>1.1.0</pegdown.version>
         <surefire-version>2.16</surefire-version>
         <exec-maven-plugin.version>1.2.1</exec-maven-plugin.version>
@@ -84,6 +84,7 @@
         <module>tools/kotlin-maven-noarg</module>
         <module>tools/kotlin-maven-sam-with-receiver</module>
         <module>tools/kotlin-maven-serialization</module>
+        <module>tools/kotlin-maven-lombok</module>
 
         <module>tools/kotlin-bom</module>
 

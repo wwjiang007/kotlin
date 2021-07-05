@@ -6,36 +6,104 @@
 package org.jetbrains.kotlin.idea.completion
 
 import com.intellij.codeInsight.completion.*
+import com.intellij.openapi.components.service
 import com.intellij.patterns.PlatformPatterns
 import com.intellij.patterns.PsiJavaPatterns
-import com.intellij.psi.PsiElement
 import com.intellij.util.ProcessingContext
-import org.jetbrains.kotlin.idea.frontend.api.InvalidWayOfUsingAnalysisSession
+import org.jetbrains.kotlin.idea.completion.context.*
+import org.jetbrains.kotlin.idea.completion.context.FirBasicCompletionContext
+import org.jetbrains.kotlin.idea.completion.context.FirExpressionNameReferencePositionContext
+import org.jetbrains.kotlin.idea.completion.context.FirPositionCompletionContextDetector
+import org.jetbrains.kotlin.idea.completion.context.FirTypeNameReferencePositionContext
+import org.jetbrains.kotlin.idea.completion.context.FirUnknownPositionContext
+import org.jetbrains.kotlin.idea.completion.contributors.*
+import org.jetbrains.kotlin.idea.completion.contributors.FirAnnotationCompletionContributor
+import org.jetbrains.kotlin.idea.completion.contributors.FirCallableCompletionContributor
+import org.jetbrains.kotlin.idea.completion.contributors.FirClassifierCompletionContributor
+import org.jetbrains.kotlin.idea.completion.contributors.complete
+import org.jetbrains.kotlin.idea.completion.weighers.Weighers
+import org.jetbrains.kotlin.idea.fir.low.level.api.util.originalKtFile
 import org.jetbrains.kotlin.idea.frontend.api.KtAnalysisSession
-import org.jetbrains.kotlin.idea.frontend.api.getAnalysisSessionFor
-import org.jetbrains.kotlin.idea.frontend.api.scopes.KtCompositeScope
-import org.jetbrains.kotlin.idea.frontend.api.scopes.KtScope
-import org.jetbrains.kotlin.idea.frontend.api.symbols.KtCallableSymbol
-import org.jetbrains.kotlin.idea.frontend.api.symbols.KtSymbol
-import org.jetbrains.kotlin.idea.frontend.api.symbols.markers.KtNamedSymbol
-import org.jetbrains.kotlin.idea.frontend.api.symbols.markers.isExtension
-import org.jetbrains.kotlin.idea.references.mainReference
 import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.psiUtil.getQualifiedExpressionForSelector
+import org.jetbrains.kotlin.psi.KtFile
 
 class KotlinFirCompletionContributor : CompletionContributor() {
     init {
         extend(CompletionType.BASIC, PlatformPatterns.psiElement(), KotlinFirCompletionProvider)
     }
+
+    override fun beforeCompletion(context: CompletionInitializationContext) {
+        val psiFile = context.file
+        if (psiFile !is KtFile) return
+
+        val identifierProviderService = service<CompletionDummyIdentifierProviderService>()
+
+        correctPositionAndDummyIdentifier(identifierProviderService, context)
+    }
+
+    private fun correctPositionAndDummyIdentifier(
+        identifierProviderService: CompletionDummyIdentifierProviderService,
+        context: CompletionInitializationContext
+    ) {
+        val dummyIdentifierCorrected = identifierProviderService.correctPositionForStringTemplateEntry(context)
+        if (dummyIdentifierCorrected) {
+            return
+        }
+
+        context.dummyIdentifier = identifierProviderService.provideDummyIdentifier(context)
+    }
 }
 
 private object KotlinFirCompletionProvider : CompletionProvider<CompletionParameters>() {
     override fun addCompletions(parameters: CompletionParameters, context: ProcessingContext, result: CompletionResultSet) {
-        if (shouldSuppressCompletion(parameters, result.prefixMatcher)) return
+        @Suppress("NAME_SHADOWING") val parameters = KotlinFirCompletionParametersProvider.provide(parameters)
 
-        KotlinAvailableScopesCompletionProvider.addCompletions(parameters, result)
+        if (shouldSuppressCompletion(parameters.ijParameters, result.prefixMatcher)) return
+        val resultSet = createResultSet(parameters, result)
+
+        val basicContext = FirBasicCompletionContext.createFromParameters(parameters, resultSet) ?: return
+        recordOriginalFile(basicContext)
+
+        val positionContext = FirPositionCompletionContextDetector.detect(basicContext)
+
+        FirPositionCompletionContextDetector.analyseInContext(basicContext, positionContext) {
+            complete(basicContext, positionContext)
+        }
     }
+
+
+    private fun KtAnalysisSession.complete(
+        basicContext: FirBasicCompletionContext,
+        positionContext: FirRawPositionCompletionContext,
+    ) {
+        val factory = FirCompletionContributorFactory(basicContext)
+        with(Completions) {
+            complete(factory, positionContext)
+        }
+    }
+
+
+    private fun recordOriginalFile(basicCompletionContext: FirBasicCompletionContext) {
+        val originalFile = basicCompletionContext.originalKtFile
+        val fakeFile = basicCompletionContext.fakeKtFile
+        fakeFile.originalKtFile = originalFile
+    }
+
+    private fun createResultSet(parameters: KotlinFirCompletionParameters, result: CompletionResultSet): CompletionResultSet {
+        @Suppress("NAME_SHADOWING") var result = result.withRelevanceSorter(createSorter(parameters.ijParameters, result))
+        if (parameters is KotlinFirCompletionParameters.Corrected) {
+            val replaced = parameters.ijParameters
+
+            @Suppress("UnstableApiUsage", "DEPRECATION")
+            val originalPrefix = CompletionData.findPrefixStatic(replaced.position, replaced.offset)
+            result = result.withPrefixMatcher(originalPrefix)
+        }
+        return result
+    }
+
+    private fun createSorter(parameters: CompletionParameters, result: CompletionResultSet): CompletionSorter =
+        CompletionSorter.defaultSorter(parameters, result.prefixMatcher)
+            .let(Weighers::addWeighersToCompletionSorter)
 
     private val AFTER_NUMBER_LITERAL = PsiJavaPatterns.psiElement().afterLeafSkipping(
         PsiJavaPatterns.psiElement().withText(""),
@@ -57,85 +125,5 @@ private object KotlinFirCompletionProvider : CompletionProvider<CompletionParame
         if (invocationCount == 0 && prefixMatcher.prefix.isEmpty() && AFTER_INTEGER_LITERAL_AND_DOT.accepts(position)) return true
 
         return false
-    }
-}
-
-private object KotlinAvailableScopesCompletionProvider {
-    private val lookupElementFactory = KotlinFirLookupElementFactory()
-
-    private fun CompletionResultSet.addSymbolToCompletion(symbol: KtSymbol) {
-        if (symbol !is KtNamedSymbol) return
-        addElement(lookupElementFactory.createLookupElement(symbol))
-    }
-
-    @OptIn(InvalidWayOfUsingAnalysisSession::class)
-    fun addCompletions(parameters: CompletionParameters, result: CompletionResultSet) {
-        val originalFile = parameters.originalFile as? KtFile ?: return
-
-        val reference = (parameters.position.parent as? KtSimpleNameExpression)?.mainReference ?: return
-        val nameExpression = reference.expression.takeIf { it !is KtLabelReferenceExpression } ?: return
-
-        val explicitReceiver = nameExpression.getQualifiedExpressionForSelector()?.receiverExpression
-
-        with(getAnalysisSessionFor(originalFile).createContextDependentCopy()) {
-            val (implicitScopes, _) = originalFile.getScopeContextForPosition(nameExpression)
-
-            fun KtCallableSymbol.hasSuitableExtensionReceiver(): Boolean =
-                checkExtensionIsSuitable(originalFile, parameters.originalPosition, nameExpression, explicitReceiver)
-
-            when {
-                nameExpression.parent is KtUserType -> collectTypesCompletion(result, implicitScopes)
-                explicitReceiver != null ->
-                    collectDotCompletion(result, implicitScopes, explicitReceiver, KtCallableSymbol::hasSuitableExtensionReceiver)
-                else -> collectDefaultCompletion(result, implicitScopes, KtCallableSymbol::hasSuitableExtensionReceiver)
-            }
-        }
-    }
-
-    private fun collectTypesCompletion(result: CompletionResultSet, implicitScopes: KtScope) {
-        val availableClasses = implicitScopes.getClassifierSymbols()
-        availableClasses.forEach { result.addSymbolToCompletion(it) }
-    }
-
-    private fun KtAnalysisSession.collectDotCompletion(
-        result: CompletionResultSet,
-        implicitScopes: KtCompositeScope,
-        explicitReceiver: KtExpression,
-        hasSuitableExtensionReceiver: KtCallableSymbol.() -> Boolean
-    ) {
-        val typeOfPossibleReceiver = explicitReceiver.getKtType()
-        val possibleReceiverScope = typeOfPossibleReceiver.getTypeScope() ?: return
-
-        val nonExtensionMembers = possibleReceiverScope
-            .getCallableSymbols()
-            .filterNot { it.isExtension }
-
-        val extensionNonMembers = implicitScopes
-            .getCallableSymbols()
-            .filter { it.isExtension && it.hasSuitableExtensionReceiver() }
-
-        nonExtensionMembers.forEach { result.addSymbolToCompletion(it) }
-        extensionNonMembers.forEach { result.addSymbolToCompletion(it) }
-    }
-
-    private fun collectDefaultCompletion(
-        result: CompletionResultSet,
-        implicitScopes: KtCompositeScope,
-        hasSuitableExtensionReceiver: KtCallableSymbol.() -> Boolean,
-    ) {
-        val availableNonExtensions = implicitScopes
-            .getCallableSymbols()
-            .filterNot { it.isExtension }
-
-        val extensionsWhichCanBeCalled = implicitScopes
-            .getCallableSymbols()
-            .filter {
-                it.isExtension && it.hasSuitableExtensionReceiver()
-            }
-
-        availableNonExtensions.forEach { result.addSymbolToCompletion(it) }
-        extensionsWhichCanBeCalled.forEach { result.addSymbolToCompletion(it) }
-
-        collectTypesCompletion(result, implicitScopes)
     }
 }

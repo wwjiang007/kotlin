@@ -22,6 +22,7 @@ import com.intellij.psi.util.PsiTypesUtil
 import org.jetbrains.annotations.NotNull
 import org.jetbrains.annotations.Nullable
 import org.jetbrains.kotlin.asJava.classes.KtLightClass
+import org.jetbrains.kotlin.asJava.elements.KtLightAbstractAnnotation
 import org.jetbrains.kotlin.asJava.elements.KtLightElement
 import org.jetbrains.kotlin.descriptors.annotations.AnnotationUseSiteTarget
 import org.jetbrains.kotlin.psi.*
@@ -31,10 +32,9 @@ import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.typeUtil.TypeNullability
 import org.jetbrains.kotlin.types.typeUtil.nullability
 import org.jetbrains.kotlin.utils.SmartList
+import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import org.jetbrains.uast.*
 import org.jetbrains.uast.internal.acceptList
-import org.jetbrains.uast.kotlin.declarations.KotlinUIdentifier
-import org.jetbrains.uast.kotlin.declarations.UastLightIdentifier
 import org.jetbrains.uast.kotlin.internal.DelegatedMultiResolve
 import org.jetbrains.uast.kotlin.psi.UastKotlinPsiParameter
 import org.jetbrains.uast.kotlin.psi.UastKotlinPsiVariable
@@ -80,22 +80,21 @@ abstract class AbstractKotlinUVariable(givenParent: UElement?) : KotlinAbstractU
 
     override fun getContainingFile(): PsiFile = unwrapFakeFileForLightClass(psi.containingFile)
 
-    override val annotations by lz {
+    override val uAnnotations by lz {
         val sourcePsi = sourcePsi ?: return@lz psi.annotations.map { WrappedUAnnotation(it, this) }
         val annotations = SmartList<UAnnotation>(KotlinNullabilityUAnnotation(sourcePsi, this))
         if (sourcePsi is KtModifierListOwner) {
-            sourcePsi.annotationEntries.
-                    filter { acceptsAnnotationTarget(it.useSiteTarget?.getAnnotationUseSiteTarget()) }.
-                    mapTo(annotations) { KotlinUAnnotation(it, this) }
+            sourcePsi.annotationEntries
+                .filter { acceptsAnnotationTarget(it.useSiteTarget?.getAnnotationUseSiteTarget()) }
+                .mapTo(annotations) { baseResolveProviderService.baseKotlinConverter.convertAnnotation(it, this) }
         }
         annotations
     }
 
-
     protected abstract fun acceptsAnnotationTarget(target: AnnotationUseSiteTarget?): Boolean
 
     override val typeReference: UTypeReferenceExpression? by lz {
-        KotlinUTypeReferenceExpression(type, (sourcePsi as? KtCallableDeclaration)?.typeReference, this)
+        KotlinUTypeReferenceExpression((sourcePsi as? KtCallableDeclaration)?.typeReference, this) { type }
     }
 
     override val uastAnchor: UIdentifier?
@@ -123,13 +122,19 @@ abstract class AbstractKotlinUVariable(givenParent: UElement?) : KotlinAbstractU
 
         override val javaPsi: PsiAnnotation = psiAnnotation
         override val psi: PsiAnnotation = javaPsi
-        override val sourcePsi: PsiElement? = null
+        override val sourcePsi: PsiElement? = psiAnnotation.safeAs<KtLightAbstractAnnotation>()?.kotlinOrigin
 
         override val attributeValues: List<UNamedExpression> by lz {
             psi.parameterList.attributes.map { WrappedUNamedExpression(it, this) }
         }
 
-        override val uastAnchor by lazy { KotlinUIdentifier(javaPsi.nameReferenceElement?.referenceNameElement, null, this) }
+        override val uastAnchor by lazy {
+            KotlinUIdentifier(
+                { javaPsi.nameReferenceElement?.referenceNameElement },
+                sourcePsi.safeAs<KtAnnotationEntry>()?.typeReference?.nameElement,
+                this
+            )
+        }
 
         class WrappedUNamedExpression(pair: PsiNameValuePair, override val uastParent: UElement?) : UNamedExpression {
             override val name: String? = pair.name
@@ -228,11 +233,11 @@ class KotlinReceiverUParameter(
         givenParent: UElement?
 ) : KotlinUParameter(psi, receiver, givenParent) {
 
-    override val annotations: List<UAnnotation> by lz {
+    override val uAnnotations: List<UAnnotation> by lz {
         receiver.annotationEntries
-                .filter { it.useSiteTarget?.getAnnotationUseSiteTarget() == AnnotationUseSiteTarget.RECEIVER }
-                .map { KotlinUAnnotation(it, this) } +
-        super.annotations
+            .filter { it.useSiteTarget?.getAnnotationUseSiteTarget() == AnnotationUseSiteTarget.RECEIVER }
+            .map { baseResolveProviderService.baseKotlinConverter.convertAnnotation(it, this) } +
+        super.uAnnotations
     }
 
 }
@@ -326,7 +331,7 @@ open class KotlinUField(
 
     override fun accept(visitor: UastVisitor) {
         if (visitor.visitField(this)) return
-        annotations.acceptList(visitor)
+        uAnnotations.acceptList(visitor)
         uastInitializer?.accept(visitor)
         delegateExpression?.accept(visitor)
         visitor.afterVisitField(this)
@@ -363,7 +368,7 @@ open class KotlinULocalVariable(
 
     override fun accept(visitor: UastVisitor) {
         if (visitor.visitLocalVariable(this)) return
-        annotations.acceptList(visitor)
+        uAnnotations.acceptList(visitor)
         uastInitializer?.accept(visitor)
         delegateExpression?.accept(visitor)
         visitor.afterVisitLocalVariable(this)
@@ -377,7 +382,7 @@ open class KotlinUAnnotatedLocalVariable(
         computeAnnotations: (parent: UElement) -> List<UAnnotation>
 ) : KotlinULocalVariable(psi, sourcePsi, uastParent) {
 
-    override val annotations: List<UAnnotation> by lz { computeAnnotations(this) }
+    override val uAnnotations: List<UAnnotation> by lz { computeAnnotations(this) }
 }
 
 class KotlinUEnumConstant(

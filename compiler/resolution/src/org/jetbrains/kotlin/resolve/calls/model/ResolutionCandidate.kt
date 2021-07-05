@@ -84,10 +84,10 @@ class KotlinResolutionCandidate(
 ) : Candidate, KotlinDiagnosticsHolder {
     val diagnosticsFromResolutionParts = arrayListOf<KotlinCallDiagnostic>() // TODO: this is mutable list, take diagnostics only once!
     private var newSystem: NewConstraintSystemImpl? = null
-    private var currentApplicability = ResolutionCandidateApplicability.RESOLVED
+    private var currentApplicability = CandidateApplicability.RESOLVED
     private var subResolvedAtoms: MutableList<ResolvedAtom> = arrayListOf()
 
-    private val stepCount = resolutionSequence.sumBy { it.run { workCount() } }
+    private val stepCount = resolutionSequence.sumOf { it.run { workCount() } }
     private var step = 0
 
     fun getSystem(): NewConstraintSystem {
@@ -102,7 +102,7 @@ class KotlinResolutionCandidate(
 
     override fun addDiagnostic(diagnostic: KotlinCallDiagnostic) {
         diagnosticsFromResolutionParts.add(diagnostic)
-        currentApplicability = maxOf(diagnostic.candidateApplicability, currentApplicability)
+        currentApplicability = minOf(diagnostic.candidateApplicability, currentApplicability)
     }
 
     fun getSubResolvedAtoms(): List<ResolvedAtom> = subResolvedAtoms
@@ -155,7 +155,7 @@ class KotlinResolutionCandidate(
         get() = callComponents.statelessCallbacks.getVariableCandidateIfInvoke(resolvedCall.atom)
 
     private val variableApplicability
-        get() = variableCandidateIfInvoke?.resultingApplicability ?: ResolutionCandidateApplicability.RESOLVED
+        get() = variableCandidateIfInvoke?.resultingApplicability ?: CandidateApplicability.RESOLVED
 
     override val isSuccessful: Boolean
         get() {
@@ -163,12 +163,12 @@ class KotlinResolutionCandidate(
             return currentApplicability.isSuccess && variableApplicability.isSuccess && !getSystem().hasContradiction
         }
 
-    override val resultingApplicability: ResolutionCandidateApplicability
+    override val resultingApplicability: CandidateApplicability
         get() {
             processParts(stopOnFirstError = false)
 
             val systemApplicability = getResultApplicability(getSystem().errors)
-            return maxOf(currentApplicability, systemApplicability, variableApplicability)
+            return minOf(currentApplicability, systemApplicability, variableApplicability)
         }
 
     override fun addCompatibilityWarning(other: Candidate) {

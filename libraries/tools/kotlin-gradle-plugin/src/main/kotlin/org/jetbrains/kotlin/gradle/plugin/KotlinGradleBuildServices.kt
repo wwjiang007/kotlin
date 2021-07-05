@@ -13,9 +13,9 @@ import org.gradle.api.logging.Logging
 import org.jetbrains.kotlin.gradle.logging.kotlinDebug
 import org.jetbrains.kotlin.gradle.plugin.internal.state.TaskExecutionResults
 import org.jetbrains.kotlin.gradle.plugin.internal.state.TaskLoggers
-import org.jetbrains.kotlin.gradle.report.configureBuildReporter
+import org.jetbrains.kotlin.gradle.plugin.statistics.KotlinBuildEsStatListener
+import org.jetbrains.kotlin.gradle.report.configureReporting
 import org.jetbrains.kotlin.gradle.utils.isConfigurationCacheAvailable
-
 
 //Support Gradle 6 and less. Move to
 internal class KotlinGradleBuildServices private constructor(
@@ -65,6 +65,9 @@ internal class KotlinGradleBuildServices private constructor(
             val kotlinGradleListenerProvider: org.gradle.api.provider.Provider<KotlinGradleBuildListener> = project.provider {
                 KotlinGradleBuildListener(KotlinGradleFinishBuildHandler())
             }
+            val kotlinGradleEsListenerProvider = project.provider {
+                KotlinBuildEsStatListener(project.rootProject.name)
+            }
 
             if (instance != null) {
                 log.kotlinDebug(ALREADY_INITIALIZED_MESSAGE)
@@ -75,8 +78,10 @@ internal class KotlinGradleBuildServices private constructor(
             val services = KotlinGradleBuildServices(gradle)
             if (isConfigurationCacheAvailable(gradle)) {
                 listenerRegistryHolder.listenerRegistry!!.onTaskCompletion(kotlinGradleListenerProvider)
+                listenerRegistryHolder.listenerRegistry.onTaskCompletion(kotlinGradleEsListenerProvider)
             } else {
                 gradle.addBuildListener(services)
+                gradle.taskGraph.addTaskExecutionListener(kotlinGradleEsListenerProvider.get())
                 log.kotlinDebug(INIT_MESSAGE)
             }
             instance = services
@@ -99,7 +104,7 @@ internal class KotlinGradleBuildServices private constructor(
         TaskLoggers.clear()
         TaskExecutionResults.clear()
 
-        configureBuildReporter(gradle, log)
+        configureReporting(gradle)
     }
 
     override fun buildFinished(result: BuildResult) {

@@ -5,21 +5,22 @@
 
 package org.jetbrains.kotlin.codegen.ir
 
+import org.jetbrains.kotlin.ObsoleteTestInfrastructure
 import org.jetbrains.kotlin.cli.AbstractCliTest
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.js.K2JSCompiler
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment.Companion.createForTests
 import org.jetbrains.kotlin.codegen.AbstractBlackBoxCodegenTest
-import org.jetbrains.kotlin.codegen.CodegenTestCase
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.JVMConfigurationKeys
-import org.jetbrains.kotlin.test.KotlinTestUtils
 import org.jetbrains.kotlin.test.TargetBackend
+import org.jetbrains.kotlin.test.util.KtTestUtil
 import java.io.File
 import java.nio.file.Paths
 import java.util.*
 
+@OptIn(ObsoleteTestInfrastructure::class)
 abstract class AbstractCompileKotlinAgainstKlibTest : AbstractBlackBoxCodegenTest() {
     lateinit var klibName: String
     lateinit var outputDir: File
@@ -28,15 +29,12 @@ abstract class AbstractCompileKotlinAgainstKlibTest : AbstractBlackBoxCodegenTes
 
     override fun doMultiFileTest(wholeFile: File, files: List<TestFile>) {
         outputDir = javaSourcesOutputDirectory
-        klibName = Paths.get(outputDir.toString(), wholeFile.name.toString().removeSuffix(".kt")).toString()
+        klibName = Paths.get(outputDir.toString(), wholeFile.name.toString().replace(".kt", ".klib")).toString()
 
         val classpath: MutableList<File> = ArrayList()
-        classpath.add(KotlinTestUtils.getAnnotationsJar())
+        classpath.add(KtTestUtil.getAnnotationsJar())
         val configuration = createConfiguration(
-            configurationKind, getTestJdkKind(files),
-            classpath,
-            listOf(outputDir),
-            files
+            configurationKind, getTestJdkKind(files), backend, classpath, listOf(outputDir), files
         )
         myEnvironment = createForTests(
             testRootDisposable, configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES

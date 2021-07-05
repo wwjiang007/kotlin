@@ -4,10 +4,17 @@ plugins {
 }
 
 dependencies {
-    compile(project(":idea:idea-frontend-fir"))
+    compile(project(":plugins:uast-kotlin-fir"))
+    compile(project(":idea-frontend-fir"))
+    compile(project(":idea:idea-frontend-fir:fir-low-level-api-ide-impl"))
+
     compile(project(":idea:formatter"))
     compile(intellijDep())
     compile(intellijCoreDep())
+    implementation(project(":idea:idea-fir-fe10-binding"))
+
+    compile(project(":plugins:uast-kotlin-idea-fir"))
+    compile(project(":plugins:uast-kotlin-idea-base"))
 
 // <temp>
     compile(project(":idea:idea-core"))
@@ -18,16 +25,16 @@ dependencies {
     testCompile(projectTests(":idea"))
     testCompile(projectTests(":compiler:tests-common"))
     testCompile(projectTests(":idea:idea-test-framework"))
-    testCompile(projectTests(":idea:idea-frontend-fir"))
+    testCompile(projectTests(":idea-frontend-fir"))
     testCompile(project(":kotlin-test:kotlin-test-junit"))
     testCompile(commonDep("junit:junit"))
+    testCompile(projectTests(":idea:idea-frontend-independent"))
 
     testCompileOnly(intellijDep())
     testRuntime(intellijDep())
+    testImplementation(project(":idea:idea-fir-fe10-binding"))
 
-    Platform[192].orHigher {
-        compile(intellijPluginDep("java"))
-    }
+    compile(intellijPluginDep("java"))
 }
 
 sourceSets {
@@ -35,10 +42,14 @@ sourceSets {
     "test" { projectDefault() }
 }
 
-if (rootProject.findProperty("idea.fir.plugin") == "true") {
-    projectTest(parallel = true) {
-        dependsOn(":dist")
-        workingDir = rootDir
+projectTest(parallel = false) {
+    dependsOn(":dist")
+    workingDir = rootDir
+    val useFirIdeaPlugin = kotlinBuildProperties.useFirIdeaPlugin
+    doFirst {
+        if (!useFirIdeaPlugin) {
+            error("Test task in the module should be executed with -Pidea.fir.plugin=true")
+        }
     }
 }
 

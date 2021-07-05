@@ -12,8 +12,8 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilationToRunnableFiles
 import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
+import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.toSingleModuleIdentifier
 import org.jetbrains.kotlin.gradle.plugin.sources.KotlinDependencyScope
-import org.jetbrains.kotlin.gradle.targets.metadata.getPublishedPlatformCompilations
 import java.io.File
 
 internal data class SourceSetVisibilityResult(
@@ -38,8 +38,7 @@ internal class SourceSetVisibilityProvider(
      * Determine which source sets of the [resolvedRootMppDependency] are visible in the [visibleFrom] source set.
      *
      * This requires resolving dependencies of the compilations which [visibleFrom] takes part in, in order to find which variants the
-     * [resolvedRootMppDependency] got resolved to for those compilations. The [resolvedRootMppDependency] should therefore be the dependency
-     * on the 'root' module of the MPP (such as 'com.example:lib-foo', not 'com.example:lib-foo-metadata').
+     * [resolvedRootMppDependency] got resolved to for those compilations.
      *
      * Once the variants are known, they are checked against the [dependencyProjectStructureMetadata], and the
      * source sets of the dependency are determined that are compiled for all those variants and thus should be visible here.
@@ -57,21 +56,12 @@ internal class SourceSetVisibilityProvider(
     ): SourceSetVisibilityResult {
         val compilations = CompilationSourceSetUtil.compilationsBySourceSets(project).getValue(visibleFrom)
 
-        val mppModuleIdentifier = ModuleIds.fromComponent(project, resolvedRootMppDependency ?: resolvedMetadataDependency)
-
-        /**
-         * When Gradle resolves a project dependency, as opposed to an external dependency, the variant name it returns in the resolution
-         * results is the name of the configuration that is chosen during variant-aware resolution, not the actual name of the variant that
-         * is written to the Gradle module metadata and the Kotlin project structure metadata. To fix this, get the published Kotlin
-         * variants of the dependency project and find among them the one that owns the configuration by the given name.
-         */
-        val projectPublishedCompilations = resolvedToOtherProject?.let(::getPublishedPlatformCompilations)?.keys
-        fun platformVariantName(resolvedToVariantName: String): String =
-            projectPublishedCompilations?.first { it.dependencyConfigurationName == resolvedToVariantName }?.name ?: resolvedToVariantName
+        val component = resolvedRootMppDependency ?: resolvedMetadataDependency
+        val mppModuleIdentifier = component.toSingleModuleIdentifier()
 
         val firstConfigurationByVariant = mutableMapOf<String, Configuration>()
 
-        val visiblePlatformVariantNames: Set<String> =
+        val visiblePlatformVariantNames: Set<String?> =
             compilations
                 .filter { it.target.platformType != KotlinPlatformType.common }
                 .flatMapTo(mutableSetOf()) { compilation ->
@@ -79,10 +69,10 @@ internal class SourceSetVisibilityProvider(
                     // that we have in the compilations:
                     dependencyScopes.mapNotNull { scope -> project.resolvableConfigurationFromCompilationByScope(compilation, scope) }
                 }
-                .mapNotNullTo(mutableSetOf()) { configuration ->
+                .mapTo(mutableSetOf()) { configuration ->
                     val resolvedVariant = resolvedVariantsProvider.getResolvedVariantName(mppModuleIdentifier, configuration)
-                        ?.let { platformVariantName(it) }
-                        ?: return@mapNotNullTo null
+                        ?.let { kotlinVariantNameFromPublishedVariantName(it) }
+                        ?: return@mapTo null
 
                     firstConfigurationByVariant.putIfAbsent(resolvedVariant, configuration)
                     resolvedVariant
@@ -121,11 +111,11 @@ internal class SourceSetVisibilityProvider(
                             .keys.first()
                     }
 
-                someVariantByHostSpecificSourceSet.mapValues { (_, variantName) ->
+                someVariantByHostSpecificSourceSet.entries.mapNotNull { (sourceSetName, variantName) ->
                     val configuration = firstConfigurationByVariant.getValue(variantName)
-                    resolvedVariantsProvider.getMetadataArtifactByRootModule(mppModuleIdentifier, configuration)
-                        ?: error("Couldn't resolve metadata artifact for $mppModuleIdentifier in $configuration")
-                }
+                    resolvedVariantsProvider.getHostSpecificMetadataArtifactByRootModule(mppModuleIdentifier, configuration)
+                        ?.let { sourceSetName to it }
+                }.toMap()
             }
 
         return SourceSetVisibilityResult(
@@ -134,6 +124,9 @@ internal class SourceSetVisibilityProvider(
         )
     }
 }
+
+internal fun kotlinVariantNameFromPublishedVariantName(resolvedToVariantName: String): String =
+    originalVariantNameFromPublished(resolvedToVariantName) ?: resolvedToVariantName
 
 private fun Project.resolvableConfigurationFromCompilationByScope(
     compilation: KotlinCompilation<*>,

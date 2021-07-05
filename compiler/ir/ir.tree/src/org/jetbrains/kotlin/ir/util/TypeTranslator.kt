@@ -5,17 +5,14 @@
 
 package org.jetbrains.kotlin.ir.util
 
-import org.jetbrains.kotlin.builtins.KotlinBuiltIns
 import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.PropertyDescriptor
-import org.jetbrains.kotlin.descriptors.TypeAliasDescriptor
-import org.jetbrains.kotlin.descriptors.TypeParameterDescriptor
+import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.declarations.IrConstructor
 import org.jetbrains.kotlin.ir.declarations.IrTypeParametersContainer
+import org.jetbrains.kotlin.ir.descriptors.IrBasedTypeParameterDescriptor
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstructorCallImpl
 import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
@@ -26,22 +23,28 @@ import org.jetbrains.kotlin.ir.types.impl.*
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.typeUtil.replaceArgumentsWithStarProjections
 import org.jetbrains.kotlin.types.typesApproximation.approximateCapturedTypes
+import org.jetbrains.kotlin.utils.threadLocal
 import java.util.*
 
 @OptIn(ObsoleteDescriptorBasedAPI::class)
-class TypeTranslator(
-    private val symbolTable: ReferenceSymbolTable,
+abstract class TypeTranslator(
+    protected val symbolTable: ReferenceSymbolTable,
     val languageVersionSettings: LanguageVersionSettings,
-    builtIns: KotlinBuiltIns,
-    private val typeParametersResolver: TypeParametersResolver = ScopedTypeParametersResolver(),
+    typeParametersResolverBuilder: () -> TypeParametersResolver = { ScopedTypeParametersResolver() },
     private val enterTableScope: Boolean = false,
-    private val extensions: StubGeneratorExtensions = StubGeneratorExtensions.EMPTY
+    protected val extensions: StubGeneratorExtensions = StubGeneratorExtensions.EMPTY
 ) {
+    abstract val constantValueGenerator: ConstantValueGenerator
+
+    protected abstract fun approximateType(type: KotlinType): KotlinType
+
+    protected abstract fun commonSupertype(types: Collection<KotlinType>): KotlinType
+
+    private val typeParametersResolver by threadLocal { typeParametersResolverBuilder() }
 
     private val erasureStack = Stack<PropertyDescriptor>()
 
-    private val typeApproximatorForNI = TypeApproximator(builtIns)
-    lateinit var constantValueGenerator: ConstantValueGenerator
+    protected abstract fun isTypeAliasAccessibleHere(typeAliasDescriptor: TypeAliasDescriptor): Boolean
 
     fun enterScope(irElement: IrTypeParametersContainer) {
         typeParametersResolver.enterTypeParameterScope(irElement)
@@ -66,7 +69,7 @@ class TypeTranslator(
         }
     }
 
-    inline fun <T> buildWithScope(container: IrTypeParametersContainer, builder: () -> T): T {
+    fun <T> buildWithScope(container: IrTypeParametersContainer, builder: () -> T): T {
         enterScope(container)
         val result = builder()
         leaveScope(container)
@@ -74,6 +77,9 @@ class TypeTranslator(
     }
 
     private fun resolveTypeParameter(typeParameterDescriptor: TypeParameterDescriptor): IrTypeParameterSymbol {
+        if (typeParameterDescriptor is IrBasedTypeParameterDescriptor) {
+            return typeParameterDescriptor.owner.symbol
+        }
         val originalTypeParameter = typeParameterDescriptor.originalTypeParameter
         return typeParametersResolver.resolveScopedTypeParameter(originalTypeParameter)
             ?: symbolTable.referenceTypeParameter(originalTypeParameter)
@@ -83,69 +89,91 @@ class TypeTranslator(
         translateType(kotlinType, Variance.INVARIANT).type
 
     private fun translateType(kotlinType: KotlinType, variance: Variance): IrTypeProjection {
-        val flexibleApproximatedType = approximate(kotlinType)
+        val approximatedType = approximate(kotlinType)
 
         when {
-            flexibleApproximatedType.isError ->
-                return IrErrorTypeImpl(flexibleApproximatedType, translateTypeAnnotations(flexibleApproximatedType), variance)
-            flexibleApproximatedType.isDynamic() ->
-                return IrDynamicTypeImpl(flexibleApproximatedType, translateTypeAnnotations(flexibleApproximatedType), variance)
+            approximatedType.isError ->
+                return IrErrorTypeImpl(approximatedType, translateTypeAnnotations(approximatedType), variance)
+            approximatedType.isDynamic() ->
+                return IrDynamicTypeImpl(approximatedType, translateTypeAnnotations(approximatedType), variance)
         }
 
-        val approximatedType = flexibleApproximatedType.upperIfFlexible()
-
-        val ktTypeConstructor = approximatedType.constructor
-        val ktTypeDescriptor = ktTypeConstructor.declarationDescriptor
-            ?: throw AssertionError("No descriptor for type $approximatedType")
+        val upperType = approximatedType.upperIfFlexible()
+        val upperTypeDescriptor = upperType.constructor.declarationDescriptor
+            ?: throw AssertionError("No descriptor for type $upperType")
 
         if (erasureStack.isNotEmpty()) {
-            if (ktTypeDescriptor is TypeParameterDescriptor) {
-                if (ktTypeDescriptor.containingDeclaration in erasureStack) {
+            if (upperTypeDescriptor is TypeParameterDescriptor) {
+                if (upperTypeDescriptor.containingDeclaration in erasureStack) {
                     // This hack is about type parameter leak in case of generic delegated property
                     // Such code has to be prohibited since LV 1.5
                     // For more details see commit message or KT-24643
-                    return approximateUpperBounds(ktTypeDescriptor.upperBounds, variance)
+                    return approximateUpperBounds(upperTypeDescriptor.upperBounds, variance)
                 }
             }
         }
 
         return IrSimpleTypeBuilder().apply {
-            this.kotlinType = flexibleApproximatedType
-            this.hasQuestionMark = approximatedType.isMarkedNullable
+            this.kotlinType = approximatedType
+            this.hasQuestionMark = upperType.isMarkedNullable
             this.variance = variance
-            this.abbreviation = approximatedType.getAbbreviation()?.toIrTypeAbbreviation()
-            when (ktTypeDescriptor) {
+            this.abbreviation = upperType.getAbbreviation()?.toIrTypeAbbreviation()
+
+            when (upperTypeDescriptor) {
                 is TypeParameterDescriptor -> {
-                    classifier = resolveTypeParameter(ktTypeDescriptor)
-                    annotations = translateTypeAnnotations(approximatedType, flexibleApproximatedType)
+                    classifier = resolveTypeParameter(upperTypeDescriptor)
+                    annotations = translateTypeAnnotations(upperType, approximatedType)
                 }
 
+                is ScriptDescriptor -> {
+                    classifier = symbolTable.referenceScript(upperTypeDescriptor)
+                }
                 is ClassDescriptor -> {
-                    classifier = symbolTable.referenceClass(ktTypeDescriptor)
-                    arguments =
-                        if (flexibleApproximatedType is RawType)
-                            translateTypeArguments(flexibleApproximatedType.arguments)
-                        else
+                    // Types such as 'java.util.Collection<? extends CharSequence>' are treated as
+                    // '( kotlin.collections.MutableCollection<out kotlin.CharSequence!>
+                    //   .. kotlin.collections.Collection<kotlin.CharSequence!>? )'
+                    // by the front-end.
+                    // When generating generic signatures, JVM BE uses generic arguments of lower bound,
+                    // thus producing 'java.util.Collection<? extends CharSequence>' from
+                    // 'kotlin.collections.MutableCollection<out kotlin.CharSequence!>'.
+                    // Construct equivalent type here.
+                    // NB the difference is observed only when lowerTypeDescriptor != upperTypeDescriptor,
+                    // which corresponds to mutability-flexible types such as mentioned above.
+                    val lowerType = approximatedType.lowerIfFlexible()
+                    val lowerTypeDescriptor =
+                        lowerType.constructor.declarationDescriptor as? ClassDescriptor
+                            ?: throw AssertionError("No class descriptor for lower type $lowerType of $approximatedType")
+                    classifier = symbolTable.referenceClass(lowerTypeDescriptor)
+                    arguments = when {
+                        approximatedType is RawType ->
                             translateTypeArguments(approximatedType.arguments)
-                    annotations = translateTypeAnnotations(approximatedType, flexibleApproximatedType)
+                        lowerTypeDescriptor != upperTypeDescriptor ->
+                            translateTypeArguments(lowerType.arguments)
+                        else ->
+                            translateTypeArguments(upperType.arguments)
+                    }
+                    annotations = translateTypeAnnotations(upperType, approximatedType)
                 }
 
                 else ->
-                    throw AssertionError("Unexpected type descriptor $ktTypeDescriptor :: ${ktTypeDescriptor::class}")
+                    throw AssertionError("Unexpected type descriptor $upperTypeDescriptor :: ${upperTypeDescriptor::class}")
             }
         }.buildTypeProjection()
     }
 
     private fun approximateUpperBounds(upperBounds: Collection<KotlinType>, variance: Variance): IrTypeProjection {
-        val commonSupertype = CommonSupertypes.commonSupertype(upperBounds)
+        val commonSupertype = commonSupertype(upperBounds)
         return translateType(approximate(commonSupertype.replaceArgumentsWithStarProjections()), variance)
     }
 
-    private fun SimpleType.toIrTypeAbbreviation(): IrTypeAbbreviation {
-        val typeAliasDescriptor = constructor.declarationDescriptor.let {
-            it as? TypeAliasDescriptor
-                ?: throw AssertionError("TypeAliasDescriptor expected: $it")
-        }
+    private fun SimpleType.toIrTypeAbbreviation(): IrTypeAbbreviation? {
+        // Abbreviated type's classifier might not be TypeAliasDescriptor in case it's MockClassDescriptor (not found in dependencies).
+        val typeAliasDescriptor = constructor.declarationDescriptor as? TypeAliasDescriptor ?: return null
+
+        // There is possible situation when we have private top-level type alias visible outside its file which is illegal from klib POV.
+        // In that specific case don't generate type abbreviation
+        if (!isTypeAliasAccessibleHere(typeAliasDescriptor)) return null
+
         return IrTypeAbbreviationImpl(
             symbolTable.referenceTypeAlias(typeAliasDescriptor),
             isMarkedNullable,
@@ -161,7 +189,7 @@ class TypeTranslator(
         // That's what old back-end effectively does.
         val typeConstructor = properlyApproximatedType.constructor
         if (typeConstructor is IntersectionTypeConstructor) {
-            val commonSupertype = CommonSupertypes.commonSupertype(typeConstructor.supertypes)
+            val commonSupertype = commonSupertype(typeConstructor.supertypes)
             return approximate(commonSupertype.replaceArgumentsWithStarProjections())
         }
 
@@ -176,11 +204,7 @@ class TypeTranslator(
             if (ktType.constructor.isDenotable && ktType.arguments.isEmpty())
                 ktType
             else
-                typeApproximatorForNI.approximateDeclarationType(
-                    ktType,
-                    local = false,
-                    languageVersionSettings = languageVersionSettings
-                )
+                approximateType(ktType)
         } else {
             // Hack to preserve *-projections in arguments in OI.
             // Expected to be removed as soon as OI is deprecated.
@@ -207,12 +231,22 @@ class TypeTranslator(
         if (flexibleType.isNullabilityFlexible()) {
             irAnnotations.addSpecialAnnotation(extensions.flexibleNullabilityAnnotationConstructor)
         }
+        if (flexibleType.isMutabilityFlexible()) {
+            irAnnotations.addSpecialAnnotation(extensions.flexibleMutabilityAnnotationConstructor)
+        }
 
         if (flexibleType is RawType) {
             irAnnotations.addSpecialAnnotation(extensions.rawTypeAnnotationConstructor)
         }
 
         return irAnnotations
+    }
+
+    private fun KotlinType.isMutabilityFlexible(): Boolean {
+        val flexibility = unwrap()
+        return flexibility is FlexibleType && flexibility.lowerBound.constructor != flexibility.upperBound.constructor &&
+                FlexibleTypeBoundsChecker.getBaseBoundFqNameByMutability(flexibility.lowerBound) ==
+                FlexibleTypeBoundsChecker.getBaseBoundFqNameByMutability(flexibility.upperBound)
     }
 
     private fun MutableList<IrConstructorCall>.addSpecialAnnotation(irConstructor: IrConstructor?) {

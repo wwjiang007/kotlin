@@ -29,6 +29,8 @@ import org.jetbrains.kotlin.ir.expressions.impl.IrReturnImpl
 import org.jetbrains.kotlin.ir.expressions.mapValueParameters
 import org.jetbrains.kotlin.ir.expressions.putTypeArguments
 import org.jetbrains.kotlin.ir.expressions.typeParametersCount
+import org.jetbrains.kotlin.ir.types.IrSimpleType
+import org.jetbrains.kotlin.ir.util.SYNTHETIC_OFFSET
 import org.jetbrains.kotlin.ir.util.createIrClassFromDescriptor
 import org.jetbrains.kotlin.ir.util.declareSimpleFunctionWithOverrides
 import org.jetbrains.kotlin.ir.util.properties
@@ -74,7 +76,7 @@ class ClassGenerator(
 
         fun <T : DeclarationDescriptor> List<T>.sortedByRenderer(): List<T> {
             val rendered = map(DESCRIPTOR_RENDERER::render)
-            val sortedIndices = (0 until size).sortedWith(Comparator { i, j -> rendered[i].compareTo(rendered[j]) })
+            val sortedIndices = (0 until size).sortedWith { i, j -> rendered[i].compareTo(rendered[j]) }
             return sortedIndices.map { this[it] }
         }
     }
@@ -91,7 +93,7 @@ class ClassGenerator(
                 startOffset, endOffset, IrDeclarationOrigin.DEFINED, it, classDescriptor,
                 context.symbolTable.nameProvider.nameForDeclaration(classDescriptor), visibility, modality
             ).apply {
-                metadata = MetadataSource.Class(it.descriptor)
+                metadata = DescriptorMetadataSource.Class(it.descriptor)
             }
         }.buildWithScope { irClass ->
             declarationGenerator.generateGlobalTypeParametersDeclarations(irClass, classDescriptor.declaredTypeParameters)
@@ -120,6 +122,11 @@ class ClassGenerator(
             generateFakeOverrideMemberDeclarations(irClass, ktClassOrObject)
 
             if (irClass.isInline && ktClassOrObject is KtClassOrObject) {
+                val representation = classDescriptor.inlineClassRepresentation
+                    ?: error("Unknown representation for inline class: $classDescriptor")
+                irClass.inlineClassRepresentation = representation.mapUnderlyingType { type ->
+                    type.toIrType() as? IrSimpleType ?: error("Inline class underlying type is not a simple type: $classDescriptor")
+                }
                 generateAdditionalMembersForInlineClasses(irClass, ktClassOrObject)
             }
 
@@ -285,9 +292,18 @@ class ClassGenerator(
             irProperty.setter = generateDelegatedFunction(irDelegate, delegatedDescriptor.setter!!, delegateToDescriptor.setter!!)
         }
 
+        irProperty.generateOverrides(delegatedDescriptor)
+
         irProperty.linkCorrespondingPropertySymbol()
 
         return irProperty
+    }
+
+    private fun IrProperty.generateOverrides(propertyDescriptor: PropertyDescriptor) {
+        overriddenSymbols =
+            propertyDescriptor.overriddenDescriptors.map { overriddenPropertyDescriptor ->
+                context.symbolTable.referenceProperty(overriddenPropertyDescriptor.original)
+            }
     }
 
     private fun generateDelegatedFunction(
@@ -305,7 +321,7 @@ class ClassGenerator(
         delegateToDescriptor: FunctionDescriptor
     ): IrSimpleFunction =
         context.symbolTable.declareSimpleFunctionWithOverrides(
-            irDelegate.startOffset, irDelegate.endOffset,
+            SYNTHETIC_OFFSET, SYNTHETIC_OFFSET,
             IrDeclarationOrigin.DELEGATED_MEMBER,
             delegatedDescriptor
         ).buildWithScope { irFunction ->
@@ -323,8 +339,8 @@ class ClassGenerator(
         delegateToDescriptor: FunctionDescriptor,
         irDelegatedFunction: IrSimpleFunction
     ): IrBlockBody {
-        val startOffset = irDelegate.startOffset
-        val endOffset = irDelegate.endOffset
+        val startOffset = SYNTHETIC_OFFSET
+        val endOffset = SYNTHETIC_OFFSET
 
         val irBlockBody = context.irFactory.createBlockBody(startOffset, endOffset)
 
@@ -333,7 +349,7 @@ class ClassGenerator(
 
         val delegateToSymbol = context.symbolTable.referenceSimpleFunction(delegateToDescriptor.original)
 
-        val irCall = IrCallImpl(
+        val irCall = IrCallImpl.fromSymbolDescriptor(
             startOffset, endOffset,
             returnType.toIrType(),
             delegateToSymbol,

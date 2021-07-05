@@ -23,6 +23,7 @@ import org.jetbrains.kotlin.tools.projectWizard.plugins.printer.printBuildFile
 import org.jetbrains.kotlin.tools.projectWizard.plugins.projectPath
 import org.jetbrains.kotlin.tools.projectWizard.plugins.templates.TemplatesPlugin
 import org.jetbrains.kotlin.tools.projectWizard.settings.DisplayableSettingItem
+import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.DefaultRepository
 import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.Repository
 import org.jetbrains.kotlin.tools.projectWizard.settings.buildsystem.updateBuildFiles
 
@@ -43,19 +44,17 @@ abstract class BuildSystemPlugin(context: Context) : Plugin(context) {
             }
 
             validate { buildSystemType ->
-                if (!buildSystemType.isGradle
-                    && KotlinPlugin.projectKind.notRequiredSettingValue != ProjectKind.Singleplatform
-                ) {
-                    val projectKind = KotlinPlugin.projectKind.notRequiredSettingValue?.text?.capitalize()
-                        ?: KotlinNewProjectWizardBundle.message("project")
-                    ValidationResult.ValidationError(
+                val projectKind = KotlinPlugin.projectKind.notRequiredSettingValue ?: ProjectKind.Multiplatform
+                when (buildSystemType) {
+                    in projectKind.supportedBuildSystems -> ValidationResult.OK
+                    else -> ValidationResult.ValidationError(
                         KotlinNewProjectWizardBundle.message(
                             "plugin.buildsystem.setting.type.error.wrong.project.kind",
-                            projectKind,
+                            projectKind.shortName.replaceFirstChar(Char::uppercaseChar),
                             buildSystemType.fullText
                         )
                     )
-                } else ValidationResult.OK
+                }
             }
         }
 
@@ -127,6 +126,19 @@ abstract class BuildSystemPlugin(context: Context) : Plugin(context) {
     )
 }
 
+fun Reader.getPluginRepositoriesWithDefaultOnes(): List<Repository> {
+    val allRepositories = BuildSystemPlugin.pluginRepositoreis.propertyValue + buildSystemType.getDefaultPluginRepositories()
+    return allRepositories.filterOutOnlyDefaultPluginRepositories(buildSystemType)
+}
+
+private fun List<Repository>.filterOutOnlyDefaultPluginRepositories(buildSystem: BuildSystemType): List<Repository> {
+    val isAllDefault = all { it.isDefaultPluginRepository(buildSystem) }
+    return if (isAllDefault) emptyList() else this
+}
+
+private fun Repository.isDefaultPluginRepository(buildSystem: BuildSystemType) =
+    this in buildSystem.getDefaultPluginRepositories()
+
 fun PluginSettingsOwner.addBuildSystemData(data: BuildSystemData) = pipelineTask(GenerationPhase.PREPARE) {
     runBefore(BuildSystemPlugin.createModules)
     withAction {
@@ -171,6 +183,10 @@ enum class BuildSystemType(
 
     override val greyText: String?
         get() = null
+
+    companion object {
+        val ALL_GRADLE = setOf(GradleKotlinDsl, GradleGroovyDsl)
+    }
 }
 
 val BuildSystemType.isGradle
@@ -195,6 +211,12 @@ val Writer.allModulesPaths
                 ?.takeIf { it.isNotEmpty() }
         }
     }
+
+fun BuildSystemType.getDefaultPluginRepositories(): List<DefaultRepository> = when (this) {
+    BuildSystemType.GradleKotlinDsl, BuildSystemType.GradleGroovyDsl -> listOf(DefaultRepository.GRADLE_PLUGIN_PORTAL)
+    BuildSystemType.Maven -> listOf(DefaultRepository.MAVEN_CENTRAL)
+    BuildSystemType.Jps -> emptyList()
+}
 
 
 val Reader.buildSystemType: BuildSystemType

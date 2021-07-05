@@ -10,10 +10,16 @@ import groovy.lang.Closure
 import org.gradle.api.Action
 import org.gradle.api.Project
 import org.gradle.api.file.FileCollection
+import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.util.ConfigureUtil
 import org.jetbrains.kotlin.gradle.plugin.CInteropSettings
 import org.jetbrains.kotlin.gradle.plugin.CInteropSettings.IncludeDirectories
+import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
+import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.KotlinNativeCompilationData
+import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.KotlinNativeVariantCompilationData
+import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.disambiguateName
+import org.jetbrains.kotlin.gradle.targets.native.internal.CInteropIdentifier
 import org.jetbrains.kotlin.gradle.utils.lowerCamelCaseName
 import java.io.File
 import javax.inject.Inject
@@ -21,7 +27,7 @@ import javax.inject.Inject
 open class DefaultCInteropSettings @Inject constructor(
     private val project: Project,
     private val name: String,
-    override val compilation: KotlinNativeCompilation
+    override val compilation: KotlinNativeCompilationData<*>
 ) : CInteropSettings {
 
     inner class DefaultIncludeDirectories : CInteropSettings.IncludeDirectories {
@@ -41,8 +47,11 @@ open class DefaultCInteropSettings @Inject constructor(
 
     override fun getName(): String = name
 
-    val target: KotlinNativeTarget
-        get() = compilation.target
+    internal val identifier: CInteropIdentifier
+        get() = CInteropIdentifier(CInteropIdentifier.Scope.create(compilation), name)
+
+    val target: KotlinNativeTarget?
+        get() = (compilation as? KotlinNativeCompilation?)?.target
 
     override val dependencyConfigurationName: String
         get() = compilation.disambiguateName("${name.capitalize()}CInterop")
@@ -52,9 +61,9 @@ open class DefaultCInteropSettings @Inject constructor(
     val interopProcessingTaskName: String
         get() = lowerCamelCaseName(
             "cinterop",
-            compilation.compilationName.takeIf { it != "main" }.orEmpty(),
+            compilation.compilationPurpose.takeIf { it != "main" }.orEmpty(),
             name,
-            target.disambiguationClassifier
+            target?.disambiguationClassifier ?: compilation.compilationClassifier
         )
 
     val defFileProperty: Property<File> = project.objects.property(File::class.java)
@@ -62,13 +71,28 @@ open class DefaultCInteropSettings @Inject constructor(
 
     var defFile: File
         get() = defFileProperty.get()
-        set(value) { defFileProperty.set(value) }
+        set(value) {
+            defFileProperty.set(value)
+        }
 
-    var packageName: String? = null
+    var packageName: String?
+        get() = _packageNameProp.orNull
+        set(value) {
+            _packageNameProp.set(value)
+        }
+
+    internal val _packageNameProp: Property<String> = project.objects.property(String::class.java)
 
     val compilerOpts = mutableListOf<String>()
     val linkerOpts = mutableListOf<String>()
-    val extraOpts = mutableListOf<String>()
+    var extraOpts: List<String>
+        get() = _extraOptsProp.get()
+        set(value) {
+            _extraOptsProp = project.objects.listProperty(String::class.java)
+            extraOpts(value)
+        }
+
+    internal var _extraOptsProp: ListProperty<String> = project.objects.listProperty(String::class.java)
 
     val includeDirs = DefaultIncludeDirectories()
     var headers: FileCollection = project.files()
@@ -80,7 +104,7 @@ open class DefaultCInteropSettings @Inject constructor(
     }
 
     override fun packageName(value: String) {
-        packageName = value
+        _packageNameProp.set(value)
     }
 
     override fun header(file: Any) = headers(file)
@@ -106,6 +130,16 @@ open class DefaultCInteropSettings @Inject constructor(
 
     override fun extraOpts(vararg values: Any) = extraOpts(values.toList())
     override fun extraOpts(values: List<Any>) {
-        extraOpts.addAll(values.map { it.toString() })
+        _extraOptsProp.addAll(project.provider { values.map { it.toString() } })
     }
+}
+
+private fun KotlinNativeCompilationData<*>.disambiguateName(simpleName: String): String = when (this) {
+    is AbstractKotlinNativeCompilation -> (this as AbstractKotlinCompilation<*>).disambiguateName(simpleName)
+    is KotlinNativeVariantCompilationData -> owner.disambiguateName(simpleName)
+    else -> lowerCamelCaseName(
+        this.compilationClassifier,
+        this.compilationPurpose.takeIf { it != KotlinCompilation.MAIN_COMPILATION_NAME },
+        simpleName
+    )
 }

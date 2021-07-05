@@ -58,6 +58,10 @@ internal class OperatorExpressionGenerator(
             )
         }
 
+        if (comparisonExpression.compareToCall.toResolvedCallableSymbol()?.fir?.receiverTypeRef != null) {
+            return fallbackToRealCall()
+        }
+
         val comparisonInfo = comparisonExpression.inferPrimitiveNumericComparisonInfo() ?: return fallbackToRealCall()
         val comparisonType = comparisonInfo.comparisonType
 
@@ -169,7 +173,7 @@ internal class OperatorExpressionGenerator(
 
             unsafeIrCall.dispatchReceiver = IrGetValueImpl(startOffset, endOffset, receiverVariableSymbol)
 
-            components.createSafeCallConstruction(receiverVariable, receiverVariableSymbol, unsafeIrCall, isReceiverNullable = true)
+            components.createSafeCallConstruction(receiverVariable, receiverVariableSymbol, unsafeIrCall)
         } else {
             unsafeIrCall
         }

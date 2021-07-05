@@ -16,13 +16,13 @@ class DescriptorlessExternalPackageFragmentSymbol : IrExternalPackageFragmentSym
     override val descriptor: PackageFragmentDescriptor
         get() = error("Operation is unsupported")
 
+    override val hasDescriptor: Boolean
+        get() = error("Operation is unsupported")
+
     private var _owner: IrExternalPackageFragment? = null
     override val owner get() = _owner!!
 
-    override val isPublicApi: Boolean
-        get() = TODO("Not yet implemented")
-
-    override val signature: IdSignature
+    override val signature: IdSignature?
         get() = TODO("Not yet implemented")
 
     override val isBound get() = _owner != null

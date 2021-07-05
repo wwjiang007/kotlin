@@ -5,71 +5,64 @@
 
 package org.jetbrains.kotlin.idea.frontend.api.fir.components
 
-import com.intellij.psi.PsiElement
-import com.jetbrains.rd.util.getOrCreate
-import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.declarations.FirCallableDeclaration
+import org.jetbrains.kotlin.fir.declarations.FirFile
+import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
+import org.jetbrains.kotlin.fir.declarations.FirVariable
 import org.jetbrains.kotlin.fir.expressions.FirExpression
 import org.jetbrains.kotlin.fir.resolve.calls.ImplicitReceiverValue
-import org.jetbrains.kotlin.idea.fir.getOrBuildFirOfType
-import org.jetbrains.kotlin.idea.fir.low.level.api.LowLevelFirApiFacade
+import org.jetbrains.kotlin.fir.resolve.inference.receiverType
+import org.jetbrains.kotlin.fir.types.coneType
+import org.jetbrains.kotlin.idea.fir.low.level.api.api.LowLevelFirApiFacadeForResolveOnAir.getTowerContextProvider
+import org.jetbrains.kotlin.idea.fir.low.level.api.api.getOrBuildFirFile
+import org.jetbrains.kotlin.idea.fir.low.level.api.api.getOrBuildFirOfType
 import org.jetbrains.kotlin.idea.fir.low.level.api.resolver.ResolutionParameters
 import org.jetbrains.kotlin.idea.fir.low.level.api.resolver.SingleCandidateResolutionMode
 import org.jetbrains.kotlin.idea.fir.low.level.api.resolver.SingleCandidateResolver
-import org.jetbrains.kotlin.idea.frontend.api.ValidityToken
+import org.jetbrains.kotlin.idea.fir.low.level.api.util.getElementTextInContext
 import org.jetbrains.kotlin.idea.frontend.api.components.KtCompletionCandidateChecker
+import org.jetbrains.kotlin.idea.frontend.api.components.KtExtensionApplicabilityResult
 import org.jetbrains.kotlin.idea.frontend.api.fir.KtFirAnalysisSession
-import org.jetbrains.kotlin.idea.frontend.api.fir.symbols.KtFirFunctionSymbol
-import org.jetbrains.kotlin.idea.frontend.api.fir.symbols.KtFirPropertySymbol
 import org.jetbrains.kotlin.idea.frontend.api.fir.symbols.KtFirSymbol
+import org.jetbrains.kotlin.idea.frontend.api.fir.utils.weakRef
 import org.jetbrains.kotlin.idea.frontend.api.symbols.KtCallableSymbol
+import org.jetbrains.kotlin.idea.frontend.api.tokens.ValidityToken
 import org.jetbrains.kotlin.idea.frontend.api.withValidityAssertion
-import org.jetbrains.kotlin.idea.util.getElementTextInContext
-import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
-import org.jetbrains.kotlin.utils.addToStdlib.safeAs
+import org.jetbrains.kotlin.psi.KtExpression
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtSimpleNameExpression
 
 internal class KtFirCompletionCandidateChecker(
-    override val analysisSession: KtFirAnalysisSession,
+    analysisSession: KtFirAnalysisSession,
     override val token: ValidityToken,
 ) : KtCompletionCandidateChecker(), KtFirAnalysisSessionComponent {
-    private val completionContextCache = HashMap<Pair<FirFile, KtNamedFunction>, LowLevelFirApiFacade.FirCompletionContext>()
+    override val analysisSession: KtFirAnalysisSession by weakRef(analysisSession)
 
     override fun checkExtensionFitsCandidate(
         firSymbolForCandidate: KtCallableSymbol,
         originalFile: KtFile,
-        originalPosition: PsiElement?,
         nameExpression: KtSimpleNameExpression,
         possibleExplicitReceiver: KtExpression?,
-    ): Boolean = withValidityAssertion {
-        val originalEnclosingFunction = originalPosition?.getNonStrictParentOfType<KtNamedFunction>()
-            ?: error("Cannot find enclosing function for completion in provided position (or position is absent)")
-
-        val functionFits = firSymbolForCandidate.withResolvedFirOfType<KtFirFunctionSymbol, FirSimpleFunction, Boolean> { firFunction ->
-            checkExtension(firFunction, originalFile, originalEnclosingFunction, nameExpression, possibleExplicitReceiver)
+    ): KtExtensionApplicabilityResult = withValidityAssertion {
+        require(firSymbolForCandidate is KtFirSymbol<*>)
+        return firSymbolForCandidate.firRef.withFirWithPossibleResolveInside(
+            phase = FirResolvePhase.IMPLICIT_TYPES_BODY_RESOLVE
+        ) { declaration ->
+            check(declaration is FirCallableDeclaration)
+            checkExtension(declaration, originalFile, nameExpression, possibleExplicitReceiver)
         }
-        val propertyFits = firSymbolForCandidate.withResolvedFirOfType<KtFirPropertySymbol, FirProperty, Boolean> { firProperty ->
-            checkExtension(firProperty, originalFile, originalEnclosingFunction, nameExpression, possibleExplicitReceiver)
-        }
-
-        functionFits ?: propertyFits ?: false
     }
 
-    private inline fun <reified T : KtFirSymbol<F>, F : FirDeclaration, R> KtCallableSymbol.withResolvedFirOfType(
-        noinline action: (F) -> R,
-    ): R? = this.safeAs<T>()?.firRef?.withFir(FirResolvePhase.BODY_RESOLVE, action)
-
     private fun checkExtension(
-        candidateSymbol: FirCallableDeclaration<*>,
+        candidateSymbol: FirCallableDeclaration,
         originalFile: KtFile,
-        originalEnclosingFunction: KtNamedFunction,
         nameExpression: KtSimpleNameExpression,
         possibleExplicitReceiver: KtExpression?,
-    ): Boolean {
-        val file = originalFile.getOrBuildFirOfType<FirFile>(firResolveState)
+    ): KtExtensionApplicabilityResult {
+        val file = originalFile.getOrBuildFirFile(firResolveState)
         val explicitReceiverExpression = possibleExplicitReceiver?.getOrBuildFirOfType<FirExpression>(firResolveState)
-        val resolver = SingleCandidateResolver(firResolveState.firIdeSourcesSession, file)
-        val implicitReceivers = getImplicitReceivers(file, nameExpression, originalEnclosingFunction)
-
+        val resolver = SingleCandidateResolver(firResolveState.rootModuleSession, file)
+        val implicitReceivers = getImplicitReceivers(originalFile, file, nameExpression)
         for (implicitReceiverValue in implicitReceivers) {
             val resolutionParameters = ResolutionParameters(
                 singleCandidateResolutionMode = SingleCandidateResolutionMode.CHECK_EXTENSION_FOR_COMPLETION,
@@ -78,31 +71,27 @@ internal class KtFirCompletionCandidateChecker(
                 explicitReceiver = explicitReceiverExpression
             )
             resolver.resolveSingleCandidate(resolutionParameters)?.let {
-                // not null if resolved and completed successfully
-                return true
+                return when {
+                    candidateSymbol is FirVariable && candidateSymbol.returnTypeRef.coneType.receiverType(rootModuleSession) != null -> {
+                        KtExtensionApplicabilityResult.ApplicableAsFunctionalVariableCall
+                    }
+                    else -> {
+                        KtExtensionApplicabilityResult.ApplicableAsExtensionCallable
+                    }
+                }
             }
         }
-        return false
+        return KtExtensionApplicabilityResult.NonApplicable
     }
 
     private fun getImplicitReceivers(
-        file: FirFile,
-        fakeNameExpression: KtElement,
-        originalEnclosingFunction: KtNamedFunction,
+        originalFile: KtFile,
+        firFile: FirFile,
+        fakeNameExpression: KtSimpleNameExpression
     ): Sequence<ImplicitReceiverValue<*>?> {
-        val fakeEnclosingFunction = fakeNameExpression.getNonStrictParentOfType<KtNamedFunction>()
-            ?: error("Cannot find enclosing function for ${fakeNameExpression.getElementTextInContext()}")
-
-        val completionContext = completionContextCache.getOrCreate(file to fakeEnclosingFunction) {
-            LowLevelFirApiFacade.buildCompletionContextForFunction(
-                file,
-                fakeEnclosingFunction,
-                originalEnclosingFunction,
-                state = firResolveState
-            )
-        }
-
-        val towerDataContext = completionContext.getTowerDataContext(fakeNameExpression)
+        val towerDataContext = analysisSession.firResolveState.getTowerContextProvider()
+            .getClosestAvailableParentContext(fakeNameExpression)
+            ?: error("Cannot find enclosing declaration for ${fakeNameExpression.getElementTextInContext()}")
 
         return sequence {
             yield(null) // otherwise explicit receiver won't be checked when there are no implicit receivers in completion position

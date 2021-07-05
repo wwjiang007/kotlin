@@ -15,6 +15,7 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation.Companion.MAIN_COMPI
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation.Companion.TEST_COMPILATION_NAME
 import org.jetbrains.kotlin.gradle.plugin.PropertiesProvider
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJsSingleTargetPreset
+import org.jetbrains.kotlin.gradle.plugin.mpp.setupGeneralKotlinExtensionParameters
 import org.jetbrains.kotlin.gradle.plugin.whenEvaluated
 import org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrSingleTargetPreset
 import org.jetbrains.kotlin.gradle.utils.*
@@ -28,6 +29,8 @@ open class KotlinJsPlugin(
             project.logger.warn(jsPluginDeprecationMessage("org.jetbrains.kotlin.frontend"))
         }
 
+        project.setupGeneralKotlinExtensionParameters()
+
         // TODO get rid of this plugin, too? Use the 'base' plugin instead?
         // in fact, the attributes schema of the Java base plugin may be required to consume non-MPP Kotlin/JS libs,
         // so investigation is needed
@@ -39,8 +42,8 @@ open class KotlinJsPlugin(
         customizeKotlinDependencies(project)
 
         kotlinExtension.apply {
-            irPreset = KotlinJsIrSingleTargetPreset(project, kotlinPluginVersion)
-            legacyPreset = KotlinJsSingleTargetPreset(project, kotlinPluginVersion)
+            irPreset = KotlinJsIrSingleTargetPreset(project)
+            legacyPreset = KotlinJsSingleTargetPreset(project)
             defaultJsCompilerType = PropertiesProvider(project).jsCompiler
         }
 

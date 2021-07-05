@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.backend.common.serialization.metadata
 
+import com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.backend.common.serialization.isExpectMember
 import org.jetbrains.kotlin.backend.common.serialization.isSerializableExpectClass
 import org.jetbrains.kotlin.config.AnalysisFlags
@@ -19,6 +20,7 @@ import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.scopes.DescriptorKindFilter
+import org.jetbrains.kotlin.serialization.ApproximatingStringTable
 import org.jetbrains.kotlin.serialization.DescriptorSerializer
 import org.jetbrains.kotlin.serialization.StringTableImpl
 import org.jetbrains.kotlin.serialization.deserialization.descriptors.DeserializedClassDescriptor
@@ -31,8 +33,11 @@ internal fun <T, R> Iterable<T>.maybeChunked(size: Int?, transform: (List<T>) ->
 abstract class KlibMetadataSerializer(
     val languageVersionSettings: LanguageVersionSettings,
     val metadataVersion: BinaryVersion,
+    val project: Project?,
+    val exportKDoc: Boolean = false,
     val skipExpects: Boolean = false,
-    val includeOnlyModuleContent: Boolean = false
+    val includeOnlyModuleContent: Boolean = false,
+    private val allowErrorTypes: Boolean
 ) {
 
     lateinit var serializerContext: SerializerContext
@@ -48,7 +53,9 @@ abstract class KlibMetadataSerializer(
         val extension = KlibMetadataSerializerExtension(
             languageVersionSettings,
             metadataVersion,
-            KlibMetadataStringTable()
+            ApproximatingStringTable(),
+            allowErrorTypes,
+            exportKDoc
         )
         return SerializerContext(
             extension,
@@ -91,7 +98,7 @@ abstract class KlibMetadataSerializer(
         with(serializerContext) {
             val previousSerializer = classSerializer
 
-            classSerializer = DescriptorSerializer.create(classDescriptor, serializerExtension, classSerializer)
+            classSerializer = DescriptorSerializer.create(classDescriptor, serializerExtension, classSerializer, project)
             val classProto = classSerializer.classProto(classDescriptor).build() ?: error("Class not serialized: $classDescriptor")
             //builder.addClass(classProto)
 

@@ -10,13 +10,14 @@ import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Dependency
 import org.gradle.api.attributes.Attribute
-import org.gradle.api.attributes.Usage
 import org.gradle.jvm.tasks.Jar
 import org.gradle.util.WrapUtil
 import org.jetbrains.kotlin.gradle.dsl.KotlinNativeBinaryContainer
 import org.jetbrains.kotlin.gradle.dsl.kotlinExtension
-import org.jetbrains.kotlin.gradle.dsl.multiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.*
+import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.*
+import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.isNativeShared
+import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.variantsContainingFragment
 import org.jetbrains.kotlin.gradle.targets.metadata.*
 import org.jetbrains.kotlin.gradle.targets.metadata.filesWithUnpackedArchives
 import org.jetbrains.kotlin.gradle.targets.metadata.isKotlinGranularMetadataEnabled
@@ -44,7 +45,7 @@ open class KotlinNativeTarget @Inject constructor(
 
     private val hostSpecificMetadataJarTaskName get() = disambiguateName("MetadataJar")
 
-    private val hostSpecificMetadataElementsConfigurationName get() = disambiguateName("MetadataElements")
+    internal val hostSpecificMetadataElementsConfigurationName get() = disambiguateName("MetadataElements")
 
     override val kotlinComponents: Set<KotlinTargetComponent> by lazy {
         if (!project.isKotlinGranularMetadataEnabled)
@@ -60,14 +61,12 @@ open class KotlinNativeTarget @Inject constructor(
                 .intersect(mainCompilation.allKotlinSourceSets)
 
             if (hostSpecificSourceSets.isNotEmpty()) {
-                val hostSpecificMetadataJar = project.locateOrRegisterTask<Jar>(hostSpecificMetadataJarTaskName) {
-                    it.archiveAppendix.set(project.provider { disambiguationClassifier.orEmpty().toLowerCase() })
-                    it.archiveClassifier.set("metadata")
-                }
-                project.artifacts.add(Dependency.ARCHIVES_CONFIGURATION, hostSpecificMetadataJar)
+                val hostSpecificMetadataJar = project.locateOrRegisterTask<Jar>(hostSpecificMetadataJarTaskName) { metadataJar ->
+                    metadataJar.archiveAppendix.set(project.provider { disambiguationClassifier.orEmpty().toLowerCase() })
+                    metadataJar.archiveClassifier.set("metadata")
 
-                hostSpecificMetadataJar.configure { metadataJar ->
-                    metadataJar.onlyIf { this@KotlinNativeTarget.publishable }
+                    val publishable = this@KotlinNativeTarget.publishable
+                    metadataJar.onlyIf { publishable }
 
                     val metadataCompilations = hostSpecificSourceSets.mapNotNull {
                         project.getMetadataCompilationForSourceSet(it)
@@ -80,29 +79,18 @@ open class KotlinNativeTarget @Inject constructor(
                         metadataJar.dependsOn(it.output.classesDirs)
                     }
                 }
+                project.artifacts.add(Dependency.ARCHIVES_CONFIGURATION, hostSpecificMetadataJar)
 
-                val metadataConfiguration = project.configurations.findByName(hostSpecificMetadataElementsConfigurationName)
-                    ?: project.configurations.create(hostSpecificMetadataElementsConfigurationName) { configuration ->
-                        configuration.isCanBeConsumed = false
-                        configuration.isCanBeResolved = false
-                        project.artifacts.add(configuration.name, hostSpecificMetadataJar) { artifact ->
-                            artifact.classifier = "metadata"
-                        }
-
-                        configuration.extendsFrom(*configurations.getByName(apiElementsConfigurationName).extendsFrom.toTypedArray())
-                    }
-
-                val metadataAttributes =
-                    HierarchyAttributeContainer(project.configurations.getByName(apiElementsConfigurationName).attributes).apply {
-                        attribute(Usage.USAGE_ATTRIBUTE, project.usageByName(KotlinUsages.KOTLIN_METADATA))
-                    }
+                val metadataConfiguration = project.configurations.getByName(hostSpecificMetadataElementsConfigurationName)
+                project.artifacts.add(metadataConfiguration.name, hostSpecificMetadataJar) { artifact ->
+                    artifact.classifier = "metadata"
+                }
 
                 mutableUsageContexts.add(
                     DefaultKotlinUsageContext(
                         mainCompilation,
                         project.usageByName(javaApiUsageForMavenScoping()),
                         metadataConfiguration.name,
-                        overrideConfigurationAttributes = metadataAttributes,
                         includeIntoProjectStructureMetadata = false
                     )
                 )
@@ -142,29 +130,56 @@ open class KotlinNativeTarget @Inject constructor(
             "org.jetbrains.kotlin.native.target",
             String::class.java
         )
+        val kotlinNativeBuildTypeAttribute = Attribute.of(
+            "org.jetbrains.kotlin.native.build.type",
+            String::class.java
+        )
     }
 }
 
-internal fun getHostSpecificSourceSets(project: Project): List<KotlinSourceSet> {
-    val compilationsBySourceSet = CompilationSourceSetUtil.compilationsBySourceSets(project)
+private val hostManager by lazy { HostManager() }
 
-    val enabledByHost = HostManager().enabledByHost
+internal fun isHostSpecificKonanTargetsSet(konanTargets: Iterable<KonanTarget>): Boolean {
+    val enabledByHost = hostManager.enabledByHost
     val allHosts = enabledByHost.keys
-
     fun canBeBuiltOnHosts(konanTarget: KonanTarget) = enabledByHost.filterValues { konanTarget in it }.keys
+    return konanTargets.flatMapTo(mutableSetOf(), ::canBeBuiltOnHosts) != allHosts
+}
 
-    return project.kotlinExtension.sourceSets.filter { sourceSet ->
-        if (sourceSet !in compilationsBySourceSet) return@filter false
+private fun <T> getHostSpecificElements(
+    fragments: Iterable<T>,
+    isNativeShared: (T) -> Boolean,
+    getKonanTargets: (T) -> Set<KonanTarget>
+): Set<T> = fragments.filterTo(mutableSetOf()) { isNativeShared(it) && isHostSpecificKonanTargetsSet(getKonanTargets(it)) }
 
-        // If the source set participates in compilations such that some host can't run either of them, then on that host,
-        // we can't analyze the source set, so the source set's metadata can't be published from that host, and therefore
-        // we consider it platform-specific and publish as a part of the Native targets where the source set takes part,
-        // not the common metadata artifact;
-        val platformCompilations = compilationsBySourceSet.getValue(sourceSet).filter { it !is KotlinMetadataCompilation }
-        val nativeCompilations = platformCompilations.filterIsInstance<KotlinNativeCompilation>()
-        val nativeEnabledOn = nativeCompilations.flatMapTo(mutableSetOf()) { compilation -> canBeBuiltOnHosts(compilation.konanTarget) }
-        platformCompilations == nativeCompilations && allHosts != nativeEnabledOn
+internal fun getHostSpecificFragments(
+    module: KotlinGradleModule
+): Set<KotlinGradleFragment> = getHostSpecificElements<KotlinGradleFragment>(
+    module.fragments,
+    isNativeShared = { it.isNativeShared() },
+    getKonanTargets = {
+        val nativeVariants = module.variantsContainingFragment(it).filterIsInstance<KotlinNativeVariantInternal>()
+        nativeVariants.mapTo(mutableSetOf()) { it.konanTarget }
     }
+)
+
+internal fun getHostSpecificSourceSets(project: Project): Set<KotlinSourceSet> {
+    val compilationsBySourceSet = CompilationSourceSetUtil.compilationsBySourceSets(project).mapValues { (_, compilations) ->
+        compilations.filter { it !is KotlinMetadataCompilation<*> }
+    }
+
+    return getHostSpecificElements(
+        project.kotlinExtension.sourceSets,
+        isNativeShared = { sourceSet ->
+            val compilations = compilationsBySourceSet[sourceSet].orEmpty()
+            compilations.isNotEmpty() && compilations.all { it.platformType == KotlinPlatformType.native }
+        },
+        getKonanTargets = { sourceSet ->
+            compilationsBySourceSet[sourceSet].orEmpty()
+                .filterIsInstance<KotlinNativeCompilation>()
+                .mapTo(mutableSetOf()) { it.konanTarget }
+        }
+    )
 }
 
 abstract class KotlinNativeTargetWithTests<T : KotlinNativeBinaryTestRun>(

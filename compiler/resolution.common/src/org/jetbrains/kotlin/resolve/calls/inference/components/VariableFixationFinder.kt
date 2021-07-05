@@ -5,6 +5,8 @@
 
 package org.jetbrains.kotlin.resolve.calls.inference.components
 
+import org.jetbrains.kotlin.config.LanguageFeature
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.resolve.calls.inference.components.ConstraintSystemCompletionMode.PARTIAL
 import org.jetbrains.kotlin.resolve.calls.inference.model.Constraint
 import org.jetbrains.kotlin.resolve.calls.inference.model.DeclaredUpperBoundConstraintPosition
@@ -13,10 +15,12 @@ import org.jetbrains.kotlin.resolve.calls.model.PostponedResolvedAtomMarker
 import org.jetbrains.kotlin.types.model.*
 
 class VariableFixationFinder(
-    private val trivialConstraintTypeInferenceOracle: TrivialConstraintTypeInferenceOracle
+    private val trivialConstraintTypeInferenceOracle: TrivialConstraintTypeInferenceOracle,
+    private val languageVersionSettings: LanguageVersionSettings,
 ) {
     interface Context : TypeSystemInferenceExtensionContext {
         val notFixedTypeVariables: Map<TypeConstructorMarker, VariableWithConstraints>
+        val fixedTypeVariables: Map<TypeConstructorMarker, KotlinTypeMarker>
         val postponedTypeVariables: List<TypeVariableMarker>
         fun isReified(variable: TypeVariableMarker): Boolean
     }
@@ -32,7 +36,7 @@ class VariableFixationFinder(
         allTypeVariables: List<TypeConstructorMarker>,
         postponedKtPrimitives: List<PostponedResolvedAtomMarker>,
         completionMode: ConstraintSystemCompletionMode,
-        topLevelType: KotlinTypeMarker
+        topLevelType: KotlinTypeMarker,
     ): VariableForFixation? = c.findTypeVariableForFixation(allTypeVariables, postponedKtPrimitives, completionMode, topLevelType)
 
     enum class TypeVariableFixationReadiness {
@@ -42,13 +46,18 @@ class VariableFixationFinder(
         WITH_TRIVIAL_OR_NON_PROPER_CONSTRAINTS, // proper trivial constraint from arguments, Nothing <: T
         RELATED_TO_ANY_OUTPUT_TYPE,
         FROM_INCORPORATION_OF_DECLARED_UPPER_BOUND,
+        READY_FOR_FIXATION_UPPER,
+        READY_FOR_FIXATION_LOWER,
         READY_FOR_FIXATION,
         READY_FOR_FIXATION_REIFIED,
     }
 
+    private val inferenceCompatibilityModeEnabled: Boolean
+        get() = languageVersionSettings.supportsFeature(LanguageFeature.InferenceCompatibility)
+
     private fun Context.getTypeVariableReadiness(
         variable: TypeConstructorMarker,
-        dependencyProvider: TypeVariableDependencyInformationProvider
+        dependencyProvider: TypeVariableDependencyInformationProvider,
     ): TypeVariableFixationReadiness = when {
         !notFixedTypeVariables.contains(variable) ||
                 dependencyProvider.isVariableRelatedToTopLevelType(variable) -> TypeVariableFixationReadiness.FORBIDDEN
@@ -59,10 +68,19 @@ class VariableFixationFinder(
         variableHasOnlyIncorporatedConstraintsFromDeclaredUpperBound(variable) ->
             TypeVariableFixationReadiness.FROM_INCORPORATION_OF_DECLARED_UPPER_BOUND
         isReified(variable) -> TypeVariableFixationReadiness.READY_FOR_FIXATION_REIFIED
+        inferenceCompatibilityModeEnabled -> {
+            when {
+                variableHasLowerNonNothingProperConstraint(variable) -> TypeVariableFixationReadiness.READY_FOR_FIXATION_LOWER
+                else -> TypeVariableFixationReadiness.READY_FOR_FIXATION_UPPER
+            }
+        }
         else -> TypeVariableFixationReadiness.READY_FOR_FIXATION
     }
 
-    fun isTypeVariableHasProperConstraint(context: Context, typeVariable: TypeConstructorMarker): Boolean {
+    fun isTypeVariableHasProperConstraint(
+        context: Context,
+        typeVariable: TypeConstructorMarker,
+    ): Boolean {
         return with(context) {
             val dependencyProvider = TypeVariableDependencyInformationProvider(
                 notFixedTypeVariables, emptyList(), topLevelType = null, context
@@ -91,7 +109,7 @@ class VariableFixationFinder(
         allTypeVariables: List<TypeConstructorMarker>,
         postponedArguments: List<PostponedResolvedAtomMarker>,
         completionMode: ConstraintSystemCompletionMode,
-        topLevelType: KotlinTypeMarker
+        topLevelType: KotlinTypeMarker,
     ): VariableForFixation? {
         if (allTypeVariables.isEmpty()) return null
 
@@ -99,7 +117,8 @@ class VariableFixationFinder(
             notFixedTypeVariables, postponedArguments, topLevelType.takeIf { completionMode == PARTIAL }, this
         )
 
-        val candidate = allTypeVariables.maxByOrNull { getTypeVariableReadiness(it, dependencyProvider) } ?: return null
+        val candidate =
+            allTypeVariables.maxByOrNull { getTypeVariableReadiness(it, dependencyProvider) } ?: return null
 
         return when (getTypeVariableReadiness(candidate, dependencyProvider)) {
             TypeVariableFixationReadiness.FORBIDDEN -> null
@@ -122,8 +141,12 @@ class VariableFixationFinder(
         return false
     }
 
-    private fun Context.variableHasProperArgumentConstraints(variable: TypeConstructorMarker): Boolean =
-        notFixedTypeVariables[variable]?.constraints?.any { isProperArgumentConstraint(it) } ?: false
+    private fun Context.variableHasProperArgumentConstraints(variable: TypeConstructorMarker): Boolean {
+        val constraints = notFixedTypeVariables[variable]?.constraints ?: return false
+        // temporary hack to fail calls which contain callable references resolved though OI with uninferred type parameters
+        val areThereConstraintsWithUninferredTypeParameter = constraints.any { c -> c.type.contains { it.isUninferredParameter() } }
+        return constraints.any { isProperArgumentConstraint(it) } && !areThereConstraintsWithUninferredTypeParameter
+    }
 
     private fun Context.isProperArgumentConstraint(c: Constraint) =
         isProperType(c.type)
@@ -135,19 +158,43 @@ class VariableFixationFinder(
 
     private fun Context.isReified(variable: TypeConstructorMarker): Boolean =
         notFixedTypeVariables[variable]?.typeVariable?.let { isReified(it) } ?: false
+
+    private fun Context.variableHasLowerNonNothingProperConstraint(variable: TypeConstructorMarker): Boolean {
+        val constraints = notFixedTypeVariables[variable]?.constraints ?: return false
+
+        return constraints.any {
+            it.kind.isLower() && isProperArgumentConstraint(it) && !it.type.typeConstructor().isNothingConstructor()
+        }
+    }
 }
 
-inline fun TypeSystemInferenceExtensionContext.isProperTypeForFixation(
-    type: KotlinTypeMarker,
-    isProper: (KotlinTypeMarker) -> Boolean
-): Boolean {
-    if (!isProper(type)) return false
-    if (type.isCapturedType()) {
-        val projection = (type as? SimpleTypeMarker)?.asCapturedType()?.typeConstructorProjection() ?: return true
-        if (projection.isStarProjection()) return true
+inline fun TypeSystemInferenceExtensionContext.isProperTypeForFixation(type: KotlinTypeMarker, isProper: (KotlinTypeMarker) -> Boolean) =
+    isProper(type) && extractProjectionsForAllCapturedTypes(type).all(isProper)
 
-        if (!isProper(projection.getType())) return false
+@OptIn(ExperimentalStdlibApi::class)
+fun TypeSystemInferenceExtensionContext.extractProjectionsForAllCapturedTypes(baseType: KotlinTypeMarker): Set<KotlinTypeMarker> {
+    val simpleBaseType = baseType.asSimpleType()
+
+    return buildSet {
+        val projectionType = if (simpleBaseType is CapturedTypeMarker) {
+            val typeArgument = simpleBaseType.typeConstructorProjection().takeIf { !it.isStarProjection() } ?: return@buildSet
+            typeArgument.getType().also(::add)
+        } else baseType
+        val argumentsCount = projectionType.argumentsCount().takeIf { it != 0 } ?: return@buildSet
+
+        for (i in 0 until argumentsCount) {
+            val typeArgument = projectionType.getArgument(i).takeIf { !it.isStarProjection() } ?: continue
+            addAll(extractProjectionsForAllCapturedTypes(typeArgument.getType()))
+        }
     }
+}
 
-    return true
+fun TypeSystemInferenceExtensionContext.containsTypeVariable(type: KotlinTypeMarker, typeVariable: TypeConstructorMarker): Boolean {
+    if (type.contains { it.typeConstructor() == typeVariable }) return true
+
+    val typeProjections = extractProjectionsForAllCapturedTypes(type)
+
+    return typeProjections.any { typeProjectionsType ->
+        typeProjectionsType.contains { it.typeConstructor() == typeVariable }
+    }
 }

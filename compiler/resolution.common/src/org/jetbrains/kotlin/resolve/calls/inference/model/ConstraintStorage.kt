@@ -33,26 +33,28 @@ import org.jetbrains.kotlin.types.model.*
 interface ConstraintStorage {
     val allTypeVariables: Map<TypeConstructorMarker, TypeVariableMarker>
     val notFixedTypeVariables: Map<TypeConstructorMarker, VariableWithConstraints>
+    val missedConstraints: List<Pair<IncorporationConstraintPosition, List<Pair<TypeVariableMarker, Constraint>>>>
     val initialConstraints: List<InitialConstraint>
     val maxTypeDepthFromInitialConstraints: Int
     val errors: List<ConstraintSystemError>
     val hasContradiction: Boolean
     val fixedTypeVariables: Map<TypeConstructorMarker, KotlinTypeMarker>
     val postponedTypeVariables: List<TypeVariableMarker>
-    val revisedVariablesForParameters: Map<Pair<TypeVariableMarker, Int>, TypeVariableMarker>
-    val revisedReturnTypes: Map<TypeVariableMarker, TypeVariableMarker>
+    val builtFunctionalTypesForPostponedArgumentsByTopLevelTypeVariables: Map<Pair<TypeConstructorMarker, List<Pair<TypeConstructorMarker, Int>>>, KotlinTypeMarker>
+    val builtFunctionalTypesForPostponedArgumentsByExpectedTypeVariables: Map<TypeConstructorMarker, KotlinTypeMarker>
 
     object Empty : ConstraintStorage {
         override val allTypeVariables: Map<TypeConstructorMarker, TypeVariableMarker> get() = emptyMap()
         override val notFixedTypeVariables: Map<TypeConstructorMarker, VariableWithConstraints> get() = emptyMap()
+        override val missedConstraints: List<Pair<IncorporationConstraintPosition, List<Pair<TypeVariableMarker, Constraint>>>> get() = emptyList()
         override val initialConstraints: List<InitialConstraint> get() = emptyList()
         override val maxTypeDepthFromInitialConstraints: Int get() = 1
         override val errors: List<ConstraintSystemError> get() = emptyList()
         override val hasContradiction: Boolean get() = false
         override val fixedTypeVariables: Map<TypeConstructorMarker, KotlinTypeMarker> get() = emptyMap()
         override val postponedTypeVariables: List<TypeVariableMarker> get() = emptyList()
-        override val revisedVariablesForParameters: Map<Pair<TypeVariableMarker, Int>, TypeVariableMarker> = emptyMap()
-        override val revisedReturnTypes: Map<TypeVariableMarker, TypeVariableMarker> = emptyMap()
+        override val builtFunctionalTypesForPostponedArgumentsByTopLevelTypeVariables: Map<Pair<TypeConstructorMarker, List<Pair<TypeConstructorMarker, Int>>>, KotlinTypeMarker> = emptyMap()
+        override val builtFunctionalTypesForPostponedArgumentsByExpectedTypeVariables: Map<TypeConstructorMarker, KotlinTypeMarker> = emptyMap()
     }
 }
 
@@ -143,3 +145,6 @@ fun checkConstraint(
         ConstraintKind.UPPER -> typeChecker.isSubtypeOf(context, resultType, constraintType)
     }
 }
+
+fun Constraint.replaceType(newType: KotlinTypeMarker) =
+    Constraint(kind, newType, position, typeHashCode, derivedFrom, isNullabilityConstraint, inputTypePositionBeforeIncorporation)

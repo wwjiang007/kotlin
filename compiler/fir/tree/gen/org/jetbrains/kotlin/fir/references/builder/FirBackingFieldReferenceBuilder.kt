@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2020 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
@@ -10,7 +10,7 @@ import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.fir.builder.FirBuilderDsl
 import org.jetbrains.kotlin.fir.references.FirBackingFieldReference
 import org.jetbrains.kotlin.fir.references.impl.FirBackingFieldReferenceImpl
-import org.jetbrains.kotlin.fir.symbols.AbstractFirBasedSymbol
+import org.jetbrains.kotlin.fir.symbols.FirBasedSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirBackingFieldSymbol
 import org.jetbrains.kotlin.fir.visitors.*
 import org.jetbrains.kotlin.name.Name
@@ -23,7 +23,7 @@ import org.jetbrains.kotlin.name.Name
 @FirBuilderDsl
 class FirBackingFieldReferenceBuilder {
     var source: FirSourceElement? = null
-    var candidateSymbol: AbstractFirBasedSymbol<*>? = null
+    var candidateSymbol: FirBasedSymbol<*>? = null
     lateinit var resolvedSymbol: FirBackingFieldSymbol
 
     fun build(): FirBackingFieldReference {

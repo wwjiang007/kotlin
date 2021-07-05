@@ -7,18 +7,17 @@ package org.jetbrains.kotlin.fir.analysis.checkers.extended
 
 import org.jetbrains.kotlin.fir.FirFakeSourceElement
 import org.jetbrains.kotlin.fir.analysis.checkers.context.CheckerContext
-import org.jetbrains.kotlin.fir.analysis.checkers.expression.FirBasicExpresionChecker
+import org.jetbrains.kotlin.fir.analysis.checkers.expression.FirFunctionCallChecker
 import org.jetbrains.kotlin.fir.analysis.diagnostics.DiagnosticReporter
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirErrors
+import org.jetbrains.kotlin.fir.analysis.diagnostics.reportOn
 import org.jetbrains.kotlin.fir.expressions.FirConstExpression
 import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
-import org.jetbrains.kotlin.fir.expressions.FirStatement
 import org.jetbrains.kotlin.fir.scopes.impl.FirIntegerOperatorCall
 
-object EmptyRangeChecker : FirBasicExpresionChecker() {
-    override fun check(expression: FirStatement, context: CheckerContext, reporter: DiagnosticReporter) {
-        if (expression.source is FirFakeSourceElement<*>) return
-        if (expression !is FirFunctionCall) return
+object EmptyRangeChecker : FirFunctionCallChecker() {
+    override fun check(expression: FirFunctionCall, context: CheckerContext, reporter: DiagnosticReporter) {
+        if (expression.source is FirFakeSourceElement) return
         val left = expression.rangeLeft ?: return
         val right = expression.rangeRight ?: return
 
@@ -36,8 +35,7 @@ object EmptyRangeChecker : FirBasicExpresionChecker() {
         }
 
         if (needReport) {
-            reporter.report(expression.source, FirErrors.EMPTY_RANGE)
-
+            reporter.reportOn(expression.source, FirErrors.EMPTY_RANGE, context)
         }
     }
 

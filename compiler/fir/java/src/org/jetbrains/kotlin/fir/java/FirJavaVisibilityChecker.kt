@@ -5,24 +5,25 @@
 
 package org.jetbrains.kotlin.fir.java
 
+import org.jetbrains.kotlin.descriptors.Visibility
+import org.jetbrains.kotlin.descriptors.java.JavaVisibilities
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.FirVisibilityChecker
-import org.jetbrains.kotlin.descriptors.java.JavaVisibilities
-import org.jetbrains.kotlin.descriptors.Visibility
+import org.jetbrains.kotlin.fir.NoMutableState
 import org.jetbrains.kotlin.fir.declarations.FirDeclaration
 import org.jetbrains.kotlin.fir.declarations.FirFile
-import org.jetbrains.kotlin.fir.resolve.calls.Candidate
-import org.jetbrains.kotlin.fir.symbols.AbstractFirBasedSymbol
-import org.jetbrains.kotlin.name.ClassId
+import org.jetbrains.kotlin.fir.getOwnerId
+import org.jetbrains.kotlin.fir.resolve.calls.ReceiverValue
+import org.jetbrains.kotlin.fir.symbols.FirBasedSymbol
 
+@NoMutableState
 object FirJavaVisibilityChecker : FirVisibilityChecker() {
     override fun platformVisibilityCheck(
         declarationVisibility: Visibility,
-        symbol: AbstractFirBasedSymbol<*>,
+        symbol: FirBasedSymbol<*>,
         useSiteFile: FirFile,
-        ownerId: ClassId?,
         containingDeclarations: List<FirDeclaration>,
-        candidate: Candidate,
+        dispatchReceiver: ReceiverValue?,
         session: FirSession
     ): Boolean {
         return when (declarationVisibility) {
@@ -30,7 +31,8 @@ object FirJavaVisibilityChecker : FirVisibilityChecker() {
                 if (symbol.packageFqName() == useSiteFile.packageFqName) {
                     true
                 } else {
-                    ownerId != null && canSeeProtectedMemberOf(containingDeclarations, candidate.dispatchReceiverValue, ownerId, session)
+                    val ownerId = symbol.getOwnerId()
+                    ownerId != null && canSeeProtectedMemberOf(containingDeclarations, dispatchReceiver, ownerId, session)
                 }
             }
 

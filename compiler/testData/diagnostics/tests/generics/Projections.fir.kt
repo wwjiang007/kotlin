@@ -1,4 +1,3 @@
-// !WITH_NEW_INFERENCE
 // !CHECK_TYPE
 
 class In<in T>() {
@@ -21,7 +20,7 @@ class Inv<T>() {
 fun testInOut() {
     In<String>().f("1");
     (null as In<in String>).f("1")
-    (null as In<*>).f("1") // Wrong Arg
+    (null as In<*>).<!NONE_APPLICABLE!>f<!>("1") // Wrong Arg
 
     In<String>().f(1);
     (null as In<in String>).f(1)
@@ -37,18 +36,18 @@ fun testInOut() {
 
     Inv<Int>().f(1)
     (null as Inv<in Int>).f(1)
-    (null as Inv<out Int>).f(1) // !!
-    (null as Inv<*>).f(1) // !!
+    (null as Inv<out Int>).f(<!ARGUMENT_TYPE_MISMATCH!>1<!>) // !!
+    (null as Inv<*>).f(<!ARGUMENT_TYPE_MISMATCH!>1<!>) // !!
 
     Inv<Int>().inf(1)
     (null as Inv<in Int>).inf(1)
-    (null as Inv<out Int>).inf(1) // !!
-    (null as Inv<*>).inf(1) // !!
+    (null as Inv<out Int>).inf(<!ARGUMENT_TYPE_MISMATCH!>1<!>) // !!
+    (null as Inv<*>).inf(<!ARGUMENT_TYPE_MISMATCH!>1<!>) // !!
 
     Inv<Int>().outf()
-    checkSubtype<Int>((null as Inv<in Int>).outf()) // Type mismatch
+    checkSubtype<Int>(<!ARGUMENT_TYPE_MISMATCH!>(null as Inv<in Int>).outf()<!>) // Type mismatch
     (null as Inv<out Int>).outf()
     (null as Inv<*>).outf()
 
-    Inv<Int>().<!INAPPLICABLE_CANDIDATE!>outf<!>(1) // Wrong Arg
+    Inv<Int>().outf(<!TOO_MANY_ARGUMENTS!>1<!>) // Wrong Arg
 }

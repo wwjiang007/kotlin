@@ -1,6 +1,9 @@
-
+// FILE: call.kt
 fun call() {
-    val a = <selection>A()</selection>
+    val a = <expr>A()</expr>
 }
 
-// CALL: FunctionCallInfo: targetFunction = <constructor>(): A
+// FILE: A.java
+class A {}
+
+// CALL: KtFunctionCall: targetFunction = <constructor>(): A

@@ -11,7 +11,7 @@ import org.jetbrains.kotlin.ir.backend.js.utils.emptyScope
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.declarations.IrVariable
 import org.jetbrains.kotlin.ir.expressions.*
-import org.jetbrains.kotlin.ir.types.*
+import org.jetbrains.kotlin.ir.types.isAny
 import org.jetbrains.kotlin.ir.util.constructedClassType
 import org.jetbrains.kotlin.js.backend.ast.*
 
@@ -65,7 +65,7 @@ class IrElementToJsStatementTransformer : BaseIrElementToJsNodeTransformer<JsSta
         return expression.value.maybeOptimizeIntoSwitch(context) { jsAssignment(dest, it).makeStmt() }
     }
 
-    override fun visitSetVariable(expression: IrSetVariable, context: JsGenerationContext): JsStatement {
+    override fun visitSetValue(expression: IrSetValue, context: JsGenerationContext): JsStatement {
         val ref = JsNameRef(context.getNameForValueDeclaration(expression.symbol.owner))
         return expression.value.maybeOptimizeIntoSwitch(context) { JsBinaryOperation(JsBinaryOperator.ASG, ref, it).makeStmt() }
     }
@@ -106,7 +106,7 @@ class IrElementToJsStatementTransformer : BaseIrElementToJsNodeTransformer<JsSta
 
     override fun visitCall(expression: IrCall, data: JsGenerationContext): JsStatement {
         if (data.checkIfJsCode(expression.symbol)) {
-            val statements = translateJsCodeIntoStatementList(expression.getValueArgument(0) ?: error("JsCode is expected"))
+            val statements = translateJsCodeIntoStatementList(expression.getValueArgument(0) ?: error("JsCode is expected"))!!
             return when (statements.size) {
                 0 -> JsEmpty
                 1 -> statements.single()

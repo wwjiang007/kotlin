@@ -7,6 +7,7 @@ plugins {
 
 dependencies {
     compileOnly(project(":core:util.runtime"))
+    compileOnly(project(":compiler:backend.common.jvm"))
     compileOnly(project(":compiler:util"))
     compileOnly(project(":compiler:cli-common"))
     compileOnly(project(":compiler:frontend.java"))
@@ -22,9 +23,6 @@ dependencies {
     testCompile(commonDep("junit:junit"))
     testCompile(protobufFull())
     testCompile(kotlinStdlib())
-    Platform[193].orLower {
-        testCompileOnly(intellijDep()) { includeJars("openapi", rootProject = rootProject) }
-    }
     testRuntime(project(":kotlin-reflect"))
 }
 

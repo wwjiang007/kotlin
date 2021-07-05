@@ -12,14 +12,23 @@ dependencies {
 
     compileOnly(intellijPluginDep("gradle"))
     compileOnly(intellijDep()) { includeJars("slf4j-api-1.7.25") }
-    Platform[193].orLower {
-        compile(project(":idea:idea-gradle-tooling-api"))
-    }
+
+    testImplementation(commonDep("junit:junit"))
+    testImplementation(projectTests(":compiler:tests-common"))
+    testCompileOnly(projectTests(":idea:idea-test-framework"))
+    testCompileOnly(intellijDep())
+
 }
 
 sourceSets {
     "main" { projectDefault() }
-    "test" {}
+    "test" { projectDefault() }
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.dsl.KotlinCompile<*>> {
+    kotlinOptions {
+        freeCompilerArgs += "-Xsuppress-deprecated-jvm-target-warning"
+    }
 }
 
 runtimeJar()
@@ -27,5 +36,3 @@ runtimeJar()
 sourcesJar()
 
 javadocJar()
-
-apply(from = "$rootDir/gradle/kotlinPluginPublication.gradle.kts")

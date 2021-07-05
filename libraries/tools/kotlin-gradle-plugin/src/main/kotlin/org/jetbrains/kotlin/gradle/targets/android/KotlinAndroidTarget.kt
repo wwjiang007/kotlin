@@ -8,8 +8,10 @@ package org.jetbrains.kotlin.gradle.plugin.mpp
 
 import com.android.build.gradle.api.BaseVariant
 import org.gradle.api.InvalidUserDataException
+import org.gradle.api.Named
 import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Project
+import org.gradle.api.attributes.Attribute
 import org.gradle.api.attributes.Usage.JAVA_RUNTIME_JARS
 import org.jetbrains.kotlin.gradle.plugin.*
 import org.jetbrains.kotlin.gradle.utils.dashSeparatedName
@@ -43,7 +45,9 @@ open class KotlinAndroidTarget(
      * all library variants will be published, but not test or application variants. */
     var publishLibraryVariants: List<String>? = listOf()
         // Workaround for Groovy GString items in a list:
-        set(value) { field = value?.map(Any::toString) }
+        set(value) {
+            field = value?.map(Any::toString)
+        }
 
     /** Add Android library variant names to [publishLibraryVariants]. */
     fun publishLibraryVariants(vararg names: String) {
@@ -69,9 +73,7 @@ open class KotlinAndroidTarget(
                 }
             }
 
-        val variantNames =
-            KotlinAndroidPlugin.androidTargetHandler(project.getKotlinPluginVersion()!!, this)
-                .getLibraryVariantNames()
+        val variantNames = KotlinAndroidPlugin.androidTargetHandler().getLibraryVariantNames()
 
         val missingVariants =
             publishLibraryVariants?.minus(variantNames).orEmpty()
@@ -88,14 +90,19 @@ open class KotlinAndroidTarget(
     override val kotlinComponents by lazy {
         checkPublishLibraryVariantsExist()
 
-        KotlinAndroidPlugin.androidTargetHandler(project.getKotlinPluginVersion()!!, this).doCreateComponents()
+        KotlinAndroidPlugin.androidTargetHandler().doCreateComponents()
+    }
+
+    private fun isVariantPublished(variant: BaseVariant): Boolean {
+        return publishLibraryVariants?.contains(getVariantName(variant)) ?: true
     }
 
     private fun AbstractAndroidProjectHandler.doCreateComponents(): Set<KotlinTargetComponent> {
+
         val publishableVariants = mutableListOf<BaseVariant>()
             .apply { project.forEachVariant { add(it) } }
             .toList() // Defensive copy against unlikely modification by the lambda that captures the list above in forEachVariant { }
-            .filter { getLibraryOutputTask(it) != null && publishLibraryVariants?.contains(getVariantName(it)) ?: true }
+            .filter { getLibraryOutputTask(it) != null }
 
         val publishableVariantGroups = publishableVariants.groupBy { variant ->
             val flavorNames = getFlavorNames(variant)
@@ -118,12 +125,17 @@ open class KotlinAndroidTarget(
 
                 val artifactClassifier = buildTypeName.takeIf { it != "release" && publishLibraryVariantsGroupedByFlavor }
 
-                val usageContexts = createAndroidUsageContexts(androidVariant, compilation, artifactClassifier)
                 createKotlinVariant(
                     lowerCamelCaseName(compilation.target.name, *flavorGroupNameParts.toTypedArray()),
                     compilation,
-                    usageContexts
+                    createAndroidUsageContexts(
+                        androidVariant,
+                        compilation,
+                        artifactClassifier,
+                        publishableVariants.filter(::isVariantPublished).map(::getBuildTypeName).distinct().size == 1
+                    )
                 ).apply {
+                    publishable = isVariantPublished(androidVariant)
                     sourcesArtifacts = setOf(
                         sourcesJarArtifact(
                             compilation, compilation.disambiguateName(""),
@@ -148,21 +160,22 @@ open class KotlinAndroidTarget(
 
             if (publishLibraryVariantsGroupedByFlavor) {
                 JointAndroidKotlinTargetComponent(
-                    this@KotlinAndroidTarget,
-                    nestedVariants,
-                    flavorGroupNameParts,
-                    nestedVariants.flatMap { it.sourcesArtifacts }.toSet()
+                    target = this@KotlinAndroidTarget,
+                    nestedVariants = nestedVariants,
+                    flavorNames = flavorGroupNameParts,
+                    sourcesArtifacts = nestedVariants.filter { it.publishable }.flatMap { it.sourcesArtifacts }.toSet()
                 )
             } else {
                 nestedVariants.single()
-            } as KotlinTargetComponent
+            } as KotlinTargetComponent // Type inference corner case or bug? this cast in each branch is redundant but required here
         }.toSet()
     }
 
     private fun AbstractAndroidProjectHandler.createAndroidUsageContexts(
         variant: BaseVariant,
         compilation: KotlinCompilation<*>,
-        artifactClassifier: String?
+        artifactClassifier: String?,
+        isSingleBuildType: Boolean
     ): Set<DefaultKotlinUsageContext> {
         val variantName = getVariantName(variant)
         val outputTaskOrProvider = getLibraryOutputTask(variant) ?: return emptySet()
@@ -187,12 +200,42 @@ open class KotlinAndroidTarget(
             apiElementsConfigurationName to javaApiUsageForMavenScoping(),
             runtimeElementsConfigurationName to JAVA_RUNTIME_JARS
         ).mapTo(mutableSetOf()) { (dependencyConfigurationName, usageName) ->
+            val configuration = project.configurations.getByName(dependencyConfigurationName)
             DefaultKotlinUsageContext(
                 compilation,
                 project.usageByName(usageName),
                 dependencyConfigurationName,
-                overrideConfigurationArtifacts = setOf(artifact)
+                overrideConfigurationArtifacts = setOf(artifact),
+                overrideConfigurationAttributes = HierarchyAttributeContainer(configuration.attributes) {
+                    val valueString = run {
+                        val value = configuration.attributes.getAttribute(it)
+                        (value as? Named)?.name ?: value.toString()
+                    }
+                    filterOutAndroidVariantAttribute(it) && filterOutAndroidBuildTypeAttribute(it, valueString, isSingleBuildType)
+                }
             )
         }
+    }
+
+    /** We filter this variant out as it is never requested on the consumer side, while keeping it leads to ambiguity between Android and
+     * JVM variants due to non-nesting sets of unmatched attributes. */
+    private fun filterOutAndroidVariantAttribute(
+        attribute: Attribute<*>
+    ): Boolean =
+        attribute.name != "com.android.build.gradle.internal.attributes.VariantAttr" &&
+                attribute.name != "com.android.build.api.attributes.VariantAttr"
+
+    private fun filterOutAndroidBuildTypeAttribute(
+        it: Attribute<*>,
+        valueString: String,
+        isSinglePublishedVariant: Boolean
+    ) = when {
+        PropertiesProvider(project).keepAndroidBuildTypeAttribute -> true
+        it.name != "com.android.build.api.attributes.BuildTypeAttr" -> true
+
+        // then the name is "com.android.build.api.attributes.BuildTypeAttr", so we omit it if there's just the single variant and always for the release one:
+        valueString == "release" -> false
+        isSinglePublishedVariant -> false
+        else -> true
     }
 }

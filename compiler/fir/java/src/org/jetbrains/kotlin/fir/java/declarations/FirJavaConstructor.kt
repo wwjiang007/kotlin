@@ -5,10 +5,10 @@
 
 package org.jetbrains.kotlin.fir.java.declarations
 
-import org.jetbrains.kotlin.fir.FirImplementationDetail
-import org.jetbrains.kotlin.fir.FirSession
-import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.descriptors.Visibility
+import org.jetbrains.kotlin.fir.FirImplementationDetail
+import org.jetbrains.kotlin.fir.FirModuleData
+import org.jetbrains.kotlin.fir.FirSourceElement
 import org.jetbrains.kotlin.fir.builder.FirBuilderDsl
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.declarations.builder.FirConstructorBuilder
@@ -17,6 +17,7 @@ import org.jetbrains.kotlin.fir.expressions.FirBlock
 import org.jetbrains.kotlin.fir.expressions.FirDelegatedConstructorCall
 import org.jetbrains.kotlin.fir.references.FirControlFlowGraphReference
 import org.jetbrains.kotlin.fir.symbols.impl.FirConstructorSymbol
+import org.jetbrains.kotlin.fir.types.ConeKotlinType
 import org.jetbrains.kotlin.fir.types.FirTypeRef
 import org.jetbrains.kotlin.fir.visitors.FirTransformer
 import org.jetbrains.kotlin.fir.visitors.FirVisitor
@@ -28,15 +29,16 @@ import kotlin.properties.Delegates
 @OptIn(FirImplementationDetail::class)
 class FirJavaConstructor @FirImplementationDetail constructor(
     override val source: FirSourceElement?,
-    override val session: FirSession,
+    override val moduleData: FirModuleData,
     override val symbol: FirConstructorSymbol,
     override val isPrimary: Boolean,
     override var returnTypeRef: FirTypeRef,
     override val valueParameters: MutableList<FirValueParameter>,
     override val typeParameters: MutableList<FirTypeParameterRef>,
-    override val annotations: MutableList<FirAnnotationCall>,
+    annotationBuilder: () -> List<FirAnnotationCall>,
     override var status: FirDeclarationStatus,
     override var resolvePhase: FirResolvePhase,
+    override val dispatchReceiverType: ConeKotlinType?,
 ) : FirConstructor() {
     override val receiverTypeRef: FirTypeRef? get() = null
 
@@ -56,6 +58,9 @@ class FirJavaConstructor @FirImplementationDetail constructor(
     override val attributes: FirDeclarationAttributes = FirDeclarationAttributes()
 
     override val controlFlowGraphReference: FirControlFlowGraphReference? get() = null
+
+    override val annotations: List<FirAnnotationCall> by lazy { annotationBuilder() }
+
 
     override fun <D> transformValueParameters(transformer: FirTransformer<D>, data: D): FirJavaConstructor {
         valueParameters.transformInplace(transformer, data)
@@ -99,7 +104,6 @@ class FirJavaConstructor @FirImplementationDetail constructor(
     }
 
     override fun <D> transformAnnotations(transformer: FirTransformer<D>, data: D): FirJavaConstructor {
-        annotations.transformInplace(transformer, data)
         return this
     }
 
@@ -130,6 +134,10 @@ class FirJavaConstructor @FirImplementationDetail constructor(
     override fun replaceReceiverTypeRef(newReceiverTypeRef: FirTypeRef?) {}
 
     override fun replaceControlFlowGraphReference(newControlFlowGraphReference: FirControlFlowGraphReference?) {}
+
+    override fun replaceBody(newBody: FirBlock?) {
+        error("Body cannot be replaced for FirJavaConstructor")
+    }
 }
 
 @FirBuilderDsl
@@ -137,20 +145,22 @@ class FirJavaConstructorBuilder : FirConstructorBuilder() {
     lateinit var visibility: Visibility
     var isInner: Boolean by Delegates.notNull()
     var isPrimary: Boolean by Delegates.notNull()
+    lateinit var annotationBuilder: () -> List<FirAnnotationCall>
 
     @OptIn(FirImplementationDetail::class)
     override fun build(): FirJavaConstructor {
         return FirJavaConstructor(
             source,
-            session,
+            moduleData,
             symbol,
             isPrimary,
             returnTypeRef,
             valueParameters,
             typeParameters,
-            annotations,
+            annotationBuilder,
             status,
-            resolvePhase = FirResolvePhase.ANALYZED_DEPENDENCIES
+            resolvePhase = FirResolvePhase.ANALYZED_DEPENDENCIES,
+            dispatchReceiverType
         )
     }
 

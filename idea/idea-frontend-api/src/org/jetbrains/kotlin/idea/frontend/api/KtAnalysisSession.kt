@@ -5,19 +5,10 @@
 
 package org.jetbrains.kotlin.idea.frontend.api
 
-import com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.idea.frontend.api.components.*
-import org.jetbrains.kotlin.idea.frontend.api.scopes.*
 import org.jetbrains.kotlin.idea.frontend.api.symbols.*
-import org.jetbrains.kotlin.idea.frontend.api.symbols.markers.KtSymbolWithKind
 import org.jetbrains.kotlin.idea.frontend.api.symbols.pointers.KtSymbolPointer
-import org.jetbrains.kotlin.idea.frontend.api.types.KtType
-import org.jetbrains.kotlin.idea.references.KtReference
-import org.jetbrains.kotlin.idea.references.KtSimpleReference
-import org.jetbrains.kotlin.name.ClassId
-import org.jetbrains.kotlin.name.FqName
-import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.idea.frontend.api.tokens.ValidityToken
 import org.jetbrains.kotlin.psi.*
 
 /**
@@ -25,111 +16,102 @@ import org.jetbrains.kotlin.psi.*
  * - Should not be accessed from event dispatch thread
  * - Should not be accessed outside read action
  * - Should not be leaked outside read action it was created in
- * - To be sure that session is not leaked it is forbidden to store it in a variable, consider working with it only in [analyze] context
+ * - To be sure that session is not leaked it is forbidden to store it in a variable, consider working with it only in [analyse] context
  * - All entities retrieved from analysis session should not be leaked outside the read action KtAnalysisSession was created in
  *
  * To pass a symbol from one read action to another use [KtSymbolPointer] which can be created from a symbol by [KtSymbol.createPointer]
  *
- * To create analysis session consider using [analyze]
+ * To create analysis session consider using [analyse]
  */
-abstract class KtAnalysisSession(override val token: ValidityToken) : ValidityTokenOwner {
-    protected abstract val smartCastProvider: KtSmartCastProvider
-    protected abstract val typeProvider: KtTypeProvider
-    protected abstract val diagnosticProvider: KtDiagnosticProvider
-    protected abstract val scopeProvider: KtScopeProvider
-    protected abstract val containingDeclarationProvider: KtSymbolContainingDeclarationProvider
-    protected abstract val symbolProvider: KtSymbolProvider
-    protected abstract val callResolver: KtCallResolver
-    protected abstract val completionCandidateChecker: KtCompletionCandidateChecker
+abstract class KtAnalysisSession(final override val token: ValidityToken) : ValidityTokenOwner,
+    KtSmartCastProviderMixIn,
+    KtCallResolverMixIn,
+    KtDiagnosticProviderMixIn,
+    KtScopeProviderMixIn,
+    KtCompletionCandidateCheckerMixIn,
+    KtSymbolDeclarationOverridesProviderMixIn,
+    KtExpressionTypeProviderMixIn,
+    KtPsiTypeProviderMixIn,
+    KtTypeProviderMixIn,
+    KtTypeInfoProviderMixIn,
+    KtSymbolProviderMixIn,
+    KtSymbolContainingDeclarationProviderMixIn,
+    KtSubtypingComponentMixIn,
+    KtExpressionInfoProviderMixIn,
+    KtCompileTimeConstantProviderMixIn,
+    KtSymbolsMixIn,
+    KtReferenceResolveMixIn,
+    KtReferenceShortenerMixIn,
+    KtSymbolDeclarationRendererMixIn,
+    KtVisibilityCheckerMixIn,
+    KtMemberSymbolProviderMixin,
+    KtInheritorsProviderMixIn,
+    KtTypeCreatorMixIn {
 
+    override val analysisSession: KtAnalysisSession get() = this
 
-    /// TODO: get rid of
-    @Deprecated("Used only in completion now, temporary")
-    abstract fun createContextDependentCopy(): KtAnalysisSession
+    abstract fun createContextDependentCopy(originalKtFile: KtFile, elementToReanalyze: KtElement): KtAnalysisSession
 
+    internal val smartCastProvider: KtSmartCastProvider get() = smartCastProviderImpl
+    protected abstract val smartCastProviderImpl: KtSmartCastProvider
 
-    fun KtExpression.getSmartCasts(): Collection<KtType> = smartCastProvider.getSmartCastedToTypes(this)
+    internal val diagnosticProvider: KtDiagnosticProvider get() = diagnosticProviderImpl
+    protected abstract val diagnosticProviderImpl: KtDiagnosticProvider
 
-    fun KtExpression.getImplicitReceiverSmartCasts(): Collection<ImplicitReceiverSmartCast> = smartCastProvider.getImplicitReceiverSmartCasts(this)
+    internal val scopeProvider: KtScopeProvider get() = scopeProviderImpl
+    protected abstract val scopeProviderImpl: KtScopeProvider
 
-    fun KtExpression.getKtType(): KtType = typeProvider.getKtExpressionType(this)
+    internal val containingDeclarationProvider: KtSymbolContainingDeclarationProvider get() = containingDeclarationProviderImpl
+    protected abstract val containingDeclarationProviderImpl: KtSymbolContainingDeclarationProvider
 
-    fun KtDeclaration.getReturnKtType(): KtType = typeProvider.getReturnTypeForKtDeclaration(this)
+    internal val symbolProvider: KtSymbolProvider get() = symbolProviderImpl
+    protected abstract val symbolProviderImpl: KtSymbolProvider
 
-    fun KtElement.getDiagnostics(): Collection<Diagnostic> = diagnosticProvider.getDiagnosticsForElement(this)
+    internal val callResolver: KtCallResolver get() = callResolverImpl
+    protected abstract val callResolverImpl: KtCallResolver
 
-    fun KtSymbolWithKind.getContainingSymbol(): KtSymbolWithKind? = containingDeclarationProvider.getContainingDeclaration(this)
+    internal val completionCandidateChecker: KtCompletionCandidateChecker get() = completionCandidateCheckerImpl
+    protected abstract val completionCandidateCheckerImpl: KtCompletionCandidateChecker
 
-    fun KtClassOrObjectSymbol.getMemberScope(): KtMemberScope = scopeProvider.getMemberScope(this)
+    internal val symbolDeclarationOverridesProvider: KtSymbolDeclarationOverridesProvider get() = symbolDeclarationOverridesProviderImpl
+    protected abstract val symbolDeclarationOverridesProviderImpl: KtSymbolDeclarationOverridesProvider
 
-    fun KtClassOrObjectSymbol.getDeclaredMemberScope(): KtDeclaredMemberScope = scopeProvider.getDeclaredMemberScope(this)
+    internal val referenceShortener: KtReferenceShortener get() = referenceShortenerImpl
+    protected abstract val referenceShortenerImpl: KtReferenceShortener
 
-    fun KtPackageSymbol.getPackageScope(): KtPackageScope = scopeProvider.getPackageScope(this)
+    internal val symbolDeclarationRendererProvider: KtSymbolDeclarationRendererProvider get() = symbolDeclarationRendererProviderImpl
+    protected abstract val symbolDeclarationRendererProviderImpl: KtSymbolDeclarationRendererProvider
 
-    fun List<KtScope>.asCompositeScope(): KtCompositeScope = scopeProvider.getCompositeScope(this)
+    internal val expressionTypeProvider: KtExpressionTypeProvider get() = expressionTypeProviderImpl
+    protected abstract val expressionTypeProviderImpl: KtExpressionTypeProvider
 
-    fun KtType.getTypeScope(): KtScope? = scopeProvider.getTypeScope(this)
+    internal val psiTypeProvider: KtPsiTypeProvider get() = psiTypeProviderImpl
+    protected abstract val psiTypeProviderImpl: KtPsiTypeProvider
 
-    fun KtFile.getScopeContextForPosition(positionInFakeFile: KtElement): KtScopeContext =
-        scopeProvider.getScopeContextForPosition(this, positionInFakeFile)
+    internal val typeProvider: KtTypeProvider get() = typeProviderImpl
+    protected abstract val typeProviderImpl: KtTypeProvider
 
-    fun KtDeclaration.getSymbol(): KtSymbol = symbolProvider.getSymbol(this)
+    internal val typeInfoProvider: KtTypeInfoProvider get() = typeInfoProviderImpl
+    protected abstract val typeInfoProviderImpl: KtTypeInfoProvider
 
-    fun KtParameter.getParameterSymbol(): KtParameterSymbol = symbolProvider.getParameterSymbol(this)
+    internal val subtypingComponent: KtSubtypingComponent get() = subtypingComponentImpl
+    protected abstract val subtypingComponentImpl: KtSubtypingComponent
 
-    fun KtNamedFunction.getFunctionSymbol(): KtFunctionSymbol = symbolProvider.getFunctionSymbol(this)
+    internal val expressionInfoProvider: KtExpressionInfoProvider get() = expressionInfoProviderImpl
+    protected abstract val expressionInfoProviderImpl: KtExpressionInfoProvider
 
-    fun KtConstructor<*>.getConstructorSymbol(): KtConstructorSymbol = symbolProvider.getConstructorSymbol(this)
+    internal val compileTimeConstantProvider: KtCompileTimeConstantProvider get() = compileTimeConstantProviderImpl
+    protected abstract val compileTimeConstantProviderImpl: KtCompileTimeConstantProvider
 
-    fun KtTypeParameter.getTypeParameterSymbol(): KtTypeParameterSymbol = symbolProvider.getTypeParameterSymbol(this)
+    internal val visibilityChecker: KtVisibilityChecker get() = visibilityCheckerImpl
+    protected abstract val visibilityCheckerImpl: KtVisibilityChecker
 
-    fun KtTypeAlias.getTypeAliasSymbol(): KtTypeAliasSymbol = symbolProvider.getTypeAliasSymbol(this)
+    internal val overrideInfoProvider: KtOverrideInfoProvider get() = overrideInfoProviderImpl
+    protected abstract val overrideInfoProviderImpl: KtOverrideInfoProvider
 
-    fun KtEnumEntry.getEnumEntrySymbol(): KtEnumEntrySymbol = symbolProvider.getEnumEntrySymbol(this)
+    internal val inheritorsProvider: KtInheritorsProvider get() = inheritorsProviderImpl
+    protected abstract val inheritorsProviderImpl: KtInheritorsProvider
 
-    fun KtNamedFunction.getAnonymousFunctionSymbol(): KtAnonymousFunctionSymbol = symbolProvider.getAnonymousFunctionSymbol(this)
-
-    fun KtLambdaExpression.getAnonymousFunctionSymbol(): KtAnonymousFunctionSymbol = symbolProvider.getAnonymousFunctionSymbol(this)
-
-    fun KtProperty.getVariableSymbol(): KtVariableSymbol = symbolProvider.getVariableSymbol(this)
-
-    fun KtClassOrObject.getClassOrObjectSymbol(): KtClassOrObjectSymbol = symbolProvider.getClassOrObjectSymbol(this)
-
-    fun KtPropertyAccessor.getPropertyAccessorSymbol(): KtPropertyAccessorSymbol = symbolProvider.getPropertyAccessorSymbol(this)
-
-    /**
-     * @return symbol with specified [this@getClassOrObjectSymbolByClassId] or `null` in case such symbol is not found
-     */
-    fun ClassId.getCorrespondingToplevelClassOrObjectSymbol(): KtClassOrObjectSymbol? = symbolProvider.getClassOrObjectSymbolByClassId(this)
-
-    fun FqName.getContainingCallableSymbolsWithName(name: Name): Sequence<KtSymbol> = symbolProvider.getTopLevelCallableSymbols(this, name)
-
-    fun <S : KtSymbol> KtSymbolPointer<S>.restoreSymbol(): S? = restoreSymbol(this@KtAnalysisSession)
-
-    fun KtCallExpression.resolveCall(): CallInfo? = callResolver.resolveCall(this)
-
-    fun KtBinaryExpression.resolveCall(): CallInfo? = callResolver.resolveCall(this)
-
-    fun KtReference.resolveToSymbols(): Collection<KtSymbol> {
-        check(this is KtSymbolBasedReference) { "To get reference symbol the one should be KtSymbolBasedReference" }
-        return this@KtAnalysisSession.resolveToSymbols()
-    }
-
-    fun KtSimpleReference<*>.resolveToSymbol(): KtSymbol? {
-        check(this is KtSymbolBasedReference) { "To get reference symbol the one should be KtSymbolBasedReference but was ${this::class}" }
-        return resolveToSymbols().singleOrNull()
-    }
-
-    fun KtCallableSymbol.checkExtensionIsSuitable(
-        originalPsiFile: KtFile,
-        originalPosition: PsiElement?,
-        psiFakeCompletionExpression: KtSimpleNameExpression,
-        psiReceiverExpression: KtExpression?,
-    ): Boolean = completionCandidateChecker.checkExtensionFitsCandidate(
-        this,
-        originalPsiFile,
-        originalPosition,
-        psiFakeCompletionExpression,
-        psiReceiverExpression
-    )
+    @PublishedApi internal val typesCreator: KtTypeCreator get() = typesCreatorImpl
+    protected abstract val typesCreatorImpl: KtTypeCreator
 }

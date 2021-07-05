@@ -15,7 +15,7 @@ class A() {
 
 fun case1() {
     var b: Case1? = Case1()
-    <!AMBIGUITY!>--<!>b?.a
+    <!UNSAFE_CALL!>--<!>b?.a
 }
 
 

@@ -28,12 +28,12 @@ object O {
 fun f() {
     A.c
     A.hashCode()
-    A().Nested
+    A().<!UNRESOLVED_REFERENCE!>Nested<!>
     A.Nested()
     A().Inner()
     A.Companion.<!UNRESOLVED_REFERENCE!>Nested<!>
     A.Companion.<!UNRESOLVED_REFERENCE!>Inner<!>
-    A.Inner
+    A.<!NO_COMPANION_OBJECT!>Inner<!>
     A.Companion.c
     A.Companion.Obj2
     A.Companion.Obj2.c
@@ -42,9 +42,9 @@ fun f() {
     A.Companion.c
     A.Obj
     A.Companion.Obj2
-    A.Obj2
-    A.Obj2.c
-    A.Nested2
+    A.<!UNRESOLVED_REFERENCE!>Obj2<!>
+    A.<!UNRESOLVED_REFERENCE!>Obj2<!>.c
+    A.<!UNRESOLVED_REFERENCE!>Nested2<!>
 
     O.O
     O.A()

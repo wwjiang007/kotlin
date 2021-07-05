@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.idea.caches.resolve
 
+import com.intellij.openapi.diagnostic.ControlFlowException
 import com.intellij.openapi.progress.ProcessCanceledException
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.project.Project
@@ -13,9 +14,11 @@ import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
 import com.intellij.util.containers.SLRUCache
 import org.jetbrains.kotlin.analyzer.*
+import org.jetbrains.kotlin.caches.resolve.PlatformAnalysisSettings
 import org.jetbrains.kotlin.context.GlobalContextImpl
 import org.jetbrains.kotlin.context.withProject
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
+import org.jetbrains.kotlin.diagnostics.DiagnosticSink
 import org.jetbrains.kotlin.idea.caches.project.*
 import org.jetbrains.kotlin.idea.caches.project.IdeaModuleInfo
 import org.jetbrains.kotlin.idea.caches.trackers.KotlinCodeBlockModificationListener
@@ -24,7 +27,6 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.CompositeBindingContext
 import org.jetbrains.kotlin.storage.CancellableSimpleLock
 import org.jetbrains.kotlin.storage.guarded
-import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 import java.util.concurrent.locks.ReentrantLock
 
 internal class ProjectResolutionFacade(
@@ -102,13 +104,8 @@ internal class ProjectResolutionFacade(
     private val resolverForProjectDependencies = dependencies + listOf(globalContext.exceptionTracker)
 
     private fun computeModuleResolverProvider(): ResolverForProject<IdeaModuleInfo> {
-        val delegateResolverForProject: ResolverForProject<IdeaModuleInfo>
-
-        if (reuseDataFrom != null) {
-            delegateResolverForProject = reuseDataFrom.cachedResolverForProject
-        } else {
-            delegateResolverForProject = EmptyResolverForProject()
-        }
+        val delegateResolverForProject: ResolverForProject<IdeaModuleInfo> =
+            reuseDataFrom?.cachedResolverForProject ?: EmptyResolverForProject()
 
         val allModuleInfos = (allModules ?: getModuleInfosFromIdeaModel(project, (settings as? PlatformAnalysisSettingsImpl)?.platform))
             .toMutableSet()
@@ -119,25 +116,22 @@ internal class ProjectResolutionFacade(
 
         val modulesToCreateResolversFor = allModuleInfos.filter(moduleFilter)
 
-        val resolverForProject = IdeaResolverForProject(
+        return IdeaResolverForProject(
             resolverDebugName,
             globalContext.withProject(project),
             modulesToCreateResolversFor,
             syntheticFilesByModule,
             delegateResolverForProject,
             if (invalidateOnOOCB) KotlinModificationTrackerService.getInstance(project).outOfBlockModificationTracker else null,
-            settings.isReleaseCoroutines,
-            constantSdkDependencyIfAny = if (settings is PlatformAnalysisSettingsImpl) settings.sdk?.let { SdkInfo(project, it) } else null
+            settings
         )
-
-        return resolverForProject
     }
 
     internal fun resolverForModuleInfo(moduleInfo: IdeaModuleInfo) = cachedResolverForProject.resolverForModule(moduleInfo)
 
     internal fun resolverForElement(element: PsiElement): ResolverForModule {
         val infos = element.getModuleInfos()
-        return infos.asIterable().firstNotNullResult { cachedResolverForProject.tryGetResolverForModule(it) }
+        return infos.asIterable().firstNotNullOfOrNull { cachedResolverForProject.tryGetResolverForModule(it) }
             ?: cachedResolverForProject.tryGetResolverForModule(NotUnderContentRootModuleInfo)
             ?: cachedResolverForProject.diagnoseUnknownModuleInfo(infos.toList())
     }
@@ -148,19 +142,38 @@ internal class ProjectResolutionFacade(
     internal fun findModuleDescriptor(ideaModuleInfo: IdeaModuleInfo): ModuleDescriptor {
         return cachedResolverForProject.descriptorForModule(ideaModuleInfo)
     }
-    
+
     internal fun getResolverForProject(): ResolverForProject<IdeaModuleInfo> = cachedResolverForProject
 
-    internal fun getAnalysisResultsForElements(elements: Collection<KtElement>): AnalysisResult {
+    internal fun getAnalysisResultsForElements(
+        elements: Collection<KtElement>,
+        callback: DiagnosticSink.DiagnosticsCallback? = null
+    ): AnalysisResult {
         assert(elements.isNotEmpty()) { "elements collection should not be empty" }
 
-        val slruCache = analysisResultsSimpleLock.guarded {
+        val cache = analysisResultsSimpleLock.guarded {
             analysisResults.value!!
         }
-        val results = elements.map {
-            val perFileCache = slruCache[it.containingKtFile]
-            perFileCache.getAnalysisResults(it)
-        }
+        val results =
+            elements.map {
+                val containingKtFile = it.containingKtFile
+                val perFileCache = cache[containingKtFile]
+                try {
+                    perFileCache.getAnalysisResults(it, callback)
+                } catch (e: Throwable) {
+                    if (e is ControlFlowException) {
+                        throw e
+                    }
+                    val actualCache = analysisResultsSimpleLock.guarded {
+                        analysisResults.upToDateOrNull?.get()
+                    }
+                    if (cache !== actualCache) {
+                        throw IllegalStateException("Cache has been invalidated during performing analysis for $containingKtFile", e)
+                    }
+                    throw e
+                }
+            }
+
         val withError = results.firstOrNull { it.isError() }
         val bindingContext = CompositeBindingContext.create(results.map { it.bindingContext })
         if (withError != null) {

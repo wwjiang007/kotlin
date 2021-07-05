@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.fir.resolve.dfa.cfg
 
 import org.jetbrains.kotlin.fir.declarations.FirDeclaration
+import org.jetbrains.kotlin.fir.symbols.impl.FirFunctionSymbol
 
 class ControlFlowGraph(val declaration: FirDeclaration?, val name: String, val kind: Kind) {
     private var _nodes: MutableList<CFGNode<*>> = mutableListOf()
@@ -79,12 +80,70 @@ class ControlFlowGraph(val declaration: FirDeclaration?, val name: String, val k
         AnonymousFunction(withBody = true),
         ClassInitializer(withBody = true),
         PropertyInitializer(withBody = true),
+        FieldInitializer(withBody = true),
         TopLevel(withBody = false),
         AnnotationCall(withBody = true),
         DefaultArgument(withBody = false),
         Stub(withBody = true)
     }
 }
+
+data class Edge(
+    val label: EdgeLabel,
+    val kind: EdgeKind,
+) {
+    companion object {
+        val Normal_Forward = Edge(NormalPath, EdgeKind.Forward)
+        private val Normal_DeadForward = Edge(NormalPath, EdgeKind.DeadForward)
+        private val Normal_DfgForward = Edge(NormalPath, EdgeKind.DfgForward)
+        private val Normal_CfgForward = Edge(NormalPath, EdgeKind.CfgForward)
+        private val Normal_CfgBackward = Edge(NormalPath, EdgeKind.CfgBackward)
+        private val Normal_DeadBackward = Edge(NormalPath, EdgeKind.DeadBackward)
+
+        fun create(label: EdgeLabel, kind: EdgeKind): Edge =
+            when (label) {
+                NormalPath -> {
+                    when (kind) {
+                        EdgeKind.Forward -> Normal_Forward
+                        EdgeKind.DeadForward -> Normal_DeadForward
+                        EdgeKind.DfgForward -> Normal_DfgForward
+                        EdgeKind.CfgForward -> Normal_CfgForward
+                        EdgeKind.CfgBackward -> Normal_CfgBackward
+                        EdgeKind.DeadBackward -> Normal_DeadBackward
+                    }
+                }
+                else -> {
+                    Edge(label, kind)
+                }
+            }
+    }
+}
+
+sealed class EdgeLabel(val label: String?) {
+    open val isNormal: Boolean
+        get() = false
+
+    override fun toString(): String {
+        return label ?: ""
+    }
+}
+
+object NormalPath : EdgeLabel(label = null) {
+    override val isNormal: Boolean
+        get() = true
+}
+
+object LoopBackPath : EdgeLabel(label = null) {
+    override val isNormal: Boolean
+        get() = true
+}
+
+object UncaughtExceptionPath : EdgeLabel(label = "onUncaughtException")
+
+// TODO: Label `return`ing edge with this.
+class ReturnPath(
+    returnTargetSymbol: FirFunctionSymbol<*>
+) : EdgeLabel(label = "return@${returnTargetSymbol.callableId}")
 
 enum class EdgeKind(
     val usedInDfa: Boolean,
@@ -102,19 +161,17 @@ enum class EdgeKind(
 
 @OptIn(ExperimentalStdlibApi::class)
 private fun ControlFlowGraph.orderNodes(): LinkedHashSet<CFGNode<*>> {
-    val visitedNodes = LinkedHashSet<CFGNode<*>>()
+    val visitedNodes = linkedSetOf<CFGNode<*>>()
     /*
      * [delayedNodes] is needed to accomplish next order contract:
      *   for each node all previous node lays before it
      */
-    val delayedNodes = LinkedHashSet<CFGNode<*>>()
     val stack = ArrayDeque<CFGNode<*>>()
     stack.addFirst(enterNode)
     while (stack.isNotEmpty()) {
         val node = stack.removeFirst()
         val previousNodes = node.previousNodes
-        if (previousNodes.any { it !in visitedNodes && it.owner == this && !node.incomingEdges.getValue(it).isBack }) {
-            delayedNodes.add(node)
+        if (previousNodes.any { it !in visitedNodes && it.owner == this && !node.incomingEdges.getValue(it).kind.isBack }) {
             stack.addLast(node)
             continue
         }

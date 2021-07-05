@@ -11,10 +11,11 @@ import com.intellij.debugger.engine.evaluation.CodeFragmentKind
 import com.intellij.debugger.engine.evaluation.EvaluateException
 import com.intellij.debugger.engine.evaluation.TextWithImportsImpl
 import com.intellij.debugger.engine.evaluation.expression.EvaluatorBuilderImpl
-import com.intellij.debugger.engine.events.SuspendContextCommandImpl
 import com.intellij.debugger.impl.DebuggerContextImpl
 import com.intellij.debugger.impl.DebuggerContextImpl.createDebuggerContext
+import com.intellij.debugger.impl.OutputChecker
 import com.intellij.debugger.ui.impl.watch.NodeDescriptorImpl
+import com.intellij.openapi.application.ex.PathManagerEx.getTestDataPath
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.ui.treeStructure.Tree
 import com.intellij.xdebugger.impl.ui.tree.ValueMarkup
@@ -24,15 +25,19 @@ import org.jetbrains.eval4j.Value
 import org.jetbrains.eval4j.jdi.asValue
 import org.jetbrains.kotlin.idea.KotlinFileType
 import org.jetbrains.kotlin.idea.debugger.evaluate.KotlinCodeFragmentFactory
+import org.jetbrains.kotlin.idea.debugger.evaluate.compilation.CodeFragmentCompiler
 import org.jetbrains.kotlin.idea.debugger.test.preference.DebuggerPreferences
 import org.jetbrains.kotlin.idea.debugger.test.util.FramePrinter
 import org.jetbrains.kotlin.idea.debugger.test.util.FramePrinterDelegate
+import org.jetbrains.kotlin.idea.debugger.test.util.KotlinOutputChecker
 import org.jetbrains.kotlin.idea.debugger.test.util.SteppingInstruction
 import org.jetbrains.kotlin.idea.util.application.runReadAction
+import org.jetbrains.kotlin.test.InTextDirectivesUtils
 import org.jetbrains.kotlin.test.InTextDirectivesUtils.findLinesWithPrefixesRemoved
 import org.jetbrains.kotlin.test.InTextDirectivesUtils.findStringWithPrefixes
 import org.jetbrains.kotlin.test.KotlinBaseTest
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import javax.swing.tree.TreeNode
 
 private data class CodeFragment(val text: String, val result: String, val kind: CodeFragmentKind)
@@ -56,6 +61,12 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDescriptorTestCaseWi
     private var isMultipleBreakpointsTest = false
 
     private var framePrinter: FramePrinter? = null
+
+    private val exceptions = ConcurrentHashMap<String, Throwable>()
+
+    override fun runBare() {
+        // DO NOTHING
+    }
 
     fun doSingleBreakpointTest(path: String) {
         isMultipleBreakpointsTest = false
@@ -89,6 +100,7 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDescriptorTestCaseWi
     override fun tearDown() {
         framePrinter?.close()
         framePrinter = null
+        exceptions.clear()
 
         super.tearDown()
     }
@@ -99,29 +111,23 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDescriptorTestCaseWi
         doOnBreakpoint {
             createDebugLabels(data.debugLabels)
 
-            val exceptions = linkedMapOf<String, Throwable>()
-
             for ((expression, expected, kind) in data.fragments) {
-                mayThrow(exceptions, expression) {
+                mayThrow(expression) {
                     evaluate(this, expression, kind, expected)
                 }
             }
 
             val completion = { resume(this) }
             framePrinter?.printFrame(completion) ?: completion()
-
-            checkExceptions(exceptions)
         }
 
         finish()
     }
 
     private fun performMultipleBreakpointTest(data: EvaluationTestData) {
-        val exceptions = linkedMapOf<String, Throwable>()
-
         for ((expression, expected) in data.fragments) {
-            mayThrow(exceptions, expression) {
-                doOnBreakpoint {
+            doOnBreakpoint {
+                mayThrow(expression) {
                     try {
                         evaluate(this, expression, CodeFragmentKind.EXPRESSION, expected)
                     } finally {
@@ -131,8 +137,6 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDescriptorTestCaseWi
                 }
             }
         }
-
-        checkExceptions(exceptions)
         finish()
     }
 
@@ -156,6 +160,11 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDescriptorTestCaseWi
         debuggerContext.initCaches()
 
         val contextElement = ContextUtil.getContextElement(debuggerContext)!!
+
+        evaluationContext.debugProcess.putUserData(
+            CodeFragmentCompiler.KOTLIN_EVALUATOR_FRAGMENT_COMPILER_BACKEND,
+            fragmentCompilerBackend()
+        )
 
         assert(KotlinCodeFragmentFactory().isContextAccepted(contextElement)) {
             val text = runReadAction { contextElement.text }
@@ -211,24 +220,38 @@ abstract class AbstractKotlinEvaluateExpressionTest : KotlinDescriptorTestCaseWi
         super.expandAll(tree, runnable, HashSet(), filter, suspendContext)
     }
 
-    private fun mayThrow(collector: MutableMap<String, Throwable>, expression: String, f: () -> Unit) {
+    private fun mayThrow(expression: String, f: () -> Unit) {
         try {
             f()
         } catch (e: Throwable) {
-            collector[expression] = e
+            exceptions[expression] = e
         }
     }
 
-    private fun checkExceptions(exceptions: MutableMap<String, Throwable>) {
+    override fun initOutputChecker(): OutputChecker {
+        return KotlinOutputChecker(
+            getTestDataPath(),
+            testAppPath,
+            appOutputPath,
+            targetBackend(),
+            getExpectedOutputFile()
+        )
+    }
+
+    override fun throwExceptionsIfAny() {
         if (exceptions.isNotEmpty()) {
-            for (exc in exceptions.values) {
-                exc.printStackTrace()
+            val outputFile = getExpectedOutputFile()
+            val isIgnored = outputFile.exists() && InTextDirectivesUtils.isIgnoredTarget(targetBackend(), outputFile)
+
+            if (!isIgnored) {
+                for (exc in exceptions.values) {
+                    exc.printStackTrace()
+                }
+                val expressionsText = exceptions.entries.joinToString("\n") { (k, v) -> "expression: $k, exception: ${v.message}" }
+                throw AssertionError("Test failed:\n$expressionsText")
+            } else {
+                (checker as KotlinOutputChecker).threwException = true
             }
-
-            val expressionsText = exceptions.entries.joinToString("\n") { (k, v) -> "expression: $k, exception: ${v.message}" }
-
-            @Suppress("ConvertToStringTemplate")
-            throw AssertionError("Test failed:\n" + expressionsText)
         }
     }
 

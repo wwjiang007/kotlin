@@ -16,7 +16,10 @@
 
 package org.jetbrains.kotlin.backend.common.lower
 
-import org.jetbrains.kotlin.backend.common.*
+import org.jetbrains.kotlin.backend.common.BodyLoweringPass
+import org.jetbrains.kotlin.backend.common.CommonBackendContext
+import org.jetbrains.kotlin.backend.common.DeclarationTransformer
+import org.jetbrains.kotlin.backend.common.getOrPut
 import org.jetbrains.kotlin.backend.common.ir.Symbols
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.builders.*
@@ -27,19 +30,17 @@ import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrGetFieldImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrSetFieldImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrSetVariableImpl
+import org.jetbrains.kotlin.ir.expressions.impl.IrSetValueImpl
 import org.jetbrains.kotlin.ir.types.isMarkedNullable
 import org.jetbrains.kotlin.ir.types.isPrimitiveType
 import org.jetbrains.kotlin.ir.types.makeNullable
+import org.jetbrains.kotlin.ir.util.render
 import org.jetbrains.kotlin.ir.util.resolveFakeOverride
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 
 class NullableFieldsForLateinitCreationLowering(val backendContext: CommonBackendContext) : DeclarationTransformer {
-
-    override fun lower(irFile: IrFile) {
-        runPostfix(true).toFileLoweringPass().lower(irFile)
-    }
+    override val withLocalDeclarations: Boolean get() = true
 
     override fun transformFlat(declaration: IrDeclaration): List<IrDeclaration>? {
         if (declaration is IrField) {
@@ -56,10 +57,7 @@ class NullableFieldsForLateinitCreationLowering(val backendContext: CommonBacken
 
 // Transform declarations
 class NullableFieldsDeclarationLowering(val backendContext: CommonBackendContext) : DeclarationTransformer {
-
-    override fun lower(irFile: IrFile) {
-        runPostfix(true).toFileLoweringPass().lower(irFile)
-    }
+    override val withLocalDeclarations: Boolean get() = true
 
     override fun transformFlat(declaration: IrDeclaration): List<IrDeclaration>? {
         when (declaration) {
@@ -154,11 +152,11 @@ class LateinitUsageLowering(val backendContext: CommonBackendContext) : BodyLowe
                 }
             }
 
-            override fun visitSetVariable(expression: IrSetVariable): IrExpression {
+            override fun visitSetValue(expression: IrSetValue): IrExpression {
                 expression.transformChildrenVoid(this)
                 val newVar = nullableVariables[expression.symbol.owner] ?: return expression
                 return with(expression) {
-                    IrSetVariableImpl(startOffset, endOffset, type, newVar.symbol, value, origin)
+                    IrSetValueImpl(startOffset, endOffset, type, newVar.symbol, value, origin)
                 }
             }
 
@@ -183,18 +181,15 @@ class LateinitUsageLowering(val backendContext: CommonBackendContext) : BodyLowe
 
                 if (!Symbols.isLateinitIsInitializedPropertyGetter(expression.symbol)) return expression
 
-                val receiver = expression.extensionReceiver as IrPropertyReference
-
-                val property =
-                    receiver.getter?.owner?.resolveFakeOverride()?.correspondingPropertySymbol!!.owner.also { assert(it.isLateinit) }
-
-                val nullableField =
-                    backendContext.buildOrGetNullableField(
-                        property.backingField ?: error("Lateinit property is supposed to have backing field")
-                    )
-
-                return expression.run { backendContext.createIrBuilder(symbol, startOffset, endOffset) }.run {
-                    irNotEquals(irGetField(receiver.dispatchReceiver, nullableField), irNull())
+                return expression.extensionReceiver!!.replaceTailExpression {
+                    require(it is IrPropertyReference) { "isInitialized cannot be invoked on ${it.render()}" }
+                    val property = it.getter?.owner?.resolveFakeOverride()?.correspondingPropertySymbol?.owner
+                    require(property?.isLateinit == true) { "isInitialized invoked on non-lateinit property ${property?.render()}" }
+                    val backingField = property?.backingField ?: error("Lateinit property is supposed to have a backing field")
+                    // This is not the right scope symbol, but we don't use it anyway.
+                    backendContext.createIrBuilder(it.symbol, expression.startOffset, expression.endOffset).run {
+                        irNotEquals(irGetField(it.dispatchReceiver, backendContext.buildOrGetNullableField(backingField)), irNull())
+                    }
                 }
             }
         })
@@ -211,9 +206,24 @@ private fun CommonBackendContext.buildOrGetNullableField(originalField: IrField)
         }.apply {
             parent = originalField.parent
             correspondingPropertySymbol = originalField.correspondingPropertySymbol
-            annotations += originalField.annotations
+            annotations = originalField.annotations
         }
     }
 }
 
 private val IrProperty.isRealLateinit get() = isLateinit && !isFakeOverride
+
+private inline fun IrExpression.replaceTailExpression(crossinline transform: (IrExpression) -> IrExpression): IrExpression {
+    var current = this
+    var block: IrContainerExpression? = null
+    while (current is IrContainerExpression) {
+        block = current
+        current = current.statements.last() as IrExpression
+    }
+    current = transform(current)
+    if (block == null) {
+        return current
+    }
+    block.statements[block.statements.size - 1] = current
+    return this
+}

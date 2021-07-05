@@ -5,13 +5,11 @@
 
 package org.jetbrains.kotlin.fir.resolve.calls.tower
 
-import org.jetbrains.kotlin.fir.declarations.FirRegularClass
 import org.jetbrains.kotlin.fir.expressions.FirExpression
 import org.jetbrains.kotlin.fir.expressions.FirResolvedQualifier
 import org.jetbrains.kotlin.fir.expressions.builder.FirQualifiedAccessExpressionBuilder
 import org.jetbrains.kotlin.fir.resolve.*
 import org.jetbrains.kotlin.fir.resolve.calls.*
-import org.jetbrains.kotlin.fir.resolve.calls.ExpressionReceiverValue
 import org.jetbrains.kotlin.fir.resolve.transformers.body.resolve.firUnsafe
 import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirClassLikeSymbol
@@ -24,10 +22,12 @@ import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
 import org.jetbrains.kotlin.util.OperatorNameConventions
 
 internal class FirInvokeResolveTowerExtension(
-    private val components: BodyResolveComponents,
+    private val context: ResolutionContext,
     private val manager: TowerResolveManager,
     private val candidateFactoriesAndCollectors: CandidateFactoriesAndCollectors
 ) {
+    private val components: BodyResolveComponents
+        get() = context.bodyResolveComponents
 
     fun enqueueResolveTasksForQualifier(info: CallInfo, receiver: FirResolvedQualifier) {
         if (info.callKind != CallKind.Function) return
@@ -108,7 +108,7 @@ internal class FirInvokeResolveTowerExtension(
             manager,
             towerDataElementsForName,
             collector,
-            CandidateFactory(components, invokeReceiverInfo),
+            CandidateFactory(context, invokeReceiverInfo),
             onSuccessfulLevel = { towerGroup ->
                 enqueueResolverTasksForInvokeReceiverCandidates(
                     invokeBuiltinExtensionMode, info,
@@ -155,7 +155,9 @@ internal class FirInvokeResolveTowerExtension(
 
             val invokeFunctionInfo =
                 info.copy(
-                    explicitReceiver = invokeReceiverExpression, name = OperatorNameConventions.INVOKE,
+                    explicitReceiver = invokeReceiverExpression,
+                    name = OperatorNameConventions.INVOKE,
+                    isImplicitInvoke = true,
                     candidateForCommonInvokeReceiver = invokeReceiverCandidate.takeUnless { invokeBuiltinExtensionMode }
                 ).let {
                     when {
@@ -182,16 +184,8 @@ internal class FirInvokeResolveTowerExtension(
         useImplicitReceiverAsBuiltinInvokeArgument: Boolean,
         receiverGroup: TowerGroup
     ) {
-        val invokeOnGivenReceiverCandidateFactory = CandidateFactory(components, invokeFunctionInfo)
-        val task = InvokeFunctionResolveTask(
-            components,
-            manager,
-            TowerDataElementsForName(invokeFunctionInfo.name, components.towerDataContext),
-            receiverGroup,
-            candidateFactoriesAndCollectors.resultCollector,
-            invokeOnGivenReceiverCandidateFactory,
-            candidateFactoriesAndCollectors.stubReceiverCandidateFactory
-        )
+        val invokeOnGivenReceiverCandidateFactory = CandidateFactory(context, invokeFunctionInfo)
+        val task = createInvokeFunctionResolveTask(invokeFunctionInfo, receiverGroup, invokeOnGivenReceiverCandidateFactory)
         if (invokeBuiltinExtensionMode) {
             manager.enqueueResolverTask {
                 task.runResolverForBuiltinInvokeExtensionWithExplicitArgument(
@@ -218,6 +212,41 @@ internal class FirInvokeResolveTowerExtension(
         }
     }
 
+    fun enqueueResolveTasksForImplicitInvokeCall(info: CallInfo, receiverExpression: FirExpression) {
+        val explicitReceiverValue = ExpressionReceiverValue(receiverExpression)
+        val task = createInvokeFunctionResolveTask(info, TowerGroup.EmptyRoot)
+        manager.enqueueResolverTask {
+            task.runResolverForInvoke(
+                info, explicitReceiverValue,
+                TowerGroup.EmptyRoot
+            )
+        }
+        manager.enqueueResolverTask {
+            task.runResolverForBuiltinInvokeExtensionWithExplicitArgument(
+                info, explicitReceiverValue,
+                TowerGroup.EmptyRoot
+            )
+        }
+        manager.enqueueResolverTask {
+            task.runResolverForBuiltinInvokeExtensionWithImplicitArgument(
+                info, explicitReceiverValue,
+                TowerGroup.EmptyRoot
+            )
+        }
+    }
+
+    private fun createInvokeFunctionResolveTask(
+        info: CallInfo,
+        receiverGroup: TowerGroup,
+        candidateFactory: CandidateFactory = candidateFactoriesAndCollectors.candidateFactory
+    ): InvokeFunctionResolveTask = InvokeFunctionResolveTask(
+        components,
+        manager,
+        TowerDataElementsForName(info.name, components.towerDataContext),
+        receiverGroup,
+        candidateFactoriesAndCollectors.resultCollector,
+        candidateFactory,
+    )
 }
 
 
@@ -234,8 +263,8 @@ private fun BodyResolveComponents.createExplicitReceiverForInvoke(
         is FirRegularClassSymbol -> buildResolvedQualifierForClass(symbol, sourceElement = null)
         is FirTypeAliasSymbol -> {
             val type = symbol.fir.expandedTypeRef.coneTypeUnsafe<ConeClassLikeType>().fullyExpandedType(session)
-            val expansionRegularClass = type.lookupTag.toSymbol(session)?.fir as? FirRegularClass
-            buildResolvedQualifierForClass(expansionRegularClass!!.symbol, sourceElement = symbol.fir.source)
+            val expansionRegularClassSymbol = type.lookupTag.toSymbolOrError(session)
+            buildResolvedQualifierForClass(expansionRegularClassSymbol, sourceElement = symbol.fir.source)
         }
         else -> throw AssertionError()
     }
@@ -278,7 +307,6 @@ private class InvokeReceiverResolveTask(
     towerDataElementsForName,
     collector,
     candidateFactory,
-    stubReceiverCandidateFactory = null
 ) {
     override fun interceptTowerGroup(towerGroup: TowerGroup): TowerGroup =
         towerGroup.InvokeResolvePriority(InvokeResolvePriority.INVOKE_RECEIVER)
@@ -295,18 +323,19 @@ private class InvokeFunctionResolveTask(
     private val receiverGroup: TowerGroup,
     collector: CandidateCollector,
     candidateFactory: CandidateFactory,
-    stubReceiverCandidateFactory: CandidateFactory? = null
 ) : FirBaseTowerResolveTask(
     components,
     manager,
     towerDataElementsForName,
     collector,
     candidateFactory,
-    stubReceiverCandidateFactory
 ) {
 
-    override fun interceptTowerGroup(towerGroup: TowerGroup): TowerGroup =
-        maxOf(towerGroup.InvokeResolvePriority(InvokeResolvePriority.COMMON_INVOKE), receiverGroup)
+    override fun interceptTowerGroup(towerGroup: TowerGroup): TowerGroup {
+        val invokeGroup = towerGroup.InvokeResolvePriority(InvokeResolvePriority.COMMON_INVOKE)
+        val max = maxOf(invokeGroup, receiverGroup)
+        return max.InvokeReceiver(receiverGroup)
+    }
 
     suspend fun runResolverForInvoke(
         info: CallInfo,

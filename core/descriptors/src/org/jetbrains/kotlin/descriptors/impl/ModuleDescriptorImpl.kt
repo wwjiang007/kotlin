@@ -38,6 +38,7 @@ class ModuleDescriptorImpl @JvmOverloads constructor(
     override val stableName: Name? = null,
 ) : DeclarationDescriptorImpl(Annotations.EMPTY, moduleName), ModuleDescriptor {
     private val capabilities: Map<ModuleCapability<*>, Any?>
+    private val packageViewDescriptorFactory: PackageViewDescriptorFactory
 
     init {
         if (!moduleName.isSpecial) {
@@ -46,6 +47,7 @@ class ModuleDescriptorImpl @JvmOverloads constructor(
         this.capabilities = capabilities.toMutableMap()
         @OptIn(TypeRefinement::class)
         this.capabilities[REFINER_CAPABILITY] = Ref(null)
+        packageViewDescriptorFactory = getCapability(PackageViewDescriptorFactory.CAPABILITY) ?: PackageViewDescriptorFactory.Default
     }
 
     private var dependencies: ModuleDependencies? = null
@@ -63,8 +65,8 @@ class ModuleDescriptorImpl @JvmOverloads constructor(
         }
     }
 
-    private val packages = storageManager.createMemoizedFunction<FqName, PackageViewDescriptor> { fqName: FqName ->
-        LazyPackageViewDescriptorImpl(this, fqName, storageManager)
+    private val packages = storageManager.createMemoizedFunction { fqName: FqName ->
+        packageViewDescriptorFactory.compute(this, fqName, storageManager)
     }
 
     @Deprecated("This method is not going to be supported. Please do not use it")
@@ -75,7 +77,10 @@ class ModuleDescriptorImpl @JvmOverloads constructor(
         get() = this.dependencies.sure { "Dependencies of module $id were not set" }.allDependencies.filter { it != this }
 
     override val expectedByModules: List<ModuleDescriptor>
-        get() = this.dependencies.sure { "Dependencies of module $id were not set" }.expectedByDependencies
+        get() = this.dependencies.sure { "Dependencies of module $id were not set" }.directExpectedByDependencies
+
+    override val allExpectedByModules: Set<ModuleDescriptor>
+        get() = this.dependencies.sure { "Dependencies of module $id were not set" }.allExpectedByDependencies
 
     override fun getPackage(fqName: FqName): PackageViewDescriptor {
         assertValid()
@@ -90,15 +95,18 @@ class ModuleDescriptorImpl @JvmOverloads constructor(
     private val packageFragmentProviderForWholeModuleWithDependencies by lazy {
         val moduleDependencies = dependencies.sure { "Dependencies of module $id were not set before querying module content" }
         val dependenciesDescriptors = moduleDependencies.allDependencies
-        assert(this in dependenciesDescriptors) { "Module $id is not contained in his own dependencies, this is probably a misconfiguration" }
+        assert(this in dependenciesDescriptors) { "Module $id is not contained in its own dependencies, this is probably a misconfiguration" }
         dependenciesDescriptors.forEach { dependency ->
             assert(dependency.isInitialized) {
                 "Dependency module ${dependency.id} was not initialized by the time contents of dependent module ${this.id} were queried"
             }
         }
-        CompositePackageFragmentProvider(dependenciesDescriptors.map {
-            it.packageFragmentProviderForModuleContent!!
-        })
+        CompositePackageFragmentProvider(
+            dependenciesDescriptors.map {
+                it.packageFragmentProviderForModuleContent!!
+            },
+            "CompositeProvider@ModuleDescriptor for $name"
+        )
     }
 
     private val isInitialized: Boolean
@@ -118,7 +126,7 @@ class ModuleDescriptorImpl @JvmOverloads constructor(
     }
 
     fun setDependencies(descriptors: List<ModuleDescriptorImpl>, friends: Set<ModuleDescriptorImpl>) {
-        setDependencies(ModuleDependenciesImpl(descriptors, friends, emptyList()))
+        setDependencies(ModuleDependenciesImpl(descriptors, friends, emptyList(), emptySet()))
     }
 
     override fun shouldSeeInternalsOf(targetModule: ModuleDescriptor): Boolean {
@@ -154,11 +162,13 @@ class ModuleDescriptorImpl @JvmOverloads constructor(
 interface ModuleDependencies {
     val allDependencies: List<ModuleDescriptorImpl>
     val modulesWhoseInternalsAreVisible: Set<ModuleDescriptorImpl>
-    val expectedByDependencies: List<ModuleDescriptorImpl>
+    val directExpectedByDependencies: List<ModuleDescriptorImpl>
+    val allExpectedByDependencies: Set<ModuleDescriptorImpl>
 }
 
 class ModuleDependenciesImpl(
     override val allDependencies: List<ModuleDescriptorImpl>,
     override val modulesWhoseInternalsAreVisible: Set<ModuleDescriptorImpl>,
-    override val expectedByDependencies: List<ModuleDescriptorImpl>
+    override val directExpectedByDependencies: List<ModuleDescriptorImpl>,
+    override val allExpectedByDependencies: Set<ModuleDescriptorImpl>,
 ) : ModuleDependencies

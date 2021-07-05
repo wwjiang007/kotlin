@@ -4,33 +4,28 @@ plugins {
     kotlin("multiplatform") version "KOTLIN_VERSION"
     application
 }
+
 group = "me.user"
 version = "1.0-SNAPSHOT"
 
 repositories {
-    mavenCentral()
     jcenter()
-    maven {
-        url = uri("https://dl.bintray.com/kotlin/ktor")
-    }
-    maven {
-        url = uri("https://dl.bintray.com/kotlin/kotlin-dev")
-    }
-    maven {
-        url = uri("https://dl.bintray.com/kotlin/kotlinx")
-    }
-    maven {
-        url = uri("https://dl.bintray.com/kotlin/kotlin-js-wrappers")
-    }
+    mavenCentral()
+    maven { url = uri("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/kotlin-js-wrappers") }
+    maven { url = uri("https://maven.pkg.jetbrains.space/public/p/kotlinx-html/maven") }
 }
+
 kotlin {
     jvm {
         compilations.all {
             kotlinOptions.jvmTarget = "1.8"
         }
+        testRuns["test"].executionTask.configure {
+            useJUnit()
+        }
         withJava()
     }
-    js {
+    js(LEGACY) {
         browser {
             binaries.executable()
             webpackTask {
@@ -57,9 +52,9 @@ kotlin {
         }
         val jvmMain by getting {
             dependencies {
-                implementation("io.ktor:ktor-server-netty:1.3.2-KOTLIN_VERSION")
-                implementation("io.ktor:ktor-html-builder:1.3.2-KOTLIN_VERSION")
-                implementation("org.jetbrains.kotlinx:kotlinx-html-jvm:0.7.1-KOTLIN_VERSION")
+                implementation("io.ktor:ktor-server-netty:1.5.2")
+                implementation("io.ktor:ktor-html-builder:1.5.2")
+                implementation("org.jetbrains.kotlinx:kotlinx-html-jvm:0.7.2")
             }
         }
         val jvmTest by getting {
@@ -69,8 +64,8 @@ kotlin {
         }
         val jsMain by getting {
             dependencies {
-                implementation("org.jetbrains:kotlin-react:16.13.1-pre.110-kotlin-KOTLIN_VERSION")
-                implementation("org.jetbrains:kotlin-react-dom:16.13.1-pre.110-kotlin-KOTLIN_VERSION")
+                implementation("org.jetbrains:kotlin-react:17.0.1-pre.148-kotlin-1.4.30")
+                implementation("org.jetbrains:kotlin-react-dom:17.0.1-pre.148-kotlin-1.4.30")
             }
         }
         val jsTest by getting {
@@ -80,17 +75,21 @@ kotlin {
         }
     }
 }
+
 application {
     mainClassName = "ServerKt"
 }
+
 tasks.getByName<KotlinWebpack>("jsBrowserProductionWebpack") {
     outputFileName = "output.js"
 }
+
 tasks.getByName<Jar>("jvmJar") {
     dependsOn(tasks.getByName("jsBrowserProductionWebpack"))
     val jsBrowserProductionWebpack = tasks.getByName<KotlinWebpack>("jsBrowserProductionWebpack")
     from(File(jsBrowserProductionWebpack.destinationDirectory, jsBrowserProductionWebpack.outputFileName))
 }
+
 tasks.getByName<JavaExec>("run") {
     dependsOn(tasks.getByName<Jar>("jvmJar"))
     classpath(tasks.getByName<Jar>("jvmJar"))

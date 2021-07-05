@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.backend.jvm.lower
 
+import org.jetbrains.kotlin.backend.common.ir.copyAnnotationsFrom
 import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.backend.common.ir.copyTypeParametersFrom
 import org.jetbrains.kotlin.backend.common.lower.InnerClassesSupport
@@ -13,21 +14,18 @@ import org.jetbrains.kotlin.codegen.AsmUtil
 import org.jetbrains.kotlin.ir.builders.declarations.buildConstructor
 import org.jetbrains.kotlin.ir.builders.declarations.buildField
 import org.jetbrains.kotlin.ir.builders.declarations.buildValueParameter
-import org.jetbrains.kotlin.ir.declarations.IrClass
-import org.jetbrains.kotlin.ir.declarations.IrConstructor
-import org.jetbrains.kotlin.ir.declarations.IrFactory
-import org.jetbrains.kotlin.ir.declarations.IrField
-import org.jetbrains.kotlin.ir.util.deepCopyWithSymbols
+import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.ir.util.dump
 import org.jetbrains.kotlin.ir.util.parentAsClass
 import org.jetbrains.kotlin.load.java.JavaDescriptorVisibilities
 import org.jetbrains.kotlin.name.Name
+import java.util.concurrent.ConcurrentHashMap
 
 class JvmInnerClassesSupport(private val irFactory: IrFactory) : InnerClassesSupport {
-    private val outerThisDeclarations = HashMap<IrClass, IrField>()
-    private val innerClassConstructors = HashMap<IrConstructor, IrConstructor>()
-    private val originalInnerClassPrimaryConstructorByClass = HashMap<IrClass, IrConstructor>()
+    private val outerThisDeclarations = ConcurrentHashMap<IrClass, IrField>()
+    private val innerClassConstructors = ConcurrentHashMap<IrConstructor, IrConstructor>()
+    private val originalInnerClassPrimaryConstructorByClass = ConcurrentHashMap<IrClass, IrConstructor>()
 
     override fun getOuterThisField(innerClass: IrClass): IrField =
         outerThisDeclarations.getOrPut(innerClass) {
@@ -35,7 +33,7 @@ class JvmInnerClassesSupport(private val irFactory: IrFactory) : InnerClassesSup
             irFactory.buildField {
                 name = Name.identifier("this$0")
                 type = innerClass.parentAsClass.defaultType
-                origin = InnerClassesSupport.FIELD_FOR_OUTER_THIS
+                origin = IrDeclarationOrigin.FIELD_FOR_OUTER_THIS
                 visibility = JavaDescriptorVisibilities.PACKAGE_VISIBILITY
                 isFinal = true
             }.apply {
@@ -67,9 +65,9 @@ class JvmInnerClassesSupport(private val irFactory: IrFactory) : InnerClassesSup
             updateFrom(oldConstructor)
             returnType = oldConstructor.returnType
         }.apply {
-            annotations = oldConstructor.annotations.map { it.deepCopyWithSymbols(this) }
             parent = oldConstructor.parent
             returnType = oldConstructor.returnType
+            copyAnnotationsFrom(oldConstructor)
             copyTypeParametersFrom(oldConstructor)
 
             val outerThisValueParameter = buildValueParameter(this) {

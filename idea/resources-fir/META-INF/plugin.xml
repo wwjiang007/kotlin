@@ -13,7 +13,7 @@ The Kotlin FIR plugin provides language support in IntelliJ IDEA and Android Stu
   <version>@snapshot@</version>
   <vendor url="http://www.jetbrains.com">JetBrains</vendor>
 
-  <idea-version since-build="201.7223.91" until-build="201.*"/>
+  <idea-version since-build="201.7223.91" until-build="203.*"/>
 
   <depends>com.intellij.modules.platform</depends>
 
@@ -37,8 +37,13 @@ The Kotlin FIR plugin provides language support in IntelliJ IDEA and Android Stu
   <xi:include href="jps.xml" xpointer="xpointer(/idea-plugin/*)"/>
   <xi:include href="idea.xml" xpointer="xpointer(/idea-plugin/*)"/>
   <xi:include href="caches.xml" xpointer="xpointer(/idea-plugin/*)"/>
+  <xi:include href="firInspections.xml" xpointer="xpointer(/idea-plugin/*)"/>
+  <xi:include href="firIntentions.xml" xpointer="xpointer(/idea-plugin/*)"/>
+  <xi:include href="fe10Binding.xml" xpointer="xpointer(/idea-plugin/*)"/>
 
   <xi:include href="extensions/ide-frontend-independent.xml" xpointer="xpointer(/idea-plugin/*)"/>
+
+  <xi:include href="extensions.xml" xpointer="xpointer(/idea-plugin/*)"/>
 
 
   <!-- CIDR-PLUGIN-EXCLUDE-START -->
@@ -69,6 +74,10 @@ The Kotlin FIR plugin provides language support in IntelliJ IDEA and Android Stu
 
   <extensions defaultExtensionNs="org.jetbrains.kotlin">
     <beforeResolveHighlightingVisitor implementation="org.jetbrains.kotlin.idea.fir.highlighter.visitors.DeclarationHighlightingExtension"/>
+    <binaryExtension implementation="org.jetbrains.kotlin.idea.util.JavaClassBinary"/>
+    <binaryExtension implementation="org.jetbrains.kotlin.idea.util.KotlinBuiltInBinary"/>
+    <binaryExtension implementation="org.jetbrains.kotlin.idea.util.KotlinModuleBinary"/>
+    <binaryExtension implementation="org.jetbrains.kotlin.idea.util.KotlinJsMetaBinary"/>
   </extensions>
 
   <actions>
@@ -86,16 +95,57 @@ The Kotlin FIR plugin provides language support in IntelliJ IDEA and Android Stu
 <!--decompiler-->
 
   <extensions defaultExtensionNs="com.intellij">
+    <statistics.counterUsagesCollector groupId="kotlin.gradle.target" version="2"/>
+    <statistics.counterUsagesCollector groupId="kotlin.maven.target" version="3"/>
+    <statistics.counterUsagesCollector groupId="kotlin.jps.target" version="3"/>
+    <statistics.counterUsagesCollector groupId="kotlin.gradle.library" version="1"/>
+    <statistics.counterUsagesCollector groupId="kotlin.ide.refactoring" version="1"/>
+    <statistics.counterUsagesCollector groupId="kotlin.ide.newFileTempl" version="1"/>
+    <statistics.counterUsagesCollector groupId="kotlin.ide.npwizards" version="2"/>
+    <statistics.counterUsagesCollector groupId="kotlin.ide.debugger" version="2"/>
+    <statistics.counterUsagesCollector groupId="kotlin.ide.j2k" version="1"/>
+    <statistics.counterUsagesCollector groupId="kotlin.ide.editor" version="1"/>
+    <statistics.counterUsagesCollector groupId="kotlin.ide.migrationTool" version="1"/>
+    <statistics.counterUsagesCollector groupId="kotlin.ide.new.wizard" version="1"/>
+    <statistics.counterUsagesCollector groupId="kotlin.gradle.performance" version="1"/>
+    <statistics.projectUsagesCollector implementation="org.jetbrains.kotlin.idea.IDESettingsFUSCollector"/>
+    <statistics.projectUsagesCollector implementation="org.jetbrains.kotlin.idea.formatter.KotlinFormatterUsageCollector"/>
+    <statistics.projectUsagesCollector implementation="org.jetbrains.kotlin.idea.statistics.ProjectConfigurationCollector"/>
+  </extensions>
+
+  <extensions defaultExtensionNs="com.intellij">
     <!-- fir-specific -->
+    <statusBarWidgetFactory implementation="org.jetbrains.kotlin.idea.fir.FirStatusBarWidgetFactory"/>
+    <postStartupActivity implementation="org.jetbrains.kotlin.idea.fir.AndroidPluginIncompatibilityCheckerStartupActivity"/>
+
+
+    <projectService serviceInterface="org.jetbrains.kotlin.idea.fir.low.level.api.KtDeclarationProviderFactory"
+                    serviceImplementation="org.jetbrains.kotlin.idea.fir.low.level.api.ide.KtDeclarationProviderFactoryIdeImpl"/>
+
+    <projectService serviceInterface="org.jetbrains.kotlin.idea.fir.low.level.api.KtPackageProviderFactory"
+                    serviceImplementation="org.jetbrains.kotlin.idea.fir.low.level.api.ide.KtPackageProviderFactoryIdeImpl"/>
+
+
+    <projectService serviceInterface="org.jetbrains.kotlin.idea.fir.low.level.api.api.FirModuleResolveStateConfigurator"
+                    serviceImplementation="org.jetbrains.kotlin.idea.fir.low.level.api.ide.FirModuleResolveStateConfiguratorIdeImpl"/>
+
     <projectService serviceInterface="org.jetbrains.kotlin.idea.frontend.api.KtAnalysisSessionProvider"
                         serviceImplementation="org.jetbrains.kotlin.idea.frontend.api.fir.KtFirAnalysisSessionProvider"/>
     <applicationService serviceInterface="org.jetbrains.kotlin.idea.references.KotlinReferenceProviderContributor"
                         serviceImplementation="org.jetbrains.kotlin.idea.references.KotlinFirReferenceContributor"/>
-    <applicationService serviceImplementation="org.jetbrains.kotlin.idea.PluginStartupService"/>
+    <applicationService serviceImplementation="org.jetbrains.kotlin.idea.PluginStartupApplicationService"/>
     <highlightRangeExtension implementation="org.jetbrains.kotlin.idea.fir.highlighter.KotlinFirPsiChecker"/>
     <annotator language="kotlin" implementationClass="org.jetbrains.kotlin.idea.fir.highlighter.KotlinFirPsiChecker"/>
     <projectService serviceImplementation="org.jetbrains.kotlin.idea.fir.low.level.api.FirIdeResolveStateService"/>
     <projectService serviceImplementation="org.jetbrains.kotlin.resolve.jvm.KotlinJavaPsiFacade"/>
+
+    <projectService serviceInterface="org.jetbrains.kotlin.psi.KtFileClassProvider"
+                    serviceImplementation="org.jetbrains.kotlin.idea.caches.resolve.KtFileClassProviderImpl"/>
+
+    <projectService serviceInterface="org.jetbrains.uast.kotlin.BaseKotlinUastResolveProviderService"
+                    serviceImplementation="org.jetbrains.uast.kotlin.internal.FirIdeaKotlinUastResolveProviderService"/>
+    <projectService serviceInterface="org.jetbrains.uast.kotlin.FirKotlinUastResolveProviderService"
+                    serviceImplementation="org.jetbrains.uast.kotlin.internal.FirIdeaKotlinUastResolveProviderService"/>
 
     <completion.contributor language="kotlin"
                             id="KotlinCompletionContributor"
@@ -103,7 +153,16 @@ The Kotlin FIR plugin provides language support in IntelliJ IDEA and Android Stu
                             implementationClass="org.jetbrains.kotlin.idea.completion.KotlinFirCompletionContributor"/>
     <codeInsight.typeInfo language="kotlin"
                           implementationClass="org.jetbrains.kotlin.idea.codeInsight.KotlinHighLevelExpressionTypeProvider"/>
+    <highlightingPassFactory implementation="org.jetbrains.kotlin.idea.fir.highlighter.KotlinDiagnosticHighlightingPassFactory"/>
 
+    <projectService serviceImplementation="org.jetbrains.kotlin.idea.fir.low.level.api.trackers.KotlinFirModificationTrackerService"/>
+    <projectService serviceInterface="org.jetbrains.kotlin.idea.fir.low.level.api.api.KotlinOutOfBlockModificationTrackerFactory"
+                    serviceImplementation="org.jetbrains.kotlin.idea.fir.low.level.api.trackers.KotlinFirOutOfBlockModificationTrackerFactory"/>
+    <psi.treeChangePreprocessor implementation="org.jetbrains.kotlin.idea.fir.low.level.api.trackers.KotlinOutOfBlockPsiTreeChangePreprocessor"/>
+    <projectService serviceImplementation="org.jetbrains.kotlin.idea.fir.api.impl.ResolveAllowanceServiceFirImpl"
+                    serviceInterface="org.jetbrains.kotlin.idea.api.ResolveAllowanceService"/>
+    <codeInsight.implementMethod language="kotlin" implementationClass="org.jetbrains.kotlin.idea.core.overrideImplement.KtImplementMembersHandler"/>
+    <codeInsight.overrideMethod language="kotlin" implementationClass="org.jetbrains.kotlin.idea.core.overrideImplement.KtOverrideMembersHandler"/>
   </extensions>
 
   <!--  scripts  -->
@@ -173,6 +232,13 @@ The Kotlin FIR plugin provides language support in IntelliJ IDEA and Android Stu
 
 
   <extensions defaultExtensionNs="com.intellij">
+    <applicationService serviceImplementation="org.jetbrains.kotlin.idea.completion.FirCompletionDummyIdentifierProviderService"
+                        serviceInterface="org.jetbrains.kotlin.idea.completion.CompletionDummyIdentifierProviderService"/>
+
+    <postStartupActivity implementation="org.jetbrains.kotlin.idea.PluginStartupActivity"/>
+    <projectService serviceImplementation="org.jetbrains.kotlin.idea.PluginStartupService"/>
+
+    <iconProvider implementation="org.jetbrains.kotlin.idea.KotlinIconProviderBase"/>
 
     <projectService serviceImplementation="org.jetbrains.kotlin.idea.caches.resolve.IdePackageOracleFactory"/>
     <projectService serviceImplementation="org.jetbrains.kotlin.idea.caches.trackers.KotlinCodeBlockModificationListener"/>
@@ -190,7 +256,55 @@ The Kotlin FIR plugin provides language support in IntelliJ IDEA and Android Stu
     <projectService serviceImplementation="org.jetbrains.kotlin.idea.completion.LookupCancelService"/>
     <projectService serviceImplementation="org.jetbrains.kotlin.idea.configuration.KotlinMigrationProjectService"/>
 
+    <projectService serviceImplementation="org.jetbrains.kotlin.idea.project.KotlinLibraryToSourceAnalysisStateComponent"/>
+
     <highlightingPassFactory implementation="org.jetbrains.kotlin.idea.highlighter.KotlinBeforeResolveHighlightingPass$Registrar"/>
+
+    <java.elementFinder implementation="org.jetbrains.kotlin.asJava.finder.JavaElementFinder"/>
+
+    <projectService serviceInterface="org.jetbrains.kotlin.asJava.KotlinAsJavaSupport"
+                    serviceImplementation="org.jetbrains.kotlin.idea.caches.resolve.IDEKotlinAsJavaFirSupport"/>
+
+    <projectService serviceInterface="org.jetbrains.kotlin.asJava.LightClassGenerationSupport"
+                    serviceImplementation="org.jetbrains.kotlin.idea.asJava.FirLightClassGenerationSupport"/>
+
+    <elementDescriptionProvider
+        implementation="org.jetbrains.kotlin.idea.findUsages.KotlinElementDescriptionProviderBase"
+        order="first"/>
+
+    <findUsagesHandlerFactory implementation="org.jetbrains.kotlin.idea.findUsages.KotlinFindUsagesHandlerFactory"/>
+    <usageTypeProvider implementation="org.jetbrains.kotlin.idea.findUsages.KotlinUsageTypeProviderFirImpl"/>
+    <projectService serviceInterface="org.jetbrains.kotlin.idea.findUsages.KotlinFindUsagesSupport"
+                    serviceImplementation="org.jetbrains.kotlin.idea.findUsages.KotlinFindUsagesSupportFirImpl"/>
+    <projectService serviceInterface="org.jetbrains.kotlin.idea.search.KotlinSearchUsagesSupport"
+                    serviceImplementation="org.jetbrains.kotlin.idea.search.KotlinSearchUsagesSupportFirImpl"/>
+
+    <lang.findUsagesProvider language="kotlin" implementationClass="org.jetbrains.kotlin.idea.findUsages.KotlinFindUsagesProviderBase"/>
+
+    <applicationService serviceInterface="org.jetbrains.kotlin.idea.references.ReadWriteAccessChecker"
+                        serviceImplementation="org.jetbrains.kotlin.idea.references.ReadWriteAccessCheckerDescriptorsFirImpl"/>
+
+    <gotoDeclarationHandler implementation="org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinImportAliasGotoDeclarationHandler"/>
+    <referencesSearch implementation="org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinReferencesSearcher"/>
+    <referencesSearch implementation="org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinAliasedImportedElementSearcher"/>
+    <methodReferencesSearch implementation="org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinConstructorDelegationCallReferenceSearcher"/>
+    <methodReferencesSearch implementation="org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinConventionMethodReferencesSearcher"/>
+    <definitionsScopedSearch implementation="org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinDefinitionsSearcher"/>
+    <methodReferencesSearch implementation="org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinOverridingMethodReferenceSearcher"/>
+    <methodReferencesSearch implementation="org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinPropertyAccessorsReferenceSearcher"/>
+    <directClassInheritorsSearch implementation="org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinDirectInheritorsSearcher"/>
+<!--    <overridingMethodsSearch implementation="org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinOverridingMethodsWithGenericsSearcher"/>-->
+<!--    <annotatedElementsSearch implementation="org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinAnnotatedElementsSearcher"/>-->
+<!--    <classesWithAnnotatedMembersSearch implementation="org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinClassesWithAnnotatedMembersSearcher"/>-->
+<!--    <methodReferencesSearch implementation="org.jetbrains.kotlin.idea.search.ideaExtensions.DefaultAnnotationMethodKotlinImplicitReferenceSearcher"/>-->
+
+    <projectService serviceInterface="org.jetbrains.kotlin.idea.util.FirPluginOracleService"
+                    serviceImplementation="org.jetbrains.kotlin.idea.util.FirPluginOracleServiceFirImpl"/>
+
+    <applicationService serviceImplementation="org.jetbrains.kotlin.idea.fir.api.fixes.KtQuickFixService"/>
+
+    <readWriteAccessDetector implementation="org.jetbrains.kotlin.idea.search.ideaExtensions.KotlinReadWriteAccessDetector" id="kotlin"/>
+
 
     <fileType name="Kotlin"
               implementationClass="org.jetbrains.kotlin.idea.KotlinFileType"
@@ -207,10 +321,6 @@ The Kotlin FIR plugin provides language support in IntelliJ IDEA and Android Stu
               fieldName="INSTANCE"
               extensions="kotlin_module"/>
 
-   <!-- <intentionAction>
-      <className>org.jetbrains.kotlin.idea.fir.inspections.AddFunctionReturnTypeIntention</className>
-      <category>Kotlin</category>
-    </intentionAction>-->
-
+    <java.shortNamesCache implementation="org.jetbrains.kotlin.idea.caches.KotlinShortNamesCache"/>
   </extensions>
 </idea-plugin>

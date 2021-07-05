@@ -5,14 +5,14 @@
 
 package org.jetbrains.kotlin.fir.lazy
 
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
-import org.jetbrains.kotlin.descriptors.ClassKind
-import org.jetbrains.kotlin.descriptors.Modality
-import org.jetbrains.kotlin.descriptors.SourceElement
+import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.fir.backend.Fir2IrComponents
+import org.jetbrains.kotlin.fir.backend.computeInlineClassRepresentation
 import org.jetbrains.kotlin.fir.backend.declareThisReceiverParameter
 import org.jetbrains.kotlin.fir.backend.toIrType
 import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.declarations.utils.*
+import org.jetbrains.kotlin.fir.dispatchReceiverClassOrNull
 import org.jetbrains.kotlin.fir.scopes.unsubstitutedScope
 import org.jetbrains.kotlin.fir.symbols.Fir2IrClassSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirNamedFunctionSymbol
@@ -21,12 +21,15 @@ import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
 import org.jetbrains.kotlin.fir.types.isNullableAny
 import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.declarations.lazy.IrMaybeDeserializedClass
 import org.jetbrains.kotlin.ir.declarations.lazy.lazyVar
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
+import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.impl.IrSimpleTypeImpl
+import org.jetbrains.kotlin.ir.util.isFakeOverride
+import org.jetbrains.kotlin.ir.util.render
 import org.jetbrains.kotlin.name.Name
-import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 
 class Fir2IrLazyClass(
     components: Fir2IrComponents,
@@ -35,7 +38,7 @@ class Fir2IrLazyClass(
     override var origin: IrDeclarationOrigin,
     override val fir: FirRegularClass,
     override val symbol: Fir2IrClassSymbol,
-) : IrClass(), AbstractFir2IrLazyDeclaration<FirRegularClass, IrClass>, Fir2IrComponents by components {
+) : IrClass(), AbstractFir2IrLazyDeclaration<FirRegularClass, IrClass>, IrMaybeDeserializedClass, Fir2IrComponents by components {
     init {
         symbol.bind(this)
         classifierStorage.preCacheTypeParameters(fir)
@@ -46,7 +49,7 @@ class Fir2IrLazyClass(
     override lateinit var parent: IrDeclarationParent
 
     override val source: SourceElement
-        get() = SourceElement.NO_SOURCE
+        get() = fir.sourceElement ?: SourceElement.NO_SOURCE
 
     @ObsoleteDescriptorBasedAPI
     override val descriptor: ClassDescriptor
@@ -97,11 +100,11 @@ class Fir2IrLazyClass(
     override val isFun: Boolean
         get() = fir.isFun
 
-    override var superTypes: List<IrType> by lazyVar {
+    override var superTypes: List<IrType> by lazyVar(lock) {
         fir.superTypeRefs.map { it.toIrType(typeConverter) }
     }
 
-    override var thisReceiver: IrValueParameter? by lazyVar {
+    override var thisReceiver: IrValueParameter? by lazyVar(lock) {
         symbolTable.enterScope(this)
         val typeArguments = fir.typeParameters.map {
             IrSimpleTypeImpl(
@@ -118,12 +121,25 @@ class Fir2IrLazyClass(
         receiver
     }
 
-    override val declarations: MutableList<IrDeclaration> by lazyVar {
+    override var inlineClassRepresentation: InlineClassRepresentation<IrSimpleType>?
+        get() = computeInlineClassRepresentation(fir)
+        set(_) {
+            error("Mutating Fir2Ir lazy elements is not possible")
+        }
+
+    private val fakeOverridesByName = mutableMapOf<Name, Collection<IrDeclaration>>()
+
+    fun getFakeOverridesByName(name: Name): Collection<IrDeclaration> = fakeOverridesByName.getOrPut(name) {
+        fakeOverrideGenerator.generateFakeOverridesForName(this@Fir2IrLazyClass, name, fir)
+            .also(fakeOverrideGenerator::bindOverriddenSymbols)
+    }
+
+    override val declarations: MutableList<IrDeclaration> by lazyVar(lock) {
         val result = mutableListOf<IrDeclaration>()
         val processedNames = mutableSetOf<Name>()
         // NB: it's necessary to take all callables from scope,
         // e.g. to avoid accessing un-enhanced Java declarations with FirJavaTypeRef etc. inside
-        val scope = fir.unsubstitutedScope(session, scopeSession)
+        val scope = fir.unsubstitutedScope(session, scopeSession, withForcedTypeCalculator = true)
         scope.processDeclaredConstructors {
             result += declarationStorage.getIrConstructorSymbol(it).owner
         }
@@ -140,7 +156,7 @@ class Fir2IrLazyClass(
                             result += declarationStorage.getIrFunctionSymbol(declaration.symbol).owner
                         } else {
                             scope.processFunctionsByName(declaration.name) {
-                                if (it is FirNamedFunctionSymbol && it.callableId.classId == fir.symbol.classId) {
+                                if (it.dispatchReceiverClassOrNull() == fir.symbol.toLookupTag()) {
                                     if (it.isAbstractMethodOfAny()) {
                                         return@processFunctionsByName
                                     }
@@ -154,8 +170,8 @@ class Fir2IrLazyClass(
                     if (declaration.name !in processedNames) {
                         processedNames += declaration.name
                         scope.processPropertiesByName(declaration.name) {
-                            if (it is FirPropertySymbol) {
-                                result += declarationStorage.getIrPropertyOrFieldSymbol(it).owner as IrProperty
+                            if (it is FirPropertySymbol && it.dispatchReceiverClassOrNull() == fir.symbol.toLookupTag()) {
+                                result += declarationStorage.getIrPropertySymbol(it).owner as IrProperty
                             }
                         }
                     }
@@ -167,15 +183,17 @@ class Fir2IrLazyClass(
                 else -> continue
             }
         }
-        with(fakeOverrideGenerator) {
-            val fakeOverrides = getFakeOverrides(fir, processedNames)
-            bindOverriddenSymbols(fakeOverrides)
-            result += fakeOverrides
+
+        for (name in scope.getCallableNames()) {
+            result += getFakeOverridesByName(name)
         }
+
         // TODO: remove this check to save time
         for (declaration in result) {
             if (declaration.parent != this) {
-                throw AssertionError("Unmatched parent for lazy class member")
+                throw AssertionError(
+                    "Unmatched parent for lazy class ${fir.name} member ${declaration.render()} f/o ${declaration.isFakeOverride}"
+                )
             }
         }
         result
@@ -184,6 +202,9 @@ class Fir2IrLazyClass(
     override var metadata: MetadataSource?
         get() = null
         set(_) = error("We should never need to store metadata of external declarations.")
+
+    override val moduleName: String?
+        get() = fir.moduleName
 
     private fun FirNamedFunctionSymbol.isAbstractMethodOfAny(): Boolean {
         val fir = fir

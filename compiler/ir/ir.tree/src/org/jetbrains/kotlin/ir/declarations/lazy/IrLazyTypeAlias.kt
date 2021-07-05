@@ -17,17 +17,17 @@ import org.jetbrains.kotlin.ir.util.TypeTranslator
 import org.jetbrains.kotlin.name.Name
 
 class IrLazyTypeAlias(
-        override val startOffset: Int,
-        override val endOffset: Int,
-        override var origin: IrDeclarationOrigin,
-        override val symbol: IrTypeAliasSymbol,
-        @OptIn(ObsoleteDescriptorBasedAPI::class)
+    override val startOffset: Int,
+    override val endOffset: Int,
+    override var origin: IrDeclarationOrigin,
+    override val symbol: IrTypeAliasSymbol,
+    @OptIn(ObsoleteDescriptorBasedAPI::class)
     override val descriptor: TypeAliasDescriptor,
-        override val name: Name,
-        override var visibility: DescriptorVisibility,
-        override val isActual: Boolean,
-        override val stubGenerator: DeclarationStubGenerator,
-        override val typeTranslator: TypeTranslator,
+    override val name: Name,
+    override var visibility: DescriptorVisibility,
+    override val isActual: Boolean,
+    override val stubGenerator: DeclarationStubGenerator,
+    override val typeTranslator: TypeTranslator,
 ) : IrTypeAlias(), IrLazyDeclarationBase {
     init {
         symbol.bind(this)
@@ -37,17 +37,15 @@ class IrLazyTypeAlias(
 
     override var annotations: List<IrConstructorCall> by createLazyAnnotations()
 
-    override var typeParameters: List<IrTypeParameter> by lazyVar {
+    override var typeParameters: List<IrTypeParameter> by lazyVar(stubGenerator.lock) {
         descriptor.declaredTypeParameters.mapTo(arrayListOf()) {
             stubGenerator.generateOrGetTypeParameterStub(it)
         }
     }
 
-    override val expandedType: IrType by lazy {
-        withInitialIr {
-            typeTranslator.buildWithScope(this) {
-                descriptor.expandedType.toIrType()
-            }
+    override var expandedType: IrType by lazyVar(stubGenerator.lock) {
+        typeTranslator.buildWithScope(this) {
+            descriptor.expandedType.toIrType()
         }
     }
 }

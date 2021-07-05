@@ -54,11 +54,12 @@ var Project.javaHome: String?
         extra["javaHome"] = v
     }
 
-fun Project.generator(fqName: String, sourceSet: SourceSet? = null) = smartJavaExec {
+fun Project.generator(fqName: String, sourceSet: SourceSet? = null, configure: JavaExec.() -> Unit = {}) = smartJavaExec {
     classpath = (sourceSet ?: testSourceSet).runtimeClasspath
     mainClass.set(fqName)
     workingDir = rootDir
     systemProperty("line.separator", "\n")
+    configure()
 }
 
 fun Project.getBooleanProperty(name: String): Boolean? = this.findProperty(name)?.let {
@@ -80,3 +81,12 @@ fun Task.singleOutputFile(): File = when (this) {
     is ProGuardTask -> project.file(outJarFiles.single()!!)
     else -> outputs.files.singleFile
 }
+
+val Project.isConfigurationCacheDisabled
+    get() = (gradle.startParameter as? org.gradle.api.internal.StartParameterInternal)?.isConfigurationCache != true
+
+val Project.isIdeaActive
+    get() = providers.systemProperty("idea.active").forUseAtConfigurationTime().isPresent
+
+val Project.intellijCommunityDir: File
+    get() = rootDir.resolve("kotlin-ide/intellij/community").takeIf { it.isDirectory } ?: rootDir.resolve("kotlin-ide/intellij")

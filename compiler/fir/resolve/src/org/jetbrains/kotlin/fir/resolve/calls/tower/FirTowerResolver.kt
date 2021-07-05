@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.fir.references.FirSuperReference
 import org.jetbrains.kotlin.fir.resolve.BodyResolveComponents
 import org.jetbrains.kotlin.fir.resolve.calls.*
 import org.jetbrains.kotlin.fir.resolve.scope
+import org.jetbrains.kotlin.fir.scopes.FakeOverrideTypeCalculator
 import org.jetbrains.kotlin.fir.typeContext
 import org.jetbrains.kotlin.fir.types.ConeClassLikeType
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind
@@ -25,24 +26,25 @@ class FirTowerResolver(
 
     fun runResolver(
         info: CallInfo,
+        context: ResolutionContext,
         collector: CandidateCollector = this.collector,
         manager: TowerResolveManager = this.manager
     ): CandidateCollector {
-        val candidateFactoriesAndCollectors = buildCandidateFactoriesAndCollectors(info, collector)
+        val candidateFactoriesAndCollectors = buildCandidateFactoriesAndCollectors(info, collector, context)
 
-        enqueueResolutionTasks(components, manager, candidateFactoriesAndCollectors, info)
+        enqueueResolutionTasks(context, manager, candidateFactoriesAndCollectors, info)
 
         manager.runTasks()
         return collector
     }
 
     private fun enqueueResolutionTasks(
-        components: BodyResolveComponents,
+        context: ResolutionContext,
         manager: TowerResolveManager,
         candidateFactoriesAndCollectors: CandidateFactoriesAndCollectors,
         info: CallInfo
     ) {
-        val invokeResolveTowerExtension = FirInvokeResolveTowerExtension(components, manager, candidateFactoriesAndCollectors)
+        val invokeResolveTowerExtension = FirInvokeResolveTowerExtension(context, manager, candidateFactoriesAndCollectors)
 
         val mainTask = FirTowerResolveTask(
             components,
@@ -50,7 +52,6 @@ class FirTowerResolver(
             TowerDataElementsForName(info.name, components.towerDataContext),
             candidateFactoriesAndCollectors.resultCollector,
             candidateFactoriesAndCollectors.candidateFactory,
-            candidateFactoriesAndCollectors.stubReceiverCandidateFactory
         )
         when (val receiver = info.explicitReceiver) {
             is FirResolvedQualifier -> {
@@ -63,12 +64,15 @@ class FirTowerResolver(
             }
             else -> {
                 if (receiver is FirQualifiedAccessExpression) {
-                    val calleeReference = receiver.calleeReference
-                    if (calleeReference is FirSuperReference) {
-                        return manager.enqueueResolverTask { mainTask.runResolverForSuperReceiver(info, receiver.typeRef) }
+                    if (receiver.calleeReference is FirSuperReference) {
+                        manager.enqueueResolverTask { mainTask.runResolverForSuperReceiver(info, receiver) }
+                        return
                     }
                 }
-
+                if (info.isImplicitInvoke) {
+                    invokeResolveTowerExtension.enqueueResolveTasksForImplicitInvokeCall(info, receiver)
+                    return
+                }
                 manager.enqueueResolverTask { mainTask.runResolverForExpressionReceiver(info, receiver) }
                 invokeResolveTowerExtension.enqueueResolveTasksForExpressionReceiver(info, receiver)
             }
@@ -77,10 +81,11 @@ class FirTowerResolver(
 
     fun runResolverForDelegatingConstructor(
         info: CallInfo,
-        constructedType: ConeClassLikeType
+        constructedType: ConeClassLikeType,
+        context: ResolutionContext
     ): CandidateCollector {
         val outerType = components.outerClassManager.outerType(constructedType)
-        val scope = constructedType.scope(components.session, components.scopeSession) ?: return collector
+        val scope = constructedType.scope(components.session, components.scopeSession, FakeOverrideTypeCalculator.DoNothing) ?: return collector
 
         val dispatchReceiver =
             if (outerType != null)
@@ -90,19 +95,22 @@ class FirTowerResolver(
             else
                 null
 
-        val candidateFactory = CandidateFactory(components, info)
+        val candidateFactory = CandidateFactory(context, info)
         val resultCollector = collector
 
         scope.processDeclaredConstructors {
             resultCollector.consumeCandidate(
                 TowerGroup.Member,
                 candidateFactory.createCandidate(
+                    info,
                     it,
                     ExplicitReceiverKind.NO_EXPLICIT_RECEIVER,
+                    scope,
                     dispatchReceiver,
-                    implicitExtensionReceiverValue = null,
+                    extensionReceiverValue = null,
                     builtInExtensionFunctionReceiverValue = null
-                )
+                ),
+                context
             )
         }
 
@@ -111,19 +119,14 @@ class FirTowerResolver(
 
     private fun buildCandidateFactoriesAndCollectors(
         info: CallInfo,
-        collector: CandidateCollector
+        collector: CandidateCollector,
+        context: ResolutionContext
     ): CandidateFactoriesAndCollectors {
-        val candidateFactory = CandidateFactory(components, info)
-        val stubReceiverCandidateFactory =
-            if (info.callKind == CallKind.CallableReference && info.stubReceiver != null)
-                candidateFactory.replaceCallInfo(info.replaceExplicitReceiver(info.stubReceiver))
-            else
-                null
+        val candidateFactory = CandidateFactory(context, info)
 
         return CandidateFactoriesAndCollectors(
             candidateFactory,
-            collector,
-            stubReceiverCandidateFactory
+            collector
         )
     }
 

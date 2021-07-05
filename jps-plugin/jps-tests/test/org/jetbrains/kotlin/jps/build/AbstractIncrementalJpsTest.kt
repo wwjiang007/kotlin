@@ -15,7 +15,6 @@
  */
 
 package org.jetbrains.kotlin.jps.build
-
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.io.FileUtil
@@ -31,6 +30,7 @@ import org.jetbrains.jps.ModuleChunk
 import org.jetbrains.jps.api.CanceledStatus
 import org.jetbrains.jps.builders.BuildResult
 import org.jetbrains.jps.builders.CompileScopeTestBuilder
+import org.jetbrains.jps.builders.JpsBuildTestCase
 import org.jetbrains.jps.builders.impl.BuildDataPathsImpl
 import org.jetbrains.jps.builders.impl.logging.ProjectBuilderLoggerBase
 import org.jetbrains.jps.builders.java.dependencyView.Callbacks
@@ -43,16 +43,21 @@ import org.jetbrains.jps.model.JpsModuleRootModificationUtil
 import org.jetbrains.jps.model.java.JpsJavaExtensionService
 import org.jetbrains.jps.model.library.sdk.JpsSdk
 import org.jetbrains.jps.util.JpsPathUtil
-import org.jetbrains.kotlin.cli.common.KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY
+import org.jetbrains.kotlin.cli.common.arguments.CommonCompilerArguments
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
 import org.jetbrains.kotlin.cli.common.arguments.K2MetadataCompilerArguments
+import org.jetbrains.kotlin.cli.common.arguments.parseCommandLineArguments
 import org.jetbrains.kotlin.incremental.LookupSymbol
 import org.jetbrains.kotlin.incremental.testingUtils.*
 import org.jetbrains.kotlin.jps.build.dependeciestxt.ModulesTxt
 import org.jetbrains.kotlin.jps.build.dependeciestxt.ModulesTxtBuilder
 import org.jetbrains.kotlin.jps.build.fixtures.EnableICFixture
-import org.jetbrains.kotlin.jps.incremental.*
+import org.jetbrains.kotlin.jps.incremental.CacheAttributesDiff
+import org.jetbrains.kotlin.jps.incremental.CacheVersionManager
+import org.jetbrains.kotlin.jps.incremental.CompositeLookupsCacheAttributesManager
+import org.jetbrains.kotlin.jps.incremental.getKotlinCache
 import org.jetbrains.kotlin.jps.model.JpsKotlinFacetModuleExtension
+import org.jetbrains.kotlin.jps.model.kotlinCommonCompilerArguments
 import org.jetbrains.kotlin.jps.model.kotlinFacet
 import org.jetbrains.kotlin.jps.targets.KotlinModuleBuildTarget
 import org.jetbrains.kotlin.platform.idePlatformKind
@@ -78,11 +83,23 @@ abstract class AbstractIncrementalJpsTest(
         private val TEMP_DIRECTORY_TO_USE = File(FileUtilRt.getTempDirectory())
 
         private val DEBUG_LOGGING_ENABLED = System.getProperty("debug.logging.enabled") == "true"
+
+        private const val ARGUMENTS_FILE_NAME = "args.txt"
+
+        private fun parseAdditionalArgs(testDir: File): List<String> {
+            return File(testDir, ARGUMENTS_FILE_NAME)
+                .takeIf { it.exists() }
+                ?.readText()
+                ?.split(" ", "\n")
+                ?.filter { it.isNotBlank() }
+                ?: emptyList()
+        }
     }
 
     protected lateinit var testDataDir: File
     protected lateinit var workDir: File
     protected lateinit var projectDescriptor: ProjectDescriptor
+    protected lateinit var additionalCommandLineArguments: List<String>
     // is used to compare lookup dumps in a human readable way (lookup symbols are hashed in an actual lookup storage)
     protected lateinit var lookupsDuringTest: MutableSet<LookupSymbol>
     private var isJvmICEnabledBackup: Boolean = false
@@ -128,7 +145,6 @@ abstract class AbstractIncrementalJpsTest(
 
         enableICFixture.setUp()
         lookupsDuringTest = hashSetOf()
-        System.setProperty(KOTLIN_COMPILER_ENVIRONMENT_KEEPALIVE_PROPERTY, "true")
 
         if (DEBUG_LOGGING_ENABLED) {
             enableDebugLogging()
@@ -138,7 +154,7 @@ abstract class AbstractIncrementalJpsTest(
     override fun tearDown() {
         restoreSystemProperties()
 
-        (AbstractIncrementalJpsTest::myProject).javaField!![this] = null
+        JpsBuildTestCase::class.java.getDeclaredField("myProject")[this] = null
         (AbstractIncrementalJpsTest::projectDescriptor).javaField!![this] = null
         (AbstractIncrementalJpsTest::systemPropertiesBackup).javaField!![this] = null
 
@@ -172,12 +188,14 @@ abstract class AbstractIncrementalJpsTest(
                 BuilderRegistry.getInstance(),
                 myBuildParams,
                 CanceledStatus.NULL,
-                mockConstantSearch,
                 true
             )
             val buildResult = BuildResult()
             builder.addMessageHandler(buildResult)
             val finalScope = scope.build()
+            projectDescriptor.project.kotlinCommonCompilerArguments = projectDescriptor.project.kotlinCommonCompilerArguments.apply {
+                updateCommandLineArguments(this)
+            }
 
             builder.build(finalScope, false)
 
@@ -234,6 +252,10 @@ abstract class AbstractIncrementalJpsTest(
         return build(null, CompileScopeTestBuilder.rebuild().allModules())
     }
 
+    private fun updateCommandLineArguments(arguments: CommonCompilerArguments) {
+        parseCommandLineArguments(additionalCommandLineArguments, arguments)
+    }
+
     private fun rebuildAndCheckOutput(makeOverallResult: MakeResult) {
         val outDir = File(getAbsolutePath("out"))
         val outAfterMake = File(getAbsolutePath("out-after-make"))
@@ -255,7 +277,7 @@ abstract class AbstractIncrementalJpsTest(
         }
 
         if (!makeOverallResult.makeFailed) {
-            if (checkDumpsCaseInsensitively && rebuildResult.mappingsDump?.toLowerCase() == makeOverallResult.mappingsDump?.toLowerCase()) {
+            if (checkDumpsCaseInsensitively && rebuildResult.mappingsDump?.lowercase() == makeOverallResult.mappingsDump?.lowercase()) {
                 // do nothing
             } else {
                 TestCase.assertEquals(rebuildResult.mappingsDump, makeOverallResult.mappingsDump)
@@ -301,7 +323,8 @@ abstract class AbstractIncrementalJpsTest(
 
     protected open fun doTest(testDataPath: String) {
         testDataDir = File(testDataPath)
-        workDir = FileUtilRt.createTempDirectory(TEMP_DIRECTORY_TO_USE, "jps-build", null)
+        workDir = FileUtilRt.createTempDirectory(TEMP_DIRECTORY_TO_USE, "aijt-jps-build", null)
+        additionalCommandLineArguments = parseAdditionalArgs(File(testDataPath))
         val buildLogFile = buildLogFinder.findBuildLog(testDataDir)
         Disposer.register(testRootDisposable, Disposable { FileUtilRt.delete(workDir) })
 

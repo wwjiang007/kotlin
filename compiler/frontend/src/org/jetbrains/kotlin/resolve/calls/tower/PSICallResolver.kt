@@ -40,6 +40,7 @@ import org.jetbrains.kotlin.resolve.calls.util.CallMaker
 import org.jetbrains.kotlin.resolve.constants.evaluate.ConstantExpressionEvaluator
 import org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
+import org.jetbrains.kotlin.resolve.descriptorUtil.isUnderscoreNamed
 import org.jetbrains.kotlin.resolve.scopes.*
 import org.jetbrains.kotlin.resolve.scopes.receivers.*
 import org.jetbrains.kotlin.types.*
@@ -47,7 +48,6 @@ import org.jetbrains.kotlin.types.expressions.*
 import org.jetbrains.kotlin.types.model.TypeSystemInferenceExtensionContext
 import org.jetbrains.kotlin.utils.KotlinExceptionWithAttachments
 import org.jetbrains.kotlin.utils.addToStdlib.firstIsInstanceOrNull
-import org.jetbrains.kotlin.utils.addToStdlib.firstNotNullResult
 import java.util.*
 
 class PSICallResolver(
@@ -123,7 +123,7 @@ class PSICallResolver(
         resolutionCandidates: Collection<ResolutionCandidate<D>>,
         tracingStrategy: TracingStrategy
     ): OverloadResolutionResults<D> {
-        val dispatchReceiver = resolutionCandidates.firstNotNullResult { it.dispatchReceiver }
+        val dispatchReceiver = resolutionCandidates.firstNotNullOfOrNull { it.dispatchReceiver }
 
         val isSpecialFunction = resolutionCandidates.any { it.descriptor.name in SPECIAL_FUNCTION_NAMES }
         val kotlinCall = toKotlinCall(
@@ -261,7 +261,7 @@ class PSICallResolver(
             return transformManyCandidatesAndRecordTrace(it, tracingStrategy, trace, context)
         }
 
-        if (getResultApplicability(diagnostics) == ResolutionCandidateApplicability.INAPPLICABLE_WRONG_RECEIVER) {
+        if (getResultApplicability(diagnostics.filterErrorDiagnostics()) == CandidateApplicability.INAPPLICABLE_WRONG_RECEIVER) {
             val singleCandidate = result.resultCallAtom() ?: error("Should be not null for result: $result")
             val resolvedCall = kotlinToResolvedCallTransformer.onlyTransform<D>(singleCandidate, diagnostics).also {
                 tracingStrategy.unresolvedReferenceWrongReceiver(trace, listOf(it))
@@ -333,7 +333,7 @@ class PSICallResolver(
 
     private fun Collection<KotlinResolutionCandidate>.areAllFailedWithInapplicableWrongReceiver() =
         all {
-            it.resultingApplicability == ResolutionCandidateApplicability.INAPPLICABLE_WRONG_RECEIVER
+            it.resultingApplicability == CandidateApplicability.INAPPLICABLE_WRONG_RECEIVER
         }
 
     private fun CallResolutionResult.areAllInapplicable(): Boolean {
@@ -343,9 +343,9 @@ class PSICallResolver(
         }
 
         val applicability = getResultApplicability(diagnostics)
-        return applicability == ResolutionCandidateApplicability.INAPPLICABLE ||
-                applicability == ResolutionCandidateApplicability.INAPPLICABLE_WRONG_RECEIVER ||
-                applicability == ResolutionCandidateApplicability.HIDDEN
+        return applicability == CandidateApplicability.INAPPLICABLE ||
+                applicability == CandidateApplicability.INAPPLICABLE_WRONG_RECEIVER ||
+                applicability == CandidateApplicability.HIDDEN
     }
 
     // true if we found something
@@ -837,7 +837,11 @@ class PSICallResolver(
         val catchScope = with(scope) {
             LexicalWritableScope(this, ownerDescriptor, false, redeclarationChecker, LexicalScopeKind.CATCH)
         }
-        catchScope.addVariableDescriptor(variableDescriptor)
+        val isReferencingToUnderscoreNamedParameterForbidden =
+            languageVersionSettings.getFeatureSupport(LanguageFeature.ForbidReferencingToUnderscoreNamedParameterOfCatchBlock) == LanguageFeature.State.ENABLED
+        if (!variableDescriptor.isUnderscoreNamed || !isReferencingToUnderscoreNamedParameterForbidden) {
+            catchScope.addVariableDescriptor(variableDescriptor)
+        }
         return replaceScope(catchScope)
     }
 }

@@ -18,19 +18,21 @@ dependencies {
     compileOnly(project(":kotlin-reflect-api"))
     compileOnly(intellijCoreDep())
     compileOnly(intellijDep())
+    compileOnly(project(":compiler:light-classes"))
+    compileOnly(intellijPluginDep("java")) { includeJars("java-api", "java-impl") }
 
-    Platform[191].orLower {
-        compileOnly(intellijDep()) { includeJars("java-api", "java-impl") }
-    }
-
-    Platform[192].orHigher {
-        compileOnly(intellijPluginDep("java")) { includeJars("java-api", "java-impl") }
-    }
+    testCompile(projectTests(":compiler:tests-common"))
 }
 
 sourceSets {
-    "main" { projectDefault() }
+    "main" {
+        projectDefault()
+        resources.srcDirs(
+            "resources-en"
+        )
+    }
     "test" { projectDefault() }
+
 }
 
 testsJar()

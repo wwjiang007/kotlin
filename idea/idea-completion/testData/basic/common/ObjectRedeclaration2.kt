@@ -1,4 +1,5 @@
 // FIR_COMPARISON
+
 object A {
   fun f() : S
 }

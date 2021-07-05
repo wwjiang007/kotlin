@@ -1,15 +1,14 @@
 plugins {
     kotlin("multiplatform") version "KOTLIN_VERSION"
 }
+
 group = "me.user"
 version = "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
-    maven {
-        url = uri("https://dl.bintray.com/kotlin/kotlin-dev")
-    }
 }
+
 kotlin {
     val hostOs = System.getProperty("os.name")
     val isMingwX64 = hostOs.startsWith("Windows")

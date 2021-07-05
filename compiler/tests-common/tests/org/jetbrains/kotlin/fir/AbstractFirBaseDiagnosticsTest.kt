@@ -5,7 +5,6 @@
 
 package org.jetbrains.kotlin.fir
 
-import com.intellij.openapi.extensions.Extensions
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementFinder
@@ -21,10 +20,12 @@ import org.jetbrains.kotlin.checkers.diagnostics.TextDiagnostic
 import org.jetbrains.kotlin.checkers.utils.CheckerTestUtil
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM
+import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
+import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.PsiDiagnosticUtils
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnostic
-import org.jetbrains.kotlin.fir.analysis.diagnostics.FirPsiDiagnostic
 import org.jetbrains.kotlin.fir.builder.RawFirBuilder
+import org.jetbrains.kotlin.fir.builder.RawFirBuilderMode
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.extensions.BunchOfRegisteredExtensions
 import org.jetbrains.kotlin.fir.java.FirProjectSessionProvider
@@ -41,7 +42,6 @@ import org.jetbrains.kotlin.resolve.AnalyzingUtils
 import org.jetbrains.kotlin.resolve.PlatformDependentAnalyzerServices
 import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatformAnalyzerServices
 import java.io.File
-import java.util.*
 
 abstract class AbstractFirBaseDiagnosticsTest : BaseDiagnosticsTest() {
     override fun analyzeAndCheck(testDataFile: File, files: List<TestFile>) {
@@ -57,10 +57,11 @@ abstract class AbstractFirBaseDiagnosticsTest : BaseDiagnosticsTest() {
     protected open val useLightTree: Boolean
         get() = false
 
+    protected open val useLazyBodiesModeForRawFir: Boolean
+        get() = false
+
     override fun setupEnvironment(environment: KotlinCoreEnvironment) {
-        Extensions.getArea(environment.project)
-            .getExtensionPoint(PsiElementFinder.EP_NAME)
-            .unregisterExtension(JavaElementFinder::class.java)
+        PsiElementFinder.EP.getPoint(environment.project).unregisterExtension(JavaElementFinder::class.java)
     }
 
     open fun analyzeAndCheckUnhandled(testDataFile: File, files: List<TestFile>, useLightTree: Boolean = false) {
@@ -68,22 +69,29 @@ abstract class AbstractFirBaseDiagnosticsTest : BaseDiagnosticsTest() {
 
         val modules = createModules(groupedByModule)
 
-        val sessionProvider = FirProjectSessionProvider(project)
+        val sessionProvider = FirProjectSessionProvider()
 
         //For BuiltIns, registered in sessionProvider automatically
         val allProjectScope = GlobalSearchScope.allScope(project)
-
-        FirSessionFactory.createLibrarySession(
-            builtInsModuleInfo, sessionProvider, allProjectScope, project,
-            environment.createPackagePartProvider(allProjectScope)
-        )
 
         val configToSession = modules.mapValues { (config, info) ->
             val moduleFiles = groupedByModule.getValue(config)
             val scope = TopDownAnalyzerFacadeForJVM.newModuleSearchScope(
                 project,
                 moduleFiles.mapNotNull { it.ktFile })
-            FirSessionFactory.createJavaModuleBasedSession(info, sessionProvider, scope) {
+            FirSessionFactory.createSessionWithDependencies(
+                Name.identifier(info.name.asString().removeSurrounding("<", ">")),
+                info.platform,
+                info.analyzerServices,
+                externalSessionProvider = sessionProvider,
+                project,
+                config?.languageVersionSettings ?: LanguageVersionSettingsImpl.DEFAULT,
+                sourceScope = scope,
+                librariesScope = allProjectScope,
+                lookupTracker = null,
+                providerAndScopeForIncrementalCompilation = null,
+                getPackagePartProvider = { environment.createPackagePartProvider(it) },
+            ) {
                 configureSession()
                 getFirExtensions()?.let {
                     registerExtensions(it)
@@ -121,7 +129,11 @@ abstract class AbstractFirBaseDiagnosticsTest : BaseDiagnosticsTest() {
                 firFile
             }
         } else {
-            val firBuilder = RawFirBuilder(session, firProvider.kotlinScopeProvider, false)
+            val firBuilder = RawFirBuilder(
+                session,
+                firProvider.kotlinScopeProvider,
+                RawFirBuilderMode.lazyBodies(useLazyBodiesModeForRawFir)
+            )
             ktFiles.mapTo(firFiles) {
                 val firFile = firBuilder.buildFirFile(it)
                 firProvider.recordFile(firFile)
@@ -206,7 +218,7 @@ abstract class AbstractFirBaseDiagnosticsTest : BaseDiagnosticsTest() {
         }
 
     protected fun TestFile.getActualText(
-        firDiagnostics: Iterable<FirDiagnostic<*>>,
+        firDiagnostics: Iterable<FirDiagnostic>,
         actualText: StringBuilder
     ): Boolean {
         val ktFile = this.ktFile
@@ -318,11 +330,10 @@ abstract class AbstractFirBaseDiagnosticsTest : BaseDiagnosticsTest() {
         return ok[0]
     }
 
-    private fun Iterable<FirDiagnostic<*>>.toActualDiagnostic(root: PsiElement): List<ActualDiagnostic> {
+    private fun Iterable<FirDiagnostic>.toActualDiagnostic(root: PsiElement): List<ActualDiagnostic> {
         val result = mutableListOf<ActualDiagnostic>()
-        mapTo(result) {
-            val oldDiagnostic = (it as FirPsiDiagnostic<*>).asPsiBasedDiagnostic()
-            ActualDiagnostic(oldDiagnostic, null, true)
+        filterIsInstance<Diagnostic>().mapTo(result) {
+            ActualDiagnostic(it, null, true)
         }
         for (errorElement in AnalyzingUtils.getSyntaxErrorRanges(root)) {
             result.add(ActualDiagnostic(SyntaxErrorDiagnostic(errorElement), null, true))

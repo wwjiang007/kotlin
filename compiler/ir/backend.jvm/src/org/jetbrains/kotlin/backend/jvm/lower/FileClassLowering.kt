@@ -22,25 +22,23 @@ import org.jetbrains.kotlin.backend.common.phaser.makeIrModulePhase
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.codegen.AsmUtil
 import org.jetbrains.kotlin.config.JvmAnalysisFlags
-import org.jetbrains.kotlin.descriptors.ClassDescriptor
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.fileClasses.JvmFileClassInfo
 import org.jetbrains.kotlin.fileClasses.JvmFileClassUtil
 import org.jetbrains.kotlin.fileClasses.JvmSimpleFileClassInfo
+import org.jetbrains.kotlin.ir.PsiIrFileEntry
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.declarations.impl.IrClassImpl
-import org.jetbrains.kotlin.ir.descriptors.WrappedClassDescriptor
 import org.jetbrains.kotlin.ir.symbols.impl.IrClassSymbolImpl
-import org.jetbrains.kotlin.ir.util.NaiveSourceBasedFileEntryImpl
-import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
+import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.load.java.JavaDescriptorVisibilities
 import org.jetbrains.kotlin.load.kotlin.PackagePartClassUtils
-import org.jetbrains.kotlin.psi2ir.PsiSourceManager
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.resolve.inline.INLINE_ONLY_ANNOTATION_FQ_NAME
 import org.jetbrains.kotlin.resolve.jvm.JvmClassName
-import org.jetbrains.kotlin.resolve.source.KotlinSourceElement
-import java.util.*
 
 internal val fileClassPhase = makeIrModulePhase(
     ::FileClassLowering,
@@ -49,7 +47,7 @@ internal val fileClassPhase = makeIrModulePhase(
     stickyPostconditions = setOf(::checkAllFileLevelDeclarationsAreClasses)
 )
 
-private fun checkAllFileLevelDeclarationsAreClasses(irModuleFragment: IrModuleFragment) {
+internal fun checkAllFileLevelDeclarationsAreClasses(irModuleFragment: IrModuleFragment) {
     assert(irModuleFragment.files.all { irFile ->
         irFile.declarations.all { it is IrClass }
     })
@@ -61,13 +59,16 @@ private class FileClassLowering(val context: JvmBackendContext) : FileLoweringPa
         val fileClassMembers = ArrayList<IrDeclaration>()
 
         irFile.declarations.forEach {
-            if (it is IrClass)
-                classes.add(it)
-            else
-                fileClassMembers.add(it)
+            when (it) {
+                is IrScript -> {
+                }
+                is IrClass -> classes.add(it)
+                else -> fileClassMembers.add(it)
+            }
         }
 
-        if (fileClassMembers.isEmpty() && (irFile.metadata as? MetadataSource.File)?.descriptors.isNullOrEmpty()) return
+        // TODO FirMetadataSource.File
+        if (fileClassMembers.isEmpty() && (irFile.metadata as? DescriptorMetadataSource.File)?.descriptors.isNullOrEmpty()) return
 
         val irFileClass = createFileClass(irFile, fileClassMembers)
         classes.add(irFileClass)
@@ -78,52 +79,56 @@ private class FileClassLowering(val context: JvmBackendContext) : FileLoweringPa
 
     private fun createFileClass(irFile: IrFile, fileClassMembers: List<IrDeclaration>): IrClass {
         val fileEntry = irFile.fileEntry
-        val fileClassInfo: JvmFileClassInfo?
-        val descriptor: ClassDescriptor
-        when (fileEntry) {
-            is PsiSourceManager.PsiFileEntry -> {
-                val ktFile = context.psiSourceManager.getKtFile(fileEntry)
-                    ?: throw AssertionError("Unexpected file entry: $fileEntry")
-                fileClassInfo = JvmFileClassUtil.getFileClassInfoNoResolve(ktFile)
-                descriptor = WrappedClassDescriptor()
-            }
-            is NaiveSourceBasedFileEntryImpl -> {
-                fileClassInfo = JvmSimpleFileClassInfo(PackagePartClassUtils.getPackagePartFqName(irFile.fqName, fileEntry.name), false)
-                descriptor = WrappedClassDescriptor()
-            }
-            else -> error("unknown kind of file entry: $fileEntry")
-        }
+        val fileClassInfo = irFile.getFileClassInfo()
+        val isMultifilePart = fileClassInfo.withJvmMultifileClass
+
+        val onlyPrivateDeclarationsAndFeatureIsEnabled =
+            context.state.languageVersionSettings.supportsFeature(LanguageFeature.PackagePrivateFileClassesWithAllPrivateMembers) && fileClassMembers
+                .all {
+                    val isPrivate = it is IrDeclarationWithVisibility && DescriptorVisibilities.isPrivate(it.visibility)
+                    val isInlineOnly = it.hasAnnotation(INLINE_ONLY_ANNOTATION_FQ_NAME)
+                    isPrivate || isInlineOnly
+                }
+
+        val fileClassOrigin =
+            if (!isMultifilePart || context.state.languageVersionSettings.getFlag(JvmAnalysisFlags.inheritMultifileParts))
+                IrDeclarationOrigin.FILE_CLASS
+            else
+                IrDeclarationOrigin.SYNTHETIC_FILE_CLASS
         return IrClassImpl(
             0, fileEntry.maxOffset,
-            if (!fileClassInfo.withJvmMultifileClass || context.state.languageVersionSettings.getFlag(JvmAnalysisFlags.inheritMultifileParts))
-                IrDeclarationOrigin.FILE_CLASS else IrDeclarationOrigin.SYNTHETIC_FILE_CLASS,
-            symbol = IrClassSymbolImpl(descriptor),
+            fileClassOrigin,
+            symbol = IrClassSymbolImpl(),
             name = fileClassInfo.fileClassFqName.shortName(),
             kind = ClassKind.CLASS,
-            visibility = if (!fileClassInfo.withJvmMultifileClass) DescriptorVisibilities.PUBLIC else JavaDescriptorVisibilities.PACKAGE_VISIBILITY,
+            visibility = if (isMultifilePart || onlyPrivateDeclarationsAndFeatureIsEnabled)
+                JavaDescriptorVisibilities.PACKAGE_VISIBILITY
+            else
+                DescriptorVisibilities.PUBLIC,
             modality = Modality.FINAL
         ).apply {
-            descriptor.bind(this)
-            superTypes += context.irBuiltIns.anyType
+            superTypes = listOf(context.irBuiltIns.anyType)
             parent = irFile
             declarations.addAll(fileClassMembers)
             createImplicitParameterDeclarationWithWrappedDescriptor()
-            fileClassMembers.forEach {
-                it.parent = this
-                if (it is IrProperty) {
-                    it.getter?.let { it.parent = this }
-                    it.setter?.let { it.parent = this }
-                    it.backingField?.let { it.parent = this }
+            for (member in fileClassMembers) {
+                member.parent = this
+                if (member is IrProperty) {
+                    member.getter?.let { it.parent = this }
+                    member.setter?.let { it.parent = this }
+                    member.backingField?.let { it.parent = this }
                 }
             }
 
-            annotations += irFile.annotations
+            annotations =
+                if (isMultifilePart) irFile.annotations.filterNot { it.symbol.owner.parentAsClass.symbol.signature == JVM_NAME }
+                else irFile.annotations
 
             metadata = irFile.metadata
 
             val partClassType = AsmUtil.asmTypeByFqNameWithoutInnerClasses(fileClassInfo.fileClassFqName)
             val facadeClassType =
-                if (fileClassInfo.withJvmMultifileClass) AsmUtil.asmTypeByFqNameWithoutInnerClasses(fileClassInfo.facadeClassFqName)
+                if (isMultifilePart) AsmUtil.asmTypeByFqNameWithoutInnerClasses(fileClassInfo.facadeClassFqName)
                 else null
             context.state.factory.packagePartRegistry.addPart(irFile.fqName, partClassType.internalName, facadeClassType?.internalName)
 
@@ -137,4 +142,19 @@ private class FileClassLowering(val context: JvmBackendContext) : FileLoweringPa
             }
         }
     }
+
+    private companion object {
+        private val JVM_NAME = IdSignature.CommonSignature("kotlin.jvm", "JvmName", null, 0)
+    }
 }
+
+
+fun IrFile.getFileClassInfo(): JvmFileClassInfo =
+    when (val fileEntry = this.fileEntry) {
+        is PsiIrFileEntry ->
+            JvmFileClassUtil.getFileClassInfoNoResolve(fileEntry.psiFile as KtFile)
+        is NaiveSourceBasedFileEntryImpl ->
+            JvmSimpleFileClassInfo(PackagePartClassUtils.getPackagePartFqName(fqName, fileEntry.name), false)
+        else ->
+            error("unknown kind of file entry: $fileEntry")
+    }

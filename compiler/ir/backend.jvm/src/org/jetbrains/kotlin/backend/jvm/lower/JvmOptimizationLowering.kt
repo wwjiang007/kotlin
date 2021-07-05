@@ -10,16 +10,18 @@ import org.jetbrains.kotlin.backend.common.lower.createIrBuilder
 import org.jetbrains.kotlin.backend.common.lower.irBlock
 import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
-import org.jetbrains.kotlin.codegen.intrinsics.Not
+import org.jetbrains.kotlin.backend.jvm.ir.createJvmIrBuilder
+import org.jetbrains.kotlin.codegen.AsmUtil
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.IrStatement
-import org.jetbrains.kotlin.ir.builders.irGetField
-import org.jetbrains.kotlin.ir.builders.irSetField
+import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrBlockImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstImpl
+import org.jetbrains.kotlin.ir.symbols.IrSymbol
+import org.jetbrains.kotlin.ir.symbols.impl.IrPublicSymbolBase
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformer
@@ -35,7 +37,7 @@ class JvmOptimizationLowering(val context: JvmBackendContext) : FileLoweringPass
     companion object {
         fun isNegation(expression: IrExpression, context: JvmBackendContext): Boolean =
             expression is IrCall &&
-                    context.state.intrinsics.getIntrinsic(expression.symbol.descriptor) is Not
+                    (expression.symbol as? IrPublicSymbolBase<*>)?.signature == context.irBuiltIns.booleanNotSymbol.signature
     }
 
     private val IrFunction.isObjectEquals
@@ -62,6 +64,42 @@ class JvmOptimizationLowering(val context: JvmBackendContext) : FileLoweringPass
 
             else -> null
         }
+
+    private class SafeCallInfo(
+        val scopeSymbol: IrSymbol,
+        val tmpVal: IrVariable,
+        val ifNullBranch: IrBranch,
+        val ifNotNullBranch: IrBranch
+    )
+
+    private fun parseSafeCall(expression: IrExpression): SafeCallInfo? {
+        val block = expression as? IrBlock ?: return null
+        if (block.origin != IrStatementOrigin.SAFE_CALL) return null
+        if (block.statements.size != 2) return null
+        val tmpVal = block.statements[0] as? IrVariable ?: return null
+        val scopeOwner = tmpVal.parent as? IrDeclaration ?: return null
+        val scopeSymbol = scopeOwner.symbol
+        val whenExpr = block.statements[1] as? IrWhen ?: return null
+        if (whenExpr.branches.size != 2) return null
+
+        val ifNullBranch = whenExpr.branches[0]
+        val ifNullBranchCondition = ifNullBranch.condition
+        if (ifNullBranchCondition !is IrCall) return null
+        if (ifNullBranchCondition.symbol != context.irBuiltIns.eqeqSymbol) return null
+        val arg0 = ifNullBranchCondition.getValueArgument(0)
+        if (arg0 !is IrGetValue || arg0.symbol != tmpVal.symbol) return null
+        val arg1 = ifNullBranchCondition.getValueArgument(1)
+        if (arg1 !is IrConst<*> || arg1.value != null) return null
+        val ifNullBranchResult = ifNullBranch.result
+        if (ifNullBranchResult !is IrConst<*> || ifNullBranchResult.value != null) return null
+
+        val ifNotNullBranch = whenExpr.branches[1]
+        return SafeCallInfo(scopeSymbol, tmpVal, ifNullBranch, ifNotNullBranch)
+    }
+
+    private fun IrType.isJvmPrimitive(): Boolean =
+        // TODO get rid of type mapper (take care of '@EnhancedNullability', maybe some other stuff).
+        AsmUtil.isPrimitive(context.typeMapper.mapType(this))
 
     override fun lower(irFile: IrFile) {
         val transformer = object : IrElementTransformer<IrClass?> {
@@ -104,19 +142,92 @@ class JvmOptimizationLowering(val context: JvmBackendContext) : FileLoweringPass
                 }
 
                 getOperandsIfCallToEQEQOrEquals(expression)?.let { (left, right) ->
-                    return when {
-                        left.isNullConst() && right.isNullConst() ->
-                            IrConstImpl.constTrue(expression.startOffset, expression.endOffset, context.irBuiltIns.booleanType)
+                    if (left.isNullConst() && right.isNullConst())
+                        return IrConstImpl.constTrue(expression.startOffset, expression.endOffset, context.irBuiltIns.booleanType)
 
-                        left.isNullConst() && right is IrConst<*> || right.isNullConst() && left is IrConst<*> ->
-                            IrConstImpl.constFalse(expression.startOffset, expression.endOffset, context.irBuiltIns.booleanType)
+                    if (left.isNullConst() && right is IrConst<*> || right.isNullConst() && left is IrConst<*>)
+                        return IrConstImpl.constFalse(expression.startOffset, expression.endOffset, context.irBuiltIns.booleanType)
 
-                        else -> expression
+                    val safeCallLeft = parseSafeCall(left)
+                    if (safeCallLeft != null && right.type.isJvmPrimitive()) {
+                        return rewriteSafeCallEqeqPrimitive(safeCallLeft, right, expression)
                     }
+
+                    val safeCallRight = parseSafeCall(right)
+                    if (safeCallRight != null && left.type.isJvmPrimitive()) {
+                        return rewritePrimitiveEqeqSafeCall(left, safeCallRight, expression)
+                    }
+
+                    return expression
                 }
 
                 return expression
             }
+
+            private fun rewriteSafeCallEqeqPrimitive(safeCall: SafeCallInfo, primitive: IrExpression, eqeqCall: IrCall): IrExpression =
+                context.createJvmIrBuilder(safeCall.scopeSymbol).run {
+                    // Fuze safe call with primitive equality to avoid boxing the primitive.
+                    // 'a?.<...> == p' becomes:
+                    //      {
+                    //          val tmp = a
+                    //          when {
+                    //              tmp == null -> false
+                    //              else -> tmp == p
+                    //          }
+                    //      }
+                    irBlock {
+                        +safeCall.tmpVal
+                        +irWhen(
+                            eqeqCall.type,
+                            listOf(
+                                irBranch(safeCall.ifNullBranch.condition, irFalse()),
+                                irElseBranch(
+                                    irCall(eqeqCall.symbol).apply {
+                                        putValueArgument(0, safeCall.ifNotNullBranch.result)
+                                        putValueArgument(1, primitive)
+                                    }
+                                )
+                            )
+                        )
+                    }
+                }
+
+            private fun rewritePrimitiveEqeqSafeCall(primitive: IrExpression, safeCall: SafeCallInfo, eqeqCall: IrCall): IrExpression =
+                context.createJvmIrBuilder(safeCall.scopeSymbol).run {
+                    // Fuze safe call with primitive equality to avoid boxing the primitive.
+                    // 'p == a?.<...>' becomes:
+                    //      {
+                    //          val tmp_p = p               // should evaluate 'p' before 'a'
+                    //          val tmp = a
+                    //          when {
+                    //              tmp == null -> false
+                    //              else -> tmp_p == tmp
+                    //          }
+                    //      }
+                    // 'tmp_p' above could be elided if 'p' is a variable or a constant.
+                    irBlock {
+                        val lhs =
+                            if (primitive.isTrivial())
+                                primitive
+                            else {
+                                val tmp = irTemporary(primitive)
+                                irGet(tmp)
+                            }
+                        +safeCall.tmpVal
+                        +irWhen(
+                            eqeqCall.type,
+                            listOf(
+                                irBranch(safeCall.ifNullBranch.condition, irFalse()),
+                                irElseBranch(
+                                    irCall(eqeqCall.symbol).apply {
+                                        putValueArgument(0, lhs)
+                                        putValueArgument(1, safeCall.ifNotNullBranch.result)
+                                    }
+                                )
+                            )
+                        )
+                    }
+                }
 
             private fun IrType.isByteOrShort() = isByte() || isShort()
 
@@ -169,7 +280,7 @@ class JvmOptimizationLowering(val context: JvmBackendContext) : FileLoweringPass
                     return context.createIrBuilder(expression.symbol, expression.startOffset, expression.endOffset).irBlock(expression) {
                         if (backingField.isStatic && receiver != null) {
                             // If the field is static, evaluate the receiver for potential side effects.
-                            +receiver.coerceToUnit(context.irBuiltIns)
+                            +receiver.coerceToUnit(context.irBuiltIns, this@JvmOptimizationLowering.context.typeSystem)
                         }
                         if (accessor.valueParameters.size > 0) {
                             +irSetField(
@@ -203,7 +314,7 @@ class JvmOptimizationLowering(val context: JvmBackendContext) : FileLoweringPass
                                 "Failing expression: ${expression.dump()}"
                     }
                     // Replace conjunction condition with intrinsic "and" function call
-                    return IrCallImpl(
+                    return IrCallImpl.fromSymbolOwner(
                         expression.startOffset,
                         expression.endOffset,
                         context.irBuiltIns.booleanType,
@@ -224,7 +335,7 @@ class JvmOptimizationLowering(val context: JvmBackendContext) : FileLoweringPass
                                 "and an 'if true then b' body on its second branch. " +
                                 "Failing expression: ${expression.dump()}"
                     }
-                    return IrCallImpl(
+                    return IrCallImpl.fromSymbolOwner(
                         expression.startOffset,
                         expression.endOffset,
                         context.irBuiltIns.booleanType,
@@ -346,7 +457,7 @@ class JvmOptimizationLowering(val context: JvmBackendContext) : FileLoweringPass
                 // initializer with the constant initializer.
                 val variable = expression.symbol.owner
                 return if (isImmutableTemporaryVariableWithConstantValue(variable))
-                    ((variable as IrVariable).initializer!! as IrConst<*>).copy()
+                    ((variable as IrVariable).initializer!! as IrConst<*>).copyWithOffsets(expression.startOffset, expression.endOffset)
                 else
                     expression
             }

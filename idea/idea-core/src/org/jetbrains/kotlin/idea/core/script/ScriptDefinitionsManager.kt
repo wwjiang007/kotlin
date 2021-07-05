@@ -56,6 +56,7 @@ import kotlin.script.experimental.host.configurationDependencies
 import kotlin.script.experimental.host.toScriptSource
 import kotlin.script.experimental.jvm.JvmDependency
 import kotlin.script.experimental.jvm.defaultJvmScriptingHostConfiguration
+import kotlin.script.experimental.jvm.util.ClasspathExtractionException
 import kotlin.script.experimental.jvm.util.scriptCompilationClasspathFromContextOrStdlib
 import kotlin.script.templates.standard.ScriptTemplateWithArgs
 
@@ -75,6 +76,7 @@ class LoadScriptDefinitionsStartupActivity : StartupActivity {
 }
 
 class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinitionProvider() {
+    private val definitionsLock = ReentrantLock()
     private var definitionsBySource = mutableMapOf<ScriptDefinitionsSource, List<ScriptDefinition>>()
 
     @Volatile
@@ -128,12 +130,12 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
     fun reloadDefinitionsBy(source: ScriptDefinitionsSource) {
         if (definitions == null) return // not loaded yet
 
-        lock.write {
+        definitionsLock.withLock {
             if (source !in definitionsBySource) error("Unknown script definition source: $source")
         }
 
         val safeGetDefinitions = source.safeGetDefinitions()
-        lock.write {
+        definitionsLock.withLock {
             definitionsBySource[source] = safeGetDefinitions
 
             definitions = definitionsBySource.values.flattenTo(mutableListOf())
@@ -142,12 +144,14 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
         }
     }
 
-    override val currentDefinitions
-        get() =
-            (definitions ?: run {
+    override val currentDefinitions:Sequence<ScriptDefinition>
+        get() {
+            val scriptingSettings = kotlinScriptingSettingsSafe() ?: return emptySequence()
+            return (definitions ?: run {
                 reloadScriptDefinitions()
                 definitions!!
-            }).asSequence().filter { KotlinScriptingSettings.getInstance(project).isScriptDefinitionEnabled(it) }
+            }).asSequence().filter { scriptingSettings.isScriptDefinitionEnabled(it) }
+        }
 
     private fun getSources(): List<ScriptDefinitionsSource> {
         @Suppress("DEPRECATION")
@@ -165,9 +169,11 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
     fun reloadScriptDefinitions() = loadScriptDefinitions()
 
     private fun loadScriptDefinitions() {
+        if (project.isDisposed) return
+
         val newDefinitionsBySource = getSources().map { it to it.safeGetDefinitions() }.toMap()
 
-        lock.write {
+        definitionsLock.withLock {
             definitionsBySource.putAll(newDefinitionsBySource)
             definitions = definitionsBySource.values.flattenTo(mutableListOf())
 
@@ -176,17 +182,22 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
     }
 
     fun reorderScriptDefinitions() {
+        val scriptingSettings = kotlinScriptingSettingsSafe() ?: return
         definitions?.forEach {
-            val order = KotlinScriptingSettings.getInstance(project).getScriptDefinitionOrder(it)
-            lock.write {
+            val order = scriptingSettings.getScriptDefinitionOrder(it)
+            definitionsLock.withLock {
                 it.order = order
             }
         }
-        lock.write {
+        definitionsLock.withLock {
             definitions = definitions?.sortedBy { it.order }
 
             updateDefinitions()
         }
+    }
+
+    private fun kotlinScriptingSettingsSafe() = runReadAction {
+        if (!project.isDisposed) KotlinScriptingSettings.getInstance(project) else null
     }
 
     fun getAllDefinitions(): List<ScriptDefinition> = definitions ?: run {
@@ -196,7 +207,7 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
 
     fun isReady(): Boolean {
         if (definitions == null) return false
-        val keys = lock.write { definitionsBySource.keys }
+        val keys = definitionsLock.withLock { definitionsBySource.keys }
         return keys.all { source ->
             // TODO: implement another API for readiness checking
             (source as? ScriptDefinitionContributor)?.isReady() != false
@@ -210,7 +221,8 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
     }
 
     private fun updateDefinitions() {
-        assert(lock.isWriteLocked) { "updateDefinitions should only be called under the write lock" }
+        assert(definitionsLock.isLocked) { "updateDefinitions should only be called under the lock" }
+        if (project.isDisposed) return
 
         val fileTypeManager = FileTypeManager.getInstance()
 
@@ -242,14 +254,21 @@ class ScriptDefinitionsManager(private val project: Project) : LazyScriptDefinit
         } catch (t: Throwable) {
             if (t is ControlFlowException) throw t
             // reporting failed loading only once
-            scriptingErrorLog("[kts] cannot load script definitions using $this", t)
             failedContributorsHashes.add(this@safeGetDefinitions.hashCode())
+            // Assuming that direct ClasspathExtractionException is the result of versions mismatch and missing subsystems, e.g. kotlin plugin
+            // so, it only results in warning, while other errors are severe misconfigurations, resulting it user-visible error
+            if (t.cause is ClasspathExtractionException || t is ClasspathExtractionException) {
+                scriptingWarnLog("Cannot load script definitions from $this: ${t.cause?.message ?: t.message}")
+            } else {
+                scriptingErrorLog("[kts] cannot load script definitions using $this", t)
+            }
         }
         return emptyList()
     }
 
     companion object {
-        fun getInstance(project: Project): ScriptDefinitionsManager = project.getServiceSafe<ScriptDefinitionProvider>() as ScriptDefinitionsManager
+        fun getInstance(project: Project): ScriptDefinitionsManager =
+            project.getServiceSafe<ScriptDefinitionProvider>() as ScriptDefinitionsManager
     }
 }
 

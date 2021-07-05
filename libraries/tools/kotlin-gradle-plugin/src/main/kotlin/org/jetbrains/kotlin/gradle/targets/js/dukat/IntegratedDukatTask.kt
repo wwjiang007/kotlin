@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.gradle.targets.js.dukat
 
 import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.TaskAction
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJsCompilation
 import org.jetbrains.kotlin.gradle.targets.js.npm.npmProject
 import java.io.File
@@ -16,18 +17,37 @@ open class IntegratedDukatTask
 constructor(
     compilation: KotlinJsCompilation
 ) : DukatTask(compilation) {
+    init {
+        onlyIf {
+            dts.isNotEmpty() || npmProject.externalsDirRoot.resolve("inputs.txt").exists()
+        }
+    }
 
     override val considerGeneratingFlag: Boolean = true
 
-    @get:OutputDirectory
-    override val destinationDir: File
-        get() = compilation.npmProject.externalsDir
+    private val npmProject = compilation.npmProject
 
-    private val executor by lazy {
-        DukatExecutor(nodeJs, dts, compilation.npmProject, true, compareInputs = false)
+    private val versions by lazy {
+        nodeJs.versions
     }
 
+    @get:OutputDirectory
+    override val destinationDir: File by lazy {
+        npmProject.externalsDir
+    }
+
+    private val executor
+        get() = DukatExecutor(
+            versions,
+            dts,
+            externalsOutputFormat,
+            npmProject,
+            true,
+            compareInputs = false
+        )
+
+    @TaskAction
     override fun run() {
-        executor.execute()
+        executor.execute(services)
     }
 }

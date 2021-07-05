@@ -20,17 +20,11 @@ import org.jetbrains.kotlin.ir.backend.js.ir.JsIrBuilder
 import org.jetbrains.kotlin.ir.builders.declarations.buildFun
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
-import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrGetValueImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrRawFunctionReferenceImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrReturnImpl
+import org.jetbrains.kotlin.ir.expressions.impl.*
 import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.types.impl.IrSimpleTypeImpl
-import org.jetbrains.kotlin.ir.util.deepCopyWithSymbols
-import org.jetbrains.kotlin.ir.util.defaultType
-import org.jetbrains.kotlin.ir.util.isSubclassOf
-import org.jetbrains.kotlin.ir.util.parentAsClass
+import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformer
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
@@ -89,7 +83,7 @@ class SecondaryConstructorLowering(val context: JsIrBackendContext) : Declaratio
         stub.body = context.irFactory.createBlockBody(UNDEFINED_OFFSET, UNDEFINED_OFFSET) {
             val type = irClass.defaultType
             val createFunctionIntrinsic = context.intrinsics.jsObjectCreate
-            val irCreateCall = JsIrBuilder.buildCall(createFunctionIntrinsic.symbol, type, listOf(type))
+            val irCreateCall = JsIrBuilder.buildCall(createFunctionIntrinsic, type, listOf(type))
             val irDelegateCall = JsIrBuilder.buildCall(delegate.symbol, type).also { call ->
                 for (i in 0 until stub.typeParameters.size) {
                     call.putTypeArgument(i, stub.typeParameters[i].toIrType())
@@ -159,6 +153,13 @@ class SecondaryConstructorLowering(val context: JsIrBackendContext) : Declaratio
         override fun visitGetValue(expression: IrGetValue) = symbolMapping[expression.symbol.owner]?.let {
             expression.run { IrGetValueImpl(startOffset, endOffset, type, it.symbol, origin) }
         } ?: expression
+
+        override fun visitSetValue(expression: IrSetValue): IrExpression {
+            expression.transformChildrenVoid()
+            return symbolMapping[expression.symbol.owner]?.let {
+                expression.run { IrSetValueImpl(startOffset, endOffset, type, it.symbol, expression.value, origin) }
+            } ?: expression
+        }
     }
 }
 
@@ -278,11 +279,11 @@ private class CallsiteRedirectionTransformer(private val context: JsIrBackendCon
             }
 
             val readThis = expression.run {
-                if (data!! is IrConstructor) {
-                    val thisReceiver = klass.thisReceiver!!
+                if (data is IrConstructor) {
+                    val thisReceiver = data.constructedClass.thisReceiver!!
                     IrGetValueImpl(startOffset, endOffset, thisReceiver.type, thisReceiver.symbol)
                 } else {
-                    val lastValueParameter = data.valueParameters.last()
+                    val lastValueParameter = data!!.valueParameters.last()
                     IrGetValueImpl(startOffset, endOffset, lastValueParameter.type, lastValueParameter.symbol)
                 }
             }

@@ -4,8 +4,7 @@ plugins {
 
 repositories {
     mavenLocal()
-    jcenter()
-    maven { setUrl("https://dl.bintray.com/kotlin/kotlinx.html/") }
+    mavenCentral()
 }
 
 kotlin {
@@ -17,7 +16,7 @@ kotlin {
     val macos64 = macosX64("macos64")
     val linux64 = linuxX64("linux64")
     val mingw64 = mingwX64("mingw64")
-    
+
     sourceSets {
         val commonTest by getting {
         	dependencies {

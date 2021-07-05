@@ -1,4 +1,3 @@
-// !WITH_NEW_INFERENCE
 // !DIAGNOSTICS: -UNUSED_PARAMETER
 
 interface C<out T>
@@ -15,18 +14,18 @@ fun <T> mc(): MC<T> = null!!
 fun <T> c(): C<T> = null!!
 
 fun foo(x: MC<out Open>) {
-    x.addAll(x)
-    x.addAllMC(x)
+    x.addAll(<!ARGUMENT_TYPE_MISMATCH!>x<!>)
+    x.addAllMC(<!ARGUMENT_TYPE_MISMATCH!>x<!>)
 
-    x.addAll(mc<Open>())
-    x.addAllMC(mc<Open>())
+    x.addAll(<!ARGUMENT_TYPE_MISMATCH!>mc<Open>()<!>)
+    x.addAllMC(<!ARGUMENT_TYPE_MISMATCH!>mc<Open>()<!>)
 
-    x.addAll(mc<Derived>())
-    x.addAllMC(mc<Derived>())
+    x.addAll(<!ARGUMENT_TYPE_MISMATCH!>mc<Derived>()<!>)
+    x.addAllMC(<!ARGUMENT_TYPE_MISMATCH!>mc<Derived>()<!>)
 
     x.addAll(c())
     x.addAll(c<Nothing>())
 
-    x.addAllInv(mc<Open>())
-    x.<!INAPPLICABLE_CANDIDATE!>addAll<!>(1)
+    x.addAllInv(<!ARGUMENT_TYPE_MISMATCH!>mc<Open>()<!>)
+    x.addAll(<!ARGUMENT_TYPE_MISMATCH!>1<!>)
 }

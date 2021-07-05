@@ -43,6 +43,7 @@ import org.jetbrains.kotlin.resolve.calls.callUtil.CallUtilKt;
 import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall;
 import org.jetbrains.kotlin.resolve.calls.model.VariableAsFunctionResolvedCall;
 import org.jetbrains.kotlin.resolve.descriptorUtil.DescriptorUtilsKt;
+import org.jetbrains.kotlin.resolve.jvm.annotations.JvmAnnotationUtilKt;
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOrigin;
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmDeclarationOriginKt;
 import org.jetbrains.kotlin.resolve.jvm.jvmSignature.JvmClassSignature;
@@ -54,6 +55,7 @@ import org.jetbrains.kotlin.resolve.scopes.receivers.ImplicitReceiver;
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValue;
 import org.jetbrains.kotlin.serialization.DescriptorSerializer;
 import org.jetbrains.kotlin.types.KotlinType;
+import org.jetbrains.kotlin.types.SimpleType;
 import org.jetbrains.org.objectweb.asm.FieldVisitor;
 import org.jetbrains.org.objectweb.asm.MethodVisitor;
 import org.jetbrains.org.objectweb.asm.Type;
@@ -64,14 +66,16 @@ import java.util.*;
 
 import static org.jetbrains.kotlin.builtins.StandardNames.ENUM_VALUES;
 import static org.jetbrains.kotlin.builtins.StandardNames.ENUM_VALUE_OF;
-import static org.jetbrains.kotlin.codegen.AsmUtil.*;
+import static org.jetbrains.kotlin.codegen.AsmUtil.CAPTURED_THIS_FIELD;
 import static org.jetbrains.kotlin.codegen.CodegenUtilKt.isGenericToArray;
 import static org.jetbrains.kotlin.codegen.CodegenUtilKt.isNonGenericToArray;
+import static org.jetbrains.kotlin.codegen.DescriptorAsmUtil.*;
 import static org.jetbrains.kotlin.codegen.JvmCodegenUtil.*;
 import static org.jetbrains.kotlin.codegen.binding.CodegenBinding.enumEntryNeedSubclass;
 import static org.jetbrains.kotlin.codegen.binding.CodegenBinding.getDelegatedLocalVariableMetadata;
 import static org.jetbrains.kotlin.load.java.DescriptorsJvmAbiUtil.*;
-import static org.jetbrains.kotlin.load.java.JvmAbi.*;
+import static org.jetbrains.kotlin.load.java.JvmAbi.HIDDEN_INSTANCE_FIELD;
+import static org.jetbrains.kotlin.load.java.JvmAbi.INSTANCE_FIELD;
 import static org.jetbrains.kotlin.resolve.BindingContext.INDEXED_LVALUE_GET;
 import static org.jetbrains.kotlin.resolve.BindingContext.INDEXED_LVALUE_SET;
 import static org.jetbrains.kotlin.resolve.BindingContextUtils.getNotNull;
@@ -123,7 +127,8 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
                 descriptor, extension,
                 parentCodegen instanceof ImplementationBodyCodegen
                 ? ((ImplementationBodyCodegen) parentCodegen).serializer
-                : DescriptorSerializer.createTopLevel(extension)
+                : DescriptorSerializer.createTopLevel(extension),
+                state.getProject()
         );
 
         this.constructorCodegen = new ConstructorCodegen(
@@ -218,6 +223,10 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
             access |= ACC_ENUM;
         }
 
+        if (JvmAnnotationUtilKt.isJvmRecord(descriptor)) {
+            access |= VersionIndependentOpcodes.ACC_RECORD;
+        }
+
         v.defineClass(
                 myClass.getPsiOrParent(),
                 state.getClassFileVersion(),
@@ -257,7 +266,7 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
     @Override
     protected void generateErasedInlineClassIfNeeded() {
         if (!(myClass instanceof KtClass)) return;
-        if (!descriptor.isInline()) return;
+        if (!InlineClassesUtilsKt.isInlineClass(descriptor)) return;
 
         ClassContext erasedInlineClassContext = context.intoWrapperForErasedInlineClass(descriptor, state);
         new ErasedInlineClassBodyCodegen((KtClass) myClass, erasedInlineClassContext, v, state, this).generate();
@@ -266,26 +275,25 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
     @Override
     protected void generateUnboxMethodForInlineClass() {
         if (!(myClass instanceof KtClass)) return;
-        if (!descriptor.isInline()) return;
+        InlineClassRepresentation<SimpleType> inlineClassRepresentation = descriptor.getInlineClassRepresentation();
+        if (inlineClassRepresentation == null) return;
 
         Type ownerType = typeMapper.mapClass(descriptor);
-        ValueParameterDescriptor inlinedValue = InlineClassesUtilsKt.underlyingRepresentation(this.descriptor);
-        if (inlinedValue == null) return;
-
-        Type valueType = typeMapper.mapType(inlinedValue.getType());
+        Type valueType = typeMapper.mapType(inlineClassRepresentation.getUnderlyingType());
         SimpleFunctionDescriptor functionDescriptor = InlineClassDescriptorResolver.createUnboxFunctionDescriptor(this.descriptor);
-        assert functionDescriptor != null : "FunctionDescriptor for unbox method should be not null during codegen";
 
         functionCodegen.generateMethod(
                 JvmDeclarationOriginKt.UnboxMethodOfInlineClass(functionDescriptor), functionDescriptor,
                 new FunctionGenerationStrategy.CodegenBased(state) {
                     @Override
-                    public void doGenerateBody(
-                            @NotNull ExpressionCodegen codegen, @NotNull JvmMethodSignature signature
-                    ) {
+                    public void doGenerateBody(@NotNull ExpressionCodegen codegen, @NotNull JvmMethodSignature signature) {
                         InstructionAdapter iv = codegen.v;
                         iv.load(0, OBJECT_TYPE);
-                        iv.getfield(ownerType.getInternalName(), inlinedValue.getName().asString(), valueType.getDescriptor());
+                        iv.getfield(
+                                ownerType.getInternalName(),
+                                inlineClassRepresentation.getUnderlyingPropertyName().asString(),
+                                valueType.getDescriptor()
+                        );
                         iv.areturn(valueType);
                     }
                 }
@@ -447,7 +455,7 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
         try {
             lookupConstructorExpressionsInClosureIfPresent();
             constructorCodegen.generatePrimaryConstructor(delegationFieldsInfo, superClassAsmType);
-            if (!descriptor.isInline() && !(descriptor instanceof SyntheticClassOrObjectDescriptor)) {
+            if (!InlineClassesUtilsKt.isInlineClass(descriptor) && !(descriptor instanceof SyntheticClassOrObjectDescriptor)) {
                 // Synthetic classes does not have declarations for secondary constructors
                 for (ClassConstructorDescriptor secondaryConstructor : DescriptorUtilsKt.getSecondaryConstructors(descriptor)) {
                     constructorCodegen.generateSecondaryConstructor(secondaryConstructor, superClassAsmType);
@@ -549,7 +557,7 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
     }
 
     private void generateFunctionsFromAnyForInlineClasses() {
-        if (!descriptor.isInline()) return;
+        if (!InlineClassesUtilsKt.isInlineClass(descriptor)) return;
         if (!(myClass instanceof KtClassOrObject)) return;
         new FunctionsFromAnyGeneratorImpl(
                 (KtClassOrObject) myClass, bindingContext, descriptor, classAsmType, context, v, state
@@ -900,19 +908,26 @@ public class ImplementationBodyCodegen extends ClassBodyCodegen {
     }
 
     private void generateCompanionObjectBackingFieldCopies() {
-        if (companionObjectPropertiesToCopy == null) return;
+        if (companionObjectPropertiesToCopy == null || companionObjectPropertiesToCopy.isEmpty()) return;
 
+        boolean isPrivateCompanion =
+                DescriptorVisibilities.isPrivate(
+                        ((ClassDescriptor) companionObjectPropertiesToCopy.get(0).descriptor.getContainingDeclaration()).getVisibility());
+
+        int modifiers = ACC_STATIC | ACC_FINAL | ACC_PUBLIC | (isPrivateCompanion ? ACC_DEPRECATED : 0);
+        List<String> additionalVisibleAnnotations =
+                isPrivateCompanion ? Collections.singletonList(CodegenUtilKt.JAVA_LANG_DEPRECATED) : Collections.emptyList();
         for (PropertyAndDefaultValue info : companionObjectPropertiesToCopy) {
             PropertyDescriptor property = info.descriptor;
 
             Type type = typeMapper.mapType(property);
-            int modifiers = ACC_STATIC | ACC_FINAL | ACC_PUBLIC;
+
             FieldVisitor fv = v.newField(JvmDeclarationOriginKt.Synthetic(DescriptorToSourceUtils.descriptorToDeclaration(property), property),
                                          modifiers, context.getFieldName(property, false),
                                          type.getDescriptor(), typeMapper.mapFieldSignature(property.getType(), property),
                                          info.defaultValue);
 
-            AnnotationCodegen.forField(fv, this, state).genAnnotations(property, type, null);
+            AnnotationCodegen.forField(fv, this, state).genAnnotations(property, type, null, null, additionalVisibleAnnotations);
 
             //This field are always static and final so if it has constant initializer don't do anything in clinit,
             //field would be initialized via default value in v.newField(...) - see JVM SPEC Ch.4

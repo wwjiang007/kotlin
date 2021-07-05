@@ -240,9 +240,9 @@ object JvmRuntimeVersionsConsistencyChecker {
         if (oldestVersion == newestVersion) return oldestVersion
 
         messageCollector.issue(null, buildString {
-            appendln("Runtime JAR files in the classpath should have the same version. These files were found in the classpath:")
+            append("Runtime JAR files in the classpath should have the same version. These files were found in the classpath:\n")
             for (jar in jars) {
-                appendln("    ${jar.file.path} (version ${jar.version})")
+                append("    ${jar.file.path} (version ${jar.version})\n")
             }
         }.trimEnd())
 
@@ -358,5 +358,5 @@ object JvmRuntimeVersionsConsistencyChecker {
     }
 
     private fun Manifest.getKotlinLanguageVersion(): MavenComparableVersion =
-        (mainAttributes.getValue(KOTLIN_VERSION_ATTRIBUTE)?.let((ApiVersion)::parse) ?: ApiVersion.KOTLIN_1_0).version
+        (mainAttributes.getValue(KOTLIN_VERSION_ATTRIBUTE)?.let(ApiVersion.Companion::parse) ?: ApiVersion.KOTLIN_1_0).version
 }

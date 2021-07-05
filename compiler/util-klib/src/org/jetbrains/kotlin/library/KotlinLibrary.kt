@@ -15,11 +15,25 @@ const val KLIB_PROPERTY_SHORT_NAME = "short_name"
 const val KLIB_PROPERTY_DEPENDS = "depends"
 const val KLIB_PROPERTY_PACKAGE = "package"
 const val KLIB_PROPERTY_BUILTINS_PLATFORM = "builtins_platform"
+const val KLIB_PROPERTY_CONTAINS_ERROR_CODE = "contains_error_code"
 
 // Native-specific:
 const val KLIB_PROPERTY_INTEROP = "interop"
 const val KLIB_PROPERTY_EXPORT_FORWARD_DECLARATIONS = "exportForwardDeclarations"
 const val KLIB_PROPERTY_NATIVE_TARGETS = "native_targets"
+
+// Commonizer-specific:
+/**
+ * Identity String of the commonizer target representing this artifact.
+ * This will also include native targets that were absent during commonization
+ */
+const val KLIB_PROPERTY_COMMONIZER_TARGET = "commonizer_target"
+
+/**
+ * Similar to [KLIB_PROPERTY_NATIVE_TARGETS] but this will also preserve targets
+ * that were unsupported on the host creating this artifact
+ */
+const val KLIB_PROPERTY_COMMONIZER_NATIVE_TARGETS = "commonizer_native_targets"
 
 /**
  * Abstractions for getting access to the information stored inside of Kotlin/Native library.
@@ -30,6 +44,7 @@ interface BaseKotlinLibrary {
     val libraryFile: File
     val componentList: List<String>
     val versions: KotlinLibraryVersioning
+
     // Whether this library is default (provided by distribution)?
     val isDefault: Boolean
     val manifestProperties: Properties
@@ -49,6 +64,7 @@ interface IrLibrary {
     fun signature(index: Int, fileIndex: Int): ByteArray
     fun string(index: Int, fileIndex: Int): ByteArray
     fun body(index: Int, fileIndex: Int): ByteArray
+    fun debugInfo(index: Int, fileIndex: Int): ByteArray?
     fun file(index: Int): ByteArray
     fun fileCount(): Int
 }
@@ -59,9 +75,12 @@ val BaseKotlinLibrary.uniqueName: String
 val BaseKotlinLibrary.shortName: String?
     get() = manifestProperties.getProperty(KLIB_PROPERTY_SHORT_NAME)
 
-val BaseKotlinLibrary.unresolvedDependencies: List<UnresolvedLibrary>
-    get() = manifestProperties.propertyList(KLIB_PROPERTY_DEPENDS, escapeInQuotes = true)
-        .map { UnresolvedLibrary(it, manifestProperties.getProperty("dependency_version_$it")) }
+val BaseKotlinLibrary.unresolvedDependencies: List<RequiredUnresolvedLibrary>
+    get() = unresolvedDependencies(lenient = false).map { it as RequiredUnresolvedLibrary }
+
+fun BaseKotlinLibrary.unresolvedDependencies(lenient: Boolean = false): List<UnresolvedLibrary> =
+    manifestProperties.propertyList(KLIB_PROPERTY_DEPENDS, escapeInQuotes = true)
+        .map { UnresolvedLibrary(it, manifestProperties.getProperty("dependency_version_$it"), lenient = lenient) }
 
 interface KotlinLibrary : BaseKotlinLibrary, MetadataLibrary, IrLibrary
 
@@ -77,3 +96,14 @@ val KotlinLibrary.exportForwardDeclarations: List<String>
 
 val BaseKotlinLibrary.nativeTargets: List<String>
     get() = manifestProperties.propertyList(KLIB_PROPERTY_NATIVE_TARGETS)
+
+val KotlinLibrary.containsErrorCode: Boolean
+    get() = manifestProperties.getProperty(KLIB_PROPERTY_CONTAINS_ERROR_CODE) == "true"
+
+val KotlinLibrary.commonizerTarget: String?
+    get() = manifestProperties.getProperty(KLIB_PROPERTY_COMMONIZER_TARGET)
+
+val KotlinLibrary.commonizerNativeTargets: List<String>?
+    get() = if (manifestProperties.containsKey(KLIB_PROPERTY_COMMONIZER_NATIVE_TARGETS))
+        manifestProperties.propertyList(KLIB_PROPERTY_COMMONIZER_NATIVE_TARGETS, escapeInQuotes = true)
+    else null

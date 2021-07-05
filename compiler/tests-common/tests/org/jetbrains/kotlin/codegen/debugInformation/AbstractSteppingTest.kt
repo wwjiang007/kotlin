@@ -8,7 +8,6 @@ package org.jetbrains.kotlin.codegen.debugInformation
 import com.sun.jdi.VirtualMachine
 import com.sun.jdi.event.Event
 import com.sun.jdi.event.LocatableEvent
-import junit.framework.TestCase
 import org.jetbrains.kotlin.test.KotlinTestUtils.assertEqualsToFile
 import org.jetbrains.kotlin.test.TargetBackend
 import org.junit.AfterClass
@@ -57,18 +56,17 @@ abstract class AbstractSteppingTest : AbstractDebugTest() {
         val lines = wholeFile.readLines()
         val forceStepInto = lines.any { it.startsWith(FORCE_STEP_INTO_MARKER) }
 
-        val actualLineNumbers = loggedItems
+        @Suppress("UNCHECKED_CAST")
+        val actualLineNumbers = compressRunsWithoutLinenumber(loggedItems as List<LocatableEvent>, LocatableEvent::location)
             .filter {
-                val location = (it as LocatableEvent).location()
-                // Ignore synthetic code with no line number information
-                // unless force step into behavior is requested.
-                forceStepInto || !location.method().isSynthetic
+                val location = it.location()
+                // Ignore:
+                //   - synthetic code with no line number information
+                //     unless force step into behavior is requested.
+                //   - helper code from the test infrastructure
+                (forceStepInto || !location.method().isSynthetic) && !location.isInDebugTestInfrastructure
             }
-            .map { event ->
-                val location = (event as LocatableEvent).location()
-                val synthetic = if (location.method().isSynthetic) " (synthetic)" else ""
-                "// ${location.sourceName()}:${location.lineNumber()} ${location.method().name()}$synthetic"
-            }
+            .map { "// ${it.location().formatAsExpectation()}" }
         val actualLineNumbersIterator = actualLineNumbers.iterator()
 
         val lineIterator = lines.iterator()
@@ -103,4 +101,3 @@ abstract class AbstractSteppingTest : AbstractDebugTest() {
         assertEqualsToFile(wholeFile, actual.joinToString("\n"))
     }
 }
-

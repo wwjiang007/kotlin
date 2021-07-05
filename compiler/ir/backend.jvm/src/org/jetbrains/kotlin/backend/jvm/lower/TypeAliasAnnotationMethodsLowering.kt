@@ -37,7 +37,7 @@ class TypeAliasAnnotationMethodsLowering(val context: CommonBackendContext) :
     private fun IrClass.visitTypeAliases() {
         val annotatedAliases = declarations
             .filterIsInstance<IrTypeAlias>()
-            .filter { !it.descriptor.annotations.isEmpty() }
+            .filter { it.annotations.isNotEmpty() }
 
         for (alias in annotatedAliases) {
             addFunction {
@@ -45,7 +45,7 @@ class TypeAliasAnnotationMethodsLowering(val context: CommonBackendContext) :
                 visibility = alias.visibility
                 returnType = context.irBuiltIns.unitType
                 modality = Modality.OPEN
-                origin = JvmLoweredDeclarationOrigin.SYNTHETIC_METHOD_FOR_TYPEALIAS_ANNOTATIONS
+                origin = JvmLoweredDeclarationOrigin.SYNTHETIC_METHOD_FOR_PROPERTY_OR_TYPEALIAS_ANNOTATIONS
             }.apply {
                 body = IrBlockBodyImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET)
                 annotations += alias.annotations
