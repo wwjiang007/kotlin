@@ -522,8 +522,6 @@ allprojects {
     tasks {
         register("listArchives") { listConfigurationContents("archives") }
 
-        register("listRuntimeJar") { listConfigurationContents("runtimeJar") }
-
         register("listDistJar") { listConfigurationContents("distJar") }
 
         // Aggregate task for build related checks
