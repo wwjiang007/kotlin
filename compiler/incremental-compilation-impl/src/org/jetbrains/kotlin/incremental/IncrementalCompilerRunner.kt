@@ -56,7 +56,7 @@ abstract class IncrementalCompilerRunner<
 ) {
 
     protected val cacheDirectory = File(workingDir, cacheDirName)
-    private val dirtySourcesSinceLastTimeFile = File(workingDir, DIRTY_SOURCES_FILE_NAME)
+    protected val dirtySourcesSinceLastTimeFile = File(workingDir, DIRTY_SOURCES_FILE_NAME)
     protected val lastBuildInfoFile = File(workingDir, LAST_BUILD_INFO_FILE_NAME)
     protected val abiSnapshotFile = File(workingDir, ABI_SNAPSHOT_FILE_NAME)
     protected open val kotlinSourceFilesExtensions: List<String> = DEFAULT_KOTLIN_SOURCE_FILES_EXTENSIONS
@@ -255,7 +255,7 @@ abstract class IncrementalCompilerRunner<
         }
     }
 
-    protected sealed class CompilationMode {
+    sealed class CompilationMode {
         class Incremental(val dirtyFiles: DirtyFilesContainer) : CompilationMode()
         class Rebuild(val reason: BuildAttribute) : CompilationMode()
     }
@@ -296,7 +296,7 @@ abstract class IncrementalCompilerRunner<
         messageCollector: MessageCollector
     ): ExitCode
 
-    private fun compileIncrementally(
+    protected open fun compileIncrementally(
         args: Args,
         caches: CacheManager,
         allKotlinSources: List<File>,
@@ -469,7 +469,7 @@ abstract class IncrementalCompilerRunner<
 
     open fun runWithNoDirtyKotlinSources(caches: CacheManager): Boolean = false
 
-    private fun processChangesAfterBuild(
+    protected fun processChangesAfterBuild(
         compilationMode: CompilationMode,
         currentBuildInfo: BuildInfo,
         dirtyData: DirtyData

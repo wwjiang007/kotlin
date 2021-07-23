@@ -129,7 +129,7 @@ object KotlinToJVMBytecodeCompiler {
     }
 
 
-    internal fun configureSourceRoots(configuration: CompilerConfiguration, chunk: List<Module>, buildFile: File? = null) {
+    fun configureSourceRoots(configuration: CompilerConfiguration, chunk: List<Module>, buildFile: File? = null) {
         for (module in chunk) {
             val commonSources = getBuildFilePaths(buildFile, module.getCommonSourceFiles()).toSet()
 
