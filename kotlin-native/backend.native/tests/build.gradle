@@ -60,7 +60,7 @@ ext.target = platformManager.targetManager(project.testTarget).target
 ext.testLibraryDir = "${ext.testOutputRoot}/klib/platform/${project.target.name}"
 
 // Add executor to run tests depending on a target
-project.convention.plugins.executor = ExecutorServiceKt.create(project)
+project.extensions.executor = ExecutorServiceKt.create(project)
 
 
 compileTestKotlin {
@@ -4678,7 +4678,7 @@ if (PlatformInfo.isAppleTarget(project)) {
 
         doBeforeBuild {
             mkdir(buildDir)
-            execClangForCompilerTests(project.target) {
+            project.extensions.execClang.execClangForCompilerTests(project.target) {
                 args "$projectDir/interop/objc/smoke.m"
                 args "-lobjc", '-fobjc-arc'
                 args '-fPIC', '-shared', '-o', "$buildDir/libobjcsmoke.dylib"
@@ -4714,7 +4714,7 @@ if (PlatformInfo.isAppleTarget(project)) {
 
         doBeforeBuild {
             mkdir(buildDir)
-            execClangForCompilerTests(project.target) {
+            project.extensions.execClang.execClangForCompilerTests(project.target) {
                 args fileTree("$projectDir/interop/objc/tests/") { include '**/*.m' }
                 args "-lobjc", '-fobjc-arc'
                 args '-fPIC', '-shared', '-o', "$buildDir/libobjctests.dylib"
@@ -4734,7 +4734,7 @@ if (PlatformInfo.isAppleTarget(project)) {
 
         doBeforeBuild {
             mkdir(buildDir)
-            execClangForCompilerTests(project.target) {
+            project.extensions.execClang.execClangForCompilerTests(project.target) {
                 args "$projectDir/interop/objc_with_initializer/objc_misc.m"
                 args "-lobjc", '-fobjc-arc'
                 args '-fPIC', '-shared', '-o', "$buildDir/libobjcmisc.dylib"
@@ -4751,7 +4751,7 @@ if (PlatformInfo.isAppleTarget(project)) {
 
         doBeforeBuild {
             mkdir(buildDir)
-            execClangForCompilerTests(project.target) {
+            project.extensions.execClang.execClangForCompilerTests(project.target) {
                 args "$projectDir/interop/objc/msg_send/messaging.m"
                 args "-lobjc", '-fobjc-arc'
                 args '-fPIC', '-shared', '-o', "$buildDir/libobjcmessaging.dylib"
@@ -4769,7 +4769,7 @@ if (PlatformInfo.isAppleTarget(project)) {
 
         doBeforeBuild {
             mkdir(buildDir)
-            execClangForCompilerTests(project.target) {
+            project.extensions.execClang.execClangForCompilerTests(project.target) {
                 args "$projectDir/interop/objc/foreignException/objc_wrap.m"
                 args "-lobjc", '-fobjc-arc'
                 args '-fPIC', '-shared', '-o', "$buildDir/libobjcexception.dylib"
@@ -4788,7 +4788,7 @@ if (PlatformInfo.isAppleTarget(project)) {
 
         doBeforeBuild {
             mkdir(buildDir)
-            execClangForCompilerTests(project.target) {
+            project.extensions.execClang.execClangForCompilerTests(project.target) {
                 args "$projectDir/interop/objc/foreignException/objc_wrap.m"
                 args "-lobjc", '-fobjc-arc'
                 args '-fPIC', '-shared', '-o', "$buildDir/libobjcexception.dylib"
@@ -4808,7 +4808,7 @@ if (PlatformInfo.isAppleTarget(project)) {
 
         doBeforeBuild {
             mkdir(buildDir)
-            execClangForCompilerTests(project.target) {
+            project.extensions.execClang.execClangForCompilerTests(project.target) {
                 args "$projectDir/interop/objc/foreignException/objc_wrap.m"
                 args "-lobjc", '-fobjc-arc'
                 args '-fPIC', '-shared', '-o', "$buildDir/libobjcexception.dylib"
@@ -4851,7 +4851,7 @@ if (PlatformInfo.isAppleTarget(project)) {
 
         doBeforeBuild {
             mkdir(buildDir)
-            execClangForCompilerTests(project.target) {
+            project.extensions.execClang.execClangForCompilerTests(project.target) {
                 args "$projectDir/interop/objc/kt42172/objclib.m"
                 args "-lobjc", '-fobjc-arc'
                 args '-fPIC', '-shared', '-o', "$buildDir/libobjc_kt42172.dylib"
