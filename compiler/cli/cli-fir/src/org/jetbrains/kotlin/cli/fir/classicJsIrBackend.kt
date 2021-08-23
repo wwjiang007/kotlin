@@ -42,6 +42,7 @@ class ClassicJsIrBackendBuilder : CompilationStageBuilder<FrontendToIrConverterR
     }
 }
 
+@Suppress("UNUSED_VARIABLE")
 class ClassicJsIrBackend internal constructor(
     val outputKlibPath: String,
     var abiVersion: KotlinAbiVersion,

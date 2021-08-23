@@ -13,7 +13,6 @@ package org.jetbrains.kotlin.cli.fir
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.io.FileUtil
-import org.jetbrains.kotlin.backend.jvm.jvmPhases
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.arguments.K2JSCompilerArguments
 import org.jetbrains.kotlin.cli.common.arguments.K2JsArgumentConstants
@@ -91,17 +90,16 @@ class ClassicJsFrontend internal constructor(
         val descriptors = ModulesStructure(
             project,
             MainModule.SourceFiles(sourceFiles),
-            analyzer,
             configuration,
             libraries,
             friendLibraries,
-            EmptyLoweringsCacheProvider
+            false, false, emptyMap()
         )
 
-        val analysisResult = descriptors.runAnalysis(configuration.get(JSConfigurationKeys.ERROR_TOLERANCE_POLICY) ?: ErrorTolerancePolicy.DEFAULT)
+        descriptors.runAnalysis(configuration.get(JSConfigurationKeys.ERROR_TOLERANCE_POLICY) ?: ErrorTolerancePolicy.DEFAULT, analyzer)
 
         return ExecutionResult.Success(
-            ClassicJsFrontendResult(analysisResult, descriptors, sourceFiles),
+            ClassicJsFrontendResult(descriptors.jsFrontEndResult, descriptors, sourceFiles),
             emptyList()
         )
     }

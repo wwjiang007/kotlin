@@ -109,7 +109,7 @@ class FirJvmFrontend internal constructor(
             project, VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.FILE_PROTOCOL), getPackagePartProvider
         )
 
-        val sourceScope = (projectEnvironment as PsiBasedProjectEnvironment).getSearchScopeByPsiFiles(ktFiles) +
+        val sourceScope = projectEnvironment.getSearchScopeByPsiFiles(ktFiles) +
                 projectEnvironment.getSearchScopeForProjectJavaSources()
 
         val librariesScope = projectEnvironment.getSearchScopeForProjectLibraries()

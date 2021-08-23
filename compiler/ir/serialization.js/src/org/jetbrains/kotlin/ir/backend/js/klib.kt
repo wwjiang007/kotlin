@@ -132,7 +132,6 @@ fun generateKLib(
     val files = (depsDescriptors.mainModule as MainModule.SourceFiles).files
     val configuration = depsDescriptors.compilerConfiguration
     val allDependencies = depsDescriptors.allDependencies
-    val incrementalDataProvider = configuration.get(JSConfigurationKeys.INCREMENTAL_DATA_PROVIDER)
     val errorPolicy = configuration.get(JSConfigurationKeys.ERROR_TOLERANCE_POLICY) ?: ErrorTolerancePolicy.DEFAULT
     val messageLogger = configuration.get(IrMessageLogger.IR_MESSAGE_LOGGER) ?: IrMessageLogger.None
     val (icData, serializedIrFiles) = prepareIncrementalCompilationData(configuration, files)
