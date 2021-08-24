@@ -101,6 +101,7 @@ open class KotlinJsTargetConfigurator :
                 moduleKind = "umd"
                 sourceMap = true
                 sourceMapEmbedSources = null
+                freeCompilerArgs += "-XXLanguage:-SuspendFunctionAsSupertype"
             }
         }
     }
