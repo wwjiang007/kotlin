@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.cli.jvm.compiler
 
+import com.intellij.psi.PsiErrorElement
 import org.jetbrains.kotlin.analyzer.common.CommonPlatformAnalyzerServices
 import org.jetbrains.kotlin.asJava.FilteredJvmDiagnostics
 import org.jetbrains.kotlin.backend.common.phaser.PhaseConfig
@@ -17,6 +18,7 @@ import org.jetbrains.kotlin.cli.common.checkKotlinPackageUsage
 import org.jetbrains.kotlin.cli.common.fir.FirDiagnosticsCompilerResultsReporter
 import org.jetbrains.kotlin.cli.common.messages.AnalyzerWithCompilerReport
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.STRONG_WARNING
+import org.jetbrains.kotlin.cli.common.messages.DefaultDiagnosticReporter
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.jvm.config.jvmClasspathRoots
 import org.jetbrains.kotlin.cli.jvm.config.jvmModularRoots
@@ -24,8 +26,7 @@ import org.jetbrains.kotlin.codegen.ClassBuilderFactories
 import org.jetbrains.kotlin.codegen.CodegenFactory
 import org.jetbrains.kotlin.codegen.state.GenerationState
 import org.jetbrains.kotlin.config.*
-import org.jetbrains.kotlin.fir.DependencyListForCliModule
-import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.*
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnostic
 import org.jetbrains.kotlin.fir.backend.Fir2IrResult
 import org.jetbrains.kotlin.fir.backend.jvm.FirJvmBackendClassResolver
@@ -33,7 +34,6 @@ import org.jetbrains.kotlin.fir.backend.jvm.FirJvmBackendExtension
 import org.jetbrains.kotlin.fir.checkers.registerExtendedCommonCheckers
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.java.FirProjectSessionProvider
-import org.jetbrains.kotlin.fir.moduleData
 import org.jetbrains.kotlin.fir.pipeline.buildFirFromKtFiles
 import org.jetbrains.kotlin.fir.pipeline.convertToIr
 import org.jetbrains.kotlin.fir.pipeline.runCheckers
@@ -43,7 +43,6 @@ import org.jetbrains.kotlin.fir.session.FirSessionFactory
 import org.jetbrains.kotlin.fir.session.FirSessionFactory.createSessionWithDependencies
 import org.jetbrains.kotlin.fir.session.environment.AbstractProjectEnvironment
 import org.jetbrains.kotlin.fir.session.environment.AbstractProjectFileSearchScope
-import org.jetbrains.kotlin.load.kotlin.PackagePartProvider
 import org.jetbrains.kotlin.load.kotlin.incremental.IncrementalPackagePartProvider
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCompilationComponents
 import org.jetbrains.kotlin.modules.Module
@@ -156,9 +155,6 @@ object FirKotlinToJvmBytecodeCompiler {
     private fun CompilationContext.runFrontend(ktFiles: List<KtFile>): FirResult? {
         @Suppress("NAME_SHADOWING")
         var ktFiles = ktFiles
-        val syntaxErrors = ktFiles.fold(false) { errorsFound, ktFile ->
-            AnalyzerWithCompilerReport.reportSyntaxErrors(ktFile, messageCollector).isHasErrors or errorsFound
-        }
 
         var sourceScope = (projectEnvironment as PsiBasedProjectEnvironment).getSearchScopeByPsiFiles(ktFiles) +
                 projectEnvironment.getSearchScopeForProjectJavaSources()
@@ -234,8 +230,16 @@ object FirKotlinToJvmBytecodeCompiler {
             friendDependencies(module.getFriendPaths())
         }
 
-        val commonRawFir = commonSession?.buildFirFromKtFiles(commonKtFiles)
-        val rawFir = session.buildFirFromKtFiles(ktFiles)
+        var syntaxErrors = false
+
+        fun reportSyntaxError(sourceElement: FirSourceElement) {
+            sourceElement as FirPsiSourceElement
+            AnalyzerWithCompilerReport.reportDiagnostic(sourceElement.psi as PsiErrorElement, DefaultDiagnosticReporter(messageCollector))
+            syntaxErrors = true
+        }
+
+        val commonRawFir = commonSession?.buildFirFromKtFiles(commonKtFiles, false, ::reportSyntaxError)
+        val rawFir = session.buildFirFromKtFiles(ktFiles, false, ::reportSyntaxError)
 
         val allFirDiagnostics = mutableListOf<FirDiagnostic>()
         commonSession?.apply {

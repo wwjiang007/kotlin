@@ -1,0 +1,2 @@
+
+data calss A

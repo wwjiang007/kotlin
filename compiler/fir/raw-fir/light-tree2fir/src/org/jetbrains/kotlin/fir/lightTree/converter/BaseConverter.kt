@@ -24,7 +24,8 @@ import kotlin.contracts.ExperimentalContracts
 abstract class BaseConverter(
     baseSession: FirSession,
     val tree: FlyweightCapableTreeStructure<LighterASTNode>,
-    context: Context<LighterASTNode> = Context()
+    context: Context<LighterASTNode> = Context(),
+    protected val syntaxErrorReporter: ((FirSourceElement) -> Unit)? = null
 ) : BaseFirBuilder<LighterASTNode>(baseSession, context) {
     abstract val offset: Int
 
@@ -181,6 +182,13 @@ abstract class BaseConverter(
             if (kid == null) break
             val tokenType = kid.tokenType
             if (COMMENTS.contains(tokenType) || tokenType == WHITE_SPACE || tokenType == SEMICOLON || tokenType in skipTokens) continue
+            if (tokenType == TokenType.ERROR_ELEMENT) {
+                syntaxErrorReporter?.let {
+                    val source = kid.toFirSourceElement()
+                    it(source)
+                    // continue ??
+                }
+            }
             f(kid)
         }
     }
@@ -193,6 +201,13 @@ abstract class BaseConverter(
             if (kid == null) break
             val tokenType = kid.tokenType
             if (COMMENTS.contains(tokenType) || tokenType == WHITE_SPACE || tokenType == SEMICOLON) continue
+            if (tokenType == TokenType.ERROR_ELEMENT) {
+                syntaxErrorReporter?.let {
+                    val source = kid.toFirSourceElement()
+                    it(source)
+                    // continue ??
+                }
+            }
             f(kid, container)
         }
 

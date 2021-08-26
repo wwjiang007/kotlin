@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.fir.expressions.builder.*
 import org.jetbrains.kotlin.fir.expressions.impl.FirSingleExpressionBlock
 import org.jetbrains.kotlin.fir.expressions.impl.buildSingleExpressionBlock
 import org.jetbrains.kotlin.fir.lightTree.LightTree2Fir
+import org.jetbrains.kotlin.fir.lightTree.LightTreeAstBuilder
 import org.jetbrains.kotlin.fir.lightTree.fir.ValueParameter
 import org.jetbrains.kotlin.fir.lightTree.fir.WhenEntry
 import org.jetbrains.kotlin.fir.references.FirNamedReference
@@ -68,7 +69,7 @@ class ExpressionsConverter(
         if (!stubMode) {
             return when (expression.tokenType) {
                 LAMBDA_EXPRESSION -> {
-                    val lambdaTree = LightTree2Fir.buildLightTreeLambdaExpression(expression.asText)
+                    val lambdaTree = LightTreeAstBuilder.buildLightTreeLambdaExpression(expression.asText)
                     declarationsConverter.withOffset(offset + expression.startOffset) {
                         ExpressionsConverter(baseSession, stubMode, lambdaTree, declarationsConverter, context)
                             .convertLambdaExpression(lambdaTree.root)

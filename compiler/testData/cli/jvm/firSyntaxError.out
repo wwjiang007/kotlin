@@ -1,0 +1,10 @@
+warning: ATTENTION!
+ This build uses in-dev FIR:
+  -Xuse-fir
+compiler/testData/cli/jvm/firSyntaxError.kt:2:6: error: expecting a top level declaration
+data calss A
+     ^
+compiler/testData/cli/jvm/firSyntaxError.kt:2:12: error: expecting a top level declaration
+data calss A
+           ^
+COMPILATION_ERROR

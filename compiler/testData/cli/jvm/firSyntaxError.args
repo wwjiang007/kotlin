@@ -1,0 +1,4 @@
+$TESTDATA_DIR$/firSyntaxError.kt
+-Xuse-fir
+-d
+$TEMP_DIR$

@@ -346,6 +346,11 @@ public class CliTestGenerated extends AbstractCliTest {
             runTest("compiler/testData/cli/jvm/firStdlibDependency.args");
         }
 
+        @TestMetadata("firSyntaxError.args")
+        public void testFirSyntaxError() throws Exception {
+            runTest("compiler/testData/cli/jvm/firSyntaxError.args");
+        }
+
         @TestMetadata("firVsClassicAnnotation.args")
         public void testFirVsClassicAnnotation() throws Exception {
             runTest("compiler/testData/cli/jvm/firVsClassicAnnotation.args");

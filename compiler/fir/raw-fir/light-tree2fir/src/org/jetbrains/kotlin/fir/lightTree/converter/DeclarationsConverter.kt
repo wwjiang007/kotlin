@@ -30,6 +30,7 @@ import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.expressions.builder.*
 import org.jetbrains.kotlin.fir.expressions.impl.FirSingleExpressionBlock
 import org.jetbrains.kotlin.fir.lightTree.LightTree2Fir
+import org.jetbrains.kotlin.fir.lightTree.LightTreeAstBuilder
 import org.jetbrains.kotlin.fir.lightTree.fir.*
 import org.jetbrains.kotlin.fir.lightTree.fir.modifier.Modifier
 import org.jetbrains.kotlin.fir.lightTree.fir.modifier.TypeModifier
@@ -58,8 +59,9 @@ class DeclarationsConverter(
     private val stubMode: Boolean,
     tree: FlyweightCapableTreeStructure<LighterASTNode>,
     offset: Int = 0,
-    context: Context<LighterASTNode> = Context()
-) : BaseConverter(session, tree, context) {
+    context: Context<LighterASTNode> = Context(),
+    syntaxErrorReporter: ((FirSourceElement) -> Unit)? = null
+) : BaseConverter(session, tree, context, syntaxErrorReporter) {
     @set:PrivateForInline
     override var offset: Int = offset
 
@@ -1637,7 +1639,7 @@ class DeclarationsConverter(
             )
         }
         return if (!stubMode) {
-            val blockTree = LightTree2Fir.buildLightTreeBlockExpression(block.asText)
+            val blockTree = LightTreeAstBuilder.buildLightTreeBlockExpression(block.asText)
             return DeclarationsConverter(
                 baseSession, baseScopeProvider, stubMode, blockTree, offset = offset + tree.getStartOffset(block), context
             ).convertBlockExpression(blockTree.root)

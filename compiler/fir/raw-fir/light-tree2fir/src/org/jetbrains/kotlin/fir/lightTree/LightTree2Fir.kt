@@ -30,20 +30,6 @@ class LightTree2Fir(
     companion object {
         private val parserDefinition = KotlinParserDefinition()
         private fun makeLexer() = KotlinLexer()
-
-        fun buildLightTreeBlockExpression(code: String): FlyweightCapableTreeStructure<LighterASTNode> {
-            val builder = PsiBuilderFactoryImpl().createBuilder(parserDefinition, makeLexer(), code)
-            //KotlinParser.parseBlockExpression(builder)
-            KotlinLightParser.parseBlockExpression(builder)
-            return builder.lightTree
-        }
-
-        fun buildLightTreeLambdaExpression(code: String): FlyweightCapableTreeStructure<LighterASTNode> {
-            val builder = PsiBuilderFactoryImpl().createBuilder(parserDefinition, makeLexer(), code)
-            //KotlinParser.parseLambdaExpression(builder)
-            KotlinLightParser.parseLambdaExpression(builder)
-            return builder.lightTree
-        }
     }
 
     fun buildFirFile(path: Path): FirFile {

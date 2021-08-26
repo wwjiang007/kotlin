@@ -16,7 +16,6 @@
 
 package org.jetbrains.kotlin.cli.common.messages
 
-import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.*
 import com.intellij.psi.util.PsiFormatUtil
 import org.jetbrains.kotlin.analyzer.AbstractAnalyzerWithCompilerReport
@@ -205,15 +204,6 @@ class AnalyzerWithCompilerReport(
                 var hasErrors = false
                 var allErrorsAtEof = true
 
-                private fun <E : PsiElement> reportDiagnostic(element: E, factory: DiagnosticFactory0<E>, message: String) {
-                    val diagnostic = MyDiagnostic(element, factory, message)
-                    AnalyzerWithCompilerReport.reportDiagnostic(diagnostic, reporter)
-                    if (allErrorsAtEof && !element.isAtEof()) {
-                        allErrorsAtEof = false
-                    }
-                    hasErrors = true
-                }
-
                 private fun PsiElement.isAtEof(): Boolean {
                     var element = this
                     while (true) {
@@ -223,11 +213,11 @@ class AnalyzerWithCompilerReport(
                 }
 
                 override fun visitErrorElement(element: PsiErrorElement) {
-                    val description = element.errorDescription
-                    reportDiagnostic(
-                        element, SYNTAX_ERROR_FACTORY,
-                        if (StringUtil.isEmpty(description)) "Syntax error" else description
-                    )
+                    reportDiagnostic(element, reporter)
+                    if (allErrorsAtEof && !element.isAtEof()) {
+                        allErrorsAtEof = false
+                    }
+                    hasErrors = true
                 }
             }
 
@@ -236,6 +226,23 @@ class AnalyzerWithCompilerReport(
             file.accept(visitor)
 
             return SyntaxErrorReport(visitor.hasErrors, visitor.allErrorsAtEof)
+        }
+
+        fun reportDiagnostic(element: PsiErrorElement, reporter: DiagnosticMessageReporter) {
+            reportDiagnostic(
+                element, SYNTAX_ERROR_FACTORY,
+                element.errorDescription.ifEmpty { "Syntax error" },
+                reporter
+            )
+        }
+
+        private fun <E : PsiElement> reportDiagnostic(
+            element: E,
+            factory: DiagnosticFactory0<E>,
+            message: String,
+            reporter: DiagnosticMessageReporter
+        ) {
+            reportDiagnostic(MyDiagnostic(element, factory, message), reporter)
         }
 
         fun reportSyntaxErrors(file: PsiElement, messageCollector: MessageCollector): SyntaxErrorReport {
