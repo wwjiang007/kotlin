@@ -48,7 +48,6 @@ dependencies {
     proguardLibraryJars(kotlinStdlib())
     proguardLibraryJars(project(":kotlin-reflect"))
     proguardLibraryJars(project(":kotlin-compiler"))
-    proguardLibraryJars(project(":kotlin-script-runtime"))
 
     relocatedJarContents(embedded)
     relocatedJarContents(mainSourceSet.output)
