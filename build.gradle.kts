@@ -465,7 +465,7 @@ allprojects {
     tasks.withType<JavaCompile> {
         options.compilerArgs.add("-Xlint:deprecation")
         options.compilerArgs.add("-Xlint:unchecked")
-        options.compilerArgs.add("-Werror")
+//        options.compilerArgs.add("-Werror")
     }
 
     val commonCompilerArgs = listOfNotNull(
@@ -486,7 +486,8 @@ allprojects {
         "-Xno-optimized-callable-references",
         "-Xno-kotlin-nothing-value-exception",
         "-Xskip-runtime-version-check",
-        "-Xsuppress-deprecated-jvm-target-warning" // Remove as soon as there are no modules for JDK 1.6 & 1.7
+        "-Xsuppress-deprecated-jvm-target-warning", // Remove as soon as there are no modules for JDK 1.6 & 1.7
+        "-Xserialize-ir"
     )
 
     tasks.withType<org.jetbrains.kotlin.gradle.dsl.KotlinJvmCompile> {

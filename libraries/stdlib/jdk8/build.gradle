@@ -59,6 +59,7 @@ compileKotlin {
     kotlinOptions.freeCompilerArgs = [
             "-Xallow-kotlin-package",
             "-Xmultifile-parts-inherit",
+            "-Xserialize-ir",
     ]
     kotlinOptions.moduleName = project.name
 }

@@ -73,6 +73,7 @@ compileKotlin {
             "-opt-in=kotlin.RequiresOptIn",
             "-opt-in=kotlin.contracts.ExperimentalContracts",
             "-Xsuppress-deprecated-jvm-target-warning",
+            "-Xserialize-ir",
     ]
     kotlinOptions.moduleName = project.name
 }
