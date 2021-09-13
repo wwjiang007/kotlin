@@ -14,11 +14,13 @@ import org.jetbrains.kotlin.fir.FirRenderer
 import org.jetbrains.kotlin.fir.builder.AbstractRawFirBuilderTestCase
 import org.jetbrains.kotlin.fir.builder.BodyBuildingMode
 import org.jetbrains.kotlin.fir.builder.StubFirScopeProvider
+import org.jetbrains.kotlin.fir.pipeline.LightTreeToFirConverter
 import org.jetbrains.kotlin.fir.session.FirSessionFactory
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners
 import org.junit.runner.RunWith
 import java.io.File
+import java.net.URI
 import kotlin.system.measureNanoTime
 
 @TestDataPath("/")
@@ -34,12 +36,13 @@ class TotalKotlinTest : AbstractRawFirBuilderTestCase() {
         }
     }
 
-    private fun generateFirFromLightTree(onlyLightTree: Boolean, converter: LightTree2Fir, text: String, fileName: String) {
+    private fun generateFirFromLightTree(onlyLightTree: Boolean, converter: LightTreeToFirConverter, text: String, fileName: String) {
         if (onlyLightTree) {
-            val lightTree = converter.buildLightTree(text)
-            DebugUtil.lightTreeToString(lightTree, false)
+            val lightTree = LightTreeAstBuilder().buildFileAST(text)
+            DebugUtil.lightTreeToString(lightTree.node, false)
         } else {
-            val firFile = converter.buildFirFile(text, fileName)
+            val lightTree = LightTreeAstBuilder().buildFileAST(text, URI(fileName))
+            val firFile = converter.convert(lightTree)
             StringBuilder().also { FirRenderer(it).visitFile(firFile) }.toString()
         }
     }
@@ -49,7 +52,7 @@ class TotalKotlinTest : AbstractRawFirBuilderTestCase() {
         var counter = 0
         var time = 0L
 
-        val lightTreeConverter = LightTree2Fir(
+        val lightTreeConverter = LightTreeToFirConverter(
             session = FirSessionFactory.createEmptySession(),
             scopeProvider = StubFirScopeProvider,
             stubMode = true

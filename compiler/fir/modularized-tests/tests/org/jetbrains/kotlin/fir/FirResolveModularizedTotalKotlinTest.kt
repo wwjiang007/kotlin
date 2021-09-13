@@ -21,7 +21,7 @@ import org.jetbrains.kotlin.fir.builder.PsiHandlingMode
 import org.jetbrains.kotlin.fir.builder.RawFirBuilder
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.dump.MultiModuleHtmlFirDump
-import org.jetbrains.kotlin.fir.lightTree.LightTree2Fir
+import org.jetbrains.kotlin.fir.pipeline.LightTreeToFirConverter
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.fir.resolve.firProvider
 import org.jetbrains.kotlin.fir.resolve.providers.impl.FirProviderImpl
@@ -143,7 +143,7 @@ class FirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
         val firProvider = session.firProvider as FirProviderImpl
 
         val firFiles = if (USE_LIGHT_TREE) {
-            val lightTree2Fir = LightTree2Fir(session, firProvider.kotlinScopeProvider, stubMode = false)
+            val lightTree2Fir = LightTreeToFirConverter(session, firProvider.kotlinScopeProvider, stubMode = false)
 
             val allSourceFiles = moduleData.sources.flatMap {
                 if (it.isDirectory) {

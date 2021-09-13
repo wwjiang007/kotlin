@@ -9,7 +9,8 @@ import com.intellij.psi.impl.DebugUtil
 import org.jetbrains.kotlin.fir.FirRenderer
 import org.jetbrains.kotlin.fir.builder.AbstractRawFirBuilderTestCase
 import org.jetbrains.kotlin.fir.builder.StubFirScopeProvider
-import org.jetbrains.kotlin.fir.lightTree.LightTree2Fir
+import org.jetbrains.kotlin.fir.lightTree.LightTreeAstBuilder
+import org.jetbrains.kotlin.fir.pipeline.LightTreeToFirConverter
 import org.jetbrains.kotlin.fir.session.FirSessionFactory
 import org.openjdk.jmh.annotations.Scope
 import org.openjdk.jmh.annotations.State
@@ -18,22 +19,18 @@ import java.io.File
 @State(Scope.Benchmark)
 open class LightTree2FirGenerator : TreeGenerator, AbstractRawFirBuilderTestCase() {
     override fun generateBaseTree(text: String, file: File) {
-        val lightTreeConverter = LightTree2Fir(
-            session = FirSessionFactory.createEmptySession(),
-            scopeProvider = StubFirScopeProvider,
-            stubMode = false
-        )
-        val lightTree = lightTreeConverter.buildLightTree(text)
-        DebugUtil.lightTreeToString(lightTree, false)
+        val lightTree = LightTreeAstBuilder().buildFileAST(text, file.toURI())
+        DebugUtil.lightTreeToString(lightTree.node, false)
     }
 
     override fun generateFir(text: String, file: File, stubMode: Boolean) {
-        val lightTreeConverter = LightTree2Fir(
+        val lightTreeConverter = LightTreeToFirConverter(
             session = FirSessionFactory.createEmptySession(),
             scopeProvider = StubFirScopeProvider,
             stubMode = stubMode
         )
-        val firFile = lightTreeConverter.buildFirFile(text, file.name)
+        val lightTree = LightTreeAstBuilder().buildFileAST(text, file.toURI())
+        val firFile = lightTreeConverter.convert(lightTree)
         StringBuilder().also { FirRenderer(it).visitFile(firFile) }.toString()
     }
 

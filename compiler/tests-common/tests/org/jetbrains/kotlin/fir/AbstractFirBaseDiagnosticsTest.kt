@@ -28,13 +28,14 @@ import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.PsiDiagnosticUtils
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnostic
-import org.jetbrains.kotlin.fir.builder.RawFirBuilder
 import org.jetbrains.kotlin.fir.builder.BodyBuildingMode
 import org.jetbrains.kotlin.fir.builder.PsiHandlingMode
+import org.jetbrains.kotlin.fir.builder.RawFirBuilder
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.extensions.BunchOfRegisteredExtensions
 import org.jetbrains.kotlin.fir.java.FirProjectSessionProvider
-import org.jetbrains.kotlin.fir.lightTree.LightTree2Fir
+import org.jetbrains.kotlin.fir.lightTree.LightTreeAstBuilder
+import org.jetbrains.kotlin.fir.pipeline.LightTreeToFirConverter
 import org.jetbrains.kotlin.fir.resolve.firProvider
 import org.jetbrains.kotlin.fir.resolve.providers.impl.FirProviderImpl
 import org.jetbrains.kotlin.fir.session.FirSessionFactory
@@ -47,6 +48,7 @@ import org.jetbrains.kotlin.resolve.AnalyzingUtils
 import org.jetbrains.kotlin.resolve.PlatformDependentAnalyzerServices
 import org.jetbrains.kotlin.resolve.jvm.platform.JvmPlatformAnalyzerServices
 import java.io.File
+import java.net.URI
 
 abstract class AbstractFirBaseDiagnosticsTest : BaseDiagnosticsTest() {
     override fun analyzeAndCheck(testDataFile: File, files: List<TestFile>) {
@@ -129,9 +131,10 @@ abstract class AbstractFirBaseDiagnosticsTest : BaseDiagnosticsTest() {
     private fun mapKtFilesToFirFiles(session: FirSession, ktFiles: List<KtFile>, firFiles: MutableList<FirFile>, useLightTree: Boolean) {
         val firProvider = (session.firProvider as FirProviderImpl)
         if (useLightTree) {
-            val lightTreeBuilder = LightTree2Fir(session, firProvider.kotlinScopeProvider, stubMode = false)
+            val lightTreeBuilder = LightTreeToFirConverter(session, firProvider.kotlinScopeProvider, stubMode = false)
             ktFiles.mapTo(firFiles) {
-                val firFile = lightTreeBuilder.buildFirFile(it.text, it.name)
+                val ast = LightTreeAstBuilder().buildFileAST(it.text, URI(it.virtualFile.path))
+                val firFile = lightTreeBuilder.convert(ast)
                 (session.firProvider as FirProviderImpl).recordFile(firFile)
                 firFile
             }

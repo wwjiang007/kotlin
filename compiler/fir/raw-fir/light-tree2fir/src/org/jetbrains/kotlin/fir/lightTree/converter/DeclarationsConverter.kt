@@ -29,7 +29,6 @@ import org.jetbrains.kotlin.fir.diagnostics.DiagnosticKind
 import org.jetbrains.kotlin.fir.expressions.*
 import org.jetbrains.kotlin.fir.expressions.builder.*
 import org.jetbrains.kotlin.fir.expressions.impl.FirSingleExpressionBlock
-import org.jetbrains.kotlin.fir.lightTree.LightTree2Fir
 import org.jetbrains.kotlin.fir.lightTree.LightTreeAstBuilder
 import org.jetbrains.kotlin.fir.lightTree.fir.*
 import org.jetbrains.kotlin.fir.lightTree.fir.modifier.Modifier

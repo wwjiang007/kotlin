@@ -15,11 +15,12 @@ import org.jetbrains.kotlin.fir.FirRenderer
 import org.jetbrains.kotlin.fir.builder.AbstractRawFirBuilderTestCase
 import org.jetbrains.kotlin.fir.builder.BodyBuildingMode
 import org.jetbrains.kotlin.fir.builder.StubFirScopeProvider
-import org.jetbrains.kotlin.fir.lightTree.LightTree2Fir
+import org.jetbrains.kotlin.fir.lightTree.LightTreeAstBuilder
 import org.jetbrains.kotlin.fir.lightTree.walkTopDown
 import org.jetbrains.kotlin.fir.lightTree.walkTopDownWithTestData
+import org.jetbrains.kotlin.fir.pipeline.LightTreeToFirConverter
 import org.jetbrains.kotlin.fir.session.FirSessionFactory
-import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners
 import org.junit.runner.RunWith
 import java.io.File
@@ -56,7 +57,7 @@ class TreesCompareTest : AbstractRawFirBuilderTestCase() {
     }
 
     private fun compareAll(stubMode: Boolean) {
-        val lightTreeConverter = LightTree2Fir(
+        val lightTreeConverter = LightTreeToFirConverter(
             session = FirSessionFactory.createEmptySession(),
             scopeProvider = StubFirScopeProvider,
             stubMode = stubMode
@@ -70,7 +71,8 @@ class TreesCompareTest : AbstractRawFirBuilderTestCase() {
             val treeFromPsi = StringBuilder().also { FirRenderer(it).visitFile(firFileFromPsi) }.toString()
 
             //light tree
-            val firFileFromLightTree = lightTreeConverter.buildFirFile(text, file.name)
+            val lightTree = LightTreeAstBuilder().buildFileAST(text, file.toURI())
+            val firFileFromLightTree = lightTreeConverter.convert(lightTree)
             val treeFromLightTree = StringBuilder().also { FirRenderer(it).visitFile(firFileFromLightTree) }.toString()
 
             return@compareBase treeFromLightTree == treeFromPsi
@@ -78,7 +80,7 @@ class TreesCompareTest : AbstractRawFirBuilderTestCase() {
     }
 
     fun testCompareDiagnostics() {
-        val lightTreeConverter = LightTree2Fir(
+        val lightTreeConverter = LightTreeToFirConverter(
             session = FirSessionFactory.createEmptySession(),
             scopeProvider = StubFirScopeProvider,
             stubMode = false
@@ -101,7 +103,8 @@ class TreesCompareTest : AbstractRawFirBuilderTestCase() {
                 .replace("<Unsupported LValue.*?>".toRegex(), "<Unsupported LValue>")
 
             //light tree
-            val firFileFromLightTree = lightTreeConverter.buildFirFile(text, file.name)
+            val lightTree = LightTreeAstBuilder().buildFileAST(text, file.toURI())
+            val firFileFromLightTree = lightTreeConverter.convert(lightTree)
             val treeFromLightTree = StringBuilder().also { FirRenderer(it).visitFile(firFileFromLightTree) }.toString()
                 .replace("<Unsupported LValue.*?>".toRegex(), "<Unsupported LValue>")
 

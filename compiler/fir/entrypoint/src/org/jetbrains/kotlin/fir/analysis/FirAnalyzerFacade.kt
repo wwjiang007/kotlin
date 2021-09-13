@@ -19,8 +19,9 @@ import org.jetbrains.kotlin.fir.backend.jvm.FirJvmVisibilityConverter
 import org.jetbrains.kotlin.fir.builder.PsiHandlingMode
 import org.jetbrains.kotlin.fir.builder.RawFirBuilder
 import org.jetbrains.kotlin.fir.declarations.FirFile
-import org.jetbrains.kotlin.fir.lightTree.LightTree2Fir
+import org.jetbrains.kotlin.fir.lightTree.LightTreeAstBuilder
 import org.jetbrains.kotlin.fir.moduleData
+import org.jetbrains.kotlin.fir.pipeline.LightTreeToFirConverter
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.fir.resolve.firProvider
 import org.jetbrains.kotlin.fir.resolve.providers.impl.FirProviderImpl
@@ -58,9 +59,10 @@ class FirAnalyzerFacade(
         if (firFiles != null) return
         val firProvider = (session.firProvider as FirProviderImpl)
         firFiles = if (useLightTree) {
-            val builder = LightTree2Fir(session, firProvider.kotlinScopeProvider)
+            val builder = LightTreeToFirConverter(session, firProvider.kotlinScopeProvider)
             originalFiles.map {
-                builder.buildFirFile(it).also { firFile ->
+                val lightTree = LightTreeAstBuilder().buildFileAST(it.toURI())
+                builder.convert(lightTree).also { firFile ->
                     firProvider.recordFile(firFile)
                 }
             }

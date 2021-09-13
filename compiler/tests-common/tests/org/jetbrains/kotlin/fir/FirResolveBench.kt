@@ -15,7 +15,8 @@ import org.jetbrains.kotlin.fir.diagnostics.ConeStubDiagnostic
 import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
 import org.jetbrains.kotlin.fir.expressions.FirPropertyAccessExpression
 import org.jetbrains.kotlin.fir.expressions.FirQualifiedAccessExpression
-import org.jetbrains.kotlin.fir.lightTree.LightTree2Fir
+import org.jetbrains.kotlin.fir.lightTree.LightTreeAstBuilder
+import org.jetbrains.kotlin.fir.pipeline.LightTreeToFirConverter
 import org.jetbrains.kotlin.fir.references.FirErrorNamedReference
 import org.jetbrains.kotlin.fir.resolve.firProvider
 import org.jetbrains.kotlin.fir.resolve.providers.impl.FirProviderImpl
@@ -132,7 +133,7 @@ class FirResolveBench(val withProgress: Boolean, val listener: BenchListener? = 
     }
 
     fun buildFiles(
-        builder: LightTree2Fir,
+        builder: LightTreeToFirConverter,
         files: List<File>
     ): List<FirFile> {
         listener?.before()
@@ -142,7 +143,8 @@ class FirResolveBench(val withProgress: Boolean, val listener: BenchListener? = 
             val code: String
             val time = measureNanoTime {
                 code = FileUtil.loadFile(file, CharsetToolkit.UTF8, true).trim()
-                firFile = builder.buildFirFile(code, file.name)
+                val lightTree = LightTreeAstBuilder().buildFileAST(code, file.toURI())
+                firFile = builder.convert(lightTree)
                 (builder.session.firProvider as FirProviderImpl).recordFile(firFile)
             }
             val after = vmStateSnapshot()
