@@ -34,11 +34,10 @@ import org.jetbrains.kotlin.fir.backend.jvm.FirJvmBackendExtension
 import org.jetbrains.kotlin.fir.checkers.registerExtendedCommonCheckers
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.java.FirProjectSessionProvider
-import org.jetbrains.kotlin.fir.pipeline.buildFirFromKtFiles
-import org.jetbrains.kotlin.fir.pipeline.convertToIr
-import org.jetbrains.kotlin.fir.pipeline.runCheckers
-import org.jetbrains.kotlin.fir.pipeline.runResolution
+import org.jetbrains.kotlin.fir.pipeline.*
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
+import org.jetbrains.kotlin.fir.resolve.firProvider
+import org.jetbrains.kotlin.fir.resolve.providers.impl.FirProviderImpl
 import org.jetbrains.kotlin.fir.session.FirSessionFactory
 import org.jetbrains.kotlin.fir.session.FirSessionFactory.createSessionWithDependencies
 import org.jetbrains.kotlin.fir.session.environment.AbstractProjectEnvironment
@@ -238,8 +237,20 @@ object FirKotlinToJvmBytecodeCompiler {
             syntaxErrors = true
         }
 
-        val commonRawFir = commonSession?.buildFirFromKtFiles(commonKtFiles, false, ::reportSyntaxError)
-        val rawFir = session.buildFirFromKtFiles(ktFiles, false, ::reportSyntaxError)
+        fun FirSession.convertPsiFilesToFir(files: List<KtFile>) =
+            PsiToFirConverter(
+                this,
+                (firProvider as FirProviderImpl).kotlinScopeProvider,
+                false,
+                ::reportSyntaxError
+            ).convert(files).also {
+                it.forEach {
+                    (firProvider as FirProviderImpl).recordFile(it) // TODO: extract/abstract functionality so cast is not needed
+                }
+            }
+
+        val commonRawFir = commonSession?.convertPsiFilesToFir(commonKtFiles)
+        val rawFir = session.convertPsiFilesToFir(ktFiles)
 
         val allFirDiagnostics = mutableListOf<FirDiagnostic>()
         commonSession?.apply {

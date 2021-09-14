@@ -186,7 +186,7 @@ abstract class BaseConverter(
                 syntaxErrorReporter?.let {
                     val source = kid.toFirSourceElement()
                     it(source)
-                    // continue ??
+                    // TODO: consider behavior like with PsiToFirConverter.continueOnSyntaxErrors = false
                 }
             }
             f(kid)
@@ -205,7 +205,7 @@ abstract class BaseConverter(
                 syntaxErrorReporter?.let {
                     val source = kid.toFirSourceElement()
                     it(source)
-                    // continue ??
+                    // TODO: consider behavior like with PsiToFirConverter.continueOnSyntaxErrors = false
                 }
             }
             f(kid, container)

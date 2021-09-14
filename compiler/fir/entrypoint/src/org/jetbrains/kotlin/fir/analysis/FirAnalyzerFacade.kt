@@ -16,12 +16,11 @@ import org.jetbrains.kotlin.fir.backend.Fir2IrResult
 import org.jetbrains.kotlin.fir.backend.jvm.Fir2IrJvmSpecialAnnotationSymbolProvider
 import org.jetbrains.kotlin.fir.backend.jvm.FirJvmKotlinMangler
 import org.jetbrains.kotlin.fir.backend.jvm.FirJvmVisibilityConverter
-import org.jetbrains.kotlin.fir.builder.PsiHandlingMode
-import org.jetbrains.kotlin.fir.builder.RawFirBuilder
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.lightTree.LightTreeAstBuilder
 import org.jetbrains.kotlin.fir.moduleData
 import org.jetbrains.kotlin.fir.pipeline.LightTreeToFirConverter
+import org.jetbrains.kotlin.fir.pipeline.PsiToFirConverter
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.fir.resolve.firProvider
 import org.jetbrains.kotlin.fir.resolve.providers.impl.FirProviderImpl
@@ -60,16 +59,16 @@ class FirAnalyzerFacade(
         val firProvider = (session.firProvider as FirProviderImpl)
         firFiles = if (useLightTree) {
             val builder = LightTreeToFirConverter(session, firProvider.kotlinScopeProvider)
-            originalFiles.map {
+            originalFiles.mapNotNull {
                 val lightTree = LightTreeAstBuilder().buildFileAST(it.toURI())
-                builder.convert(lightTree).also { firFile ->
+                builder.convert(lightTree)?.also { firFile ->
                     firProvider.recordFile(firFile)
                 }
             }
         } else {
-            val builder = RawFirBuilder(session, firProvider.kotlinScopeProvider, PsiHandlingMode.COMPILER)
+            val builder = PsiToFirConverter(session, firProvider.kotlinScopeProvider)
             ktFiles.map {
-                builder.buildFirFile(it).also { firFile ->
+                builder.convert(it)!!.also { firFile ->
                     firProvider.recordFile(firFile)
                 }
             }

@@ -9,7 +9,7 @@ import org.jetbrains.kotlin.fir.declarations.FirFile
 import java.net.URI
 
 interface AstToFirConverter<N> {
-    fun convert(node: N, source: URI = URI("")): FirFile
-    fun convert(fileAST: SourceFileAST<N>): FirFile = convert(fileAST.node, fileAST.source)
-    fun convert(fileAsts: Collection<SourceFileAST<N>>): List<FirFile> = fileAsts.map(this::convert)
+    fun convert(node: N, source: URI = URI("")): FirFile?
+    fun convert(fileAST: SourceFileAST<N>): FirFile? = convert(fileAST.node, fileAST.source)
+    fun convert(fileAsts: Collection<SourceFileAST<N>>): List<FirFile> = fileAsts.mapNotNull(this::convert)
 }
