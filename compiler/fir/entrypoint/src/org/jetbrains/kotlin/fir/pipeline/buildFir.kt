@@ -63,6 +63,6 @@ class LightTreeToFirConverter(
 
     override fun convert(node: FlyweightCapableTreeStructure<LighterASTNode>, source: URI): FirFile {
         return DeclarationsConverter(session, scopeProvider, stubMode, node, syntaxErrorReporter = syntaxErrorReporter)
-            .convertFile(node.root, File(source).name)
+            .convertFile(node.root, File(source.path).name)
     }
 }
