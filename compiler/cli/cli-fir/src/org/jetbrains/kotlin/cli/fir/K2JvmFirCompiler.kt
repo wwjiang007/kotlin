@@ -23,7 +23,7 @@ import org.jetbrains.kotlin.metadata.deserialization.BinaryVersion
 import org.jetbrains.kotlin.utils.KotlinPaths
 
 class K2JvmFirCompiler : CLICompiler<K2JVMCompilerArguments>() {
-    override val performanceManager: CommonCompilerPerformanceManager
+    override val defaultPerformanceManager: CommonCompilerPerformanceManager
         get() = TODO("Not yet implemented")
 
     override fun createMetadataVersion(versionArray: IntArray): BinaryVersion {
