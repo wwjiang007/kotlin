@@ -19,12 +19,12 @@ import java.nio.file.Paths
 abstract class AbstractLightTree2FirConverterTestCase : AbstractRawFirBuilderTestCase() {
 
     fun doTest(filePath: String) {
-        val ast = LightTreeAstBuilder().buildFileAST(Paths.get(filePath).toUri())
+        val lightTree = LightTreeAstBuilder().buildFileAST(Paths.get(filePath).toUri())
         val firFile = LightTreeToFirConverter(
             FirSessionFactory.createEmptySession(),
             StubFirScopeProvider,
             stubMode = false
-        ).convert(ast)
+        ).convert(lightTree)
         val firDump = firFile.render(mode = FirRenderer.RenderMode.WithDeclarationAttributes)
 
         val expectedFile = File(filePath.replace(".kt", ".txt"))
