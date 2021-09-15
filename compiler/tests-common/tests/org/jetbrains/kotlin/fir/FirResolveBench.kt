@@ -133,19 +133,21 @@ class FirResolveBench(val withProgress: Boolean, val listener: BenchListener? = 
     }
 
     fun buildFiles(
+        session: FirSession,
         builder: LightTreeToFirConverter,
         files: List<File>
     ): List<FirFile> {
         listener?.before()
-        return files.map { file ->
+        return files.mapNotNull { file ->
             val before = vmStateSnapshot()
-            val firFile: FirFile
+            val firFile: FirFile?
             val code: String
             val time = measureNanoTime {
                 code = FileUtil.loadFile(file, CharsetToolkit.UTF8, true).trim()
                 val lightTree = LightTreeAstBuilder().buildFileAST(code, file.toURI())
-                firFile = builder.convert(lightTree)
-                (builder.session.firProvider as FirProviderImpl).recordFile(firFile)
+                firFile = builder.convert(lightTree)?.also {
+                    (session.firProvider as FirProviderImpl).recordFile(it)
+                }
             }
             val after = vmStateSnapshot()
             val diff = after - before

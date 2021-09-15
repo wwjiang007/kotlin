@@ -132,11 +132,11 @@ abstract class AbstractFirBaseDiagnosticsTest : BaseDiagnosticsTest() {
         val firProvider = (session.firProvider as FirProviderImpl)
         if (useLightTree) {
             val lightTreeBuilder = LightTreeToFirConverter(session, firProvider.kotlinScopeProvider, stubMode = false)
-            ktFiles.mapTo(firFiles) {
+            ktFiles.mapNotNullTo(firFiles) {
                 val lightTree = LightTreeAstBuilder().buildFileAST(it.text, URI(it.virtualFile.path))
-                val firFile = lightTreeBuilder.convert(lightTree)
-                (session.firProvider as FirProviderImpl).recordFile(firFile)
-                firFile
+                lightTreeBuilder.convert(lightTree)?.also {
+                    (session.firProvider as FirProviderImpl).recordFile(it)
+                }
             }
         } else {
             val firBuilder = RawFirBuilder(
