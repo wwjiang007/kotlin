@@ -11,10 +11,9 @@ import com.intellij.psi.impl.DebugUtil
 import com.intellij.testFramework.TestDataPath
 import com.intellij.util.PathUtil
 import org.jetbrains.kotlin.fir.FirRenderer
-import org.jetbrains.kotlin.fir.builder.AbstractRawFirBuilderTestCase
-import org.jetbrains.kotlin.fir.builder.BodyBuildingMode
-import org.jetbrains.kotlin.fir.builder.StubFirScopeProvider
+import org.jetbrains.kotlin.fir.builder.*
 import org.jetbrains.kotlin.fir.pipeline.LightTreeToFirConverter
+import org.jetbrains.kotlin.fir.pipeline.SyntaxErrorCheckingMode
 import org.jetbrains.kotlin.fir.session.FirSessionFactory
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners
@@ -42,7 +41,7 @@ class TotalKotlinTest : AbstractRawFirBuilderTestCase() {
             DebugUtil.lightTreeToString(lightTree.node, false)
         } else {
             val lightTree = LightTreeAstBuilder().buildFileAST(text, URI(fileName))
-            val firFile = converter.convert(lightTree)
+            val firFile = converter.convert(lightTree).firFile
             StringBuilder().also { FirRenderer(it).visitFile(firFile) }.toString()
         }
     }
@@ -55,7 +54,8 @@ class TotalKotlinTest : AbstractRawFirBuilderTestCase() {
         val lightTreeConverter = LightTreeToFirConverter(
             session = FirSessionFactory.createEmptySession(),
             scopeProvider = StubFirScopeProvider,
-            stubMode = true
+            stubMode = true,
+            errorCheckingMode = SyntaxErrorCheckingMode.SKIP_CHECK
         )
 
         if (onlyLightTree) println("LightTree generation") else println("Fir from LightTree converter")

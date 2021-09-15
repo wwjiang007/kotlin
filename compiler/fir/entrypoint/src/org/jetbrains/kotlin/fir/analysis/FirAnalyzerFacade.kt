@@ -16,11 +16,13 @@ import org.jetbrains.kotlin.fir.backend.Fir2IrResult
 import org.jetbrains.kotlin.fir.backend.jvm.Fir2IrJvmSpecialAnnotationSymbolProvider
 import org.jetbrains.kotlin.fir.backend.jvm.FirJvmKotlinMangler
 import org.jetbrains.kotlin.fir.backend.jvm.FirJvmVisibilityConverter
+import org.jetbrains.kotlin.fir.builder.convertIgnoreErrors
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.lightTree.LightTreeAstBuilder
 import org.jetbrains.kotlin.fir.moduleData
 import org.jetbrains.kotlin.fir.pipeline.LightTreeToFirConverter
 import org.jetbrains.kotlin.fir.pipeline.PsiToFirConverter
+import org.jetbrains.kotlin.fir.pipeline.SyntaxErrorCheckingMode
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.fir.resolve.firProvider
 import org.jetbrains.kotlin.fir.resolve.providers.impl.FirProviderImpl
@@ -54,21 +56,23 @@ class FirAnalyzerFacade(
 
     private var collectedDiagnostics: Map<FirFile, List<FirDiagnostic>>? = null
 
+    // TODO: drop this
     private fun buildRawFir() {
         if (firFiles != null) return
         val firProvider = (session.firProvider as FirProviderImpl)
         firFiles = if (useLightTree) {
-            val builder = LightTreeToFirConverter(session, firProvider.kotlinScopeProvider)
-            originalFiles.mapNotNull {
+            val builder =
+                LightTreeToFirConverter(session, firProvider.kotlinScopeProvider, errorCheckingMode = SyntaxErrorCheckingMode.SKIP_CHECK)
+            originalFiles.map {
                 val lightTree = LightTreeAstBuilder().buildFileAST(it.toURI())
-                builder.convert(lightTree)?.also { firFile ->
+                builder.convert(lightTree.node, lightTree.source).firFile.also { firFile ->
                     firProvider.recordFile(firFile)
                 }
             }
         } else {
-            val builder = PsiToFirConverter(session, firProvider.kotlinScopeProvider)
+            val builder = PsiToFirConverter(session, firProvider.kotlinScopeProvider, SyntaxErrorCheckingMode.SKIP_CHECK)
             ktFiles.map {
-                builder.convert(it)!!.also { firFile ->
+                builder.convertIgnoreErrors(it).also { firFile ->
                     firProvider.recordFile(firFile)
                 }
             }

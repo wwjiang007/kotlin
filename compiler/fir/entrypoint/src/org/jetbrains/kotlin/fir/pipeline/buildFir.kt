@@ -11,11 +11,8 @@ import com.intellij.util.diff.FlyweightCapableTreeStructure
 import org.jetbrains.kotlin.fir.FirRealSourceElementKind
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.FirSourceElement
-import org.jetbrains.kotlin.fir.builder.AstToFirConverter
-import org.jetbrains.kotlin.fir.builder.BodyBuildingMode
-import org.jetbrains.kotlin.fir.builder.PsiHandlingMode
-import org.jetbrains.kotlin.fir.builder.RawFirBuilder
-import org.jetbrains.kotlin.fir.declarations.FirFile
+import org.jetbrains.kotlin.fir.builder.*
+import org.jetbrains.kotlin.fir.declarations.builder.buildFile
 import org.jetbrains.kotlin.fir.lightTree.converter.DeclarationsConverter
 import org.jetbrains.kotlin.fir.scopes.FirScopeProvider
 import org.jetbrains.kotlin.fir.toFirPsiSourceElement
@@ -24,32 +21,38 @@ import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import java.io.File
 import java.net.URI
 
-class PsiToFirConverter(
-    private val session: FirSession,
-    scopeProvider: FirScopeProvider,
-    private val continueOnSyntaxErrors: Boolean = false,
-    private val syntaxErrorReporter: ((FirSourceElement) -> Unit)? = null,
-    bodyBuildingMode: BodyBuildingMode = BodyBuildingMode.NORMAL
-) : AstToFirConverter<KtFile> {
+enum class SyntaxErrorCheckingMode {
+    SKIP_CHECK,
+    CONVERT_ON_ERRORS,
+    EMPTY_RESULT_ON_ERROR
+}
 
+class PsiToFirConverter(
+    session: FirSession,
+    scopeProvider: FirScopeProvider,
+    private val errorCheckingMode: SyntaxErrorCheckingMode = SyntaxErrorCheckingMode.EMPTY_RESULT_ON_ERROR,
+    bodyBuildingMode: BodyBuildingMode = BodyBuildingMode.NORMAL
+): AstToFirConverter<KtFile> {
     private val builder = RawFirBuilder(session, scopeProvider, PsiHandlingMode.COMPILER, bodyBuildingMode)
 
-    override fun convert(node: KtFile, source: URI): FirFile? {
-        var hasErrors = false
-        syntaxErrorReporter?.let { syntaxErrorReporter ->
+    override fun convert(node: KtFile, source: URI): FirFileWithSyntaxErrors {
+        val errors = mutableListOf<FirSyntaxError>()
+        if (errorCheckingMode != SyntaxErrorCheckingMode.SKIP_CHECK) {
             node.acceptChildren(object : KtTreeVisitorVoid() {
                 override fun visitErrorElement(element: PsiErrorElement) {
-                    syntaxErrorReporter(element.toFirPsiSourceElement(FirRealSourceElementKind))
-                    hasErrors = true
+                    errors.add(FirSyntaxError(element.toFirPsiSourceElement(FirRealSourceElementKind), element.errorDescription))
                 }
             })
         }
-        return if (hasErrors && !continueOnSyntaxErrors) null
-        else builder.buildFirFile(node)
+        val firFile =
+            if (errors.isNotEmpty() && errorCheckingMode != SyntaxErrorCheckingMode.CONVERT_ON_ERRORS) buildFile {}
+            else builder.buildFirFile(node)
+
+        return FirFileWithSyntaxErrors(firFile, errors)
     }
 }
 
-fun PsiToFirConverter.convert(files: Collection<KtFile>): List<FirFile> = files.mapNotNull {
+fun PsiToFirConverter.convert(files: Collection<KtFile>): List<FirFileWithSyntaxErrors> = files.map {
     convert(it, URI(it.virtualFile.path))
 }
 
@@ -57,11 +60,25 @@ class LightTreeToFirConverter(
     private val session: FirSession,
     private val scopeProvider: FirScopeProvider,
     private val stubMode: Boolean = false,
-    private val syntaxErrorReporter: ((FirSourceElement) -> Unit)? = null
+    private val errorCheckingMode: SyntaxErrorCheckingMode = SyntaxErrorCheckingMode.EMPTY_RESULT_ON_ERROR
 ) : AstToFirConverter<FlyweightCapableTreeStructure<LighterASTNode>> {
 
-    override fun convert(node: FlyweightCapableTreeStructure<LighterASTNode>, source: URI): FirFile {
-        return DeclarationsConverter(session, scopeProvider, stubMode, node, syntaxErrorReporter = syntaxErrorReporter)
-            .convertFile(node.root, File(source.path).name)
+    override fun convert(node: FlyweightCapableTreeStructure<LighterASTNode>, source: URI): FirFileWithSyntaxErrors {
+        val errors = mutableListOf<FirSyntaxError>()
+        val converter = DeclarationsConverter(
+            session, scopeProvider, stubMode,
+            node,
+            syntaxErrorReporter = if (errorCheckingMode != SyntaxErrorCheckingMode.SKIP_CHECK) { it: FirSourceElement ->
+                errors.add(FirSyntaxError(it, ""))
+            }
+            else null
+        )
+        val conversionResult = converter.convertFile(node.root, File(source.path).name)
+        val firFile =
+            if (errors.isNotEmpty() && errorCheckingMode != SyntaxErrorCheckingMode.CONVERT_ON_ERRORS) buildFile {}
+            else conversionResult
+
+        return FirFileWithSyntaxErrors(firFile, errors)
     }
 }
+

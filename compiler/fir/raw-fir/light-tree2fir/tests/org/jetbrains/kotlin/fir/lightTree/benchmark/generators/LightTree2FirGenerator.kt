@@ -9,8 +9,11 @@ import com.intellij.psi.impl.DebugUtil
 import org.jetbrains.kotlin.fir.FirRenderer
 import org.jetbrains.kotlin.fir.builder.AbstractRawFirBuilderTestCase
 import org.jetbrains.kotlin.fir.builder.StubFirScopeProvider
+import org.jetbrains.kotlin.fir.builder.buildFileAST
+import org.jetbrains.kotlin.fir.builder.convert
 import org.jetbrains.kotlin.fir.lightTree.LightTreeAstBuilder
 import org.jetbrains.kotlin.fir.pipeline.LightTreeToFirConverter
+import org.jetbrains.kotlin.fir.pipeline.SyntaxErrorCheckingMode
 import org.jetbrains.kotlin.fir.session.FirSessionFactory
 import org.openjdk.jmh.annotations.Scope
 import org.openjdk.jmh.annotations.State
@@ -27,10 +30,11 @@ open class LightTree2FirGenerator : TreeGenerator, AbstractRawFirBuilderTestCase
         val lightTreeConverter = LightTreeToFirConverter(
             session = FirSessionFactory.createEmptySession(),
             scopeProvider = StubFirScopeProvider,
-            stubMode = stubMode
+            stubMode = stubMode,
+            errorCheckingMode = SyntaxErrorCheckingMode.SKIP_CHECK
         )
         val lightTree = LightTreeAstBuilder().buildFileAST(text, file.toURI())
-        val firFile = lightTreeConverter.convert(lightTree)
+        val firFile = lightTreeConverter.convert(lightTree).firFile
         StringBuilder().also { FirRenderer(it).visitFile(firFile) }.toString()
     }
 

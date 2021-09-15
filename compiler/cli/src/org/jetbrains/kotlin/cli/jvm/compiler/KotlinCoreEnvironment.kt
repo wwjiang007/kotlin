@@ -67,7 +67,6 @@ import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.ERROR
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity.STRONG_WARNING
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.common.toBooleanLenient
-import org.jetbrains.kotlin.cli.jvm.JvmRuntimeVersionsConsistencyChecker
 import org.jetbrains.kotlin.cli.jvm.compiler.jarfs.FastJarFileSystem
 import org.jetbrains.kotlin.cli.jvm.config.*
 import org.jetbrains.kotlin.cli.jvm.index.*
@@ -230,7 +229,7 @@ class KotlinCoreEnvironment private constructor(
             extension.updateConfiguration(configuration)
         }
 
-        sourceFiles += createKtFiles(project)
+        sourceFiles += createSourceFilesFromSourceRoots(configuration, project, getSourceRootsCheckingForDuplicates())
 
         collectAdditionalSources(project)
 
@@ -457,9 +456,6 @@ class KotlinCoreEnvironment private constructor(
     }
 
     fun getSourceFiles(): List<KtFile> = sourceFiles
-
-    private fun createKtFiles(project: Project): List<KtFile> =
-        createSourceFilesFromSourceRoots(configuration, project, getSourceRootsCheckingForDuplicates())
 
     internal fun report(severity: CompilerMessageSeverity, message: String) = configuration.report(severity, message)
 

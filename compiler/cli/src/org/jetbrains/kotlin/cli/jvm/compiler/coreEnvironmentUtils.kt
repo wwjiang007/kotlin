@@ -30,18 +30,18 @@ fun CompilerConfiguration.report(severity: CompilerMessageSeverity, message: Str
     get(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY)?.report(severity, message, location)
 }
 
-fun createSourceFilesFromSourceRoots(
+fun <T> createSourceFilesFromSourceRoots(
     configuration: CompilerConfiguration,
     project: Project,
     sourceRoots: List<KotlinSourceRoot>,
-    reportLocation: CompilerMessageLocation? = null
-): MutableList<KtFile> {
+    reportLocation: CompilerMessageLocation? = null,
+    convertToSourceFile: (VirtualFile, Boolean) -> T?
+): MutableList<T> {
     val localFileSystem = VirtualFileManager.getInstance()
         .getFileSystem(StandardFileSystems.FILE_PROTOCOL)
-    val psiManager = PsiManager.getInstance(project)
 
     val processedFiles = hashSetOf<VirtualFile>()
-    val result = mutableListOf<KtFile>()
+    val result = mutableListOf<T>()
 
     val virtualFileCreator = PreprocessedFileCreator(project)
 
@@ -70,18 +70,29 @@ fun createSourceFilesFromSourceRoots(
 
             val virtualFile = localFileSystem.findFileByPath(file.absolutePath)?.let(virtualFileCreator::create)
             if (virtualFile != null && processedFiles.add(virtualFile)) {
-                val psiFile = psiManager.findFile(virtualFile)
-                if (psiFile is KtFile) {
-                    result.add(psiFile)
-                    if (isCommon) {
-                        psiFile.isCommonSource = true
-                    }
+                convertToSourceFile(virtualFile, isCommon)?.let {
+                    result.add(it)
                 }
             }
         }
     }
 
     return result
+}
+
+fun createSourceFilesFromSourceRoots(
+    configuration: CompilerConfiguration,
+    project: Project,
+    sourceRoots: List<KotlinSourceRoot>,
+    reportLocation: CompilerMessageLocation? = null
+): MutableList<KtFile> {
+    val psiManager = PsiManager.getInstance(project)
+    return createSourceFilesFromSourceRoots(configuration, project, sourceRoots, reportLocation) { virtualFile, isCommon ->
+        psiManager.findFile(virtualFile)?.let {
+            if (it is KtFile) it.also { it.isCommonSource = isCommon }
+            else null
+        }
+    }
 }
 
 val KotlinCoreEnvironment.messageCollector: MessageCollector

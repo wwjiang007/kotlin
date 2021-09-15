@@ -28,14 +28,13 @@ import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
 import org.jetbrains.kotlin.diagnostics.Diagnostic
 import org.jetbrains.kotlin.diagnostics.PsiDiagnosticUtils
 import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnostic
-import org.jetbrains.kotlin.fir.builder.BodyBuildingMode
-import org.jetbrains.kotlin.fir.builder.PsiHandlingMode
-import org.jetbrains.kotlin.fir.builder.RawFirBuilder
+import org.jetbrains.kotlin.fir.builder.*
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.extensions.BunchOfRegisteredExtensions
 import org.jetbrains.kotlin.fir.java.FirProjectSessionProvider
 import org.jetbrains.kotlin.fir.lightTree.LightTreeAstBuilder
 import org.jetbrains.kotlin.fir.pipeline.LightTreeToFirConverter
+import org.jetbrains.kotlin.fir.pipeline.SyntaxErrorCheckingMode
 import org.jetbrains.kotlin.fir.resolve.firProvider
 import org.jetbrains.kotlin.fir.resolve.providers.impl.FirProviderImpl
 import org.jetbrains.kotlin.fir.session.FirSessionFactory
@@ -131,10 +130,13 @@ abstract class AbstractFirBaseDiagnosticsTest : BaseDiagnosticsTest() {
     private fun mapKtFilesToFirFiles(session: FirSession, ktFiles: List<KtFile>, firFiles: MutableList<FirFile>, useLightTree: Boolean) {
         val firProvider = (session.firProvider as FirProviderImpl)
         if (useLightTree) {
-            val lightTreeBuilder = LightTreeToFirConverter(session, firProvider.kotlinScopeProvider, stubMode = false)
-            ktFiles.mapNotNullTo(firFiles) {
+            val lightTreeBuilder = LightTreeToFirConverter(
+                session, firProvider.kotlinScopeProvider, stubMode = false,
+                errorCheckingMode = SyntaxErrorCheckingMode.SKIP_CHECK
+            )
+            ktFiles.mapTo(firFiles) {
                 val lightTree = LightTreeAstBuilder().buildFileAST(it.text, URI(it.virtualFile.path))
-                lightTreeBuilder.convert(lightTree)?.also {
+                lightTreeBuilder.convert(lightTree).firFile.also {
                     (session.firProvider as FirProviderImpl).recordFile(it)
                 }
             }

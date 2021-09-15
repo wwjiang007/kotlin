@@ -12,13 +12,12 @@ import com.intellij.util.PathUtil
 import junit.framework.TestCase
 import org.jetbrains.kotlin.checkers.BaseDiagnosticsTest.Companion.DIAGNOSTIC_IN_TESTDATA_PATTERN
 import org.jetbrains.kotlin.fir.FirRenderer
-import org.jetbrains.kotlin.fir.builder.AbstractRawFirBuilderTestCase
-import org.jetbrains.kotlin.fir.builder.BodyBuildingMode
-import org.jetbrains.kotlin.fir.builder.StubFirScopeProvider
+import org.jetbrains.kotlin.fir.builder.*
 import org.jetbrains.kotlin.fir.lightTree.LightTreeAstBuilder
 import org.jetbrains.kotlin.fir.lightTree.walkTopDown
 import org.jetbrains.kotlin.fir.lightTree.walkTopDownWithTestData
 import org.jetbrains.kotlin.fir.pipeline.LightTreeToFirConverter
+import org.jetbrains.kotlin.fir.pipeline.SyntaxErrorCheckingMode
 import org.jetbrains.kotlin.fir.session.FirSessionFactory
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.test.JUnit3RunnerWithInners
@@ -60,7 +59,8 @@ class TreesCompareTest : AbstractRawFirBuilderTestCase() {
         val lightTreeConverter = LightTreeToFirConverter(
             session = FirSessionFactory.createEmptySession(),
             scopeProvider = StubFirScopeProvider,
-            stubMode = stubMode
+            stubMode = stubMode,
+            errorCheckingMode = SyntaxErrorCheckingMode.SKIP_CHECK
         )
         compareBase(System.getProperty("user.dir"), withTestData = false) { file ->
             val text = FileUtil.loadFile(file, CharsetToolkit.UTF8, true).trim()
@@ -72,8 +72,9 @@ class TreesCompareTest : AbstractRawFirBuilderTestCase() {
 
             //light tree
             val lightTree = LightTreeAstBuilder().buildFileAST(text, file.toURI())
-            val firFileFromLightTree = lightTreeConverter.convert(lightTree)
-            val treeFromLightTree = StringBuilder().also { FirRenderer(it).visitFile(firFileFromLightTree) }.toString()
+            val firFileFromLightTree = lightTreeConverter.convert(lightTree).firFile
+            val treeFromLightTree =
+                StringBuilder().also { FirRenderer(it).visitFile(firFileFromLightTree) }.toString()
 
             return@compareBase treeFromLightTree == treeFromPsi
         }
@@ -83,7 +84,8 @@ class TreesCompareTest : AbstractRawFirBuilderTestCase() {
         val lightTreeConverter = LightTreeToFirConverter(
             session = FirSessionFactory.createEmptySession(),
             scopeProvider = StubFirScopeProvider,
-            stubMode = false
+            stubMode = false,
+            errorCheckingMode = SyntaxErrorCheckingMode.SKIP_CHECK
         )
         compareBase("compiler/testData/diagnostics/tests", withTestData = true) { file ->
             if (file.name.endsWith(".fir.kt")) {
@@ -104,7 +106,8 @@ class TreesCompareTest : AbstractRawFirBuilderTestCase() {
 
             //light tree
             val lightTree = LightTreeAstBuilder().buildFileAST(text, file.toURI())
-            val firFileFromLightTree = lightTreeConverter.convert(lightTree)
+            val firFileFromLightTree = lightTreeConverter.convert(lightTree).firFile
+
             val treeFromLightTree = StringBuilder().also { FirRenderer(it).visitFile(firFileFromLightTree) }.toString()
                 .replace("<Unsupported LValue.*?>".toRegex(), "<Unsupported LValue>")
 

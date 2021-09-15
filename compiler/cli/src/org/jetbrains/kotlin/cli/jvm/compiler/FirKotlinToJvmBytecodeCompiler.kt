@@ -237,17 +237,17 @@ object FirKotlinToJvmBytecodeCompiler {
             syntaxErrors = true
         }
 
-        fun FirSession.convertPsiFilesToFir(files: List<KtFile>) =
-            PsiToFirConverter(
+        fun FirSession.convertPsiFilesToFir(files: List<KtFile>): List<FirFile> {
+            return PsiToFirConverter(
                 this,
                 (firProvider as FirProviderImpl).kotlinScopeProvider,
-                false,
-                ::reportSyntaxError
-            ).convert(files).also {
-                it.forEach {
-                    (firProvider as FirProviderImpl).recordFile(it) // TODO: extract/abstract functionality so cast is not needed
-                }
+                SyntaxErrorCheckingMode.EMPTY_RESULT_ON_ERROR
+            ).convert(files).map {
+                (firProvider as FirProviderImpl).recordFile(it.firFile) // TODO: extract/abstract functionality so cast is not needed
+                it.syntaxErrors.forEach { reportSyntaxError(it.location) }
+                it.firFile
             }
+        }
 
         val commonRawFir = commonSession?.convertPsiFilesToFir(commonKtFiles)
         val rawFir = session.convertPsiFilesToFir(ktFiles)

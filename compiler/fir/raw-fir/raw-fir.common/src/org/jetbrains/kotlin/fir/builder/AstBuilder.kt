@@ -13,11 +13,11 @@ import java.nio.file.Path
 
 class SourceFileAST<N>(val node: N, val source: URI)
 
-interface AstBuilder<T> {
-    fun buildAST(code: String): T
-    fun buildFileAST(uri: URI): SourceFileAST<T> = buildFileAST(FileUtil.loadFile(File(uri), CharsetToolkit.UTF8, true), uri)
-    fun buildFileAST(code: String, uri: URI = URI("")): SourceFileAST<T> = SourceFileAST(buildAST(code), uri)
+fun interface AstBuilder<N> {
+    fun buildAST(code: String): N
 }
 
+fun <N> AstBuilder<N>.buildFileAST(code: String, uri: URI = URI("")): SourceFileAST<N> = SourceFileAST(buildAST(code), uri)
+fun <N> AstBuilder<N>.buildFileAST(uri: URI): SourceFileAST<N> = buildFileAST(FileUtil.loadFile(File(uri), CharsetToolkit.UTF8, true), uri)
 fun <N> AstBuilder<N>.buildFileAST(file: File): SourceFileAST<N> = buildFileAST(file.toURI())
 fun <N> AstBuilder<N>.buildFileAST(path: Path): SourceFileAST<N> = buildFileAST(path.toUri())

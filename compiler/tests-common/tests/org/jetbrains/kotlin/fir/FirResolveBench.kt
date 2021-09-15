@@ -10,6 +10,8 @@ import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.CharsetToolkit
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.fir.builder.RawFirBuilder
+import org.jetbrains.kotlin.fir.builder.buildFileAST
+import org.jetbrains.kotlin.fir.builder.convertIgnoreErrors
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.diagnostics.ConeStubDiagnostic
 import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
@@ -145,7 +147,7 @@ class FirResolveBench(val withProgress: Boolean, val listener: BenchListener? = 
             val time = measureNanoTime {
                 code = FileUtil.loadFile(file, CharsetToolkit.UTF8, true).trim()
                 val lightTree = LightTreeAstBuilder().buildFileAST(code, file.toURI())
-                firFile = builder.convert(lightTree)?.also {
+                firFile = builder.convertIgnoreErrors(lightTree).also {
                     (session.firProvider as FirProviderImpl).recordFile(it)
                 }
             }
