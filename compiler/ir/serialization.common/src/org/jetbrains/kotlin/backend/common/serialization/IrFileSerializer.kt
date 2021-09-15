@@ -1424,7 +1424,7 @@ open class IrFileSerializer(
     open fun keepOrderOfProperties(property: IrProperty): Boolean = !property.isConst
     open fun backendSpecificSerializeAllMembers(irClass: IrClass) = false
 
-    fun memberNeedsSerialization(member: IrDeclaration): Boolean {
+    open fun memberNeedsSerialization(member: IrDeclaration): Boolean {
         val parent = member.parent
         require(parent is IrClass)
         if (backendSpecificSerializeAllMembers(parent)) return true

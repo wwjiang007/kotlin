@@ -29,7 +29,7 @@ class JvmFileFacadeClass(
 
     override fun loadIr(): Boolean {
         irLoaded?.let { return it }
-        irLoaded = stubGenerator.extensions.deserializeFacadeClass(this, stubGenerator, parent, allowErrorNodes = false)
-        return irLoaded!!
+        return stubGenerator.extensions.deserializeClass(this, stubGenerator, parent, allowErrorNodes = false)
+            .also { irLoaded = it }
     }
 }
