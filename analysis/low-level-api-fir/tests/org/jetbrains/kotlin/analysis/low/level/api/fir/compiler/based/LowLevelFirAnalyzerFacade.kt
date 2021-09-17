@@ -10,7 +10,7 @@ import org.jetbrains.kotlin.analysis.low.level.api.fir.api.FirModuleResolveState
 import org.jetbrains.kotlin.analysis.low.level.api.fir.api.collectDiagnosticsForFile
 import org.jetbrains.kotlin.analysis.low.level.api.fir.api.resolvedFirToPhase
 import org.jetbrains.kotlin.fir.analysis.AbstractFirAnalyzerFacade
-import org.jetbrains.kotlin.fir.analysis.diagnostics.FirDiagnostic
+import org.jetbrains.kotlin.fir.analysis.diagnostics.KtDiagnostic
 import org.jetbrains.kotlin.fir.backend.Fir2IrResult
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.declarations.FirResolvePhase
@@ -28,13 +28,13 @@ class LowLevelFirAnalyzerFacade(
 ) : AbstractFirAnalyzerFacade() {
     override val scopeSession: ScopeSession get() = shouldNotBeCalled()
 
-    override fun runCheckers(): Map<FirFile, List<FirDiagnostic>> {
+    override fun runCheckers(): Map<FirFile, List<KtDiagnostic>> {
         findSealedInheritors()
         return allFirFiles.values.associateWith { firFile ->
             val ktFile = firFile.psi as KtFile
             val diagnostics = ktFile.collectDiagnosticsForFile(resolveState, diagnosticCheckerFilter)
             @Suppress("UNCHECKED_CAST")
-            diagnostics.toList() as List<FirDiagnostic>
+            diagnostics.toList() as List<KtDiagnostic>
         }
     }
 

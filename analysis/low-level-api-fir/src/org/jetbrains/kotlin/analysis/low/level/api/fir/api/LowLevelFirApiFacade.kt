@@ -6,19 +6,18 @@
 package org.jetbrains.kotlin.analysis.low.level.api.fir.api
 
 import com.intellij.openapi.project.Project
-import org.jetbrains.kotlin.analysis.providers.getModuleInfo
-import org.jetbrains.kotlin.analyzer.ModuleInfo
-import org.jetbrains.kotlin.fir.FirElement
-import org.jetbrains.kotlin.fir.analysis.diagnostics.FirPsiDiagnostic
-import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.analysis.low.level.api.fir.FirIdeResolveStateService
 import org.jetbrains.kotlin.analysis.low.level.api.fir.annotations.InternalForInline
 import org.jetbrains.kotlin.analysis.low.level.api.fir.lazy.resolve.ResolveType
+import org.jetbrains.kotlin.analysis.providers.getModuleInfo
+import org.jetbrains.kotlin.analyzer.ModuleInfo
+import org.jetbrains.kotlin.fir.FirElement
+import org.jetbrains.kotlin.fir.analysis.diagnostics.KtPsiDiagnostic
+import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtLambdaExpression
-import kotlin.reflect.KClass
 
 /**
  * Returns [FirModuleResolveState] which corresponds to containing module
@@ -146,7 +145,7 @@ fun <D : FirDeclaration, R> D.withFirDeclaration(
  * Returns a list of Diagnostics compiler finds for given [KtElement]
  * This operation could be performance affective because it create FIleStructureElement and resolve non-local declaration into BODY phase
  */
-fun KtElement.getDiagnostics(resolveState: FirModuleResolveState, filter: DiagnosticCheckerFilter): Collection<FirPsiDiagnostic> =
+fun KtElement.getDiagnostics(resolveState: FirModuleResolveState, filter: DiagnosticCheckerFilter): Collection<KtPsiDiagnostic> =
     resolveState.getDiagnostics(this, filter)
 
 /**
@@ -156,7 +155,7 @@ fun KtElement.getDiagnostics(resolveState: FirModuleResolveState, filter: Diagno
 fun KtFile.collectDiagnosticsForFile(
     resolveState: FirModuleResolveState,
     filter: DiagnosticCheckerFilter
-): Collection<FirPsiDiagnostic> =
+): Collection<KtPsiDiagnostic> =
     resolveState.collectDiagnosticsForFile(this, filter)
 
 /**
