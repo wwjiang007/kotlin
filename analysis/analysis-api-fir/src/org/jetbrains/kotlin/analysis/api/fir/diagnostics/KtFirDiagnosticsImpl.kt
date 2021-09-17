@@ -238,7 +238,7 @@ internal class InvisibleSetterImpl(
     override val property: KtVariableSymbol,
     override val visibility: Visibility,
     override val callableId: CallableId,
-    override val firDiagnostic: FirPsiDiagnostic,
+    override val firDiagnostic: KtPsiDiagnostic,
     override val token: ValidityToken,
 ) : KtFirDiagnostic.InvisibleSetter(), KtAbstractFirDiagnostic<PsiElement>
 
@@ -335,23 +335,23 @@ internal class ResolutionToClassifierImpl(
 ) : KtFirDiagnostic.ResolutionToClassifier(), KtAbstractFirDiagnostic<PsiElement>
 
 internal class SuperIsNotAnExpressionImpl(
-    override val firDiagnostic: FirPsiDiagnostic,
+    override val firDiagnostic: KtPsiDiagnostic,
     override val token: ValidityToken,
 ) : KtFirDiagnostic.SuperIsNotAnExpression(), KtAbstractFirDiagnostic<PsiElement>
 
 internal class SuperNotAvailableImpl(
-    override val firDiagnostic: FirPsiDiagnostic,
+    override val firDiagnostic: KtPsiDiagnostic,
     override val token: ValidityToken,
 ) : KtFirDiagnostic.SuperNotAvailable(), KtAbstractFirDiagnostic<PsiElement>
 
 internal class AbstractSuperCallImpl(
-    override val firDiagnostic: FirPsiDiagnostic,
+    override val firDiagnostic: KtPsiDiagnostic,
     override val token: ValidityToken,
 ) : KtFirDiagnostic.AbstractSuperCall(), KtAbstractFirDiagnostic<PsiElement>
 
 internal class InstanceAccessBeforeSuperCallImpl(
     override val target: String,
-    override val firDiagnostic: FirPsiDiagnostic,
+    override val firDiagnostic: KtPsiDiagnostic,
     override val token: ValidityToken,
 ) : KtFirDiagnostic.InstanceAccessBeforeSuperCall(), KtAbstractFirDiagnostic<PsiElement>
 
@@ -856,17 +856,17 @@ internal class OptInMarkerWithWrongRetentionImpl(
 
 internal class OptInMarkerOnWrongTargetImpl(
     override val target: String,
-    override val firDiagnostic: FirPsiDiagnostic,
+    override val firDiagnostic: KtPsiDiagnostic,
     override val token: ValidityToken,
 ) : KtFirDiagnostic.OptInMarkerOnWrongTarget(), KtAbstractFirDiagnostic<KtAnnotationEntry>
 
 internal class OptInMarkerOnOverrideImpl(
-    override val firDiagnostic: FirPsiDiagnostic,
+    override val firDiagnostic: KtPsiDiagnostic,
     override val token: ValidityToken,
 ) : KtFirDiagnostic.OptInMarkerOnOverride(), KtAbstractFirDiagnostic<KtAnnotationEntry>
 
 internal class OptInMarkerOnOverrideWarningImpl(
-    override val firDiagnostic: FirPsiDiagnostic,
+    override val firDiagnostic: KtPsiDiagnostic,
     override val token: ValidityToken,
 ) : KtFirDiagnostic.OptInMarkerOnOverrideWarning(), KtAbstractFirDiagnostic<KtAnnotationEntry>
 
@@ -2660,12 +2660,12 @@ internal class DuplicateLabelInWhenImpl(
 ) : KtFirDiagnostic.DuplicateLabelInWhen(), KtAbstractFirDiagnostic<KtElement>
 
 internal class ConfusingBranchConditionErrorImpl(
-    override val firDiagnostic: FirPsiDiagnostic,
+    override val firDiagnostic: KtPsiDiagnostic,
     override val token: ValidityToken,
 ) : KtFirDiagnostic.ConfusingBranchConditionError(), KtAbstractFirDiagnostic<PsiElement>
 
 internal class ConfusingBranchConditionWarningImpl(
-    override val firDiagnostic: FirPsiDiagnostic,
+    override val firDiagnostic: KtPsiDiagnostic,
     override val token: ValidityToken,
 ) : KtFirDiagnostic.ConfusingBranchConditionWarning(), KtAbstractFirDiagnostic<PsiElement>
 
@@ -2835,7 +2835,7 @@ internal class PropertyAsOperatorImpl(
 
 internal class DslScopeViolationImpl(
     override val calleeSymbol: KtSymbol,
-    override val firDiagnostic: FirPsiDiagnostic,
+    override val firDiagnostic: KtPsiDiagnostic,
     override val token: ValidityToken,
 ) : KtFirDiagnostic.DslScopeViolation(), KtAbstractFirDiagnostic<PsiElement>
 
@@ -2941,7 +2941,7 @@ internal class ReturnNotAllowedImpl(
 ) : KtFirDiagnostic.ReturnNotAllowed(), KtAbstractFirDiagnostic<KtReturnExpression>
 
 internal class NotAFunctionLabelImpl(
-    override val firDiagnostic: FirPsiDiagnostic,
+    override val firDiagnostic: KtPsiDiagnostic,
     override val token: ValidityToken,
 ) : KtFirDiagnostic.NotAFunctionLabel(), KtAbstractFirDiagnostic<KtReturnExpression>
 
