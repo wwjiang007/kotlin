@@ -708,7 +708,7 @@ public class JsToStringGenerationVisitor extends JsVisitor {
         }
         nestedPush(thenStmt);
 
-        if (thenStmt instanceof JsBlock) {
+        if (thenStmt instanceof JsBlock && elseStatement != null) {
             lineBreakAfterBlock = false;
         }
 
