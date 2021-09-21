@@ -510,8 +510,12 @@ default: `indy-with-constants` for JVM target 9 or greater, `inline` otherwise""
         result[JvmAnalysisFlags.javaTypeEnhancementState] = JavaTypeEnhancementStateParser(collector, languageVersion.toKotlinVersion())
             .parse(jsr305, supportCompatqualCheckerFrameworkAnnotations, jspecifyAnnotations, nullabilityAnnotations)
         result[AnalysisFlags.ignoreDataFlowInAssert] = JVMAssertionsMode.fromString(assertionsMode) != JVMAssertionsMode.LEGACY
+
         JvmDefaultMode.fromStringOrNull(jvmDefault)?.let {
             result[JvmAnalysisFlags.jvmDefaultMode] = it
+            if (jvmTarget != "1.6") {
+                result[JvmAnalysisFlags.jvmDefaultMode] = JvmDefaultMode.ALL_INCOMPATIBLE
+            }
         } ?: collector.report(
             CompilerMessageSeverity.ERROR,
             "Unknown @JvmDefault mode: $jvmDefault, " +

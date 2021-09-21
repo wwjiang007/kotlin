@@ -19,7 +19,7 @@ enum class JvmDefaultMode(val description: String) {
         get() = this == ENABLE_WITH_DEFAULT_IMPLS || this == ALL_COMPATIBILITY
 
     val forAllMethodsWithBody
-        get() = this == ALL_COMPATIBILITY || this == ALL_INCOMPATIBLE
+        get() = true
 
     companion object {
         @JvmField
