@@ -2,13 +2,13 @@ fun foo(s: String?): String {
   { // BLOCK
     val tmp0_safe_receiver: String? = s
     when {
-      EQEQ(arg0 = tmp0_safe_receiver, arg1 = null) -> null
+      EQEQ(arg0 = tmp0_safe_receiver, arg1 = null) -> null /*~> Unit */
       else -> tmp0_safe_receiver.let<String, Nothing>(block = local fun <anonymous>(it: String): Nothing {
         return it
       }
 )
     }
-  } /*~> Unit */
+  }
   return ""
 }
 
@@ -16,7 +16,7 @@ fun bar(s: String?, t: String?): String {
   { // BLOCK
     val tmp0_safe_receiver: String? = s
     when {
-      EQEQ(arg0 = tmp0_safe_receiver, arg1 = null) -> null
+      EQEQ(arg0 = tmp0_safe_receiver, arg1 = null) -> null /*~> Unit */
       else -> tmp0_safe_receiver.let<String, Nothing?>(block = local fun <anonymous>(it: String): Nothing? {
         return { // BLOCK
           val tmp0_safe_receiver: String? = t
@@ -29,9 +29,9 @@ fun bar(s: String?, t: String?): String {
           }
         }
       }
-)
+) /*~> Unit */
     }
-  } /*~> Unit */
+  }
   return ""
 }
 
@@ -40,13 +40,13 @@ val String?.baz: String
     { // BLOCK
       val tmp0_safe_receiver: String? = <this>
       when {
-        EQEQ(arg0 = tmp0_safe_receiver, arg1 = null) -> null
+        EQEQ(arg0 = tmp0_safe_receiver, arg1 = null) -> null /*~> Unit */
         else -> tmp0_safe_receiver.let<String, Nothing>(block = local fun <anonymous>(it: String): Nothing {
           return it
         }
 )
       }
-    } /*~> Unit */
+    }
     return ""
   }
 

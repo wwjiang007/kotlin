@@ -36,6 +36,7 @@ import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtExpression
+import org.jetbrains.kotlin.psi.KtSafeQualifiedExpression
 import org.jetbrains.kotlin.psi.ValueArgument
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffsetSkippingComments
@@ -43,6 +44,7 @@ import org.jetbrains.kotlin.psi2ir.intermediate.*
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.DescriptorUtils
 import org.jetbrains.kotlin.resolve.ImportedFromObjectCallableDescriptor
+import org.jetbrains.kotlin.resolve.bindingContextUtil.isUsedAsStatement
 import org.jetbrains.kotlin.resolve.calls.callResolverUtil.getSuperCallExpression
 import org.jetbrains.kotlin.resolve.calls.callUtil.isSafeCall
 import org.jetbrains.kotlin.resolve.calls.components.isArrayOrArrayLiteral
@@ -171,7 +173,7 @@ fun StatementGenerator.generateCallReceiver(
     dispatchReceiver: ReceiverValue?,
     extensionReceiver: ReceiverValue?,
     isSafe: Boolean,
-    isAssignmentReceiver: Boolean = false
+    isStatement: Boolean = false
 ): CallReceiver {
     val dispatchReceiverValue: IntermediateValue?
     val extensionReceiverValue: IntermediateValue?
@@ -205,7 +207,7 @@ fun StatementGenerator.generateCallReceiver(
         extensionReceiverValue != null || dispatchReceiverValue != null ->
             SafeCallReceiver(
                 this, startOffset, endOffset,
-                extensionReceiverValue, dispatchReceiverValue, isAssignmentReceiver
+                extensionReceiverValue, dispatchReceiverValue, isStatement
             )
         else ->
             throw AssertionError("Safe call should have an explicit receiver: ${ktDefaultElement.text}")
@@ -699,7 +701,8 @@ fun StatementGenerator.pregenerateCallReceivers(resolvedCall: ResolvedCall<*>): 
         resolvedCall.resultingDescriptor,
         resolvedCall.dispatchReceiver,
         resolvedCall.extensionReceiver,
-        isSafe = resolvedCall.call.isSafeCall()
+        isSafe = resolvedCall.call.isSafeCall(),
+        isStatement = (resolvedCall.call.callElement.parent as? KtSafeQualifiedExpression)?.isUsedAsStatement(context.bindingContext) == true
     )
 
     call.superQualifier = getSuperQualifier(resolvedCall)

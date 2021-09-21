@@ -77,9 +77,9 @@ fun box() {
   { // BLOCK
     val tmp0_safe_receiver: Int = 42
     when {
-      EQEQ(arg0 = tmp0_safe_receiver, arg1 = null) -> null
-      else -> tmp0_safe_receiver.foo()
+      EQEQ(arg0 = tmp0_safe_receiver, arg1 = null) -> null /*~> Unit */
+      else -> tmp0_safe_receiver.foo() /*~> Unit */
     }
-  } /*~> Unit */
+  }
 }
 

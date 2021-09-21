@@ -278,7 +278,7 @@ class AssignmentGenerator(statementGenerator: StatementGenerator) : StatementGen
                     statementGenerator.generateCallReceiver(
                         ktLeft, descriptor, resolvedCall.dispatchReceiver, resolvedCall.extensionReceiver,
                         isSafe = resolvedCall.call.isSafeCall(),
-                        isAssignmentReceiver = isAssignmentStatement
+                        isStatement = isAssignmentStatement
                     )
                 )
             origin == IrStatementOrigin.EQ && !descriptor.isVar -> {
@@ -290,7 +290,7 @@ class AssignmentGenerator(statementGenerator: StatementGenerator) : StatementGen
                 val propertyReceiver = statementGenerator.generateCallReceiver(
                     ktLeft, descriptor, resolvedCall.dispatchReceiver, resolvedCall.extensionReceiver,
                     isSafe = resolvedCall.call.isSafeCall(),
-                    isAssignmentReceiver = isAssignmentStatement
+                    isStatement = isAssignmentStatement
                 )
 
                 val superQualifier = getSuperQualifier(resolvedCall)
