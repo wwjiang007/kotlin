@@ -53,8 +53,7 @@ fun test4(x: Ref?) {
   { // BLOCK
     val tmp0_safe_receiver: Ref? = x
     when {
-      EQEQ(arg0 = tmp0_safe_receiver, arg1 = null) -> null /*~> Unit */
-      else -> tmp0_safe_receiver.<set-value>(<set-?> = 0)
+      EQEQ(arg0 = tmp0_safe_receiver, arg1 = null).not() -> tmp0_safe_receiver.<set-value>(<set-?> = 0)
     }
   }
 }
@@ -77,8 +76,7 @@ fun box() {
   { // BLOCK
     val tmp0_safe_receiver: Int = 42
     when {
-      EQEQ(arg0 = tmp0_safe_receiver, arg1 = null) -> null /*~> Unit */
-      else -> tmp0_safe_receiver.foo() /*~> Unit */
+      EQEQ(arg0 = tmp0_safe_receiver, arg1 = null).not() -> tmp0_safe_receiver.foo() /*~> Unit */
     }
   }
 }

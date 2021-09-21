@@ -7,13 +7,10 @@ FILE fqName:<root> fileName:/SafeLetWithReturn.kt
           GET_VAR 's: kotlin.String? declared in <root>.foo' type=kotlin.String? origin=null
         WHEN type=kotlin.Unit origin=null
           BRANCH
-            if: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=EQEQ
-              arg0: GET_VAR 'val tmp_0: kotlin.String? [val] declared in <root>.foo' type=kotlin.String? origin=null
-              arg1: CONST Null type=kotlin.Nothing? value=null
-            then: TYPE_OP type=kotlin.Unit origin=IMPLICIT_COERCION_TO_UNIT typeOperand=kotlin.Unit
-              CONST Null type=kotlin.Nothing? value=null
-          BRANCH
-            if: CONST Boolean type=kotlin.Boolean value=true
+            if: CALL 'public final fun not (): kotlin.Boolean [operator] declared in kotlin.Boolean' type=kotlin.Boolean origin=EXCLEQ
+              $this: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=EXCLEQ
+                arg0: GET_VAR 'val tmp_0: kotlin.String? [val] declared in <root>.foo' type=kotlin.String? origin=null
+                arg1: CONST Null type=kotlin.Nothing? value=null
             then: CALL 'public final fun let <T, R> (block: kotlin.Function1<T of kotlin.StandardKt.let, R of kotlin.StandardKt.let>): R of kotlin.StandardKt.let [inline] declared in kotlin.StandardKt' type=kotlin.Nothing origin=null
               <T>: kotlin.String
               <R>: kotlin.Nothing
@@ -35,13 +32,10 @@ FILE fqName:<root> fileName:/SafeLetWithReturn.kt
           GET_VAR 's: kotlin.String? declared in <root>.bar' type=kotlin.String? origin=null
         WHEN type=kotlin.Unit origin=null
           BRANCH
-            if: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=EQEQ
-              arg0: GET_VAR 'val tmp_1: kotlin.String? [val] declared in <root>.bar' type=kotlin.String? origin=null
-              arg1: CONST Null type=kotlin.Nothing? value=null
-            then: TYPE_OP type=kotlin.Unit origin=IMPLICIT_COERCION_TO_UNIT typeOperand=kotlin.Unit
-              CONST Null type=kotlin.Nothing? value=null
-          BRANCH
-            if: CONST Boolean type=kotlin.Boolean value=true
+            if: CALL 'public final fun not (): kotlin.Boolean [operator] declared in kotlin.Boolean' type=kotlin.Boolean origin=EXCLEQ
+              $this: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=EXCLEQ
+                arg0: GET_VAR 'val tmp_1: kotlin.String? [val] declared in <root>.bar' type=kotlin.String? origin=null
+                arg1: CONST Null type=kotlin.Nothing? value=null
             then: TYPE_OP type=kotlin.Unit origin=IMPLICIT_COERCION_TO_UNIT typeOperand=kotlin.Unit
               CALL 'public final fun let <T, R> (block: kotlin.Function1<T of kotlin.StandardKt.let, R of kotlin.StandardKt.let>): R of kotlin.StandardKt.let [inline] declared in kotlin.StandardKt' type=kotlin.Nothing? origin=null
                 <T>: kotlin.String
@@ -85,13 +79,10 @@ FILE fqName:<root> fileName:/SafeLetWithReturn.kt
             GET_VAR '<this>: kotlin.String? declared in <root>.<get-baz>' type=kotlin.String? origin=null
           WHEN type=kotlin.Unit origin=null
             BRANCH
-              if: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=EQEQ
-                arg0: GET_VAR 'val tmp_3: kotlin.String? [val] declared in <root>.<get-baz>' type=kotlin.String? origin=null
-                arg1: CONST Null type=kotlin.Nothing? value=null
-              then: TYPE_OP type=kotlin.Unit origin=IMPLICIT_COERCION_TO_UNIT typeOperand=kotlin.Unit
-                CONST Null type=kotlin.Nothing? value=null
-            BRANCH
-              if: CONST Boolean type=kotlin.Boolean value=true
+              if: CALL 'public final fun not (): kotlin.Boolean [operator] declared in kotlin.Boolean' type=kotlin.Boolean origin=EXCLEQ
+                $this: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=EXCLEQ
+                  arg0: GET_VAR 'val tmp_3: kotlin.String? [val] declared in <root>.<get-baz>' type=kotlin.String? origin=null
+                  arg1: CONST Null type=kotlin.Nothing? value=null
               then: CALL 'public final fun let <T, R> (block: kotlin.Function1<T of kotlin.StandardKt.let, R of kotlin.StandardKt.let>): R of kotlin.StandardKt.let [inline] declared in kotlin.StandardKt' type=kotlin.Nothing origin=null
                 <T>: kotlin.String
                 <R>: kotlin.Nothing

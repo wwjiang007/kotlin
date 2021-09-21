@@ -126,13 +126,10 @@ FILE fqName:<root> fileName:/safeCalls.kts
             GET_VAR 'x: <root>.SafeCalls.Ref? declared in <root>.SafeCalls.test4' type=<root>.SafeCalls.Ref? origin=null
           WHEN type=kotlin.Unit origin=null
             BRANCH
-              if: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=EQEQ
-                arg0: GET_VAR 'val tmp_3: <root>.SafeCalls.Ref? [val] declared in <root>.SafeCalls.test4' type=<root>.SafeCalls.Ref? origin=null
-                arg1: CONST Null type=kotlin.Nothing? value=null
-              then: TYPE_OP type=kotlin.Unit origin=IMPLICIT_COERCION_TO_UNIT typeOperand=kotlin.Unit
-                CONST Null type=kotlin.Nothing? value=null
-            BRANCH
-              if: CONST Boolean type=kotlin.Boolean value=true
+              if: CALL 'public final fun not (): kotlin.Boolean [operator] declared in kotlin.Boolean' type=kotlin.Boolean origin=EXCLEQ
+                $this: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=EXCLEQ
+                  arg0: GET_VAR 'val tmp_3: <root>.SafeCalls.Ref? [val] declared in <root>.SafeCalls.test4' type=<root>.SafeCalls.Ref? origin=null
+                  arg1: CONST Null type=kotlin.Nothing? value=null
               then: CALL 'public final fun <set-value> (<set-?>: kotlin.Int): kotlin.Unit declared in <root>.SafeCalls.Ref' type=kotlin.Unit origin=EQ
                 $this: GET_VAR 'val tmp_3: <root>.SafeCalls.Ref? [val] declared in <root>.SafeCalls.test4' type=<root>.SafeCalls.Ref? origin=null
                 <set-?>: CONST Int type=kotlin.Int value=0
@@ -170,13 +167,10 @@ FILE fqName:<root> fileName:/safeCalls.kts
             CONST Int type=kotlin.Int value=42
           WHEN type=kotlin.Unit origin=null
             BRANCH
-              if: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=EQEQ
-                arg0: GET_VAR 'val tmp_5: kotlin.Int [val] declared in <root>.SafeCalls.box' type=kotlin.Int origin=null
-                arg1: CONST Null type=kotlin.Nothing? value=null
-              then: TYPE_OP type=kotlin.Unit origin=IMPLICIT_COERCION_TO_UNIT typeOperand=kotlin.Unit
-                CONST Null type=kotlin.Nothing? value=null
-            BRANCH
-              if: CONST Boolean type=kotlin.Boolean value=true
+              if: CALL 'public final fun not (): kotlin.Boolean [operator] declared in kotlin.Boolean' type=kotlin.Boolean origin=EXCLEQ
+                $this: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=EXCLEQ
+                  arg0: GET_VAR 'val tmp_5: kotlin.Int [val] declared in <root>.SafeCalls.box' type=kotlin.Int origin=null
+                  arg1: CONST Null type=kotlin.Nothing? value=null
               then: TYPE_OP type=kotlin.Unit origin=IMPLICIT_COERCION_TO_UNIT typeOperand=kotlin.Unit
                 CALL 'public final fun foo (): kotlin.Int declared in <root>.SafeCalls' type=kotlin.Int origin=null
                   $this: GET_VAR '<this>: <root>.SafeCalls declared in <root>.SafeCalls.box' type=<root>.SafeCalls origin=null

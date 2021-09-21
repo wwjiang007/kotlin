@@ -25,8 +25,7 @@ fun Reader.consumeRestOfQuotedSequence(sb: StringBuilder, quote: Char) {
       EQEQ(arg0 = ch, arg1 = <get-BACKSLASH>()) -> { // BLOCK
         val tmp0_safe_receiver: Char? = <this>.nextChar()
         when {
-          EQEQ(arg0 = tmp0_safe_receiver, arg1 = null) -> null /*~> Unit */
-          else -> tmp0_safe_receiver.let<Char, @FlexibleNullability StringBuilder?>(block = local fun <anonymous>(it: Char): @FlexibleNullability StringBuilder? {
+          EQEQ(arg0 = tmp0_safe_receiver, arg1 = null).not() -> tmp0_safe_receiver.let<Char, @FlexibleNullability StringBuilder?>(block = local fun <anonymous>(it: Char): @FlexibleNullability StringBuilder? {
             return sb.append(p0 = it)
           }
 ) /*~> Unit */

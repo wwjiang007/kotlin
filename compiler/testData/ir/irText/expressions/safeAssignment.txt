@@ -46,13 +46,10 @@ FILE fqName:<root> fileName:/safeAssignment.kt
           GET_VAR 'nc: <root>.C? declared in <root>.test' type=<root>.C? origin=null
         WHEN type=kotlin.Unit origin=null
           BRANCH
-            if: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=EQEQ
-              arg0: GET_VAR 'val tmp_0: <root>.C? [val] declared in <root>.test' type=<root>.C? origin=null
-              arg1: CONST Null type=kotlin.Nothing? value=null
-            then: TYPE_OP type=kotlin.Unit origin=IMPLICIT_COERCION_TO_UNIT typeOperand=kotlin.Unit
-              CONST Null type=kotlin.Nothing? value=null
-          BRANCH
-            if: CONST Boolean type=kotlin.Boolean value=true
+            if: CALL 'public final fun not (): kotlin.Boolean [operator] declared in kotlin.Boolean' type=kotlin.Boolean origin=EXCLEQ
+              $this: CALL 'public final fun EQEQ (arg0: kotlin.Any?, arg1: kotlin.Any?): kotlin.Boolean declared in kotlin.internal.ir' type=kotlin.Boolean origin=EXCLEQ
+                arg0: GET_VAR 'val tmp_0: <root>.C? [val] declared in <root>.test' type=<root>.C? origin=null
+                arg1: CONST Null type=kotlin.Nothing? value=null
             then: CALL 'public final fun <set-x> (<set-?>: kotlin.Int): kotlin.Unit declared in <root>.C' type=kotlin.Unit origin=EQ
               $this: GET_VAR 'val tmp_0: <root>.C? [val] declared in <root>.test' type=<root>.C? origin=null
               <set-?>: CONST Int type=kotlin.Int value=42

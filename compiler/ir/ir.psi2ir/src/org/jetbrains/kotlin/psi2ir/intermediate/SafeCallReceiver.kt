@@ -16,9 +16,7 @@
 
 package org.jetbrains.kotlin.psi2ir.intermediate
 
-import org.jetbrains.kotlin.ir.builders.buildStatement
-import org.jetbrains.kotlin.ir.builders.irIfNull
-import org.jetbrains.kotlin.ir.builders.irNull
+import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
 import org.jetbrains.kotlin.ir.expressions.impl.IrBlockImpl
@@ -59,7 +57,10 @@ class SafeCallReceiver(
 
         val irIfThenElse =
             generator.buildStatement(startOffset, endOffset, IrStatementOrigin.SAFE_CALL) {
-                irIfNull(resultType, safeReceiverValue.load(), irNull(), irResult)
+                if (isStatement)
+                    irIfNotNullThen(resultType, safeReceiverValue.load(), irResult)
+                else
+                    irIfNull(resultType, safeReceiverValue.load(), irNull(), irResult)
             }
         irBlock.statements.add(irIfThenElse)
 

@@ -1,4 +1,3 @@
-// FIR_IDENTICAL
 class C {
     fun foo(): C = this
     fun bar(): C? = this
@@ -6,3 +5,7 @@ class C {
 
 fun test(nc: C?) =
         nc?.foo()?.bar()?.foo()?.foo()
+
+fun testStatement(nc: C?) {
+    nc?.foo()?.bar()?.foo()?.foo()
+}

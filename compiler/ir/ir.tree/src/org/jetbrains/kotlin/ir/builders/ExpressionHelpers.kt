@@ -121,6 +121,9 @@ fun IrBuilderWithScope.irIfThenMaybeElse(
 fun IrBuilderWithScope.irIfNull(type: IrType, subject: IrExpression, thenPart: IrExpression, elsePart: IrExpression) =
     irIfThenElse(type, irEqualsNull(subject), thenPart, elsePart)
 
+fun IrBuilderWithScope.irIfNotNullThen(type: IrType, subject: IrExpression, thenPart: IrExpression) =
+    irIfThen(type, irNotEqualsNull(subject), thenPart)
+
 fun IrBuilderWithScope.irIfThenReturnTrue(condition: IrExpression) =
     irIfThen(context.irBuiltIns.unitType, condition, irReturnTrue())
 
@@ -158,6 +161,9 @@ fun IrBuilderWithScope.irNull(irType: IrType) =
 
 fun IrBuilderWithScope.irEqualsNull(argument: IrExpression) =
     irEquals(argument, irNull())
+
+fun IrBuilderWithScope.irNotEqualsNull(argument: IrExpression) =
+    irNotEquals(argument, irNull())
 
 fun IrBuilderWithScope.irEquals(arg1: IrExpression, arg2: IrExpression, origin: IrStatementOrigin = IrStatementOrigin.EQEQ) =
     primitiveOp2(
