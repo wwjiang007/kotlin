@@ -189,7 +189,7 @@ class NamedNativeInteropConfig implements Named {
                 add interopStubs.getApiConfigurationName(), "org.jetbrains.kotlin:kotlin-stdlib:${project.bootstrapKotlinVersion}"
             }
 
-            this.configuration.extendsFrom project.configurations[interopStubs.getApiConfigurationName()]
+            this.configuration.extendsFrom project.configurations[interopStubs.getRuntimeClasspathConfigurationName()]
             project.dependencies.add(this.configuration.name, interopStubs.output)
         }
 
