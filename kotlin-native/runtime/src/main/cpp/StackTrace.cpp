@@ -79,7 +79,8 @@ int getSourceInfo(void* symbol, SourceInfo *result, int result_len) {
 
 // TODO: this implementation is just a hack, e.g. the result is inexact;
 // however it is better to have an inexact stacktrace than not to have any.
-NO_INLINE KStdVector<void*> kotlin::GetCurrentStackTrace(int extraSkipFrames) noexcept {
+// TODO: Avoid using NO_EXTERNAL_CALLS_CHECK here.
+NO_INLINE NO_EXTERNAL_CALLS_CHECK KStdVector<void*> kotlin::GetCurrentStackTrace(int extraSkipFrames) noexcept {
 #if KONAN_NO_BACKTRACE
     return {};
 #else

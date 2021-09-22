@@ -3,9 +3,11 @@
  * that can be found in the LICENSE file.
  */
 
+#include <StackTrace.hpp>
 #include "GCScheduler.hpp"
 
 #include "CompilerConstants.hpp"
+#include "Logging.hpp"
 #include "Porting.h"
 
 using namespace kotlin;
@@ -25,10 +27,11 @@ void gc::GCScheduler::ThreadData::ClearCountersAndUpdateThresholds() noexcept {
 }
 
 gc::GCSchedulerConfig::GCSchedulerConfig() noexcept {
+    // TODO: These values should not differ for the aggressive mode.
     if (compiler::gcAggressive()) {
         // TODO: Make it even more aggressive and run on a subset of backend.native tests.
-        threshold = 1000;
-        allocationThresholdBytes = 10000;
+        threshold = 0;
+        allocationThresholdBytes = 0;
         cooldownThresholdNs = 0;
     }
 }
@@ -42,6 +45,23 @@ bool gc::GCScheduler::GCData::OnSafePoint(size_t allocatedBytes, size_t safePoin
     return currentTimeCallbackNs_() - timeOfLastGcNs_ >= config_.cooldownThresholdNs;
 }
 
+NO_EXTERNAL_CALLS_CHECK bool gc::GCScheduler::GCData::OnSafePointAggressive(size_t allocatedBytes, size_t safePointsCounter) noexcept {
+    SafepointID stacktrace = GetCurrentStackTrace(0);
+    bool inserted = metSafePoints_.insert(stacktrace).second;
+
+//    RuntimeLogDebug({kTagGC}, "Slow path");
+    if (inserted) {
+        RuntimeLogDebug({kTagGC}, "Trigger GC in the aggressive mode. Met safe points number: %zu", metSafePoints_.size());
+//        ThreadStateGuard guard(ThreadState::kNative);
+//        kotlin::PrintStackTraceStderr();
+//        konan::consolePrintf("\n");
+    } else {
+//        RuntimeLogDebug({kTagGC}, "Do not trigger GC, safepoint already met");
+    }
+
+    return inserted;
+}
+
 void gc::GCScheduler::GCData::OnPerformFullGC() noexcept {
     timeOfLastGcNs_ = currentTimeCallbackNs_();
 }
@@ -49,7 +69,18 @@ void gc::GCScheduler::GCData::OnPerformFullGC() noexcept {
 gc::GCScheduler::GCScheduler() noexcept : gcData_(config_, []() { return konan::getTimeNanos(); }) {}
 
 gc::GCScheduler::ThreadData gc::GCScheduler::NewThreadData() noexcept {
-    return ThreadData(config_, [this](size_t allocatedBytes, size_t safePointsCounter) {
-        return gcData().OnSafePoint(allocatedBytes, safePointsCounter);
-    });
+
+    RuntimeLogDebug({kTagGC}, "New thread data (%d)", compiler::gcAggressive());
+    if (compiler::gcAggressive()) {
+        // TODO: We can use configs other that the global one for mutators to go to the slow path on each safe point.
+
+        return ThreadData(config_, [this](size_t allocatedBytes, size_t safePointsCounter) {
+            return gcData().OnSafePointAggressive(allocatedBytes, safePointsCounter);
+        });
+    } else {
+        RuntimeLogDebug({kTagGC}, "New thread data normal");
+        return ThreadData(config_, [this](size_t allocatedBytes, size_t safePointsCounter) {
+            return gcData().OnSafePoint(allocatedBytes, safePointsCounter);
+        });
+    }
 }
