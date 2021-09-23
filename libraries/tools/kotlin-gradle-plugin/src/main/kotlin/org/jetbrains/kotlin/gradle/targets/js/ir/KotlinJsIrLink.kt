@@ -5,8 +5,10 @@
 
 package org.jetbrains.kotlin.gradle.targets.js.ir
 
-import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.ResolvedArtifact
 import org.gradle.api.artifacts.ResolvedDependency
+import org.gradle.api.artifacts.ResolvedModuleVersion
+import org.gradle.api.artifacts.component.ComponentArtifactIdentifier
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.FileCollection
@@ -57,9 +59,62 @@ abstract class KotlinJsIrLink @Inject constructor(
         }
     }
 
+    private fun getNewArtifact(original: ResolvedArtifact): ArtifactModel {
+        return artifacts.getOrPut(original) { ArtifactModel(original.file) }
+    }
+
+    private fun getNewDep(original: ResolvedDependency): DependencyModel {
+        return dependencies.getOrPut(original) {
+            val newChildren = original.children.mapTo(mutableSetOf()) { getNewDep(it) }
+            DependencyModel(
+                original.moduleName,
+                original.moduleVersion,
+                newChildren,
+                original.moduleArtifacts.mapTo(mutableSetOf()) { getNewArtifact(it) }
+            )
+        }
+    }
+
+    @get:Nested
+    internal val kotlinJsCModel: KotlinJsCModel by lazy {
+        getNewComp(compilation as KotlinCompilation<*>)
+    }
+
     @Transient
     @get:Internal
     internal lateinit var compilation: KotlinCompilationData<*>
+
+    @Transient
+    private val compilations: MutableMap<KotlinCompilation<*>, KotlinJsCModel> = mutableMapOf()
+
+    @Transient
+    private val dependencies: MutableMap<ResolvedDependency, DependencyModel> = mutableMapOf()
+
+    @Transient
+    private val artifacts: MutableMap<ResolvedArtifact, ArtifactModel> = mutableMapOf()
+
+    private fun getNewComp(compilation: KotlinCompilation<*>): KotlinJsCModel {
+        return compilations.getOrPut(compilation) {
+            val associateWith = compilation.associateWith
+                .map {
+                    getNewComp(
+                        it
+                    )
+                }
+
+            val dependencies = project.configurations.getByName((compilation).compileDependencyConfigurationName)
+                .resolvedConfiguration.firstLevelModuleDependencies
+                .map { dependency ->
+                    getNewDep(dependency)
+                }
+
+            KotlinJsCModel(
+                associateWith,
+                compilation.output.classesDirs,
+                dependencies
+            )
+        }
+    }
 
     @get:Input
     internal val incrementalJsIr: Boolean = PropertiesProvider(project).incrementalJsIr
@@ -99,12 +154,13 @@ abstract class KotlinJsIrLink @Inject constructor(
             it.report(BooleanMetrics.JS_IR_INCREMENTAL, incrementalJsIr)
         }
         if (incrementalJsIr) {
-            val visitedCompilations = mutableSetOf<KotlinCompilation<*>>()
+            val visitedCompilations = mutableSetOf<KotlinJsC>()
             val allCacheDirectories = mutableSetOf<File>()
 
+            val kotlinJsC = kotlinJsCModel.toKotlinJsC()
             val cacheBuilder = CacheBuilder(
                 buildDir,
-                compilation as KotlinCompilation<*>,
+                kotlinJsC,
                 kotlinOptions,
                 libraryFilter,
                 compilerRunner.get(),
@@ -115,7 +171,7 @@ abstract class KotlinJsIrLink @Inject constructor(
                 reportingSettings
             )
             val cacheArgs = visitCompilation(
-                compilation as KotlinCompilation<*>,
+                kotlinJsC,
                 cacheBuilder,
                 visitedCompilations,
                 allCacheDirectories
@@ -129,9 +185,9 @@ abstract class KotlinJsIrLink @Inject constructor(
     }
 
     private fun visitCompilation(
-        compilation: KotlinCompilation<*>,
+        compilation: KotlinJsC,
         cacheBuilder: CacheBuilder,
-        visitedCompilations: MutableSet<KotlinCompilation<*>>,
+        visitedCompilations: MutableSet<KotlinJsC>,
         visitedCacheDirectories: MutableSet<File>
     ): List<File> {
         if (compilation in visitedCompilations) return emptyList()
@@ -149,8 +205,8 @@ abstract class KotlinJsIrLink @Inject constructor(
 
         return cacheBuilder
             .buildCompilerArgs(
-                project.configurations.getByName(compilation.compileDependencyConfigurationName),
-                compilation.output.classesDirs,
+                compilation.dependencies,
+                compilation.classesDirs,
                 compilation,
                 associatedCaches
             )
@@ -175,9 +231,9 @@ abstract class KotlinJsIrLink @Inject constructor(
     }
 }
 
-internal class CacheBuilder(
+private class CacheBuilder(
     private val buildDir: File,
-    private val rootCompilation: KotlinCompilation<*>,
+    private val rootCompilation: KotlinJsC,
     private val kotlinOptions: KotlinJsOptions,
     private val libraryFilter: (File) -> Boolean,
     private val compilerRunner: GradleCompilerRunner,
@@ -199,16 +255,16 @@ internal class CacheBuilder(
         get() = objectFilesFactory()
 
     fun buildCompilerArgs(
-        compileClasspath: Configuration,
+        compileClasspath: List<Dependency>,
         additionalForResolve: FileCollection?,
-        compilation: KotlinCompilation<*>,
+        compilation: KotlinJsC,
         associatedCaches: List<File>
     ): List<File> {
 
         val allCacheDirectories = mutableListOf<File>()
         val visitedDependenciesForCache = mutableSetOf<ResolvedDependency>()
 
-        compileClasspath.resolvedConfiguration.firstLevelModuleDependencies
+        compileClasspath
             .forEach { dependency ->
                 ensureDependencyCached(
                     dependency
@@ -227,12 +283,15 @@ internal class CacheBuilder(
             }
 
         if (compilation != rootCompilation) {
+            fun traverse(dep: Dependency): Set<File> {
+                return (dep.children.flatMap { traverse(it) } + dep.moduleArtifacts.map { it.file }).toSet()
+            }
             additionalForResolve?.files?.forEach { file ->
                 val cacheDirectory = rootCacheDirectory.resolve(file.name)
                 cacheDirectory.mkdirs()
                 runCompiler(
                     file,
-                    compileClasspath.files,
+                    compileClasspath.flatMap { traverse(it) },
                     cacheDirectory,
                     (allCacheDirectories + associatedCaches).distinct()
                 )
@@ -354,4 +413,143 @@ internal class CacheBuilder(
             GENERATE_D_TS
         )
     }
+}
+
+internal class KotlinJsCModel(
+    @Internal
+    val associateWith: List<KotlinJsCModel>,
+    @Internal
+    var classesDirs: FileCollection,
+    @Internal
+    var dependencies: List<DependencyModel>
+)
+
+internal fun KotlinJsCModel.toKotlinJsC(): KotlinJsC = KotlinJsC(
+    associateWith.map { it.toKotlinJsC() },
+    classesDirs,
+    dependencies.map { it.toDependency() }
+)
+
+internal class KotlinJsC(
+    @Internal
+    val associateWith: List<KotlinJsC>,
+    @Internal
+    var classesDirs: FileCollection,
+    @Internal
+    var dependencies: List<Dependency>
+)
+
+internal data class DependencyModel(
+    val _moduleName: String,
+    val _moduleVersion: String,
+    val _children: Set<DependencyModel>,
+    val _moduleArtifacts: Set<ArtifactModel>
+)
+
+internal fun DependencyModel.toDependency(): Dependency = Dependency(
+    _moduleName,
+    _moduleVersion,
+    _children.mapTo(mutableSetOf()) { it.toDependency() },
+    _moduleArtifacts.mapTo(mutableSetOf()) { it.toArtifact() }
+)
+
+
+internal data class ArtifactModel(
+    val _file: File
+)
+
+internal fun ArtifactModel.toArtifact(): Artifact = Artifact(
+    _file
+)
+
+internal data class Dependency(
+    private val _moduleName: String,
+    private val _moduleVersion: String,
+    private val _children: Set<Dependency>,
+    private val _moduleArtifacts: Set<Artifact>
+) : ResolvedDependency {
+    override fun getName(): String {
+        TODO("Not yet implemented")
+    }
+
+    override fun getModuleGroup(): String {
+        TODO("Not yet implemented")
+    }
+
+    override fun getModuleName(): String {
+        return _moduleName
+    }
+
+    override fun getModuleVersion(): String {
+        return _moduleVersion
+    }
+
+    override fun getConfiguration(): String {
+        TODO("Not yet implemented")
+    }
+
+    override fun getModule(): ResolvedModuleVersion {
+        TODO("Not yet implemented")
+    }
+
+    override fun getChildren(): Set<Dependency> {
+        return _children
+    }
+
+    override fun getParents(): MutableSet<ResolvedDependency> {
+        TODO("Not yet implemented")
+    }
+
+    override fun getModuleArtifacts(): Set<ResolvedArtifact> {
+        return _moduleArtifacts
+    }
+
+    override fun getAllModuleArtifacts(): MutableSet<ResolvedArtifact> {
+        TODO("Not yet implemented")
+    }
+
+    override fun getParentArtifacts(p0: ResolvedDependency): MutableSet<ResolvedArtifact> {
+        TODO("Not yet implemented")
+    }
+
+    override fun getArtifacts(p0: ResolvedDependency): MutableSet<ResolvedArtifact> {
+        TODO("Not yet implemented")
+    }
+
+    override fun getAllArtifacts(p0: ResolvedDependency): MutableSet<ResolvedArtifact> {
+        TODO("Not yet implemented")
+    }
+}
+
+internal data class Artifact(
+    private val _file: File
+) : ResolvedArtifact {
+    override fun getFile(): File {
+        return _file
+    }
+
+    override fun getModuleVersion(): ResolvedModuleVersion {
+        TODO("Not yet implemented")
+    }
+
+    override fun getName(): String {
+        TODO("Not yet implemented")
+    }
+
+    override fun getType(): String {
+        TODO("Not yet implemented")
+    }
+
+    override fun getExtension(): String {
+        TODO("Not yet implemented")
+    }
+
+    override fun getClassifier(): String? {
+        TODO("Not yet implemented")
+    }
+
+    override fun getId(): ComponentArtifactIdentifier {
+        TODO("Not yet implemented")
+    }
+
 }
