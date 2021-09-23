@@ -59,6 +59,7 @@ public class ReadKotlinClassHeaderAnnotationVisitor implements AnnotationVisitor
     private String[] incompatibleData = null;
     private KotlinClassHeader.Kind headerKind = null;
     private String[] serializedIrFields = null;
+    private int[] serializedIrVersionArray = null;
 
     @Nullable
     public KotlinClassHeader createHeader() {
@@ -79,9 +80,12 @@ public class ReadKotlinClassHeaderAnnotationVisitor implements AnnotationVisitor
             return null;
         }
 
-        byte[] serializedIr = null;
-        if (serializedIrFields != null) {
-            serializedIr = BitEncoding.decodeBytes(serializedIrFields);
+        KotlinClassHeader.SerializedIrData serializedIr = null;
+        if (serializedIrFields != null && serializedIrVersionArray != null) {
+            serializedIr = new KotlinClassHeader.SerializedIrData(
+                    BitEncoding.decodeBytes(serializedIrFields),
+                    serializedIrVersionArray
+            );
         }
 
         return new KotlinClassHeader(
@@ -294,6 +298,14 @@ public class ReadKotlinClassHeaderAnnotationVisitor implements AnnotationVisitor
     private class KotlinSerializedIrArgumentVisitor implements AnnotationArgumentVisitor {
         @Override
         public void visit(@Nullable Name name, @Nullable Object value) {
+            if (name == null) return;
+
+            String string = name.asString();
+            if (SERIALIZED_IR_VERSION_FIELD_NAME.equals(string)) {
+                if (value instanceof int[]) {
+                    serializedIrVersionArray = (int[]) value;
+                }
+            }
         }
 
         @Override

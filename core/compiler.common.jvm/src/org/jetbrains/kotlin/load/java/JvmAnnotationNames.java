@@ -69,6 +69,7 @@ public final class JvmAnnotationNames {
 
     public static final FqName SERIALIZED_IR_FQ_NAME = new FqName("kotlin.jvm.internal.SerializedIr");
     public static final String SERIALIZED_IR_DESC = "L" + JvmClassName.byFqNameWithoutInnerClasses(SERIALIZED_IR_FQ_NAME).getInternalName() + ";";
+    public static final String SERIALIZED_IR_VERSION_FIELD_NAME = "v";
     public static final String SERIALIZED_IR_BYTES_FIELD_NAME = "b";
 
     // Just for internal use: there is no such real classes in bytecode

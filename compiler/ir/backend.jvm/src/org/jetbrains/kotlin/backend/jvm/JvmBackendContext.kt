@@ -34,6 +34,7 @@ import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.IrTypeSystemContext
 import org.jetbrains.kotlin.ir.types.defaultType
 import org.jetbrains.kotlin.ir.util.SymbolTable
+import org.jetbrains.kotlin.metadata.jvm.deserialization.SerializedIrVersion
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.resolve.jvm.JvmClassName
 import org.jetbrains.org.objectweb.asm.Type
@@ -135,6 +136,8 @@ class JvmBackendContext(
     val directInvokedLambdas = mutableListOf<IrAttributeContainer>()
 
     val publicAbiSymbols = mutableSetOf<IrClassSymbol>()
+
+    val serializedIrVersion = SerializedIrVersion.INSTANCE
 
     init {
         state.mapInlineClass = { descriptor ->

@@ -12,6 +12,9 @@ package kotlin.jvm.internal
 @Target(AnnotationTarget.CLASS)
 @SinceKotlin("1.6")
 annotation class SerializedIr(
+    @get:JvmName("v")
+    val version: IntArray = [],
+
     @get:JvmName("b")
-    val bytes: Array<String> = []
+    val bytes: Array<String> = [],
 )

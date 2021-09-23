@@ -19,7 +19,7 @@ class KotlinClassHeader(
     private val extraString: String?,
     val extraInt: Int,
     val packageName: String?,
-    val serializedIr: ByteArray?,
+    val serializedIr: SerializedIrData?,
 ) {
     // See kotlin.Metadata
     enum class Kind(val id: Int) {
@@ -74,4 +74,7 @@ class KotlinClassHeader(
     override fun toString() = "$kind version=$metadataVersion"
 
     private fun Int.has(flag: Int): Boolean = (this and flag) != 0
+
+    class SerializedIrData(val bytes: ByteArray, val version: IntArray)
 }
+

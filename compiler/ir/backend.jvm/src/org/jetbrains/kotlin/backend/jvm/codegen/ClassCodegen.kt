@@ -506,6 +506,7 @@ class ClassCodegen private constructor(
             partsVisitor.visit(null, part)
         }
         partsVisitor.visitEnd()
+        av.visit(JvmAnnotationNames.SERIALIZED_IR_VERSION_FIELD_NAME, context.serializedIrVersion.toArray())
         av.visitEnd()
     }
 

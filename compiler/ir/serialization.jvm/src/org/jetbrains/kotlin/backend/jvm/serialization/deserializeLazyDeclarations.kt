@@ -30,6 +30,8 @@ import org.jetbrains.kotlin.ir.types.IrTypeSystemContext
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
+import org.jetbrains.kotlin.load.kotlin.header.KotlinClassHeader
+import org.jetbrains.kotlin.metadata.jvm.deserialization.SerializedIrVersion
 import org.jetbrains.kotlin.backend.common.serialization.proto.IdSignature as ProtoIdSignature
 import org.jetbrains.kotlin.backend.common.serialization.proto.IrDeclaration as ProtoDeclaration
 import org.jetbrains.kotlin.backend.common.serialization.proto.IrExpression as ProtoExpression
@@ -37,12 +39,14 @@ import org.jetbrains.kotlin.backend.common.serialization.proto.IrStatement as Pr
 import org.jetbrains.kotlin.backend.common.serialization.proto.IrType as ProtoType
 
 fun deserializeFromByteArray(
-    byteArray: ByteArray,
+    serializedIr: KotlinClassHeader.SerializedIrData,
     stubGenerator: DeclarationStubGenerator,
     toplevelParent: IrClass,
     typeSystemContext: IrTypeSystemContext,
     allowErrorNodes: Boolean,
 ) {
+    if (!SerializedIrVersion(*serializedIr.version).isCompatible()) return
+    val byteArray = serializedIr.bytes
     val irBuiltIns = stubGenerator.irBuiltIns
     val symbolTable = stubGenerator.symbolTable
     val irProto = JvmIr.ClassOrFile.parseFrom(byteArray.codedInputStream)
