@@ -906,6 +906,7 @@ open class RawFirBuilder(
                 moduleData = baseModuleData
                 origin = FirDeclarationOrigin.Source
                 name = file.name
+                path = file.virtualFile?.path
                 packageDirective = buildPackageDirective {
                     packageFqName = context.packageFqName
                     source = file.packageDirective?.toKtPsiSourceElement()
