@@ -174,8 +174,8 @@ object FirDiagnosticsCompilerResultsReporter {
                     currentLineContent = readNextLine()
                 }
 
-                val col = offset - charsRead + currentLineContent!!.length
-                if (col < currentLineContent!!.length) {
+                val col = offset - (charsRead - currentLineContent!!.length - 1)/* beginning of line offset */ + 1 /* col is 1-based */
+                if (col <= currentLineContent!!.length) {
                     return PsiDiagnosticUtils.LineAndColumn(currentLine, col, if (withLineContents) currentLineContent else null)
                 }
 
