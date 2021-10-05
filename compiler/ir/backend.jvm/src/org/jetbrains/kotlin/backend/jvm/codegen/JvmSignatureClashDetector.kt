@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.diagnostics.KtDiagnosticFactory1
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.descriptors.toIrBasedDescriptor
+import org.jetbrains.kotlin.ir.util.file
 import org.jetbrains.kotlin.ir.util.isFakeOverride
 import org.jetbrains.kotlin.resolve.jvm.diagnostics.*
 import org.jetbrains.kotlin.utils.SmartSet
@@ -147,7 +148,7 @@ class JvmSignatureClashDetector(
         conflictingJvmDeclarationsData: ConflictingJvmDeclarationsData
     ) {
         for (irDeclaration in irDeclarations) {
-            context.ktDiagnosticReporter.at(irDeclaration)
+            context.ktDiagnosticReporter.atFirstValidFrom(irDeclaration, irClass, containingIrFile = irDeclaration.file)
                 .report(diagnosticFactory1, conflictingJvmDeclarationsData)
         }
     }
