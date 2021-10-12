@@ -33,7 +33,10 @@ abstract class SerializableCompanionCodegen(
                     "probably clash with user-defined function has occurred"
         )
 
-        if (serializableDescriptor.isSerializableObject || serializableDescriptor.isAbstractOrSealedSerializableClass()) {
+        if (serializableDescriptor.isSerializableObject || serializableDescriptor.isAbstractOrSealedSerializableClass()
+            // caching enum serializer if using serializer factory
+            || (serializableDescriptor.isSerializableEnum() && !serializableDescriptor.useLegacyEnums())
+        ) {
             generateLazySerializerGetter(serializerGetterDescriptor)
         } else {
             generateSerializerGetter(serializerGetterDescriptor)

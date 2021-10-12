@@ -22,6 +22,8 @@ import org.jetbrains.kotlin.resolve.scopes.getDescriptorsFiltered
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.typeUtil.isSubtypeOf
 import org.jetbrains.kotlin.types.typeUtil.representativeUpperBound
+import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.ENUM_SERIALIZER_FACTORY_FUNC_NAME
+import org.jetbrains.kotlinx.serialization.compiler.resolve.SerialEntityNames.MARKED_ENUM_SERIALIZER_FACTORY_FUNC_NAME
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerializationAnnotations.inheritableSerialInfoFqName
 import org.jetbrains.kotlinx.serialization.compiler.resolve.SerializationAnnotations.serialInfoFqName
 
@@ -120,7 +122,18 @@ internal fun ClassDescriptor.isSerializableEnum(): Boolean = kind == ClassKind.E
 internal fun ClassDescriptor.isInternallySerializableEnum(): Boolean = kind == ClassKind.ENUM_CLASS && hasSerializableAnnotationWithoutArgs
 
 internal val ClassDescriptor.shouldHaveGeneratedSerializer: Boolean
-    get() = (isInternalSerializable && (modality == Modality.FINAL || modality == Modality.OPEN)) || isInternallySerializableEnum()
+    get() = (isInternalSerializable && (modality == Modality.FINAL || modality == Modality.OPEN))
+            || (isInternallySerializableEnum() && useLegacyEnums())
+
+
+internal fun ClassDescriptor.useLegacyEnums(): Boolean {
+    // TODO determine compilation is IR or not. This common function called from different places including extension resolvers where it is hard to determine the type of compilation
+    val legacyBackend = false
+
+    val functions = module.getPackage(SerializationPackages.internalPackageFqName).memberScope.getFunctionNames()
+    return legacyBackend ||
+            !functions.contains(ENUM_SERIALIZER_FACTORY_FUNC_NAME) || !functions.contains(MARKED_ENUM_SERIALIZER_FACTORY_FUNC_NAME)
+}
 
 internal fun ClassDescriptor.enumEntries(): List<ClassDescriptor> {
     check(this.kind == ClassKind.ENUM_CLASS)
@@ -128,6 +141,13 @@ internal fun ClassDescriptor.enumEntries(): List<ClassDescriptor> {
         .filterIsInstance<ClassDescriptor>()
         .filter { it.kind == ClassKind.ENUM_ENTRY }
         .toList()
+}
+
+// check enum or its elements has any SerialInfo annotation
+internal fun ClassDescriptor.isEnumWithSerialInfoAnnotation(): Boolean {
+    if (kind != ClassKind.ENUM_CLASS) return false
+    if (annotations.hasAnySerialAnnotation) return true
+    return enumEntries().any { (it.annotations.hasAnySerialAnnotation) }
 }
 
 internal val Annotations.hasAnySerialAnnotation: Boolean
@@ -143,6 +163,15 @@ internal val ClassDescriptor.hasSerializableAnnotationWithoutArgs: Boolean
         // Otherwise, this descriptor is deserialized from another module and it is OK to check value right away.
         val psi = findSerializableAnnotationDeclaration() ?: return (serializableWith == null)
         return psi.valueArguments.isEmpty()
+    }
+
+internal val ClassDescriptor.hasSerializableAnnotationWithArgs: Boolean
+    get() {
+        if (!hasSerializableAnnotation) return false
+        // If provided descriptor is lazy, carefully look at psi in order not to trigger full resolve which may be recursive.
+        // Otherwise, this descriptor is deserialized from another module and it is OK to check value right away.
+        val psi = findSerializableAnnotationDeclaration() ?: return (serializableWith != null)
+        return psi.valueArguments.isNotEmpty()
     }
 
 internal fun Annotated.findSerializableAnnotationDeclaration(): KtAnnotationEntry? {
@@ -211,6 +240,7 @@ internal fun ClassDescriptor.needSerializerFactory(): Boolean {
     if (!(this.platform?.isNative() == true || this.platform.isJs())) return false
     val serializableClass = getSerializableClassDescriptorByCompanion(this) ?: return false
     if (serializableClass.isSerializableObject) return true
+    if (serializableClass.kind == ClassKind.ENUM_CLASS && !serializableClass.useLegacyEnums() && !serializableClass.hasSerializableAnnotationWithArgs) return true
     if (serializableClass.isAbstractOrSealedSerializableClass()) return true
     if (serializableClass.declaredTypeParameters.isEmpty()) return false
     return true
