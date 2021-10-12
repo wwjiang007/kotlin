@@ -193,6 +193,21 @@ sealed class KtFakeSourceElementKind : KtSourceElementKind() {
 sealed class AbstractKtSourceElement {
     abstract val startOffset: Int
     abstract val endOffset: Int
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is AbstractKtSourceElement) return false
+
+        if (startOffset != other.startOffset) return false
+        if (endOffset != other.endOffset) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = startOffset
+        result = 31 * result + endOffset
+        return result
+    }
 }
 
 class KtOffsetsOnlySourceElement(
@@ -206,6 +221,27 @@ sealed class KtSourceElement : AbstractKtSourceElement() {
     abstract val kind: KtSourceElementKind
     abstract val lighterASTNode: LighterASTNode
     abstract val treeStructure: FlyweightCapableTreeStructure<LighterASTNode>
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is KtSourceElement) return false
+        if (!super.equals(other)) return false
+
+        if (elementType != other.elementType) return false
+        if (kind != other.kind) return false
+        if (lighterASTNode != other.lighterASTNode) return false
+        if (treeStructure != other.treeStructure) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = super.hashCode()
+        result = 31 * result + elementType.hashCode()
+        result = 31 * result + kind.hashCode()
+        result = 31 * result + lighterASTNode.hashCode()
+        result = 31 * result + treeStructure.hashCode()
+        return result
+    }
 }
 
 // NB: in certain situations, psi.node could be null
