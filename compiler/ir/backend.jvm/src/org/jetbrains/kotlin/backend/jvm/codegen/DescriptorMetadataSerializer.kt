@@ -39,7 +39,7 @@ class DescriptorMetadataSerializer(
             is DescriptorMetadataSource.Script -> DescriptorSerializer.create(
                 metadata.descriptor, serializerExtension, (parent as? DescriptorMetadataSerializer)?.serializer, context.state.project
             )
-            is DescriptorMetadataSource.File -> DescriptorSerializer.createTopLevel(serializerExtension)
+            is DescriptorMetadataSource.File -> DescriptorSerializer.createTopLevel(serializerExtension, context.state.project)
             is DescriptorMetadataSource.Function -> DescriptorSerializer.createForLambda(serializerExtension)
             else -> null
         }
