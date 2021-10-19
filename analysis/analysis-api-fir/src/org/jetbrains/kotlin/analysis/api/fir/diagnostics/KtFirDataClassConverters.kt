@@ -421,13 +421,6 @@ internal val KT_DIAGNOSTIC_CONVERTER = KtDiagnosticConverterBuilder.buildConvert
             token,
         )
     }
-    add(FirErrors.QUALIFIED_SUPERTYPE_EXTENDED_BY_OTHER_SUPERTYPE) { firDiagnostic ->
-        QualifiedSupertypeExtendedByOtherSupertypeImpl(
-            firSymbolBuilder.buildSymbol(firDiagnostic.a.fir),
-            firDiagnostic as FirPsiDiagnostic,
-            token,
-        )
-    }
     add(FirErrors.SUPERTYPE_INITIALIZED_IN_INTERFACE) { firDiagnostic ->
         SupertypeInitializedInInterfaceImpl(
             firDiagnostic as FirPsiDiagnostic,

@@ -33,10 +33,10 @@ open class AndroidTargetConfigurator :
             }
 
             inline fun anonymousInline() {
-                super.classFun() + super<<!QUALIFIED_SUPERTYPE_EXTENDED_BY_OTHER_SUPERTYPE!>ModuleConfiguratorWithTests<!>>.getConfiguratorSettings() + super<<!QUALIFIED_SUPERTYPE_EXTENDED_BY_OTHER_SUPERTYPE!>AndroidModuleConfigurator<!>>.getConfiguratorSettings()
+                super.classFun() + super<ModuleConfiguratorWithTests>.getConfiguratorSettings() + super<AndroidModuleConfigurator>.getConfiguratorSettings()
             }
 
-            fun run() = super.classFun() + super<<!QUALIFIED_SUPERTYPE_EXTENDED_BY_OTHER_SUPERTYPE!>ModuleConfiguratorWithTests<!>>.getConfiguratorSettings() + super<<!QUALIFIED_SUPERTYPE_EXTENDED_BY_OTHER_SUPERTYPE!>AndroidModuleConfigurator<!>>.getConfiguratorSettings()
+            fun run() = super.classFun() + super<ModuleConfiguratorWithTests>.getConfiguratorSettings() + super<AndroidModuleConfigurator>.getConfiguratorSettings()
         }.run()
     }
 

@@ -1434,12 +1434,6 @@ public class FirDiagnosticsWithLightTreeTestGenerated extends AbstractFirDiagnos
             }
 
             @Test
-            @TestMetadata("qualifiedSupertypeExtendedByOtherSupertype.kt")
-            public void testQualifiedSupertypeExtendedByOtherSupertype() throws Exception {
-                runTest("compiler/fir/analysis-tests/testData/resolve/diagnostics/qualifiedSupertypeExtendedByOtherSupertype.kt");
-            }
-
-            @Test
             @TestMetadata("redundantModifier.kt")
             public void testRedundantModifier() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolve/diagnostics/redundantModifier.kt");

@@ -380,12 +380,6 @@ internal class SuperclassNotAccessibleFromInterfaceImpl(
     override val token: ValidityToken,
 ) : KtFirDiagnostic.SuperclassNotAccessibleFromInterface(), KtAbstractFirDiagnostic<PsiElement>
 
-internal class QualifiedSupertypeExtendedByOtherSupertypeImpl(
-    override val otherSuperType: KtSymbol,
-    override val firDiagnostic: FirPsiDiagnostic,
-    override val token: ValidityToken,
-) : KtFirDiagnostic.QualifiedSupertypeExtendedByOtherSupertype(), KtAbstractFirDiagnostic<KtTypeReference>
-
 internal class SupertypeInitializedInInterfaceImpl(
     override val firDiagnostic: FirPsiDiagnostic,
     override val token: ValidityToken,

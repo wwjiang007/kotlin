@@ -11,8 +11,8 @@ interface IDerived<T> : IBase<T> {
 
 class Test : IDerived<String>, IBase<String> {
     fun test() {
-        super<<!QUALIFIED_SUPERTYPE_EXTENDED_BY_OTHER_SUPERTYPE!>IBase<!>>.foo()
-        super<<!QUALIFIED_SUPERTYPE_EXTENDED_BY_OTHER_SUPERTYPE!>IBase<!>>.bar()
+        super<IBase>.foo()
+        super<IBase>.bar()
         super<IDerived>.foo()
         super<IDerived>.bar()
         super<IDerived>.qux()
