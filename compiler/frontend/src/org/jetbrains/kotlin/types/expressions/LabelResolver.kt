@@ -25,7 +25,6 @@ import org.jetbrains.kotlin.diagnostics.Errors.LABEL_NAME_CLASH
 import org.jetbrains.kotlin.diagnostics.Errors.UNRESOLVED_REFERENCE
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.psiUtil.checkReservedYield
 import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.BindingContext.LABEL_TARGET
 import org.jetbrains.kotlin.resolve.BindingContext.REFERENCE_TARGET
@@ -99,11 +98,8 @@ object LabelResolver {
     }
 
     fun resolveControlLabel(expression: KtExpressionWithLabel, context: ResolutionContext<*>): KtElement? {
-        val labelElement = expression.getTargetLabel()
-        checkReservedYield(labelElement, context.trace)
-
-        val labelName = expression.getLabelNameAsName()
-        if (labelElement == null || labelName == null) return null
+        val labelElement = expression.getTargetLabel() ?: return null
+        val labelName = expression.getLabelNameAsName() ?: return null
 
         return resolveNamedLabel(labelName, labelElement, context.trace) ?: run {
             context.trace.report(UNRESOLVED_REFERENCE.on(labelElement, labelElement))

@@ -633,18 +633,6 @@ public class DiagnosticTestGenerated extends AbstractDiagnosticTest {
         }
 
         @Test
-        @TestMetadata("ReserveYield.kt")
-        public void testReserveYield() throws Exception {
-            runTest("compiler/testData/diagnostics/tests/ReserveYield.kt");
-        }
-
-        @Test
-        @TestMetadata("ReserveYield2.kt")
-        public void testReserveYield2() throws Exception {
-            runTest("compiler/testData/diagnostics/tests/ReserveYield2.kt");
-        }
-
-        @Test
         @TestMetadata("ResolveOfJavaGenerics.kt")
         public void testResolveOfJavaGenerics() throws Exception {
             runTest("compiler/testData/diagnostics/tests/ResolveOfJavaGenerics.kt");

@@ -177,7 +177,6 @@ public class ValueArgumentsToParametersMapper {
                 ValueParameterDescriptor valueParameterDescriptor = parameterByName.get(argumentName.getAsName());
                 KtSimpleNameExpression nameReference = argumentName.getReferenceExpression();
 
-                ReservedCheckingKt.checkReservedYield(nameReference, candidateCall.getTrace());
                 if (nameReference != null) {
                     if (candidate instanceof MemberDescriptor && ((MemberDescriptor) candidate).isExpect() &&
                         candidate.getContainingDeclaration() instanceof ClassDescriptor) {

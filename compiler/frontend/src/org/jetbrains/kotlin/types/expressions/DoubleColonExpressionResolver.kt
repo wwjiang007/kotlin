@@ -21,7 +21,6 @@ import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.codeFragmentUtil.suppressDiagnosticsInDebugMode
-import org.jetbrains.kotlin.psi.psiUtil.checkReservedYield
 import org.jetbrains.kotlin.psi.psiUtil.getQualifiedElementSelector
 import org.jetbrains.kotlin.resolve.*
 import org.jetbrains.kotlin.resolve.calls.CallResolver
@@ -749,7 +748,6 @@ class DoubleColonExpressionResolver(
         return when {
             resolutionResults.isNothing -> null
             else -> ResolutionResultsAndTraceCommitCallback(resolutionResults) {
-                checkReservedYield(reference, outerContext.trace)
                 if (resolutionMode != ResolveArgumentsMode.SHAPE_FUNCTION_ARGUMENTS || resolutionResults.isSuccess) {
                     temporaryTrace.commit()
                 }

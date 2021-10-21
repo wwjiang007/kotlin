@@ -33,7 +33,6 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.codeFragmentUtil.suppressDiagnosticsInDebugMode
 import org.jetbrains.kotlin.psi.debugText.getDebugText
-import org.jetbrains.kotlin.psi.psiUtil.checkReservedYield
 import org.jetbrains.kotlin.psi.psiUtil.getNextSiblingIgnoringWhitespaceAndComments
 import org.jetbrains.kotlin.psi.psiUtil.getPrevSiblingIgnoringWhitespaceAndComments
 import org.jetbrains.kotlin.psi.psiUtil.hasSuspendModifier
@@ -254,8 +253,6 @@ class TypeResolver(
                 }
 
                 val referenceExpression = type.referenceExpression ?: return
-
-                checkReservedYield(referenceExpression, c.trace)
                 c.trace.record(BindingContext.REFERENCE_TARGET, referenceExpression, classifier)
 
                 result = resolveTypeForClassifier(c, classifier, qualifierResolutionResult, type, annotations)
