@@ -51,15 +51,3 @@ publishing {
 tasks.register("install") {
     dependsOn(tasks.named("publishToMavenLocal"))
 }
-
-// workaround for Gradle configuration cache
-// TODO: remove it when https://github.com/gradle/gradle/pull/16945 merged into used in build Gradle version
-tasks.withType(PublishToMavenLocal) {
-    def originalTask = it
-    def serializablePublishTask =
-            tasks.register(originalTask.name + "Serializable", PublishToMavenLocalSerializable) {
-                publication = originalTask.publication
-            }
-    originalTask.onlyIf { false }
-    originalTask.dependsOn(serializablePublishTask)
-}
