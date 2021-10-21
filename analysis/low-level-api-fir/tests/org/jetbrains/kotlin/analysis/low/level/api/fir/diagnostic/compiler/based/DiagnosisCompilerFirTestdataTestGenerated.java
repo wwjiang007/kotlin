@@ -4097,6 +4097,12 @@ public class DiagnosisCompilerFirTestdataTestGenerated extends AbstractDiagnosis
         }
 
         @Test
+        @TestMetadata("errorsInUnreachable.kt")
+        public void testErrorsInUnreachable() throws Exception {
+            runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/errorsInUnreachable.kt");
+        }
+
+        @Test
         @TestMetadata("exception.kt")
         public void testException() throws Exception {
             runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/exception.kt");
