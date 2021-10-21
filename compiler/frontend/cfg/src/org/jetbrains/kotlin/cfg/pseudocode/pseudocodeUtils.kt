@@ -25,6 +25,7 @@ import org.jetbrains.kotlin.cfg.pseudocode.instructions.eval.MagicKind.*
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.jumps.ConditionalJumpInstruction
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.jumps.ReturnValueInstruction
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.jumps.ThrowExceptionInstruction
+import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.impl.LocalVariableDescriptor
 import org.jetbrains.kotlin.psi.*
@@ -74,7 +75,8 @@ fun getReceiverTypePredicate(resolvedCall: ResolvedCall<*>, receiverValue: Recei
 fun getExpectedTypePredicate(
     value: PseudoValue,
     bindingContext: BindingContext,
-    builtIns: KotlinBuiltIns
+    builtIns: KotlinBuiltIns,
+    languageVersionSettings: LanguageVersionSettings
 ): TypePredicate {
     val pseudocode = value.createdAt?.owner ?: return AllTypes
     val typePredicates = LinkedHashSet<TypePredicate?>()
@@ -115,7 +117,7 @@ fun getExpectedTypePredicate(
                 TracingStrategy.EMPTY,
                 DataFlowInfoForArgumentsImpl(DataFlowInfo.EMPTY, call)
             )
-            val status = ValueArgumentsToParametersMapper.mapValueArgumentsToParameters(call, TracingStrategy.EMPTY, candidateCall)
+            val status = ValueArgumentsToParametersMapper.mapValueArgumentsToParameters(call, TracingStrategy.EMPTY, candidateCall, languageVersionSettings)
             if (!status.isSuccess) continue
 
             val candidateArgumentMap = candidateCall.valueArguments

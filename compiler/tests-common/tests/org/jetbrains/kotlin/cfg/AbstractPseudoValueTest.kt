@@ -22,6 +22,7 @@ import org.jetbrains.kotlin.cfg.pseudocode.PseudocodeImpl
 import org.jetbrains.kotlin.cfg.pseudocode.TypePredicate
 import org.jetbrains.kotlin.cfg.pseudocode.getExpectedTypePredicate
 import org.jetbrains.kotlin.cfg.pseudocode.instructions.eval.InstructionWithValue
+import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
 import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtTreeVisitorVoid
 import org.jetbrains.kotlin.resolve.BindingContext
@@ -39,7 +40,7 @@ abstract class AbstractPseudoValueTest : AbstractPseudocodeTest() {
 
                     val value = pseudocode.getElementValue(element)
                     if (value != null) {
-                        elementToValues.put(element, value)
+                        elementToValues[element] = value
                     }
                 }
             })
@@ -47,11 +48,11 @@ abstract class AbstractPseudoValueTest : AbstractPseudocodeTest() {
         }
 
         fun elementText(element: KtElement?): String =
-                element?.text?.replace("\\s+".toRegex(), " ") ?: ""
+            element?.text?.replace("\\s+".toRegex(), " ") ?: ""
 
         fun valueDecl(value: PseudoValue): String {
             val typePredicate = expectedTypePredicateMap.getOrPut(value) {
-                getExpectedTypePredicate(value, bindingContext, DefaultBuiltIns.Instance)
+                getExpectedTypePredicate(value, bindingContext, DefaultBuiltIns.Instance, LanguageVersionSettingsImpl.DEFAULT)
             }
             return "${value.debugName}: $typePredicate"
         }
@@ -65,9 +66,9 @@ abstract class AbstractPseudoValueTest : AbstractPseudocodeTest() {
 
         val elementToValues = getElementToValueMap(pseudocode)
         val unboundValues = pseudocode.instructions
-                .mapNotNull { (it as? InstructionWithValue)?.outputValue }
-                .filter { it.element == null }
-                .sortedBy { it.debugName }
+            .mapNotNull { (it as? InstructionWithValue)?.outputValue }
+            .filter { it.element == null }
+            .sortedBy { it.debugName }
         val allValues = elementToValues.values + unboundValues
         if (allValues.isEmpty()) return
 
@@ -86,11 +87,11 @@ abstract class AbstractPseudoValueTest : AbstractPseudocodeTest() {
         for ((ve, description) in valueDescriptions.entries) {
             val (value, element) = ve
             val line =
-                    "%1$-${elementColumnWidth}s".format(elementText(element)) +
-                     "   " +
-                     "%1$-${valueColumnWidth}s".format(valueDecl(value)) +
-                     "   " +
-                     "%1$-${valueDescColumnWidth}s".format(description)
+                "%1$-${elementColumnWidth}s".format(elementText(element)) +
+                        "   " +
+                        "%1$-${valueColumnWidth}s".format(valueDecl(value)) +
+                        "   " +
+                        "%1$-${valueDescColumnWidth}s".format(description)
             out.appendLine(line.trimEnd())
         }
     }
