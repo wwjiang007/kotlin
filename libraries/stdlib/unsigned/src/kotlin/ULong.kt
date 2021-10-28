@@ -13,7 +13,7 @@ import kotlin.jvm.*
 @SinceKotlin("1.5")
 @WasExperimental(ExperimentalUnsignedTypes::class)
 @JvmInline
-public value class ULong @PublishedApi internal constructor(@PublishedApi internal val data: Long) : Comparable<ULong> {
+public value class ULong @Foldable @PublishedApi internal constructor(@PublishedApi internal val data: Long) : Comparable<ULong> {
 
     companion object {
         /**

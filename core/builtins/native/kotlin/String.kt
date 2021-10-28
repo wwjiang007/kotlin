@@ -26,8 +26,10 @@ public class String : Comparable<String>, CharSequence {
     /**
      * Returns a string obtained by concatenating this string with the string representation of the given [other] object.
      */
+    @Foldable
     public operator fun plus(other: Any?): String
 
+    @Foldable
     public override val length: Int
 
     /**
@@ -36,9 +38,17 @@ public class String : Comparable<String>, CharSequence {
      * If the [index] is out of bounds of this string, throws an [IndexOutOfBoundsException] except in Kotlin/JS
      * where the behavior is unspecified.
      */
+    @Foldable
     public override fun get(index: Int): Char
 
     public override fun subSequence(startIndex: Int, endIndex: Int): CharSequence
 
+    @Foldable
     public override fun compareTo(other: String): Int
+
+    @Foldable
+    public override fun equals(other: Any?): Boolean
+
+    @Foldable
+    public override fun toString(): String
 }
