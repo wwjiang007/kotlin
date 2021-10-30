@@ -183,7 +183,7 @@ object FirJvmErrorsDefaultMessages : BaseDiagnosticRendererFactory() {
         )
         map.put(
             USAGE_OF_JVM_DEFAULT_THROUGH_SUPER_CALL,
-            "Super calls of '@JvmDefault' members are only allowed with -Xjvm-default option"
+            "Super calls of JVM-default members are only allowed with -Xjvm-default option"
         )
         map.put(
             NON_JVM_DEFAULT_OVERRIDES_JAVA_DEFAULT,
