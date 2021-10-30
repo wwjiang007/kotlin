@@ -23,7 +23,7 @@ enum class JvmDefaultMode(val description: String) {
 
     companion object {
         @JvmField
-        val DEFAULT = DISABLE
+        val DEFAULT = ALL_INCOMPATIBLE
 
         @JvmStatic
         fun fromStringOrNull(string: String?) = values().find { it.description == string }
