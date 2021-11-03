@@ -18,11 +18,7 @@ import java.io.File
 @State(Scope.Benchmark)
 open class LightTree2FirGenerator : TreeGenerator, AbstractRawFirBuilderTestCase() {
     override fun generateBaseTree(text: String, file: File) {
-        val lightTreeConverter = LightTree2Fir(
-            session = FirSessionFactory.createEmptySession(),
-            scopeProvider = StubFirScopeProvider
-        )
-        val lightTree = lightTreeConverter.buildLightTree(text)
+        val lightTree = LightTree2Fir.buildLightTree(text)
         DebugUtil.lightTreeToString(lightTree, false)
     }
 
