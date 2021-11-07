@@ -80,7 +80,7 @@ public class PathTreeWalk private constructor(
         init {
             when {
                 start.isDirectory(*linkOptions) -> state.push(directoryState(start))
-                start.exists() -> state.push(SingleFileState(start))
+                start.exists(LinkOption.NOFOLLOW_LINKS) -> state.push(SingleFileState(start))
                 else -> done()
             }
         }
@@ -131,9 +131,11 @@ public class PathTreeWalk private constructor(
 
             private var fileIndex = 0
 
+            private var failed = false
+
             /** First all children, then root directory */
             override fun step(): Path? {
-                if (fileList == null) {
+                if (!failed && fileList == null) {
                     if (onEnter?.invoke(root) == false) {
                         return null
                     }
@@ -142,6 +144,7 @@ public class PathTreeWalk private constructor(
                         fileList = root.listDirectoryEntries()
                     } catch (e: IOException) { // NotDirectoryException is also an IOException
                         onFail?.invoke(root, e)
+                        failed = true
                     }
                 }
                 if (fileList != null && fileIndex < fileList!!.size) {
@@ -205,7 +208,7 @@ public class PathTreeWalk private constructor(
             private var visited: Boolean = false
 
             init {
-                assert(rootFile.exists()) { "rootFile must exist." }
+                assert(rootFile.exists(LinkOption.NOFOLLOW_LINKS)) { "rootFile must exist." }
             }
 
             override fun step(): Path? {
