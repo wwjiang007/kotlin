@@ -605,9 +605,11 @@ class FirCallCompletionResultsWriterTransformer(
             needUpdateLambdaType = true
         }
 
+        val isSuspend = expectedType?.isSuspendFunctionType(session) ?: ((data as? ExpectedArgumentType.ExpectedType)?.isSuspend == true)
+
         if (needUpdateLambdaType) {
             val resolvedTypeRef =
-                anonymousFunction.constructFunctionalTypeRef(isSuspend = expectedType?.isSuspendFunctionType(session) == true)
+                anonymousFunction.constructFunctionalTypeRef(isSuspend = isSuspend)
             anonymousFunction.replaceTypeRef(resolvedTypeRef)
             session.lookupTracker?.recordTypeResolveAsLookup(resolvedTypeRef, anonymousFunction.source, null)
         }
@@ -617,20 +619,19 @@ class FirCallCompletionResultsWriterTransformer(
         val returnExpressionsOfAnonymousFunction: Collection<FirStatement> =
             dataFlowAnalyzer.returnExpressionsOfAnonymousFunction(anonymousFunction)
         for (expression in returnExpressionsOfAnonymousFunction) {
-            expression.transform<FirElement, ExpectedArgumentType?>(this, finalType?.toExpectedType())
+            expression.transform<FirElement, ExpectedArgumentType?>(this, finalType?.toExpectedType(isSuspend))
         }
 
-        val resultFunction = result
-        if (resultFunction.returnTypeRef.coneTypeSafe<ConeIntegerLiteralType>() != null) {
+        if (result.returnTypeRef.coneTypeSafe<ConeIntegerLiteralType>() != null) {
             val lastExpressionType =
                 (returnExpressionsOfAnonymousFunction.lastOrNull() as? FirExpression)
                     ?.typeRef?.coneTypeSafe<ConeKotlinType>()
 
-            val newReturnTypeRef = resultFunction.returnTypeRef.withReplacedConeType(lastExpressionType)
-            resultFunction.replaceReturnTypeRef(newReturnTypeRef)
+            val newReturnTypeRef = result.returnTypeRef.withReplacedConeType(lastExpressionType)
+            result.replaceReturnTypeRef(newReturnTypeRef)
             val resolvedTypeRef =
-                resultFunction.constructFunctionalTypeRef(isSuspend = expectedType?.isSuspendFunctionType(session) == true)
-            resultFunction.replaceTypeRef(resolvedTypeRef)
+                result.constructFunctionalTypeRef(isSuspend = expectedType?.isSuspendFunctionType(session) == true)
+            result.replaceTypeRef(resolvedTypeRef)
             session.lookupTracker?.let {
                 it.recordTypeResolveAsLookup(newReturnTypeRef, anonymousFunction.source, null)
                 it.recordTypeResolveAsLookup(resolvedTypeRef, anonymousFunction.source, null)
@@ -828,7 +829,7 @@ sealed class ExpectedArgumentType {
         val lambdasReturnTypes: Map<FirAnonymousFunction, ConeKotlinType>
     ) : ExpectedArgumentType()
 
-    class ExpectedType(val type: ConeKotlinType) : ExpectedArgumentType()
+    class ExpectedType(val type: ConeKotlinType, val isSuspend: Boolean) : ExpectedArgumentType()
     object NoApproximation : ExpectedArgumentType()
 }
 
@@ -838,7 +839,7 @@ private fun ExpectedArgumentType.getExpectedType(argument: FirElement): ConeKotl
     ExpectedArgumentType.NoApproximation -> null
 }
 
-fun ConeKotlinType.toExpectedType(): ExpectedArgumentType = ExpectedArgumentType.ExpectedType(this)
+fun ConeKotlinType.toExpectedType(isSuspend: Boolean = false): ExpectedArgumentType = ExpectedArgumentType.ExpectedType(this, isSuspend)
 
 internal class FirDeclarationCompletionResultsWriter(
     private val finalSubstitutor: ConeSubstitutor,

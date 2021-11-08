@@ -13460,6 +13460,12 @@ public class FirOldFrontendDiagnosticsTestGenerated extends AbstractFirDiagnosti
             }
 
             @Test
+            @TestMetadata("suspendConversionInsideSuspendLambda.kt")
+            public void testSuspendConversionInsideSuspendLambda() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/inference/suspendConversionInsideSuspendLambda.kt");
+            }
+
+            @Test
             @TestMetadata("tooEagerSmartcast.kt")
             public void testTooEagerSmartcast() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/inference/tooEagerSmartcast.kt");

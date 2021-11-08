@@ -13460,6 +13460,12 @@ public class DiagnosisCompilerTestFE10TestdataTestGenerated extends AbstractDiag
             }
 
             @Test
+            @TestMetadata("suspendConversionInsideSuspendLambda.kt")
+            public void testSuspendConversionInsideSuspendLambda() throws Exception {
+                runTest("compiler/testData/diagnostics/tests/inference/suspendConversionInsideSuspendLambda.kt");
+            }
+
+            @Test
             @TestMetadata("tooEagerSmartcast.kt")
             public void testTooEagerSmartcast() throws Exception {
                 runTest("compiler/testData/diagnostics/tests/inference/tooEagerSmartcast.kt");
