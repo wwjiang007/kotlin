@@ -262,6 +262,13 @@ public inline fun Path.copyTo(target: Path, vararg options: CopyOption): Path {
 /** Private exception class, used to terminate recursive copying. */
 private class TerminateException(path: Path) : FileSystemException(path.toString()) {}
 
+private object LinkFollowing {
+    val nofollow = arrayOf(LinkOption.NOFOLLOW_LINKS)
+    val follow = emptyArray<LinkOption>()
+
+    fun toOptions(followLinks: Boolean): Array<LinkOption> = if (followLinks) follow else nofollow
+}
+
 /**
  * Copies this file with all its children to the specified destination [target] path.
  * If some directories on the way to the destination are missing, then they will be created.
@@ -288,15 +295,18 @@ private class TerminateException(path: Path) : FileSystemException(path.toString
  * Note that if this function fails, then partial copying may have taken place.
  *
  * @param overwrite `true` if it is allowed to overwrite existing destination files and directories.
- * @param followLinks `true` to recursively copy the file/directory a symbolic link points, `false` to copy the symbolic link itself.
+ * @param followLinks `true` to recursively copy the file/directory a symbolic link points to,
+ * `false` (default) to copy only the symbolic link itself.
  * @return `false` if the copying was terminated, `true` otherwise.
  */
 public fun Path.copyRecursively(
     target: Path,
     overwrite: Boolean = false,
-    vararg options: LinkOption,
+    followLinks: Boolean = false,
     onError: (Path, IOException) -> OnErrorAction = { _, exception -> throw exception }
 ): Boolean {
+    val options = LinkFollowing.toOptions(followLinks)
+
     if (!exists(*options)) {
         val error = NoSuchFileException(this.toString(), target.toString(), "The source file doesn't exist.")
         return onError(this, error) != OnErrorAction.TERMINATE
@@ -314,7 +324,7 @@ public fun Path.copyRecursively(
                 if (dstFile.exists(*options) && !(src.isDirectory(*options) && dstFile.isDirectory(*options))) {
                     val stillExists = if (!overwrite) true else {
                         if (dstFile.isDirectory(*options))
-                            !dstFile.deleteRecursively(*options)
+                            !dstFile.deleteRecursively(followLinks)
                         else {
                             try {
                                 !dstFile.deleteIfExists()
@@ -357,15 +367,22 @@ public fun Path.copyRecursively(
  * Delete this file with all its children.
  * Note that if this operation fails then partial deletion may have taken place.
  *
+ * @param followLinks `true` to recursively delete the file/directory a symbolic link points to,
+ * `false` (default) to delete only the symbolic link itself.
+ * @return `false` if this file with all its children were successfully deleted, `true` otherwise.
  * @throws IOException if an I/O error occurs
  */
-public fun Path.deleteRecursively(vararg options: LinkOption): Boolean = walkBottomUp(*options).fold(true) { res, it ->
-    try {
-        it.deleteIfExists()
-    } catch (_: DirectoryNotEmptyException) {
-        return@fold false
+public fun Path.deleteRecursively(followLinks: Boolean = false): Boolean {
+    val options = LinkFollowing.toOptions(followLinks)
+    var success = true
+    for (file in walkBottomUp(*options).onFail { _, _ -> success = false }) {
+        try {
+            file.deleteIfExists()
+        } catch (_: DirectoryNotEmptyException) {
+            success = false
+        }
     }
-    return@fold res
+    return success
 }
 
 /**

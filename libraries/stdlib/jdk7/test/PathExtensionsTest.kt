@@ -225,7 +225,7 @@ class PathExtensionsTest : AbstractPathTest() {
         val dir2File = dir2.resolve("file.txt").createFile()
         dir1.resolve("link").createSymbolicLinkPointingTo(dir2)
 
-        assertTrue(dir1.deleteRecursively())
+        assertTrue(dir1.deleteRecursively(followLinks = true))
         assertFalse(dir1.exists())
         assertTrue(dir2.exists())
         assertFalse(dir2File.exists())
@@ -238,7 +238,7 @@ class PathExtensionsTest : AbstractPathTest() {
         val dir2File = dir2.resolve("file.txt").createFile()
         dir1.resolve("link").createSymbolicLinkPointingTo(dir2)
 
-        assertTrue(dir1.deleteRecursively(LinkOption.NOFOLLOW_LINKS))
+        assertTrue(dir1.deleteRecursively(followLinks = false))
         assertFalse(dir1.exists())
         assertTrue(dir2.exists())
         assertTrue(dir2File.exists())
