@@ -27,11 +27,11 @@ class PathTreeWalkTest : AbstractPathTest() {
             }
             return basedir
         }
-    }
 
-    private fun testVisitedFiles(expected: List<String>, walk: Sequence<Path>, basedir: Path) {
-        val actual = walk.map { it.relativeToOrSelf(basedir).invariantSeparatorsPathString }
-        assertEquals(expected.sorted(), actual.toList().sorted())
+        fun testVisitedFiles(expected: List<String>, walk: Sequence<Path>, basedir: Path) {
+            val actual = walk.map { it.relativeToOrSelf(basedir).invariantSeparatorsPathString }
+            assertEquals(expected.sorted(), actual.toList().sorted())
+        }
     }
 
     @Test

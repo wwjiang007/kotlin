@@ -9,6 +9,8 @@ import java.io.IOException
 import java.nio.file.*
 import java.nio.file.attribute.*
 import kotlin.io.path.*
+import kotlin.jdk7.test.PathTreeWalkTest.Companion.createTestFiles
+import kotlin.jdk7.test.PathTreeWalkTest.Companion.testVisitedFiles
 import kotlin.random.Random
 import kotlin.test.*
 
@@ -163,33 +165,33 @@ class PathExtensionsTest : AbstractPathTest() {
         assertEquals(srcFile.readText(), dstFile.readText())
     }
 
-
     @Test
     fun deleteRecursively() {
         val dir = createTempDirectory()
-        dir.deleteExisting()
-        dir.createDirectory()
-        val subDir = dir.resolve("subdir")
-        subDir.createDirectory()
+        val subDir = dir.resolve("subdir").createDirectory()
         dir.resolve("test1.txt").createFile()
         subDir.resolve("test2.txt").createFile()
 
-        dir.deleteRecursively()
+        assertTrue(dir.deleteRecursively())
         assertFalse(dir.exists())
-        dir.deleteRecursively() // possible to delete recursively a non-existing directory
+        assertFalse(subDir.exists())
+        assertTrue(dir.deleteRecursively()) // possible to delete recursively a non-existing directory
     }
 
     @Test
-    fun deleteRecursivelyWithFail() {
-        val basedir = PathTreeWalkTest.createTestFiles().cleanupRecursively()
+    fun deleteRecursivelyRestrictedRead() {
+        val basedir = createTestFiles().cleanupRecursively()
         val restricted1 = basedir.resolve("1").toFile()
         val restricted2 = basedir.resolve("7.txt").toFile()
         try {
             if (restricted1.setReadable(false) && restricted2.setReadable(false)) {
                 assertFalse(basedir.deleteRecursively(), "Expected incomplete recursive deletion.")
+                assertTrue(restricted1.exists())
+                assertFalse(restricted2.exists()) // restricted read allows removal of file
+
                 restricted1.setReadable(true)
-                restricted2.setReadable(true)
-                assertEquals(6, basedir.walkTopDown().count())
+                testVisitedFiles(listOf("", "1", "1/2", "1/3", "1/3/4.txt", "1/3/5.txt"), basedir.walkTopDown(), basedir)
+                assertTrue(basedir.deleteRecursively())
             }
         } finally {
             restricted1.setReadable(true)
@@ -197,80 +199,187 @@ class PathExtensionsTest : AbstractPathTest() {
         }
     }
 
+    @Test
+    fun deleteRecursivelyRestrictedWrite() {
+        val basedir = createTestFiles().cleanupRecursively()
+        val restricted = basedir.resolve("1").toFile()
+        try {
+            if (restricted.setWritable(false)) {
+                assertFailsWith<java.nio.file.AccessDeniedException> {
+                    basedir.deleteRecursively()
+                }
+                assertTrue(restricted.exists())
+
+                restricted.setWritable(true)
+                assertTrue(basedir.deleteRecursively())
+            }
+        } finally {
+            restricted.setWritable(true)
+        }
+    }
+
+    @Test
+    fun deleteRecursivelyFollowSymlinks() {
+        val dir1 = createTempDirectory()
+        val dir2 = createTempDirectory().cleanup()
+        val dir2File = dir2.resolve("file.txt").createFile()
+        dir1.resolve("link").createSymbolicLinkPointingTo(dir2)
+
+        assertTrue(dir1.deleteRecursively())
+        assertFalse(dir1.exists())
+        assertTrue(dir2.exists())
+        assertFalse(dir2File.exists())
+    }
+
+    @Test
+    fun deleteRecursivelyNoFollowSymlinks() {
+        val dir1 = createTempDirectory()
+        val dir2 = createTempDirectory().cleanupRecursively()
+        val dir2File = dir2.resolve("file.txt").createFile()
+        dir1.resolve("link").createSymbolicLinkPointingTo(dir2)
+
+        assertTrue(dir1.deleteRecursively(LinkOption.NOFOLLOW_LINKS))
+        assertFalse(dir1.exists())
+        assertTrue(dir2.exists())
+        assertTrue(dir2File.exists())
+    }
+
     private fun compareDirectories(src: Path, dst: Path) {
         for (srcFile in src.walkTopDown()) {
             val dstFile = dst.resolve(srcFile.relativeTo(src))
             compareFiles(srcFile, dstFile)
         }
+        for (dstFile in dst.walkTopDown()) {
+            val srcFile = src.resolve(dstFile.relativeTo(dst))
+            compareFiles(dstFile, srcFile)
+        }
     }
 
     @Test
     fun copyRecursively() {
-        val src = createTempDirectory().cleanupRecursively()
-        val dst = createTempDirectory().cleanupRecursively()
-        dst.deleteExisting()
-        fun check() = compareDirectories(src, dst)
+        val src = createTestFiles().cleanupRecursively()
+        val dst = createTempDirectory().also { it.deleteExisting() }.cleanupRecursively()
 
-        val subDir1 = createTempDirectory(prefix = "d1_", directory = src)
-        val subDir2 = createTempDirectory(prefix = "d2_", directory = src)
-        createTempDirectory(prefix = "d1_", directory = subDir1)
-        val file1 = createTempFile(prefix = "f1_", directory = src)
-        val file2 = createTempFile(prefix = "f2_", directory = subDir1)
-        file1.writeText("hello")
-        file2.writeText("wazzup")
-        createTempDirectory(prefix = "d1_", directory = subDir2)
+        src.resolve("1/3/4.txt").writeText("hello")
+        src.resolve("7.txt").writeText("wazzup")
 
         assertTrue(src.copyRecursively(dst))
-        check()
+        compareDirectories(src, dst)
 
         assertFailsWith(java.nio.file.FileAlreadyExistsException::class) {
             src.copyRecursively(dst)
         }
 
-        var conflicts = 0
-        src.copyRecursively(dst) { _: Path, e: IOException ->
-            if (e is java.nio.file.FileAlreadyExistsException) {
-                conflicts++
-                OnErrorAction.SKIP
-            } else {
-                throw e
-            }
-        }
-        assertEquals(2, conflicts)
+        dst.resolve("1/3/4.txt").writeText("hi")
+        assertTrue(src.copyRecursively(dst, overwrite = true))
+        compareDirectories(src, dst)
+    }
 
-        if (subDir1.toFile().setReadable(false)) {
-            try {
-                dst.deleteRecursively()
-                var caught = false
-                assertTrue(src.copyRecursively(dst) { _: Path, e: IOException ->
-                    if (e is java.nio.file.AccessDeniedException) {
-                        caught = true
-                        OnErrorAction.SKIP
-                    } else {
-                        throw e
-                    }
-                })
-                assertTrue(caught)
-                check()
-            } finally {
-                subDir1.toFile().setReadable(true)
-            }
-        }
+    @Test
+    fun copyRecursivelyNonExistent() {
+        val src = createTempDirectory().also { it.deleteExisting() }
+        val dst = createTempDirectory()
 
-        src.deleteRecursively()
-        dst.deleteRecursively()
         assertFailsWith(java.nio.file.NoSuchFileException::class) {
             src.copyRecursively(dst)
         }
 
+        dst.deleteExisting()
+        assertFailsWith(java.nio.file.NoSuchFileException::class) {
+            src.copyRecursively(dst)
+        }
+
+        assertTrue(src.copyRecursively(dst) { _, _ -> OnErrorAction.SKIP })
         assertFalse(src.copyRecursively(dst) { _, _ -> OnErrorAction.TERMINATE })
+    }
+
+    @Test
+    fun copyRecursivelyWithConflicts() {
+        val src = createTestFiles().cleanupRecursively()
+        val dst = createTestFiles().cleanupRecursively()
+
+        dst.resolve("8").deleteRecursively()
+        assertFailsWith(java.nio.file.FileAlreadyExistsException::class) {
+            src.copyRecursively(dst)
+        }
+
+        dst.resolve("8").deleteRecursively()
+        val existingNames = hashSetOf<String>()
+        assertTrue(src.copyRecursively(dst) { path: Path, e: IOException ->
+            assertTrue(e is java.nio.file.FileAlreadyExistsException)
+            existingNames.add(path.relativeToOrSelf(dst).invariantSeparatorsPathString)
+            OnErrorAction.SKIP
+        })
+        assertEquals(setOf("1/3/4.txt", "1/3/5.txt", "7.txt"), existingNames)
+
+        dst.resolve("8").deleteRecursively()
+        assertFalse(src.copyRecursively(dst) { _, _ -> OnErrorAction.TERMINATE })
+    }
+
+    @Test
+    fun copyRecursivelyRestrictedRead() {
+        val src = createTestFiles().cleanupRecursively()
+        val dst = createTempDirectory().also { it.deleteExisting() }.cleanupRecursively()
+
+        val restricted = src.resolve("1/3").toFile()
+        if (restricted.setReadable(false)) {
+            try {
+                var caught = false
+                assertTrue(src.copyRecursively(dst) { path: Path, e: IOException ->
+                    assertEquals(restricted, path.toFile())
+                    assertTrue(e is java.nio.file.AccessDeniedException)
+                    caught = true
+                    OnErrorAction.SKIP
+                })
+                assertTrue(caught)
+                compareDirectories(src, dst)
+            } finally {
+                restricted.setReadable(true)
+            }
+        } else {
+            System.err.println("cannot restrict access")
+        }
+    }
+
+    @Test
+    fun copyRecursivelyRestrictedWrite() {
+        val src = createTestFiles().cleanupRecursively()
+        val dst = createTestFiles().cleanupRecursively()
+
+        src.resolve("1/3/4.txt").writeText("hello")
+        src.resolve("7.txt").writeText("wazzup")
+
+        val restricted = dst.resolve("1/3").toFile()
+        if (restricted.setWritable(false)) {
+            try {
+                val accessDeniedNames = hashSetOf<String>()
+                assertTrue(src.copyRecursively(dst, overwrite = true) { path: Path, e: IOException ->
+                    assertTrue(path.invariantSeparatorsPathString.startsWith(restricted.invariantSeparatorsPath), path.toString())
+                    assertTrue(e is java.nio.file.AccessDeniedException)
+                    assertTrue(
+                        accessDeniedNames.add(path.relativeToOrSelf(dst).invariantSeparatorsPathString)
+                    )
+                    OnErrorAction.SKIP
+                })
+
+                assertEquals(setOf("1/3/4.txt", "1/3/5.txt"), accessDeniedNames)
+                assertNotEquals(src.resolve("1/3/4.txt").readText(), dst.resolve("1/3/4.txt").readText())
+            } finally {
+                restricted.setWritable(true)
+            }
+
+            src.resolve("1/3").deleteRecursively()
+            dst.resolve("1/3").deleteRecursively()
+            compareDirectories(src, dst)
+        } else {
+            System.err.println("cannot restrict access")
+        }
     }
 
     @Test
     fun copyRecursivelyWithOverwrite() {
         val src = createTempDirectory().cleanupRecursively()
         val dst = createTempDirectory().cleanupRecursively()
-        fun check() = compareDirectories(src, dst)
 
         val srcFile = src.resolve("test")
         val dstFile = dst.resolve("test")
@@ -280,19 +389,19 @@ class PathExtensionsTest : AbstractPathTest() {
 
         srcFile.writeText("text1 modified")
         src.copyRecursively(dst, overwrite = true)
-        check()
+        compareDirectories(src, dst)
 
         dstFile.deleteExisting()
         dstFile.createDirectory()
         dstFile.resolve("subFile").writeText("subfile")
         src.copyRecursively(dst, overwrite = true)
-        check()
+        compareDirectories(src, dst)
 
         srcFile.deleteExisting()
         srcFile.createDirectory()
         srcFile.resolve("subFile").writeText("text2")
         src.copyRecursively(dst, overwrite = true)
-        check()
+        compareDirectories(src, dst)
     }
 
     @Test

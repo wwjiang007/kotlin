@@ -297,27 +297,33 @@ public fun Path.copyRecursively(
     vararg options: LinkOption,
     onError: (Path, IOException) -> OnErrorAction = { _, exception -> throw exception }
 ): Boolean {
-    if (!exists()) {
+    if (!exists(*options)) {
         val error = NoSuchFileException(this.toString(), target.toString(), "The source file doesn't exist.")
         return onError(this, error) != OnErrorAction.TERMINATE
     }
     try {
         // We cannot break for loop from inside a lambda, so we have to use an exception here
-        for (src in walkTopDown().onFail { p, e -> if (onError(p, e) == OnErrorAction.TERMINATE) throw TerminateException(p) }) {
-            if (!src.exists()) {
+        for (src in walkTopDown(*options).onFail { p, e -> if (onError(p, e) == OnErrorAction.TERMINATE) throw TerminateException(p) }) {
+            if (!src.exists(*options)) {
                 val error = NoSuchFileException(src.toString(), target.toString(), "The source file doesn't exist.")
                 if (onError(src, error) == OnErrorAction.TERMINATE)
                     return false
             } else {
                 val relPath = src.relativeTo(this)
                 val dstFile = target.resolve(relPath)
-                if (dstFile.exists() && !(src.isDirectory(*options) && dstFile.isDirectory(*options))) {
+                if (dstFile.exists(*options) && !(src.isDirectory(*options) && dstFile.isDirectory(*options))) {
                     val stillExists = if (!overwrite) true else {
                         if (dstFile.isDirectory(*options))
-                            !dstFile.deleteRecursively()
+                            !dstFile.deleteRecursively(*options)
                         else {
-                            dstFile.deleteIfExists() // what if no permission
-                            false
+                            try {
+                                !dstFile.deleteIfExists()
+                            } catch (error: IOException) {
+                                if (onError(dstFile, error) == OnErrorAction.TERMINATE)
+                                    return false
+
+                                continue
+                            }
                         }
                     }
 
