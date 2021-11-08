@@ -1,13 +1,32 @@
 public abstract interface annotation class kotlin/io/path/ExperimentalPathApi : java/lang/annotation/Annotation {
 }
 
+public final class kotlin/io/path/PathTreeWalk : kotlin/sequences/Sequence {
+	public fun iterator ()Ljava/util/Iterator;
+	public final fun maxDepth (I)Lkotlin/io/path/PathTreeWalk;
+	public final fun onEnter (Lkotlin/jvm/functions/Function1;)Lkotlin/io/path/PathTreeWalk;
+	public final fun onFail (Lkotlin/jvm/functions/Function2;)Lkotlin/io/path/PathTreeWalk;
+	public final fun onLeave (Lkotlin/jvm/functions/Function1;)Lkotlin/io/path/PathTreeWalk;
+}
+
+public final class kotlin/io/path/PathWalkDirection : java/lang/Enum {
+	public static final field BOTTOM_UP Lkotlin/io/path/PathWalkDirection;
+	public static final field TOP_DOWN Lkotlin/io/path/PathWalkDirection;
+	public static fun valueOf (Ljava/lang/String;)Lkotlin/io/path/PathWalkDirection;
+	public static fun values ()[Lkotlin/io/path/PathWalkDirection;
+}
+
 public final class kotlin/io/path/PathsKt {
 	public static final fun appendText (Ljava/nio/file/Path;Ljava/lang/CharSequence;Ljava/nio/charset/Charset;)V
 	public static synthetic fun appendText$default (Ljava/nio/file/Path;Ljava/lang/CharSequence;Ljava/nio/charset/Charset;ILjava/lang/Object;)V
+	public static final fun copyRecursively (Ljava/nio/file/Path;Ljava/nio/file/Path;ZZLkotlin/jvm/functions/Function2;)Z
+	public static synthetic fun copyRecursively$default (Ljava/nio/file/Path;Ljava/nio/file/Path;ZZLkotlin/jvm/functions/Function2;ILjava/lang/Object;)Z
 	public static final fun createTempDirectory (Ljava/nio/file/Path;Ljava/lang/String;[Ljava/nio/file/attribute/FileAttribute;)Ljava/nio/file/Path;
 	public static synthetic fun createTempDirectory$default (Ljava/nio/file/Path;Ljava/lang/String;[Ljava/nio/file/attribute/FileAttribute;ILjava/lang/Object;)Ljava/nio/file/Path;
 	public static final fun createTempFile (Ljava/nio/file/Path;Ljava/lang/String;Ljava/lang/String;[Ljava/nio/file/attribute/FileAttribute;)Ljava/nio/file/Path;
 	public static synthetic fun createTempFile$default (Ljava/nio/file/Path;Ljava/lang/String;Ljava/lang/String;[Ljava/nio/file/attribute/FileAttribute;ILjava/lang/Object;)Ljava/nio/file/Path;
+	public static final fun deleteRecursively (Ljava/nio/file/Path;Z)Z
+	public static synthetic fun deleteRecursively$default (Ljava/nio/file/Path;ZILjava/lang/Object;)Z
 	public static final fun fileAttributeViewNotAvailable (Ljava/nio/file/Path;Ljava/lang/Class;)Ljava/lang/Void;
 	public static final fun getExtension (Ljava/nio/file/Path;)Ljava/lang/String;
 	public static final fun getInvariantSeparatorsPathString (Ljava/nio/file/Path;)Ljava/lang/String;
@@ -20,6 +39,10 @@ public final class kotlin/io/path/PathsKt {
 	public static final fun relativeTo (Ljava/nio/file/Path;Ljava/nio/file/Path;)Ljava/nio/file/Path;
 	public static final fun relativeToOrNull (Ljava/nio/file/Path;Ljava/nio/file/Path;)Ljava/nio/file/Path;
 	public static final fun relativeToOrSelf (Ljava/nio/file/Path;Ljava/nio/file/Path;)Ljava/nio/file/Path;
+	public static final fun walk (Ljava/nio/file/Path;Lkotlin/io/path/PathWalkDirection;[Ljava/nio/file/LinkOption;)Lkotlin/io/path/PathTreeWalk;
+	public static synthetic fun walk$default (Ljava/nio/file/Path;Lkotlin/io/path/PathWalkDirection;[Ljava/nio/file/LinkOption;ILjava/lang/Object;)Lkotlin/io/path/PathTreeWalk;
+	public static final fun walkBottomUp (Ljava/nio/file/Path;[Ljava/nio/file/LinkOption;)Lkotlin/io/path/PathTreeWalk;
+	public static final fun walkTopDown (Ljava/nio/file/Path;[Ljava/nio/file/LinkOption;)Lkotlin/io/path/PathTreeWalk;
 	public static final fun writeText (Ljava/nio/file/Path;Ljava/lang/CharSequence;Ljava/nio/charset/Charset;[Ljava/nio/file/OpenOption;)V
 	public static synthetic fun writeText$default (Ljava/nio/file/Path;Ljava/lang/CharSequence;Ljava/nio/charset/Charset;[Ljava/nio/file/OpenOption;ILjava/lang/Object;)V
 }
