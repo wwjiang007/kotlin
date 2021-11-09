@@ -258,7 +258,7 @@ class PathExtensionsTest : AbstractPathTest() {
     @Test
     fun copyRecursively() {
         val src = createTestFiles().cleanupRecursively()
-        val dst = createTempDirectory().also { it.deleteExisting() }.cleanupRecursively()
+        val dst = createTempDirectory().cleanupRecursively()
 
         src.resolve("1/3/4.txt").writeText("hello")
         src.resolve("7.txt").writeText("wazzup")
@@ -276,7 +276,7 @@ class PathExtensionsTest : AbstractPathTest() {
     }
 
     @Test
-    fun copyRecursivelyNonExistent() {
+    fun copyRecursivelyNonExistentSource() {
         val src = createTempDirectory().also { it.deleteExisting() }
         val dst = createTempDirectory()
 
@@ -291,6 +291,30 @@ class PathExtensionsTest : AbstractPathTest() {
 
         assertTrue(src.copyRecursively(dst) { _, _ -> OnErrorAction.SKIP })
         assertFalse(src.copyRecursively(dst) { _, _ -> OnErrorAction.TERMINATE })
+    }
+
+    @Test
+    fun copyRecursivelyNonExistentDestination() {
+        val src = createTempDirectory().cleanupRecursively()
+        val dst = createTempDirectory().cleanupRecursively().resolve("dst")
+
+        assertFalse(dst.exists())
+        assertTrue(src.copyRecursively(dst))
+        assertTrue(dst.exists())
+    }
+
+    @Test
+    fun copyRecursivelyNonExistentDestinationParent() {
+        val src = createTempDirectory().cleanupRecursively()
+        val dst = createTempDirectory().cleanupRecursively().resolve("parent/dst")
+
+        assertFalse(dst.parent.exists())
+
+        assertFailsWith<java.nio.file.NoSuchFileException> { src.copyRecursively(dst) }
+        assertFailsWith<java.nio.file.NoSuchFileException> { src.copyRecursively(dst) { _, _ -> OnErrorAction.SKIP } }
+        assertFailsWith<java.nio.file.NoSuchFileException> { src.copyRecursively(dst) { _, _ -> OnErrorAction.TERMINATE } }
+
+        assertFalse(dst.parent.exists())
     }
 
     @Test
@@ -319,15 +343,15 @@ class PathExtensionsTest : AbstractPathTest() {
     @Test
     fun copyRecursivelyRestrictedRead() {
         val src = createTestFiles().cleanupRecursively()
-        val dst = createTempDirectory().also { it.deleteExisting() }.cleanupRecursively()
+        val dst = createTempDirectory().cleanupRecursively()
 
         val restricted = src.resolve("1/3").toFile()
         if (restricted.setReadable(false)) {
             try {
                 var caught = false
                 assertTrue(src.copyRecursively(dst) { path: Path, e: IOException ->
-                    assertEquals(restricted, path.toFile())
                     assertTrue(e is java.nio.file.AccessDeniedException)
+                    assertEquals(restricted, path.toFile())
                     caught = true
                     OnErrorAction.SKIP
                 })

@@ -271,7 +271,12 @@ internal object LinkFollowing {
 
 /**
  * Copies this file with all its children to the specified destination [target] path.
- * If some directories on the way to the destination are missing, then they will be created.
+ *
+ * Unlike `File.copyRecursively`, if some directories on the way to the [target] are missing, then they won't be created automatically.
+ * You can use the following approach to ensure that required intermediate directories are created:
+ * ```
+ * sourcePath.copyRecursively(destinationPath.apply { parent?.createDirectories() })
+ * ```
  *
  * If this file path points to a single file, then it will be copied to a file with the path [target].
  * If this file path points to a directory, then its children will be copied to a directory with the path [target].
@@ -347,7 +352,9 @@ public fun Path.copyRecursively(
                 }
 
                 if (src.isDirectory(*options)) {
-                    dstFile.createDirectories()
+                    if (!dstFile.exists(*options)) {
+                        dstFile.createDirectory()
+                    }
                 } else {
                     if (src.copyTo(dstFile, overwrite).fileSize() != src.fileSize()) {
                         val error = IOException("Source file wasn't copied completely, length of destination file differs.")
