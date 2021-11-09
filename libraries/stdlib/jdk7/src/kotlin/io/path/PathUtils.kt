@@ -262,9 +262,9 @@ public inline fun Path.copyTo(target: Path, vararg options: CopyOption): Path {
 /** Private exception class, used to terminate recursive copying. */
 private class TerminateException(path: Path) : FileSystemException(path.toString()) {}
 
-private object LinkFollowing {
-    val nofollow = arrayOf(LinkOption.NOFOLLOW_LINKS)
-    val follow = emptyArray<LinkOption>()
+internal object LinkFollowing {
+    private val nofollow = arrayOf(LinkOption.NOFOLLOW_LINKS)
+    private val follow = emptyArray<LinkOption>()
 
     fun toOptions(followLinks: Boolean): Array<LinkOption> = if (followLinks) follow else nofollow
 }
@@ -313,7 +313,7 @@ public fun Path.copyRecursively(
     }
     try {
         // We cannot break for loop from inside a lambda, so we have to use an exception here
-        for (src in walkTopDown(*options).onFail { p, e -> if (onError(p, e) == OnErrorAction.TERMINATE) throw TerminateException(p) }) {
+        for (src in walkTopDown(followLinks).onFail { p, e -> if (onError(p, e) == OnErrorAction.TERMINATE) throw TerminateException(p) }) {
             if (!src.exists(*options)) {
                 val error = NoSuchFileException(src.toString(), target.toString(), "The source file doesn't exist.")
                 if (onError(src, error) == OnErrorAction.TERMINATE)
@@ -373,9 +373,8 @@ public fun Path.copyRecursively(
  * @throws IOException if an I/O error occurs
  */
 public fun Path.deleteRecursively(followLinks: Boolean = false): Boolean {
-    val options = LinkFollowing.toOptions(followLinks)
     var success = true
-    for (file in walkBottomUp(*options).onFail { _, _ -> success = false }) {
+    for (file in walkBottomUp(followLinks).onFail { _, _ -> success = false }) {
         try {
             file.deleteIfExists()
         } catch (_: DirectoryNotEmptyException) {

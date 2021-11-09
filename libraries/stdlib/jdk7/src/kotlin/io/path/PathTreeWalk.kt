@@ -46,10 +46,10 @@ public class PathTreeWalk private constructor(
     private val maxDepth: Int = Int.MAX_VALUE
 ) : Sequence<Path> {
 
-    internal constructor(start: Path, direction: PathWalkDirection, options: Array<out LinkOption>) : this(
+    internal constructor(start: Path, direction: PathWalkDirection, followLinks: Boolean) : this(
         start,
         direction,
-        options,
+        LinkFollowing.toOptions(followLinks),
         onEnter = null,
         onLeave = null,
         onFail = null
@@ -266,17 +266,17 @@ public class PathTreeWalk private constructor(
  *
  * @param direction walk direction, top-down (by default) or bottom-up.
  */
-public fun Path.walk(direction: PathWalkDirection = PathWalkDirection.TOP_DOWN, vararg options: LinkOption): PathTreeWalk =
-    PathTreeWalk(this, direction, options)
+public fun Path.walk(direction: PathWalkDirection = PathWalkDirection.TOP_DOWN, followLinks: Boolean = false): PathTreeWalk =
+    PathTreeWalk(this, direction, followLinks)
 
 /**
  * Gets a sequence for visiting this directory and all its content in top-down order.
  * Depth-first search is used and directories are visited before all their files.
  */
-public fun Path.walkTopDown(vararg options: LinkOption): PathTreeWalk = walk(PathWalkDirection.TOP_DOWN, *options)
+public fun Path.walkTopDown(followLinks: Boolean = false): PathTreeWalk = walk(PathWalkDirection.TOP_DOWN, followLinks)
 
 /**
  * Gets a sequence for visiting this directory and all its content in bottom-up order.
  * Depth-first search is used and directories are visited after all their files.
  */
-public fun Path.walkBottomUp(vararg options: LinkOption): PathTreeWalk = walk(PathWalkDirection.BOTTOM_UP, *options)
+public fun Path.walkBottomUp(followLinks: Boolean = false): PathTreeWalk = walk(PathWalkDirection.BOTTOM_UP, followLinks)

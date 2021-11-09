@@ -6,7 +6,6 @@
 package kotlin.jdk7.test
 
 import java.io.IOException
-import java.nio.file.LinkOption
 import java.nio.file.Path
 import kotlin.io.path.*
 import kotlin.test.*
@@ -413,8 +412,8 @@ class PathTreeWalkTest : AbstractPathTest() {
             return
         }
         for (direction in PathWalkDirection.values()) {
-            for (linkOption in listOf(emptyArray(), arrayOf(LinkOption.NOFOLLOW_LINKS))) {
-                val walk = basedir.walk(direction, *linkOption)
+            for (followLinks in listOf(true, false)) {
+                val walk = basedir.walk(direction, followLinks)
                 testVisitedFiles(referenceFilenames + listOf("", "1/3/link"), walk, basedir)
             }
         }
@@ -437,16 +436,16 @@ class PathTreeWalkTest : AbstractPathTest() {
         basedir.resolve("1/3/link").tryCreateSymbolicLinkTo(original) ?: return
 
         for (direction in PathWalkDirection.values()) {
-            for (linkOption in listOf(emptyArray(), arrayOf(LinkOption.NOFOLLOW_LINKS))) {
-                val walk = basedir.walk(direction, *linkOption)
+            for (followLinks in listOf(true, false)) {
+                val walk = basedir.walk(direction, followLinks)
                 testVisitedFiles(referenceFilenames + listOf("", "1/3/link"), walk, basedir)
             }
         }
 
         original.deleteExisting()
         for (direction in PathWalkDirection.values()) {
-            for (linkOption in listOf(emptyArray(), arrayOf(LinkOption.NOFOLLOW_LINKS))) {
-                val walk = basedir.walk(direction, *linkOption)
+            for (followLinks in listOf(true, false)) {
+                val walk = basedir.walk(direction, followLinks)
                 testVisitedFiles(referenceFilenames - listOf("8/9.txt") + listOf("", "1/3/link"), walk, basedir)
             }
         }
@@ -460,19 +459,19 @@ class PathTreeWalkTest : AbstractPathTest() {
 
         for (direction in PathWalkDirection.values()) {
             // follow links
-            val walk = basedir.walk(direction)
+            val walk = basedir.walk(direction, followLinks = true)
             // directory "8" contains "9.txt" file
             testVisitedFiles(referenceFilenames + listOf("", "1/3/link", "1/3/link/9.txt"), walk, basedir)
 
             // don't follow links
-            val nofollowWalk = basedir.walk(direction, LinkOption.NOFOLLOW_LINKS)
+            val nofollowWalk = basedir.walk(direction, followLinks = false)
             testVisitedFiles(referenceFilenames + listOf("", "1/3/link"), nofollowWalk, basedir)
         }
 
         assertTrue(original.deleteRecursively())
         for (direction in PathWalkDirection.values()) {
-            for (linkOption in listOf(emptyArray(), arrayOf(LinkOption.NOFOLLOW_LINKS))) {
-                val walk = basedir.walk(direction, *linkOption)
+            for (followLinks in listOf(true, false)) {
+                val walk = basedir.walk(direction, followLinks)
                 testVisitedFiles(referenceFilenames - listOf("8", "8/9.txt") + listOf("", "1/3/link"), walk, basedir)
             }
         }
@@ -486,7 +485,7 @@ class PathTreeWalkTest : AbstractPathTest() {
         link1.createSymbolicLinkPointingTo(link2)
 
         for (direction in PathWalkDirection.values()) {
-            val walk = basedir.walk(direction)
+            val walk = basedir.walk(direction, followLinks = true)
 
             testVisitedFiles(listOf("", "link1", "link2"), walk, basedir)
         }
@@ -499,7 +498,7 @@ class PathTreeWalkTest : AbstractPathTest() {
         link.createSymbolicLinkPointingTo(link)
 
         for (direction in PathWalkDirection.values()) {
-            val walk = basedir.walk(direction)
+            val walk = basedir.walk(direction, followLinks = true)
 
             testVisitedFiles(listOf("", "link"), walk, basedir)
         }
@@ -513,7 +512,7 @@ class PathTreeWalkTest : AbstractPathTest() {
         basedir.resolve("1/3/link").tryCreateSymbolicLinkTo(original) ?: return
 
         for (direction in PathWalkDirection.values()) {
-            val walk = basedir.walk(direction)
+            val walk = basedir.walk(direction, followLinks = true)
 
             val depth2ExpectedNames = listOf("", "1", "1/2", "1/3", "6", "7.txt", "8", "8/9.txt", "8/10") // link is not visited
             testVisitedFiles(depth2ExpectedNames, walk.maxDepth(2), basedir)
@@ -541,7 +540,7 @@ class PathTreeWalkTest : AbstractPathTest() {
         basedir.resolve("1/linkToLink").tryCreateSymbolicLinkTo(link) ?: return
 
         for (direction in PathWalkDirection.values()) {
-            val walk = basedir.walk(direction)
+            val walk = basedir.walk(direction, followLinks = true)
 
             val depth2ExpectedNames = listOf("", "1", "1/2", "1/3", "1/linkToLink", "6", "7.txt", "8", "8/9.txt") // linkToLink is visited
             testVisitedFiles(depth2ExpectedNames, walk.maxDepth(2), basedir)
@@ -563,19 +562,19 @@ class PathTreeWalkTest : AbstractPathTest() {
         val link = createTempDirectory().cleanupRecursively().resolve("link").tryCreateSymbolicLinkTo(basedir) ?: return
 
         for (direction in PathWalkDirection.values()) {
-            val walk = link.walk(direction)
+            val walk = link.walk(direction, followLinks = true)
             testVisitedFiles(referenceFilenames + listOf(""), walk, link)
 
-            val nofollowWalk = link.walk(direction, LinkOption.NOFOLLOW_LINKS)
+            val nofollowWalk = link.walk(direction, followLinks = false)
             assertEquals(link, nofollowWalk.single())
         }
 
         assertTrue(basedir.deleteRecursively())
         for (direction in PathWalkDirection.values()) {
-            val walk = link.walk(direction)
+            val walk = link.walk(direction, followLinks = true)
             assertEquals(link, walk.single())
 
-            val nofollowWalk = link.walk(direction, LinkOption.NOFOLLOW_LINKS)
+            val nofollowWalk = link.walk(direction, followLinks = false)
             assertEquals(link, nofollowWalk.single())
         }
     }
@@ -587,7 +586,7 @@ class PathTreeWalkTest : AbstractPathTest() {
         original.resolve("2/link").tryCreateSymbolicLinkTo(original) ?: return
 
         for (direction in PathWalkDirection.values()) {
-            val walk = basedir.walk(direction)
+            val walk = basedir.walk(direction, followLinks = true)
 
             val depth3ExpectedNames = referenceFilenames + listOf("", "1/2/link")
             testVisitedFiles(depth3ExpectedNames, walk.maxDepth(3), basedir)
@@ -612,7 +611,7 @@ class PathTreeWalkTest : AbstractPathTest() {
         link2Parent.resolve("linkTo8").tryCreateSymbolicLinkTo(link1Parent) ?: return
 
         for (direction in PathWalkDirection.values()) {
-            val walk = basedir.walk(direction)
+            val walk = basedir.walk(direction, followLinks = true)
 
             val depth2ExpectedNames = listOf("", "1", "1/2", "1/3", "6", "7.txt", "8", "8/9.txt", "8/linkTo2")
             testVisitedFiles(depth2ExpectedNames, walk.maxDepth(2), basedir)
