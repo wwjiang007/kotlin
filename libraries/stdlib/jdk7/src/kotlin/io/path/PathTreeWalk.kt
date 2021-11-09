@@ -30,9 +30,10 @@ public enum class PathWalkDirection {
 /**
  * This class is intended to implement different file traversal methods.
  * It allows to iterate through all files inside a given directory.
+ * Iteration order of sibling files is unspecified.
  *
  * Use [Path.walk], [Path.walkTopDown] or [Path.walkBottomUp] extension functions to instantiate a `PathTreeWalk` instance.
-
+ *
  * If the file path given is just a file, walker iterates only it.
  * If the file path given does not exist, walker iterates nothing, i.e. it's equivalent to an empty sequence.
  */
@@ -72,7 +73,7 @@ public class PathTreeWalk private constructor(
         }
     }
 
-    private inner class PathTreeWalkIterator() : AbstractIterator<Path>() {
+    private inner class PathTreeWalkIterator : AbstractIterator<Path>() {
 
         // Stack of directory states, beginning from the start directory
         private val state = ArrayDeque<WalkState>()
@@ -225,6 +226,9 @@ public class PathTreeWalk private constructor(
      * and before it is visited itself.
      *
      * If the [function] returns `false` the directory is not entered and neither it nor its files are visited.
+     *
+     * When a directory is entered, all its files are retrieved eagerly.
+     * Thus any changes in the directory won't affect the list of visited immediate children.
      */
     public fun onEnter(function: (Path) -> Boolean): PathTreeWalk {
         return PathTreeWalk(start, direction, linkOptions, onEnter = function, onLeave, onFail, maxDepth)
@@ -240,7 +244,8 @@ public class PathTreeWalk private constructor(
     /**
      * Set a callback [function], that is called on a directory when it's impossible to get its file list.
      *
-     * [onEnter] and [onLeave] callback functions are called even in this case.
+     * The provided [function] is called after [onEnter] callback function,
+     * and [onLeave] callback function is called after the specified [function] if the latter doesn't throw.
      */
     public fun onFail(function: (Path, IOException) -> Unit): PathTreeWalk {
         return PathTreeWalk(start, direction, linkOptions, onEnter, onLeave, onFail = function, maxDepth)
@@ -265,6 +270,8 @@ public class PathTreeWalk private constructor(
  * Gets a sequence for visiting this directory and all its content.
  *
  * @param direction walk direction, top-down (by default) or bottom-up.
+ * @param followLinks `true` to follow to the directory a symbolic link points to and visit all its content,
+ * `false` (by default) to not follow through symbolic links.
  */
 public fun Path.walk(direction: PathWalkDirection = PathWalkDirection.TOP_DOWN, followLinks: Boolean = false): PathTreeWalk =
     PathTreeWalk(this, direction, followLinks)
@@ -272,11 +279,17 @@ public fun Path.walk(direction: PathWalkDirection = PathWalkDirection.TOP_DOWN, 
 /**
  * Gets a sequence for visiting this directory and all its content in top-down order.
  * Depth-first search is used and directories are visited before all their files.
+ *
+ * @param followLinks `true` to follow to the directory a symbolic link points to and visit all its content,
+ * `false` (by default) to not follow through symbolic links.
  */
 public fun Path.walkTopDown(followLinks: Boolean = false): PathTreeWalk = walk(PathWalkDirection.TOP_DOWN, followLinks)
 
 /**
  * Gets a sequence for visiting this directory and all its content in bottom-up order.
  * Depth-first search is used and directories are visited after all their files.
+ *
+ * @param followLinks `true` to follow to the directory a symbolic link points to and visit all its content,
+ * `false` (by default) to not follow through symbolic links.
  */
 public fun Path.walkBottomUp(followLinks: Boolean = false): PathTreeWalk = walk(PathWalkDirection.BOTTOM_UP, followLinks)
