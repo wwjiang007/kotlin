@@ -151,37 +151,22 @@ class PathTreeWalkTest : AbstractPathTest() {
     }
 
     @Test
-    fun deleteTxtTopDown() {
-        val basedir = createTestFiles().cleanupRecursively()
+    fun deleteChildrenOnEnter() {
         val expectedNames = listOf("", "1", "1/2", "1/3", "6", "8")
 
-        fun enter(file: Path) {
+        fun enter(file: Path): Boolean {
             assertTrue(file.isDirectory())
             for (child in file.listDirectoryEntries()) {
                 if (child.name.endsWith("txt"))
                     child.deleteExisting()
             }
+            return true
         }
 
-        val walk = basedir.walkTopDown().onEnter { enter(it); true }
-        testVisitedFiles(expectedNames, walk, basedir)
-    }
-
-    @Test
-    fun deleteTxtBottomUp() {
-        val basedir = createTestFiles().cleanupRecursively()
-        val expectedNames = listOf("", "1", "1/2", "1/3", "6", "8")
-
-        fun enter(file: Path) {
-            assertTrue(file.isDirectory())
-            for (child in file.listDirectoryEntries()) {
-                if (child.name.endsWith("txt"))
-                    child.deleteExisting()
-            }
-        }
-
-        val walk = basedir.walkBottomUp().onEnter { enter(it); true }
-        testVisitedFiles(expectedNames, walk, basedir)
+        val basedir1 = createTestFiles().cleanupRecursively()
+        testVisitedFiles(expectedNames, basedir1.walkTopDown().onEnter(::enter), basedir1)
+        val basedir2 = createTestFiles().cleanupRecursively()
+        testVisitedFiles(expectedNames, basedir2.walkBottomUp().onEnter(::enter), basedir2)
     }
 
     @Test
@@ -198,6 +183,23 @@ class PathTreeWalkTest : AbstractPathTest() {
         val expected = listOf("") + referenceFilenames
         val walk = basedir.walkBottomUp().onEach { if (it.name == "1") it.deleteRecursively() }
         testVisitedFiles(expected, walk, basedir)
+    }
+
+
+    @Test
+    fun addChildOnEnter() {
+        val expectedNames = referenceFilenames + listOf("", "a.txt", "1/a.txt", "1/2/a.txt", "1/3/a.txt", "6/a.txt", "8/a.txt")
+
+        fun enter(file: Path): Boolean {
+            assertTrue(file.isDirectory())
+            file.resolve("a.txt").createFile()
+            return true
+        }
+
+        val basedir1 = createTestFiles().cleanupRecursively()
+        testVisitedFiles(expectedNames, basedir1.walkTopDown().onEnter(::enter), basedir1)
+        val basedir2 = createTestFiles().cleanupRecursively()
+        testVisitedFiles(expectedNames, basedir2.walkBottomUp().onEnter(::enter), basedir2)
     }
 
     @Test
@@ -244,8 +246,8 @@ class PathTreeWalkTest : AbstractPathTest() {
     @Test
     fun count() {
         val basedir = createTestFiles().cleanupRecursively()
-        assertEquals(10, basedir.walkTopDown().count());
-        assertEquals(10, basedir.walkBottomUp().count());
+        assertEquals(10, basedir.walkTopDown().count())
+        assertEquals(10, basedir.walkBottomUp().count())
     }
 
     @Test
