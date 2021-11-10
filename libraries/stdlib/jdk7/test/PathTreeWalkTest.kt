@@ -27,6 +27,16 @@ class PathTreeWalkTest : AbstractPathTest() {
             return basedir
         }
 
+        fun Path.tryCreateSymbolicLinkTo(original: Path): Path? {
+            return try {
+                this.createSymbolicLinkPointingTo(original)
+            } catch (e: Exception) {
+                // the underlying OS may not support hard links or may require a privilege
+                println("Creating a link failed with ${e.stackTraceToString()}")
+                null
+            }
+        }
+
         fun testVisitedFiles(expected: List<String>, walk: Sequence<Path>, basedir: Path) {
             val actual = walk.map { it.relativeToOrSelf(basedir).invariantSeparatorsPathString }
             assertEquals(expected.sorted(), actual.toList().sorted())
@@ -419,16 +429,6 @@ class PathTreeWalkTest : AbstractPathTest() {
         }
     }
 
-    private fun Path.tryCreateSymbolicLinkTo(original: Path): Path? {
-        return try {
-            this.createSymbolicLinkPointingTo(original)
-        } catch (e: Exception) {
-            // the underlying OS may not support hard links or may require a privilege
-            println("Creating a link failed with ${e.stackTraceToString()}")
-            null
-        }
-    }
-
     @Test
     fun symlinkToFile() {
         val basedir = createTestFiles().cleanupRecursively()
@@ -481,8 +481,8 @@ class PathTreeWalkTest : AbstractPathTest() {
     fun symlinkTwoPointingToEachOther() {
         val basedir = createTempDirectory().cleanupRecursively()
         val link1 = basedir.resolve("link1")
-        val link2 = basedir.resolve("link2").createSymbolicLinkPointingTo(link1)
-        link1.createSymbolicLinkPointingTo(link2)
+        val link2 = basedir.resolve("link2").tryCreateSymbolicLinkTo(link1) ?: return
+        link1.tryCreateSymbolicLinkTo(link2) ?: return
 
         for (direction in PathWalkDirection.values()) {
             val walk = basedir.walk(direction, followLinks = true)
@@ -495,7 +495,7 @@ class PathTreeWalkTest : AbstractPathTest() {
     fun symlinkPointingToItself() {
         val basedir = createTempDirectory().cleanupRecursively()
         val link = basedir.resolve("link")
-        link.createSymbolicLinkPointingTo(link)
+        link.tryCreateSymbolicLinkTo(link) ?: return
 
         for (direction in PathWalkDirection.values()) {
             val walk = basedir.walk(direction, followLinks = true)
@@ -605,10 +605,10 @@ class PathTreeWalkTest : AbstractPathTest() {
     @Test
     fun symlinkCyclicWithTwo() {
         val basedir = createTestFiles().cleanupRecursively()
-        val link1Parent = basedir.resolve("8")
-        val link2Parent = basedir.resolve("1/2")
-        link1Parent.resolve("linkTo2").tryCreateSymbolicLinkTo(link2Parent) ?: return
-        link2Parent.resolve("linkTo8").tryCreateSymbolicLinkTo(link1Parent) ?: return
+        val dir8 = basedir.resolve("8")
+        val dir2 = basedir.resolve("1/2")
+        dir8.resolve("linkTo2").tryCreateSymbolicLinkTo(dir2) ?: return
+        dir2.resolve("linkTo8").tryCreateSymbolicLinkTo(dir8) ?: return
 
         for (direction in PathWalkDirection.values()) {
             val walk = basedir.walk(direction, followLinks = true)

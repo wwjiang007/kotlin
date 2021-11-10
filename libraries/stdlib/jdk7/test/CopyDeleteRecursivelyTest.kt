@@ -9,7 +9,9 @@ import java.io.IOException
 import java.nio.file.*
 import kotlin.io.path.*
 import kotlin.jdk7.test.PathTreeWalkTest.Companion.createTestFiles
+import kotlin.jdk7.test.PathTreeWalkTest.Companion.referenceFilenames
 import kotlin.jdk7.test.PathTreeWalkTest.Companion.testVisitedFiles
+import kotlin.jdk7.test.PathTreeWalkTest.Companion.tryCreateSymbolicLinkTo
 import kotlin.test.*
 
 class CopyDeleteRecursivelyTest : AbstractPathTest() {
@@ -80,29 +82,120 @@ class CopyDeleteRecursivelyTest : AbstractPathTest() {
     }
 
     @Test
-    fun deleteFollowSymlinks() {
-        val dir1 = createTempDirectory()
-        val dir2 = createTempDirectory().cleanup()
-        val dir2File = dir2.resolve("file.txt").createFile()
-        dir1.resolve("link").createSymbolicLinkPointingTo(dir2)
+    fun deleteBaseSymlinkToFile() {
+        for (followLinks in listOf(true, false)) {
+            val file = createTempFile().cleanup()
+            val link = createTempDirectory().cleanupRecursively().resolve("link").tryCreateSymbolicLinkTo(file) ?: return
 
-        assertTrue(dir1.deleteRecursively(followLinks = true))
-        assertFalse(dir1.exists())
-        assertTrue(dir2.exists())
-        assertFalse(dir2File.exists())
+            assertTrue(link.deleteRecursively(followLinks))
+            assertFalse(link.exists(LinkOption.NOFOLLOW_LINKS))
+            assertTrue(file.exists())
+        }
+    }
+
+    @Test
+    fun deleteBaseSymlinkToDirectoryFollow() {
+        val dir = createTestFiles().cleanupRecursively()
+        val link = createTempDirectory().cleanupRecursively().resolve("link").tryCreateSymbolicLinkTo(dir) ?: return
+
+        assertTrue(link.deleteRecursively(followLinks = true))
+        assertFalse(link.exists(LinkOption.NOFOLLOW_LINKS))
+        assertEquals(dir, dir.walkTopDown().single())
+    }
+
+    @Test
+    fun deleteBaseSymlinkToDirectoryNoFollow() {
+        val dir = createTestFiles().cleanupRecursively()
+        val link = createTempDirectory().cleanupRecursively().resolve("link").tryCreateSymbolicLinkTo(dir) ?: return
+
+        assertTrue(link.deleteRecursively(followLinks = false))
+        assertFalse(link.exists(LinkOption.NOFOLLOW_LINKS))
+        testVisitedFiles(listOf("") + referenceFilenames, dir.walkTopDown(), dir)
+    }
+
+    @Test
+    fun deleteFollowSymlinks() {
+        val dir1 = createTestFiles().cleanupRecursively()
+        val dir2 = createTestFiles().cleanupRecursively().also { it.resolve("8/link").tryCreateSymbolicLinkTo(dir1) ?: return }
+
+        assertTrue(dir2.deleteRecursively(followLinks = true))
+        assertFalse(dir2.exists())
+        assertEquals(dir1, dir1.walkTopDown().single())
     }
 
     @Test
     fun deleteNoFollowSymlinks() {
-        val dir1 = createTempDirectory()
-        val dir2 = createTempDirectory().cleanupRecursively()
-        val dir2File = dir2.resolve("file.txt").createFile()
-        dir1.resolve("link").createSymbolicLinkPointingTo(dir2)
+        val dir1 = createTestFiles().cleanupRecursively()
+        val dir2 = createTestFiles().cleanupRecursively().also { it.resolve("8/link").tryCreateSymbolicLinkTo(dir1) ?: return }
 
-        assertTrue(dir1.deleteRecursively(followLinks = false))
-        assertFalse(dir1.exists())
-        assertTrue(dir2.exists())
-        assertTrue(dir2File.exists())
+        assertTrue(dir2.deleteRecursively(followLinks = false))
+        assertFalse(dir2.exists())
+        testVisitedFiles(listOf("") + referenceFilenames, dir1.walkTopDown(), dir1)
+    }
+
+    @Test
+    fun deleteSymlinkToSymlink() {
+        val dir = createTestFiles()
+        val link = createTempDirectory().resolve("link").tryCreateSymbolicLinkTo(dir) ?: return
+        val linkToLink = createTempDirectory().resolve("linkToLink").tryCreateSymbolicLinkTo(link) ?: return
+
+        assertTrue(linkToLink.deleteRecursively(followLinks = true))
+        assertFalse(linkToLink.exists(LinkOption.NOFOLLOW_LINKS))
+        assertTrue(link.exists(LinkOption.NOFOLLOW_LINKS)) // the mediator symlink is not deleted
+        assertEquals(dir, dir.walkTopDown().single())
+    }
+
+    @Test
+    fun deleteSymlinkCyclic() {
+        val basedir = createTestFiles().cleanupRecursively()
+        val original = basedir.resolve("1")
+        original.resolve("2/link").tryCreateSymbolicLinkTo(original) ?: return
+
+//        assertFailsWith<java.nio.file.FileSystemLoopException> {
+//            basedir.deleteRecursively(followLinks = true)
+//        }
+//        testVisitedFiles(listOf("", "1/2/link") + referenceFilenames, basedir.walkTopDown(), basedir)
+
+        basedir.deleteRecursively(followLinks = false)
+        assertFalse(basedir.exists())
+    }
+
+    @Test
+    fun deleteSymlinkCyclicWithTwo() {
+        val basedir = createTestFiles().cleanupRecursively()
+        val dir8 = basedir.resolve("8")
+        val dir2 = basedir.resolve("1/2")
+        dir8.resolve("linkTo2").tryCreateSymbolicLinkTo(dir2) ?: return
+        dir2.resolve("linkTo8").tryCreateSymbolicLinkTo(dir8) ?: return
+
+//        assertFailsWith<java.nio.file.FileSystemLoopException> {
+//            basedir.deleteRecursively(followLinks = true)
+//        }
+//        testVisitedFiles(listOf("", "1/2/linkTo8", "8/linkTo2") + referenceFilenames, basedir.walkTopDown(), basedir)
+
+        assertTrue(basedir.deleteRecursively(followLinks = false))
+        assertFalse(basedir.exists())
+    }
+
+    @Test
+    fun deleteSymlinkPointingToItself() {
+        val basedir = createTempDirectory().cleanupRecursively()
+        val link = basedir.resolve("link")
+        link.tryCreateSymbolicLinkTo(link) ?: return
+
+        assertTrue(basedir.deleteRecursively(followLinks = true))
+        assertFalse(basedir.exists())
+    }
+
+    @Test
+    fun deleteSymlinkTwoPointingToEachOther() {
+        val basedir = createTempDirectory().cleanupRecursively()
+        val link1 = basedir.resolve("link1")
+        val link2 = basedir.resolve("link2").tryCreateSymbolicLinkTo(link1) ?: return
+        link1.tryCreateSymbolicLinkTo(link2) ?: return
+
+        assertTrue(basedir.deleteRecursively(followLinks = true))
+        assertFalse(basedir.exists())
     }
 
     private fun compareFiles(src: Path, dst: Path, message: String? = null) {
@@ -178,7 +271,7 @@ class CopyDeleteRecursivelyTest : AbstractPathTest() {
     @Test
     fun copyDirectoryToFile() {
         val src = createTestFiles().cleanupRecursively()
-        val dst = createTempFile().cleanup().also { it.writeText("hello") }
+        val dst = createTempFile().cleanupRecursively().also { it.writeText("hello") }
 
         assertFailsWith<java.nio.file.FileAlreadyExistsException> {
             src.copyRecursively(dst)
