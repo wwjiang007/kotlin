@@ -154,7 +154,7 @@ class CopyDeleteRecursivelyTest : AbstractPathTest() {
 //        assertFailsWith<java.nio.file.FileSystemLoopException> {
 //            basedir.deleteRecursively(followLinks = true)
 //        }
-//        testVisitedFiles(listOf("", "1/2/link") + referenceFilenames, basedir.walkTopDown(), basedir)
+//        // partial delete may have taken place
 
         basedir.deleteRecursively(followLinks = false)
         assertFalse(basedir.exists())
@@ -171,7 +171,7 @@ class CopyDeleteRecursivelyTest : AbstractPathTest() {
 //        assertFailsWith<java.nio.file.FileSystemLoopException> {
 //            basedir.deleteRecursively(followLinks = true)
 //        }
-//        testVisitedFiles(listOf("", "1/2/linkTo8", "8/linkTo2") + referenceFilenames, basedir.walkTopDown(), basedir)
+//        // partial delete may have taken place
 
         assertTrue(basedir.deleteRecursively(followLinks = false))
         assertFalse(basedir.exists())
@@ -389,6 +389,179 @@ class CopyDeleteRecursivelyTest : AbstractPathTest() {
             compareDirectories(src, dst)
         } else {
             System.err.println("cannot restrict access")
+        }
+    }
+
+    @Test
+    fun copyBaseSymlinkPointingToFileFollow() {
+        val src = createTempFile().cleanup().also { it.writeText("hello") }
+        val link = createTempDirectory().cleanupRecursively().resolve("link").tryCreateSymbolicLinkTo(src) ?: return
+        val dst = createTempDirectory().cleanupRecursively().resolve("dst")
+
+        assertTrue(link.copyRecursively(dst, followLinks = true))
+        compareFiles(src, dst)
+    }
+
+    @Test
+    fun copyBaseSymlinkPointingToFileNoFollow() {
+        val src = createTempFile().cleanup().also { it.writeText("hello") }
+        val link = createTempDirectory().cleanupRecursively().resolve("link").tryCreateSymbolicLinkTo(src) ?: return
+        val dst = createTempDirectory().cleanupRecursively().resolve("dst")
+
+        assertTrue(link.copyRecursively(dst, followLinks = false))
+        compareFiles(link, dst)
+    }
+
+    @Test
+    fun copyBaseSymlinkPointingToDirectoryFollow() {
+        val src = createTestFiles().cleanupRecursively()
+        val link = createTempDirectory().cleanupRecursively().resolve("link").tryCreateSymbolicLinkTo(src) ?: return
+        val dst = createTempDirectory().cleanupRecursively().resolve("dst")
+
+        assertTrue(link.copyRecursively(dst, followLinks = true))
+        compareDirectories(src, dst)
+    }
+
+    @Test
+    fun copyBaseSymlinkPointingToDirectoryNoFollow() {
+        val src = createTestFiles().cleanupRecursively()
+        val link = createTempDirectory().cleanupRecursively().resolve("link").tryCreateSymbolicLinkTo(src) ?: return
+        val dst = createTempDirectory().cleanupRecursively().resolve("dst")
+
+        assertTrue(link.copyRecursively(dst, followLinks = false))
+        compareFiles(link, dst)
+    }
+
+    @Test
+    fun copyFollowSymlinks() {
+        val dir1 = createTestFiles().cleanupRecursively()
+        val dir2 = createTestFiles().cleanupRecursively().also { it.resolve("8/link").tryCreateSymbolicLinkTo(dir1) ?: return }
+        val dst = createTempDirectory().cleanupRecursively().resolve("dst")
+
+        assertTrue(dir2.copyRecursively(dst, followLinks = true))
+        val dir2Content = listOf("", "8/link") + referenceFilenames
+        val expectedDstContent = dir2Content + referenceFilenames.map { "8/link/$it" }
+        testVisitedFiles(expectedDstContent, dst.walkTopDown(), dst)
+    }
+
+    @Test
+    fun copyNoFollowSymlinks() {
+        val dir1 = createTestFiles().cleanupRecursively()
+        val dir2 = createTestFiles().cleanupRecursively().also { it.resolve("8/link").tryCreateSymbolicLinkTo(dir1) ?: return }
+        val dst = createTempDirectory().cleanupRecursively().resolve("dst")
+
+        assertTrue(dir2.copyRecursively(dst, followLinks = false))
+        testVisitedFiles(listOf("", "8/link") + referenceFilenames, dst.walkTopDown(), dst)
+    }
+
+    @Test
+    fun copyOverwriteFollowSymlinks() {
+        val dir1 = createTestFiles().cleanupRecursively()
+        val dir2 = createTestFiles().cleanupRecursively().also { it.resolve("8/link").tryCreateSymbolicLinkTo(dir1) ?: return }
+
+        val dir3 = createTempDirectory().cleanupRecursively().also { it.resolve("file.txt").createFile() }
+        val dst = createTempDirectory().cleanupRecursively().also { it.resolve("1").tryCreateSymbolicLinkTo(dir3) ?: return }
+
+        assertTrue(dir2.copyRecursively(dst, overwrite = true, followLinks = true))
+
+        // the dir pointed from dst is not deleted
+        testVisitedFiles(listOf("", "file.txt"), dir3.walkTopDown(), dir3)
+
+        // content of the directory pointed from src is copied
+        val dir2Content = listOf("", "8/link") + referenceFilenames
+        val expectedDstContent = dir2Content + referenceFilenames.map { "8/link/$it" }
+        testVisitedFiles(expectedDstContent, dst.walkTopDown(), dst)
+
+        // symlink from dst is overwritten
+        assertFalse(dst.resolve("1").isSymbolicLink())
+    }
+
+    @Test
+    fun copyOverwriteNoFollowSymlinks() {
+        val dir1 = createTestFiles().cleanupRecursively()
+        val dir2 = createTestFiles().cleanupRecursively().also { it.resolve("8/link").tryCreateSymbolicLinkTo(dir1) ?: return }
+
+        val dir3 = createTempDirectory().cleanupRecursively().also { it.resolve("file.txt").createFile() }
+        val dst = createTempDirectory().cleanupRecursively().also { it.resolve("7.txt").tryCreateSymbolicLinkTo(dir3) ?: return }
+
+        assertTrue(dir2.copyRecursively(dst, overwrite = true, followLinks = false))
+
+        // the dir pointed from dst is not deleted
+        testVisitedFiles(listOf("", "file.txt"), dir3.walkTopDown(), dir3)
+
+        // content of the directory pointed from src is not copied
+        testVisitedFiles(listOf("", "8/link") + referenceFilenames, dst.walkTopDown(), dst)
+
+        // symlink from dst is overwritten
+        assertFalse(dst.resolve("7.txt").isSymbolicLink())
+    }
+
+    @Test
+    fun copySymlinkToSymlink() {
+        val src = createTestFiles()
+        val link = createTempDirectory().resolve("link").tryCreateSymbolicLinkTo(src) ?: return
+        val linkToLink = createTempDirectory().resolve("linkToLink").tryCreateSymbolicLinkTo(link) ?: return
+        val dst = createTempDirectory().cleanupRecursively().resolve("dst")
+
+        assertTrue(linkToLink.copyRecursively(dst, followLinks = true))
+        testVisitedFiles(listOf("") + referenceFilenames, dst.walkTopDown(), dst)
+    }
+
+//    @Test
+//    fun copySymlinkCyclic() {
+//        val src = createTestFiles().cleanupRecursively()
+//        val original = src.resolve("1")
+//        original.resolve("2/link").tryCreateSymbolicLinkTo(original) ?: return
+//        val dst = createTempDirectory().cleanupRecursively().resolve("dst")
+//
+//        assertFailsWith<java.nio.file.FileSystemLoopException> {
+//            src.copyRecursively(dst, followLinks = true)
+//        }
+//        // partial copy
+//        val pathToLink = listOf(dst.resolve("1"), dst.resolve("1/link"))
+//        assertTrue(dst.walkTopDown().toList().containsAll(pathToLink))
+//    }
+
+//    @Test
+//    fun copySymlinkCyclicWithTwo() {
+//        val src = createTestFiles().cleanupRecursively()
+//        val dir8 = src.resolve("8")
+//        val dir2 = src.resolve("1/2")
+//        dir8.resolve("linkTo2").tryCreateSymbolicLinkTo(dir2) ?: return
+//        dir2.resolve("linkTo8").tryCreateSymbolicLinkTo(dir8) ?: return
+//        val dst = createTempDirectory().cleanupRecursively().resolve("dst")
+//
+//        assertFailsWith<java.nio.file.FileSystemLoopException> {
+//            src.copyRecursively(dst, followLinks = true)
+//        }
+//        // partial copy
+//        assertTrue(dst.exists())
+//    }
+
+    @Test
+    fun copySymlinkPointingToItself() {
+        val src = createTempDirectory().cleanupRecursively()
+        val link = src.resolve("link")
+        link.tryCreateSymbolicLinkTo(link) ?: return
+        val dst = createTempDirectory().cleanupRecursively().resolve("dst")
+
+        assertFailsWith<java.nio.file.FileSystemException> {
+            // throws with message "Too many levels of symbolic links"
+            src.copyRecursively(dst, followLinks = true)
+        }
+    }
+
+    @Test
+    fun copySymlinkTwoPointingToEachOther() {
+        val src = createTempDirectory().cleanupRecursively()
+        val link1 = src.resolve("link1")
+        val link2 = src.resolve("link2").tryCreateSymbolicLinkTo(link1) ?: return
+        link1.tryCreateSymbolicLinkTo(link2) ?: return
+        val dst = createTempDirectory().cleanupRecursively().resolve("dst")
+
+        assertFailsWith<java.nio.file.FileSystemException> {
+            // throws with message "Too many levels of symbolic links"
+            src.copyRecursively(dst, followLinks = true)
         }
     }
 }

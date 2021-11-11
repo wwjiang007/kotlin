@@ -310,31 +310,33 @@ public fun Path.copyRecursively(
     followLinks: Boolean = false,
     onError: (Path, IOException) -> OnErrorAction = { _, exception -> throw exception }
 ): Boolean {
-    val options = LinkFollowing.toOptions(followLinks)
-
-    if (!exists(*options)) {
+    if (!exists(LinkOption.NOFOLLOW_LINKS)) {
         val error = NoSuchFileException(this.toString(), target.toString(), "The source file doesn't exist.")
         return onError(this, error) != OnErrorAction.TERMINATE
     }
     try {
         // We cannot break for loop from inside a lambda, so we have to use an exception here
         for (src in walkTopDown(followLinks).onFail { p, e -> if (onError(p, e) == OnErrorAction.TERMINATE) throw TerminateException(p) }) {
-            if (!src.exists(*options)) {
+            if (!src.exists(LinkOption.NOFOLLOW_LINKS)) {
                 val error = NoSuchFileException(src.toString(), target.toString(), "The source file doesn't exist.")
                 if (onError(src, error) == OnErrorAction.TERMINATE)
                     return false
             } else {
                 val relPath = src.relativeTo(this)
-                val dstFile = target.resolve(relPath)
-                if (dstFile.exists(*options) && !(src.isDirectory(*options) && dstFile.isDirectory(*options))) {
+                val dst = target.resolve(relPath)
+
+                val dstOption = LinkOption.NOFOLLOW_LINKS
+                val srcOption = LinkFollowing.toOptions(followLinks)
+
+                if (dst.exists(dstOption) && !(src.isDirectory(*srcOption) && dst.isDirectory(dstOption))) {
                     val stillExists = if (!overwrite) true else {
-                        if (dstFile.isDirectory(*options))
-                            !dstFile.deleteRecursively(followLinks)
+                        if (dst.isDirectory(dstOption))
+                            !dst.deleteRecursively(followLinks = false)
                         else {
                             try {
-                                !dstFile.deleteIfExists()
+                                !dst.deleteIfExists()
                             } catch (error: IOException) {
-                                if (onError(dstFile, error) == OnErrorAction.TERMINATE)
+                                if (onError(dst, error) == OnErrorAction.TERMINATE)
                                     return false
 
                                 continue
@@ -343,20 +345,27 @@ public fun Path.copyRecursively(
                     }
 
                     if (stillExists) {
-                        val error = FileAlreadyExistsException(src.toString(), dstFile.toString(), "The destination file already exists.")
-                        if (onError(dstFile, error) == OnErrorAction.TERMINATE)
+                        val error = FileAlreadyExistsException(src.toString(), dst.toString(), "The destination file already exists.")
+                        if (onError(dst, error) == OnErrorAction.TERMINATE)
                             return false
 
                         continue
                     }
                 }
 
-                if (src.isDirectory(*options)) {
-                    if (!dstFile.exists(*options)) {
-                        dstFile.createDirectory()
+                if (src.isDirectory(*srcOption)) {
+                    if (!dst.exists(dstOption)) {
+                        dst.createDirectory()
                     }
                 } else {
-                    if (src.copyTo(dstFile, overwrite).fileSize() != src.fileSize()) {
+                    val copyOptions: Array<CopyOption> = if (overwrite) {
+                        if (!followLinks) arrayOf(StandardCopyOption.REPLACE_EXISTING, LinkOption.NOFOLLOW_LINKS)
+                        else arrayOf(StandardCopyOption.REPLACE_EXISTING)
+                    } else {
+                        if (!followLinks) arrayOf(LinkOption.NOFOLLOW_LINKS)
+                        else emptyArray()
+                    }
+                    if (src.copyTo(dst, *copyOptions).fileSize() != src.fileSize()) {
                         val error = IOException("Source file wasn't copied completely, length of destination file differs.")
                         if (onError(src, error) == OnErrorAction.TERMINATE)
                             return false
