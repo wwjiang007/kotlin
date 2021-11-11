@@ -108,6 +108,9 @@ open class KotlinGradleFragmentInternal @Inject constructor(
 internal fun KotlinModuleFragment.disambiguateName(simpleName: String) =
     lowerCamelCaseName(fragmentName, containingModule.moduleIdentifier.moduleClassifier ?: KotlinGradleModule.MAIN_MODULE_NAME, simpleName)
 
+internal val KotlinModuleFragment.unambiguousNameInProject: String
+    get() = disambiguateName("")
+
 val KotlinGradleFragment.refinesClosure: Set<KotlinGradleFragment>
     get() = (this as KotlinModuleFragment).refinesClosure.map { it as KotlinGradleFragment }.toSet()
 

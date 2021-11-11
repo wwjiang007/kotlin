@@ -17,6 +17,9 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinDependencyHandler
 import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
 import org.jetbrains.kotlin.gradle.plugin.LanguageSettingsBuilder
 import org.jetbrains.kotlin.gradle.plugin.mpp.*
+import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.*
+import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.FragmentGranularMetadataResolver
+import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.unambiguousNameInProject
 import org.jetbrains.kotlin.gradle.utils.*
 import java.io.File
 import java.util.*
@@ -249,7 +252,7 @@ internal fun KotlinSourceSet.disambiguateName(simpleName: String): String {
     return lowerCamelCaseName(*nameParts.toTypedArray())
 }
 
-private fun createDefaultSourceDirectorySet(project: Project, name: String?): SourceDirectorySet =
+internal fun createDefaultSourceDirectorySet(project: Project, name: String?): SourceDirectorySet =
     project.objects.sourceDirectorySet(name!!, name)
 
 /**
