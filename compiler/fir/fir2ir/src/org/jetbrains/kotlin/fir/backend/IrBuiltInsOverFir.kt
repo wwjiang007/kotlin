@@ -189,13 +189,14 @@ class IrBuiltInsOverFir(
     override val stringClass: IrClassSymbol get() = string.klass
     override val stringType: IrType get() = string.type
 
-    private val foldable by createClass(kotlinIrPackage, IdSignature.CommonSignature("kotlin", "Foldable", null, 0)) {
-        createConstructor()
+    private val foldable = kotlinIrPackage.createClass(kotlinPackage.child(Name.identifier("Foldable"))).apply {
+        owner.createConstructor()
+        owner.finalizeClassDefinition()
     }
 
     private val foldableAnnotation: IrConstructorCall = run {
-        val constructor = foldable.klass.constructors.single()
-        IrConstructorCallImpl.Companion.fromSymbolOwner(foldable.type, constructor)
+        val constructor = foldable.constructors.single()
+        IrConstructorCallImpl.Companion.fromSymbolOwner(foldable.defaultType, constructor)
     }
 
     private val array by createClass(kotlinIrPackage, IdSignatureValues.array) {

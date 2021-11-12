@@ -175,10 +175,3 @@ public annotation class DslMarker
 @MustBeDocumented
 @SinceKotlin("1.1")
 public annotation class PublishedApi
-
-/**
- * When applied enables compiler optimization that evaluate given function or property and replace call with result.
- */
-@Target(AnnotationTarget.CONSTRUCTOR, AnnotationTarget.FUNCTION, AnnotationTarget.PROPERTY)
-@Retention(AnnotationRetention.BINARY)
-public annotation class Foldable
