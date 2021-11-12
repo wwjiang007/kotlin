@@ -255,13 +255,11 @@ class CopyDeleteRecursivelyTest : AbstractPathTest() {
         compareDirectories(src, dst)
 
         src.resolve("1/3/4.txt").writeText("hello")
-        src.resolve("8/10").createDirectory()
         dst.resolve("10").createDirectory()
         assertFailsWith<java.nio.file.FileAlreadyExistsException> {
             src.copyRecursively(dst)
         }
         assertTrue(dst.resolve("1/3/4.txt").readText().isEmpty())
-        assertFalse(dst.resolve("8/10").exists())
 
         assertTrue(src.copyRecursively(dst, overwrite = true))
         assertTrue(dst.resolve("10").exists())
