@@ -1,0 +1,5 @@
+FILE: enumDeclaredClass.kt
+    public final fun <E : R|kotlin/Enum<E>|> foo(values: R|kotlin/Array<E>|): R|kotlin/Unit| {
+        lval value: R|E| = R|<local>/values|.R|kotlin/collections/first|<R|E|>()
+        R|<local>/value|.<Unresolved name: declaringClass>#
+    }

@@ -5094,6 +5094,12 @@ public class DiagnosisCompilerFirTestdataTestGenerated extends AbstractDiagnosis
             }
 
             @Test
+            @TestMetadata("enumDeclaredClass.kt")
+            public void testEnumDeclaredClass() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/intellij/enumDeclaredClass.kt");
+            }
+
+            @Test
             @TestMetadata("EnumWithToString.kt")
             public void testEnumWithToString() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/intellij/EnumWithToString.kt");
