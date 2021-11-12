@@ -1,6 +1,6 @@
 enum class E {
     ENTRY;
 
-    fun getDeclaringClass() {}
-    fun finalize() {}
+    fun <!VIRTUAL_MEMBER_HIDDEN!>getDeclaringClass<!>() {}
+    fun <!VIRTUAL_MEMBER_HIDDEN!>finalize<!>() {}
 }

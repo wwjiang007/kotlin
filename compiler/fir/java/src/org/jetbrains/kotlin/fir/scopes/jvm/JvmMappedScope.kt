@@ -47,7 +47,7 @@ class JvmMappedScope(
 
     override fun processFunctionsByName(name: Name, processor: (FirNamedFunctionSymbol) -> Unit) {
         val visibleMethods = signatures.visibleMethodSignaturesByName[name]
-            ?: return declaredMemberScope.processFunctionsByName(name, processor)
+        val hiddenMethods = signatures.hiddenMethodSignaturesByName[name]
 
         val declared = mutableListOf<FirNamedFunctionSymbol>()
         declaredMemberScope.processFunctionsByName(name) { symbol ->
@@ -63,7 +63,9 @@ class JvmMappedScope(
             val newSymbol = getOrCreateSubstitutedCopy(symbol)
 
             val jvmSignature = newSymbol.fir.computeJvmDescriptor()
-            if (jvmSignature in visibleMethods && jvmSignature !in declaredSignatures) {
+            if (visibleMethods != null && jvmSignature in visibleMethods && jvmSignature !in declaredSignatures) {
+                processor(newSymbol)
+            } else if (hiddenMethods != null && jvmSignature in hiddenMethods && jvmSignature !in declaredSignatures) {
                 processor(newSymbol)
             }
         }
@@ -156,8 +158,14 @@ class JvmMappedScope(
     }
 
     companion object {
-        data class Signatures(val visibleMethodSignaturesByName: Map<Name, Set<String>>, val hiddenConstructors: Set<String>) {
-            fun isEmpty() = visibleMethodSignaturesByName.isEmpty() && hiddenConstructors.isEmpty()
+        data class Signatures(
+            val visibleMethodSignaturesByName: Map<Name, Set<String>>,
+            val hiddenMethodSignaturesByName: Map<Name, Set<String>>,
+            val hiddenConstructors: Set<String>
+        ) {
+            fun isEmpty() =
+                visibleMethodSignaturesByName.isEmpty() && hiddenMethodSignaturesByName.isEmpty() && hiddenConstructors.isEmpty()
+
             fun isNotEmpty() = !isEmpty()
         }
 
@@ -185,28 +193,35 @@ class JvmMappedScope(
                 "Ljava/lang/Throwable;",
                 "Ljava/lang/String;"
             ).mapTo(this) { arguments -> "java/lang/Throwable.<init>($arguments)V" }
+
+            listOf("Ljava/lang/String;I").mapTo(this) { arguments -> "java/lang/Enum.<init>($arguments)V" }
+        }
+
+        private fun Set<String>.toMethodSignatures(classIdString: String, isMutable: Boolean): Map<Name, Set<String>> {
+            val methodsByName = mutableMapOf<Name, MutableSet<String>>()
+            filter { signature ->
+                signature in JvmBuiltInsSignatures.MUTABLE_METHOD_SIGNATURES == isMutable && signature.startsWith(classIdString)
+            }.map { signature ->
+                // +1 to delete dot before function name
+                signature.substring(classIdString.length + 1)
+            }.forEach {
+                methodsByName.getOrPut(Name.identifier(it.substringBefore("("))) { mutableSetOf() }.add(it)
+            }
+            return methodsByName
         }
 
         fun prepareSignatures(klass: FirRegularClass, isMutable: Boolean): Signatures {
 
-            val signaturePrefix = klass.symbol.classId.toString()
-            val visibleMethodsByName = mutableMapOf<Name, MutableSet<String>>()
-            JvmBuiltInsSignatures.VISIBLE_METHOD_SIGNATURES.filter { signature ->
-                signature in JvmBuiltInsSignatures.MUTABLE_METHOD_SIGNATURES == isMutable &&
-                        signature.startsWith(signaturePrefix)
-            }.map { signature ->
-                // +1 to delete dot before function name
-                signature.substring(signaturePrefix.length + 1)
-            }.forEach {
-                visibleMethodsByName.getOrPut(Name.identifier(it.substringBefore("("))) { mutableSetOf() }.add(it)
-            }
+            val classIdAsString = klass.symbol.classId.toString()
+            val visibleMethodsByName = JvmBuiltInsSignatures.VISIBLE_METHOD_SIGNATURES.toMethodSignatures(classIdAsString, isMutable)
+            val hiddenMethodsByName = JvmBuiltInsSignatures.HIDDEN_METHOD_SIGNATURES.toMethodSignatures(classIdAsString, isMutable = false)
 
             val hiddenConstructors =
                 (JvmBuiltInsSignatures.HIDDEN_CONSTRUCTOR_SIGNATURES + additionalHiddenConstructors)
-                    .filter { it.startsWith(signaturePrefix) }
-                    .mapTo(mutableSetOf()) { it.substring(signaturePrefix.length + 1) }
+                    .filter { it.startsWith(classIdAsString) }
+                    .mapTo(mutableSetOf()) { it.substring(classIdAsString.length + 1) }
 
-            return Signatures(visibleMethodsByName, hiddenConstructors)
+            return Signatures(visibleMethodsByName, hiddenMethodsByName, hiddenConstructors)
         }
     }
 }
