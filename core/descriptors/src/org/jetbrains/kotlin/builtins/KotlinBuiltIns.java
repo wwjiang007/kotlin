@@ -234,6 +234,11 @@ public abstract class KotlinBuiltIns {
     }
 
     @NotNull
+    public ClassDescriptor getFoldable() {
+        return getBuiltInClassByName("Foldable");
+    }
+
+    @NotNull
     private ClassDescriptor getPrimitiveClassDescriptor(@NotNull PrimitiveType type) {
         return getBuiltInClassByName(type.getTypeName().asString());
     }
@@ -501,6 +506,11 @@ public abstract class KotlinBuiltIns {
     @NotNull
     public SimpleType getNullableAnyType() {
         return getAnyType().makeNullableAsSpecified(true);
+    }
+
+    @NotNull
+    public SimpleType getFoldableType() {
+        return getFoldable().getDefaultType();
     }
 
     @NotNull
