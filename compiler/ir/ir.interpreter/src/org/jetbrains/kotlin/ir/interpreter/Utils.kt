@@ -29,6 +29,7 @@ import org.jetbrains.kotlin.util.capitalizeDecapitalize.capitalizeAsciiOnly
 import org.jetbrains.kotlin.utils.keysToMap
 import java.lang.invoke.MethodType
 
+val foldableAnnotation = FqName("kotlin.Foldable")
 val compileTimeAnnotation = FqName("kotlin.CompileTimeCalculation")
 val evaluateIntrinsicAnnotation = FqName("kotlin.EvaluateIntrinsic")
 val contractsDslAnnotation = FqName("kotlin.internal.ContractsDsl")
