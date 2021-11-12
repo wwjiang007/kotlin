@@ -39,10 +39,12 @@ public final class kotlin/io/path/PathsKt {
 	public static final fun relativeTo (Ljava/nio/file/Path;Ljava/nio/file/Path;)Ljava/nio/file/Path;
 	public static final fun relativeToOrNull (Ljava/nio/file/Path;Ljava/nio/file/Path;)Ljava/nio/file/Path;
 	public static final fun relativeToOrSelf (Ljava/nio/file/Path;Ljava/nio/file/Path;)Ljava/nio/file/Path;
-	public static final fun walk (Ljava/nio/file/Path;Lkotlin/io/path/PathWalkDirection;[Ljava/nio/file/LinkOption;)Lkotlin/io/path/PathTreeWalk;
-	public static synthetic fun walk$default (Ljava/nio/file/Path;Lkotlin/io/path/PathWalkDirection;[Ljava/nio/file/LinkOption;ILjava/lang/Object;)Lkotlin/io/path/PathTreeWalk;
-	public static final fun walkBottomUp (Ljava/nio/file/Path;[Ljava/nio/file/LinkOption;)Lkotlin/io/path/PathTreeWalk;
-	public static final fun walkTopDown (Ljava/nio/file/Path;[Ljava/nio/file/LinkOption;)Lkotlin/io/path/PathTreeWalk;
+	public static final fun walk (Ljava/nio/file/Path;Lkotlin/io/path/PathWalkDirection;Z)Lkotlin/io/path/PathTreeWalk;
+	public static synthetic fun walk$default (Ljava/nio/file/Path;Lkotlin/io/path/PathWalkDirection;ZILjava/lang/Object;)Lkotlin/io/path/PathTreeWalk;
+	public static final fun walkBottomUp (Ljava/nio/file/Path;Z)Lkotlin/io/path/PathTreeWalk;
+	public static synthetic fun walkBottomUp$default (Ljava/nio/file/Path;ZILjava/lang/Object;)Lkotlin/io/path/PathTreeWalk;
+	public static final fun walkTopDown (Ljava/nio/file/Path;Z)Lkotlin/io/path/PathTreeWalk;
+	public static synthetic fun walkTopDown$default (Ljava/nio/file/Path;ZILjava/lang/Object;)Lkotlin/io/path/PathTreeWalk;
 	public static final fun writeText (Ljava/nio/file/Path;Ljava/lang/CharSequence;Ljava/nio/charset/Charset;[Ljava/nio/file/OpenOption;)V
 	public static synthetic fun writeText$default (Ljava/nio/file/Path;Ljava/lang/CharSequence;Ljava/nio/charset/Charset;[Ljava/nio/file/OpenOption;ILjava/lang/Object;)V
 }
