@@ -138,7 +138,7 @@ interface ConeTypeContext : TypeSystemContext, TypeSystemOptimizationContext, Ty
             is ConeCapturedType -> constructor
             is ConeTypeVariableType -> lookupTag
             is ConeIntersectionType -> this
-            is ConeStubType -> variable.typeConstructor
+            is ConeStubType -> constructor
             is ConeDefinitelyNotNullType -> original.typeConstructor()
             is ConeIntegerLiteralType -> this
             else -> error("?: $this")
@@ -238,6 +238,7 @@ interface ConeTypeContext : TypeSystemContext, TypeSystemOptimizationContext, Ty
                 }
             }
             is ConeIntegerLiteralType -> 0
+            is ConeStubTypeConstructor -> 0
             else -> unknownConstructorError()
         }
     }
@@ -265,6 +266,7 @@ interface ConeTypeContext : TypeSystemContext, TypeSystemOptimizationContext, Ty
     override fun TypeConstructorMarker.supertypes(): Collection<ConeKotlinType> {
         if (this is ErrorTypeConstructor) return emptyList()
         return when (this) {
+            is ConeStubTypeConstructor -> emptyList()
             is ConeTypeVariableTypeConstructor -> emptyList()
             is ConeTypeParameterLookupTag -> symbol.fir.bounds.map { it.coneType }
             is ConeClassLikeLookupTag -> {
@@ -336,6 +338,7 @@ interface ConeTypeContext : TypeSystemContext, TypeSystemOptimizationContext, Ty
             is ConeClassLikeLookupTag,
             is ConeTypeParameterLookupTag -> true
 
+            is ConeStubTypeConstructor,
             is ConeCapturedTypeConstructor,
             is ErrorTypeConstructor,
             is ConeTypeVariableTypeConstructor,
