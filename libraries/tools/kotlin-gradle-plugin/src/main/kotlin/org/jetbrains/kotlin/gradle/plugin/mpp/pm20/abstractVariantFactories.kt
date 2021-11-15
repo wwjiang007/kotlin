@@ -77,7 +77,7 @@ abstract class AbstractKotlinGradleVariantFactory<T : KotlinGradleVariant>(
                 isCanBeConsumed = true
             }
             setModuleCapability(this, fragment.containingModule)
-            attributes.attribute<Usage>(Usage.USAGE_ATTRIBUTE, KotlinUsages.producerApiUsage(project, fragment.platformType))
+            attributes.attribute(Usage.USAGE_ATTRIBUTE, KotlinUsages.producerApiUsage(project, fragment.platformType))
             extendsFrom(project.configurations.getByName(fragment.transitiveApiConfigurationName))
             // FIXME + compileOnly
             configureApiElementsConfiguration(fragment, this@apply)
@@ -119,11 +119,11 @@ abstract class AbstractKotlinGradleVariantWithRuntimeFactory<T : KotlinGradleVar
 
         project.configurations.maybeCreate(fragment.runtimeElementsConfigurationName).apply {
             isCanBeResolved = false
-            isCanBeConsumed = false
+            isCanBeConsumed = true
             module.ifMadePublic {
                 isCanBeConsumed = true
-                setModuleCapability(this, fragment.containingModule)
             }
+            setModuleCapability(this, fragment.containingModule)
             configureRuntimeElementsConfiguration(fragment, this@apply)
             extendsFrom(project.configurations.getByName(fragment.transitiveApiConfigurationName))
             extendsFrom(project.configurations.getByName(fragment.transitiveImplementationConfigurationName))
