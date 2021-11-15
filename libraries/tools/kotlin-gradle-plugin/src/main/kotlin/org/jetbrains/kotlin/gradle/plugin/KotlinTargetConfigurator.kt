@@ -135,11 +135,14 @@ abstract class AbstractKotlinTargetConfigurator<KotlinTargetType : KotlinTarget>
     ) {
         val project = compilation.target.project
 
-        project.locateOrRegisterTask<ProcessResources>(compilation.processResourcesTaskName) { resourcesTask ->
+        val resourcesDestinationDir = project.file(compilation.output.resourcesDir)
+        val resourcesTask = project.locateOrRegisterTask<ProcessResources>(compilation.processResourcesTaskName) { resourcesTask ->
             resourcesTask.description = "Processes $resourceSet."
             resourcesTask.from(resourceSet)
-            resourcesTask.into(project.file(compilation.output.resourcesDir))
+            resourcesTask.into(resourcesDestinationDir)
         }
+
+        compilation.output.resourcesDirProvider = resourcesTask.map { resourcesDestinationDir }
     }
 
     protected fun createLifecycleTask(compilation: KotlinCompilation<*>) {
@@ -150,10 +153,8 @@ abstract class AbstractKotlinTargetConfigurator<KotlinTargetType : KotlinTarget>
         project.registerTask<DefaultTask>(compilation.compileAllTaskName) {
             it.group = LifecycleBasePlugin.BUILD_GROUP
             it.description = "Assembles outputs for compilation '${compilation.name}' of target '${compilation.target.name}'"
-            it.dependsOn(compilation.compileKotlinTaskName)
-            if (compilation is KotlinCompilationWithResources) {
-                it.dependsOn(compilation.processResourcesTaskName)
-            }
+            it.dependsOn(compilation.output.classesDirs)
+            it.dependsOn(compilation.output.resourcesDirProvider)
         }
     }
 
