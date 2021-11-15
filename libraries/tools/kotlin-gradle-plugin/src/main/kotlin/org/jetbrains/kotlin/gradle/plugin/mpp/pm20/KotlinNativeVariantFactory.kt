@@ -54,7 +54,7 @@ open class KotlinNativeVariantFactory<T : KotlinNativeVariantInternal>(
         val hostSpecificMetadataJar = project.registerTask<Jar>(variant.disambiguateName("hostSpecificMetadataJar")) { jar ->
             jar.archiveClassifier.set("metadata")
             jar.archiveAppendix.set(variant.disambiguateName(""))
-            project.pm20Extension.metadataCompilationRegistryByModuleId.getValue(variant.containingModule.moduleIdentifier)
+            project.metadataCompilationRegistryByModuleId.getValue(variant.containingModule.moduleIdentifier)
                 .withAll { metadataCompilation ->
                     val fragment = metadataCompilation.fragment
                     if (metadataCompilation is KotlinNativeFragmentMetadataCompilationData) {
