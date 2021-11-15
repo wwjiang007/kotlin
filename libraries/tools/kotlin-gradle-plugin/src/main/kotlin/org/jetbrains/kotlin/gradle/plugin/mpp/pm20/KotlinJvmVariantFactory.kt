@@ -22,7 +22,7 @@ open class KotlinJvmVariantFactory(module: KotlinGradleModule) :
 
     // FIXME expose the JAR with the artifacts API
     private fun getOrCreateJarTask(fragment: KotlinJvmVariant): TaskProvider<Jar> {
-        val jarTaskName = fragment.disambiguateName("jar")
+        val jarTaskName = fragment.jarTaskName
         return project.locateOrRegisterTask(jarTaskName) {
             it.from(fragment.compilationOutputs.allOutputs)
             it.archiveClassifier.set(dashSeparatedName(fragment.name, module.moduleClassifier))
@@ -42,5 +42,8 @@ open class KotlinJvmVariantFactory(module: KotlinGradleModule) :
         KotlinCompilationTaskConfigurator(project).createKotlinJvmCompilationTask(fragment, compilationData)
     }
 }
+
+internal val KotlinJvmVariant.jarTaskName: String
+    get() = disambiguateName("jar")
 
 //endregion Variant

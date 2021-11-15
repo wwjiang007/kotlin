@@ -33,34 +33,8 @@ abstract class KotlinPm20GradlePlugin @Inject constructor(
         createDefaultModules(project)
         customizeKotlinDependencies(project)
         registerDefaultVariantFactories(project)
-        setupFragmentsMetadata(project)
-        setupPublication(project)
-    }
-
-    private fun registerDefaultVariantFactories(project: Project) {
-        project.pm20Extension.modules.configureEach { module ->
-            module.fragments.registerFactory(
-                KotlinJvmVariant::class.java,
-                KotlinJvmVariantFactory(module)
-            )
-
-            fun <T: KotlinNativeVariantInternal> registerNativeVariantFactory(variantClass: KClass<T>) {
-                module.fragments.registerFactory(
-                    variantClass.java,
-                    KotlinNativeVariantFactory(module, variantClass)
-                )
-            }
-            listOf(
-                // FIXME codegen, add missing native targets
-                KotlinLinuxX64Variant::class,
-                KotlinMacosX64Variant::class,
-                KotlinMacosArm64Variant::class,
-                KotlinIosX64Variant::class,
-                KotlinIosArm64Variant::class
-            ).forEach { variantClass ->
-                registerNativeVariantFactory(variantClass)
-            }
-        }
+        setupFragmentsMetadataForKpmModules(project)
+        setupKpmModulesPublication(project)
     }
 
     private fun createDefaultModules(project: Project) {
@@ -68,19 +42,6 @@ abstract class KotlinPm20GradlePlugin @Inject constructor(
             modules.create(KotlinGradleModule.MAIN_MODULE_NAME)
             modules.create(KotlinGradleModule.TEST_MODULE_NAME)
             main { makePublic() }
-        }
-    }
-
-    private fun setupFragmentsMetadata(project: Project) {
-        project.pm20Extension.modules.all { module ->
-            configureMetadataResolutionAndBuild(module)
-            configureMetadataExposure(module)
-        }
-    }
-
-    private fun setupPublication(project: Project) {
-        project.pm20Extension.modules.all { module ->
-            setupPublicationForModule(module)
         }
     }
 
