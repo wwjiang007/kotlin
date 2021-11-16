@@ -195,7 +195,7 @@ object NewCommonSuperTypeCalculator {
             }
         }
 
-        val uniqueTypes = uniquify(nonTypeVariables, stateStubTypesNotEqual)
+        val uniqueTypes = uniquify(nonStubTypeVariables.ifEmpty { nonTypeVariables }, stateStubTypesNotEqual)
         if (uniqueTypes.size == 1) return uniqueTypes.single()
 
         val explicitSupertypes = filterSupertypes(uniqueTypes, stateStubTypesNotEqual)
