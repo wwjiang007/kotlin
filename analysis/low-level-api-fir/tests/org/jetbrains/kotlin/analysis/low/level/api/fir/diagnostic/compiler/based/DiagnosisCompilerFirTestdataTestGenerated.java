@@ -4938,6 +4938,12 @@ public class DiagnosisCompilerFirTestdataTestGenerated extends AbstractDiagnosis
             }
 
             @Test
+            @TestMetadata("sequentialLazy.kt")
+            public void testSequentialLazy() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/delegates/sequentialLazy.kt");
+            }
+
+            @Test
             @TestMetadata("simpleDelegateProvider.kt")
             public void testSimpleDelegateProvider() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/delegates/simpleDelegateProvider.kt");
