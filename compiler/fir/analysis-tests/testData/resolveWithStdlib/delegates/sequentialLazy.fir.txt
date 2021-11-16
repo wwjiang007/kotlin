@@ -12,14 +12,14 @@ FILE: sequentialLazy.kt
                 ^ this@R|/Some|.D|/Some.first|.R|kotlin/getValue|<R|kotlin/collections/Set<kotlin/String>|>(this@R|/Some|, ::R|/Some.first|)
             }
 
-        private final val second: R|kotlin/Any?|by R|kotlin/lazy|<R|kotlin/collections/Set<kotlin/String>?|>(<L> = lazy@fun <anonymous>(): R|kotlin/collections/Set<kotlin/String>?| <inline=NoInline>  {
+        private final val second: R|kotlin/collections/Set<kotlin/String>?|by R|kotlin/lazy|<R|kotlin/collections/Set<kotlin/String>?|>(<L> = lazy@fun <anonymous>(): R|kotlin/collections/Set<kotlin/String>?| <inline=NoInline>  {
             lval nonDeclaredNames: R|kotlin/collections/Set<kotlin/String>| = this@R|/Some|.R|/Some.getNonDeclaredClassifierNames|() ?: ^@lazy Null(null)
             lval allNames: R|kotlin/collections/Set<kotlin/String>| = this@R|/Some|.R|/Some.first|.R|kotlin/collections/plus|<R|kotlin/String|>(R|<local>/nonDeclaredNames|)
             ^ R|<local>/allNames|
         }
         )
-            private get(): R|kotlin/Any?| {
-                ^ this@R|/Some|.D|/Some.second|.R|kotlin/getValue|<R|kotlin/Any?|>(this@R|/Some|, ::R|/Some.second|)
+            private get(): R|kotlin/collections/Set<kotlin/String>?| {
+                ^ this@R|/Some|.D|/Some.second|.R|kotlin/getValue|<R|kotlin/collections/Set<kotlin/String>?|>(this@R|/Some|, ::R|/Some.second|)
             }
 
         public final fun getNonDeclaredClassifierNames(): R|kotlin/collections/Set<kotlin/String>?| {
