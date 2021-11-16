@@ -1,3 +1,4 @@
+// FIR_IDENTICAL
 // TARGET_BACKEND: JVM
 // WITH_RUNTIME
 // !OPT_IN: kotlin.experimental.ExperimentalTypeInference
