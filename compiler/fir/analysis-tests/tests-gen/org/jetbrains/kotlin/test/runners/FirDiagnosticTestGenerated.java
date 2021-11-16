@@ -1238,6 +1238,12 @@ public class FirDiagnosticTestGenerated extends AbstractFirDiagnosticTest {
             }
 
             @Test
+            @TestMetadata("nullableTypeDelegate.kt")
+            public void testNullableTypeDelegate() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/delegates/nullableTypeDelegate.kt");
+            }
+
+            @Test
             @TestMetadata("provideDelegate.kt")
             public void testProvideDelegate() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolve/delegates/provideDelegate.kt");

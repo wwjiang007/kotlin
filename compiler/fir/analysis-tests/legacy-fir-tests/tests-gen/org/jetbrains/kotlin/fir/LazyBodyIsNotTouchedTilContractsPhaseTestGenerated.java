@@ -1080,6 +1080,11 @@ public class LazyBodyIsNotTouchedTilContractsPhaseTestGenerated extends Abstract
             runTest("compiler/fir/analysis-tests/testData/resolve/delegates/kt41982.kt");
         }
 
+        @TestMetadata("nullableTypeDelegate.kt")
+        public void testNullableTypeDelegate() throws Exception {
+            runTest("compiler/fir/analysis-tests/testData/resolve/delegates/nullableTypeDelegate.kt");
+        }
+
         @TestMetadata("provideDelegate.kt")
         public void testProvideDelegate() throws Exception {
             runTest("compiler/fir/analysis-tests/testData/resolve/delegates/provideDelegate.kt");
