@@ -38,6 +38,7 @@ import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
 import org.jetbrains.kotlin.fir.resolve.substitution.createTypeSubstitutorByTypeConstructor
 import org.jetbrains.kotlin.fir.resolve.transformers.*
 import org.jetbrains.kotlin.fir.scopes.impl.FirMemberTypeParameterScope
+import org.jetbrains.kotlin.fir.symbols.constructStarProjectedType
 import org.jetbrains.kotlin.fir.symbols.impl.FirValueParameterSymbol
 import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.fir.types.builder.buildErrorTypeRef
@@ -155,6 +156,9 @@ open class FirDeclarationsResolveTransformer(transformer: FirBodyResolveTransfor
                 val delegate = property.delegate
                 if (delegate != null) {
                     transformPropertyAccessorsWithDelegate(property)
+                    if (property.delegateFieldSymbol != null) {
+                        replacePropertyReferenceTypeInDelegateAccessors(property)
+                    }
                     property.replaceBodyResolveState(FirPropertyBodyResolveState.EVERYTHING_RESOLVED)
                 } else {
                     val hasNonDefaultAccessors = property.getter != null && property.getter !is FirDefaultPropertyAccessor ||
@@ -215,6 +219,47 @@ open class FirDeclarationsResolveTransformer(transformer: FirBodyResolveTransfor
         }
     }
 
+    private fun FirFunctionCall.replacePropertyReferenceTypeInDelegateAccessors(property: FirProperty) {
+        // var someProperty: SomeType
+        //     get() = delegate.getValue(thisRef, kProperty: KProperty0/1/2<..., SomeType>)
+        //     set() = delegate.getValue(thisRef, kProperty: KProperty0/1/2<..., SomeType>, value)
+        val propertyReferenceAccess = argumentMapping?.keys?.toList()?.getOrNull(1) as? FirCallableReferenceAccess ?: return
+        val typeRef = propertyReferenceAccess.typeRef
+        if (typeRef is FirResolvedTypeRef && property.returnTypeRef is FirResolvedTypeRef) {
+            val typeArguments = (typeRef.type as ConeClassLikeType).typeArguments
+            val extensionType = property.receiverTypeRef?.coneType
+            val dispatchType = context.containingClass?.let { containingClass ->
+                containingClass.symbol.constructStarProjectedType(containingClass.typeParameters.size)
+            }
+            propertyReferenceAccess.replaceTypeRef(
+                buildResolvedTypeRef {
+                    source = typeRef.source
+                    annotations.addAll(typeRef.annotations)
+                    type = (typeRef.type as ConeClassLikeType).lookupTag.constructClassType(
+                        typeArguments.mapIndexed { index, argument ->
+                            when (index) {
+                                typeArguments.lastIndex -> property.returnTypeRef.coneType
+                                0 -> extensionType ?: dispatchType
+                                else -> dispatchType
+                            } ?: argument
+                        }.toTypedArray(),
+                        isNullable = false
+                    )
+                }.also {
+                    session.lookupTracker?.recordTypeResolveAsLookup(it, propertyReferenceAccess.source ?: source, null)
+                }
+            )
+        }
+    }
+
+    private fun replacePropertyReferenceTypeInDelegateAccessors(property: FirProperty) {
+        (property.getter?.body?.statements?.singleOrNull() as? FirReturnExpression)?.let { returnExpression ->
+            (returnExpression.result as? FirFunctionCall)?.replacePropertyReferenceTypeInDelegateAccessors(property)
+        }
+        (property.setter?.body?.statements?.singleOrNull() as? FirFunctionCall)?.replacePropertyReferenceTypeInDelegateAccessors(property)
+        (property.delegate as? FirFunctionCall)?.replacePropertyReferenceTypeInDelegateAccessors(property)
+    }
+
     private fun transformPropertyAccessorsWithDelegate(property: FirProperty) {
 
         context.forPropertyDelegateAccessors(property, resolutionContext, callCompleter) {
@@ -255,8 +300,6 @@ open class FirDeclarationsResolveTransformer(transformer: FirBodyResolveTransfor
     ): FirStatement {
         dataFlowAnalyzer.enterDelegateExpression()
         try {
-
-
             // First, resolve delegate expression in dependent context
             val delegateExpression =
                 wrappedDelegateExpression.expression.transformSingle(transformer, ResolutionMode.ContextDependent)
@@ -322,6 +365,9 @@ open class FirDeclarationsResolveTransformer(transformer: FirBodyResolveTransfor
 
         if (delegate != null) {
             transformPropertyAccessorsWithDelegate(variable)
+            if (variable.delegateFieldSymbol != null) {
+                replacePropertyReferenceTypeInDelegateAccessors(variable)
+            }
             // This ensures there's no ImplicitTypeRef
             // left in the backingField (witch is always present).
             variable.transformBackingField(transformer, withExpectedType(variable.returnTypeRef))
