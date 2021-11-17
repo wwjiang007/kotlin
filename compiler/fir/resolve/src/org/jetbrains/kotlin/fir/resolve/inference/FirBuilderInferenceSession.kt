@@ -266,7 +266,7 @@ class FirBuilderInferenceSession(
 class ConeComposedSubstitutor(val left: ConeSubstitutor, val right: ConeSubstitutor) : ConeSubstitutor() {
     override fun substituteOrNull(type: ConeKotlinType): ConeKotlinType? {
         val rightSubstitution = right.substituteOrNull(type)
-        return left.substituteOrNull(rightSubstitution ?: type)
+        return left.substituteOrNull(rightSubstitution ?: type) ?: rightSubstitution
     }
 }
 
