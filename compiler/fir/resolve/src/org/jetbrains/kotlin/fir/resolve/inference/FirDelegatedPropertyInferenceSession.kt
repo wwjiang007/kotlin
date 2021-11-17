@@ -171,9 +171,9 @@ class FirDelegatedPropertyInferenceSession(
                 notCompletedCalls as List<FirStatement>,
                 unitType, resolutionContext
             ) { lambdaAtom ->
-                val containingCandidateForLambda = notCompletedCalls.first {
+                val containingCandidateForLambda = notCompletedCalls.firstOrNull {
                     it.candidate.postponedAtoms.contains(lambdaAtom)
-                }.candidate
+                }?.candidate ?: return@complete
                 postponedArgumentsAnalyzer.analyze(
                     commonSystem.asPostponedArgumentsAnalyzerContext(),
                     lambdaAtom,
