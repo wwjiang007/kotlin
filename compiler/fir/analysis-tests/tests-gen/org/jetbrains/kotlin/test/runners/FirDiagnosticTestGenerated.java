@@ -4938,6 +4938,12 @@ public class FirDiagnosticTestGenerated extends AbstractFirDiagnosticTest {
             }
 
             @Test
+            @TestMetadata("mapValuesLazy.kt")
+            public void testMapValuesLazy() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/delegates/mapValuesLazy.kt");
+            }
+
+            @Test
             @TestMetadata("propertyWithFunctionalType.kt")
             public void testPropertyWithFunctionalType() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/delegates/propertyWithFunctionalType.kt");

@@ -143,6 +143,17 @@ class FirDelegatedPropertyInferenceSession(
         return typeVariable in syntheticTypeVariableByTypeVariable.values
     }
 
+    override fun fixSyntheticTypeVariableWithNotEnoughInformation(
+        typeVariable: TypeVariableMarker,
+        completionContext: ConstraintSystemCompletionContext
+    ) {
+        completionContext.fixVariable(
+            typeVariable,
+            stubTypeBySyntheticTypeVariable[typeVariable]!!,
+            ConeFixVariableConstraintPosition(typeVariable)
+        )
+    }
+
     fun completeCandidates(): List<FirResolvable> {
         @Suppress("UNCHECKED_CAST")
         val notCompletedCalls = partiallyResolvedCalls.mapNotNull { partiallyResolvedCall ->
