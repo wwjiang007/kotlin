@@ -4950,6 +4950,12 @@ public class FirDiagnosticsWithLightTreeTestGenerated extends AbstractFirDiagnos
             }
 
             @Test
+            @TestMetadata("annotationArgumentMapping.kt")
+            public void testAnnotationArgumentMapping() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/delegates/annotationArgumentMapping.kt");
+            }
+
+            @Test
             @TestMetadata("anonymousInDelegate.kt")
             public void testAnonymousInDelegate() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/delegates/anonymousInDelegate.kt");
