@@ -1,5 +1,6 @@
 // IGNORE_BACKEND: WASM
 // !LANGUAGE: +UnrestrictedBuilderInference
+// IGNORE_BACKEND_FIR: JVM_IR
 // WITH_STDLIB
 
 internal class TowerDataElementsForName() {

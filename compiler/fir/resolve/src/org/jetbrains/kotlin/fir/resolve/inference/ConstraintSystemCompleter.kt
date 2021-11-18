@@ -230,8 +230,16 @@ class ConstraintSystemCompleter(private val components: BodyResolveComponents, p
                 fixVariable(asConstraintSystemCompletionContext(), topLevelType, variableWithConstraints, postponedArguments)
                 return true
             } else if (context.inferenceSession.isSyntheticTypeVariable(variableWithConstraints.typeVariable)) {
-                val variable = variableWithConstraints.typeVariable as ConeTypeVariable
-                context.inferenceSession.fixSyntheticTypeVariableWithNotEnoughInformation(variable, asConstraintSystemCompletionContext())
+                if (variableWithConstraints.constraints.isEmpty()) {
+                    context.inferenceSession.fixSyntheticTypeVariableWithNotEnoughInformation(
+                        variableWithConstraints.typeVariable as ConeTypeVariable,
+                        asConstraintSystemCompletionContext()
+                    )
+                } else {
+                    // Alternatively we should replace variable in all related constraints to created stub
+                    // Otherwise we'll get "Type variable is not fixed" when one of these constraints is encountered in future
+                    fixVariable(asConstraintSystemCompletionContext(), topLevelType, variableWithConstraints, postponedArguments)
+                }
                 return true
             } else {
                 processVariableWhenNotEnoughInformation(this, variableWithConstraints, topLevelAtoms)
