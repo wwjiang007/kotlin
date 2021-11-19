@@ -1,5 +1,5 @@
 // IGNORE_BACKEND_FIR: JVM_IR
-var result = ""
+// FIR status: UNRESOLVED_REFERENCE at getFun. Questionable syntax
 
 fun getReceiver() : Int {
     result += "getReceiver->"
