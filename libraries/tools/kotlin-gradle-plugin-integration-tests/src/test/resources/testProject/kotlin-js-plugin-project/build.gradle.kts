@@ -1,8 +1,18 @@
+buildscript {
+    repositories {
+        mavenLocal()
+    }
+    dependencies {
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:<pluginMarkerVersion>")
+    }
+}
+
 plugins {
     kotlin("js").version("<pluginMarkerVersion>")
-    id("kotlin-dce-js")
     `maven-publish`
 }
+
+apply(plugin = "kotlin-dce-js")
 
 group = "com.example"
 version = "1.0"

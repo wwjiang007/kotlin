@@ -1,12 +1,3 @@
-buildscript {
-    repositories {
-        mavenLocal()
-    }
-    dependencies {
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:<pluginMarkerVersion>")
-    }
-}
-
 plugins {
     id "org.jetbrains.kotlin.multiplatform" version "<pluginMarkerVersion>" apply false
 }

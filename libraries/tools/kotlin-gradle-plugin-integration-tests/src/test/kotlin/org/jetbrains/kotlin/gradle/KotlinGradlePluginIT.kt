@@ -929,7 +929,7 @@ class KotlinGradleIT : BaseGradleIT() {
     }
 
     @Test
-    fun testDetectingDifferentClassLoaders() = with(Project("kt-27059-pom-rewriting", GradleVersionRequired.FOR_MPP_SUPPORT)) {
+    fun testDetectingDifferentClassLoaders() = with(Project("mpp-different-classloaders", GradleVersionRequired.FOR_MPP_SUPPORT)) {
         setupWorkingDir()
 
         val originalRootBuildScript = gradleBuildScript().readText()
@@ -959,8 +959,8 @@ class KotlinGradleIT : BaseGradleIT() {
         }
         gradleBuildScript("js-app").modify {
             it.checkedReplace(
-                "id \"kotlin2js\"",
-                "id \"kotlin2js\" version \"<pluginMarkerVersion>\""
+                "id \"org.jetbrains.kotlin.js\"",
+                "id \"org.jetbrains.kotlin.js\" version \"<pluginMarkerVersion>\""
             ).let(::transformBuildScriptWithPluginsDsl)
         }
 

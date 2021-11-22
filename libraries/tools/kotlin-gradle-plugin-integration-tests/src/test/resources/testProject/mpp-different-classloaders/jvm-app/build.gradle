@@ -1,11 +1,14 @@
 plugins {
+    id "org.jetbrains.kotlin.jvm"
     id "maven-publish"
 }
 
-apply plugin: "kotlin2js"
-
 group = "com.example"
 version = "1.0"
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib"
+}
 
 if (project.findProperty("mppProjectDependency") == "true") {
 
