@@ -407,3 +407,41 @@ fun Project.configureKotlinCompileTasksGradleCompatibility() {
         )
     }
 }
+
+fun Project.publishShadowedJar(
+    sourceSet: SourceSet,
+    commonSourceSet: SourceSet
+) {
+    val jarTask = tasks.named<Jar>(sourceSet.jarTaskName)
+
+    val shadowJarTask = embeddableCompilerDummyForDependenciesRewriting(
+        taskName = "$EMBEDDABLE_COMPILER_TASK_NAME${sourceSet.jarTaskName.capitalize()}"
+    ) {
+        setupPublicJar(
+            jarTask.flatMap { it.archiveBaseName },
+            jarTask.flatMap { it.archiveClassifier }
+        )
+        addEmbeddedRuntime()
+        from(sourceSet.output)
+        from(commonSourceSet.output)
+
+        // When Gradle traverses the inputs, reject the shaded compiler JAR,
+        // which leads to the content of that JAR being excluded as well:
+        val compilerDummyJarFile = project.provider { project.configurations.getByName("compilerDummyJar").singleFile }
+        exclude { it.file == compilerDummyJarFile.get() }
+    }
+
+    // Removing artifact produced by Jar task
+    configurations[sourceSet.runtimeElementsConfigurationName]
+        .artifacts.removeAll { true }
+    configurations[sourceSet.apiElementsConfigurationName]
+        .artifacts.removeAll { true }
+
+    // Adding instead artifact from shadow jar task
+    configurations {
+        artifacts {
+            add(sourceSet.runtimeElementsConfigurationName, shadowJarTask)
+            add(sourceSet.apiElementsConfigurationName, shadowJarTask)
+        }
+    }
+}

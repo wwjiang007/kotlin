@@ -25,6 +25,7 @@ configure<PluginBundleExtension> {
 
 val commonSourceSet = createGradleCommonSourceSet()
 reconfigureMainSourceSetForGradlePlugin(commonSourceSet)
+publishShadowedJar(sourceSets[SourceSet.MAIN_SOURCE_SET_NAME], commonSourceSet)
 
 publishing {
     publications {
@@ -41,7 +42,8 @@ publishing {
 }
 
 // Used for Gradle 7.0+ versions
-createGradlePluginVariant(
+val gradle70SourceSet = createGradlePluginVariant(
     GradlePluginVariant.GRADLE_70,
     commonSourceSet = commonSourceSet
 )
+publishShadowedJar(gradle70SourceSet, commonSourceSet)
