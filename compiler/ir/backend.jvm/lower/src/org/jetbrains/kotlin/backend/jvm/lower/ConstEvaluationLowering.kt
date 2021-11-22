@@ -1,17 +1,18 @@
 /*
- * Copyright 2010-2019 JetBrains s.r.o. and Kotlin Programming Language contributors.
+ * Copyright 2010-2021 JetBrains s.r.o. and Kotlin Programming Language contributors.
  * Use of this source code is governed by the Apache 2.0 license that can be found in the license/LICENSE.txt file.
  */
 
-package org.jetbrains.kotlin.backend.common.lower
+package org.jetbrains.kotlin.backend.jvm.lower
 
-import org.jetbrains.kotlin.backend.common.CommonBackendContext
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
 import org.jetbrains.kotlin.backend.common.phaser.makeIrModulePhase
+import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.interpreter.IrInterpreter
 import org.jetbrains.kotlin.ir.interpreter.checker.EvaluationMode
 import org.jetbrains.kotlin.ir.interpreter.checker.IrConstTransformer
+import org.jetbrains.kotlin.resolve.jvm.diagnostics.JvmBackendErrors
 
 val constEvaluationPhase = makeIrModulePhase(
     ::ConstEvaluationLowering,
@@ -19,11 +20,16 @@ val constEvaluationPhase = makeIrModulePhase(
     description = "Evaluate functions that are marked as `Foldable`"
 )
 
-class ConstEvaluationLowering(val context: CommonBackendContext) : FileLoweringPass {
+// TODO make context common
+class ConstEvaluationLowering(val context: JvmBackendContext) : FileLoweringPass {
     val interpreter = IrInterpreter(context.irBuiltIns)
 
     override fun lower(irFile: IrFile) {
-        irFile.transformChildren(IrConstTransformer(interpreter, irFile, mode = EvaluationMode.ONLY_FOLDABLE), null)
+        val transformer = IrConstTransformer(interpreter, irFile, mode = EvaluationMode.ONLY_FOLDABLE) { element, error ->
+            context.ktDiagnosticReporter.at(element, irFile)
+                .report(JvmBackendErrors.EXCEPTION_IN_CONST_VAL_INITIALIZER, error.description)
+        }
+        irFile.transformChildren(transformer, null)
     }
 }
 

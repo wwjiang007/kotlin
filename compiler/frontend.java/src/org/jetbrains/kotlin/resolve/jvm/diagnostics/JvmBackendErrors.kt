@@ -27,6 +27,8 @@ object JvmBackendErrors {
 
     val SUSPENSION_POINT_INSIDE_MONITOR by error1<PsiElement, String>()
 
+    val EXCEPTION_IN_CONST_VAL_INITIALIZER by error1<PsiElement, String>()
+
     init {
         RootDiagnosticRendererFactory.registerFactory(KtDefaultJvmErrorMessages)
     }
@@ -60,5 +62,6 @@ object KtDefaultJvmErrorMessages : BaseDiagnosticRendererFactory() {
         map.put(JvmBackendErrors.TYPEOF_SUSPEND_TYPE, "Suspend functional types are not supported in typeOf")
         map.put(JvmBackendErrors.TYPEOF_NON_REIFIED_TYPE_PARAMETER_WITH_RECURSIVE_BOUND, "Non-reified type parameters with recursive bounds are not supported yet: {0}", STRING)
         map.put(JvmBackendErrors.SUSPENSION_POINT_INSIDE_MONITOR, "A suspension point at {0} is inside a critical section", STRING)
+        map.put(JvmBackendErrors.EXCEPTION_IN_CONST_VAL_INITIALIZER, "An exception occur while evaluating const value initializer: {0}", STRING)
     }
 }
