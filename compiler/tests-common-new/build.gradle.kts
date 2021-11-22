@@ -10,6 +10,7 @@ dependencies {
     testApi(project(":compiler:cli"))
     testImplementation(project(":compiler:ir.tree.impl"))
     testImplementation(project(":compiler:backend.jvm.entrypoint"))
+    testImplementation(project(":compiler:backend.jvm.lower"))
     testImplementation(intellijCoreDep()) { includeJars("intellij-core") }
 
     testCompileOnly(project(":kotlin-reflect-api"))

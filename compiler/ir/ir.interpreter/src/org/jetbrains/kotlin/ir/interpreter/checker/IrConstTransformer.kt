@@ -29,7 +29,7 @@ class IrConstTransformer(
         if (expression.accept(IrCompileTimeChecker(mode = mode), null)) {
             return interpreter.interpret(expression, irFile).replaceIfError(expression)
         }
-        return expression
+        return super.visitCall(expression)
     }
 
     override fun visitField(declaration: IrField): IrStatement {
