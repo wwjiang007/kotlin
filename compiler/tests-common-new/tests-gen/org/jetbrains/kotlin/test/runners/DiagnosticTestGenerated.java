@@ -19355,6 +19355,12 @@ public class DiagnosticTestGenerated extends AbstractDiagnosticTest {
                 }
 
                 @Test
+                @TestMetadata("enumConstName.kt")
+                public void testEnumConstName() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/modifiers/const/enumConstName.kt");
+                }
+
+                @Test
                 @TestMetadata("fromJava.kt")
                 public void testFromJava() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/modifiers/const/fromJava.kt");
@@ -19364,6 +19370,18 @@ public class DiagnosticTestGenerated extends AbstractDiagnosticTest {
                 @TestMetadata("fromJavaSubclass.kt")
                 public void testFromJavaSubclass() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/modifiers/const/fromJavaSubclass.kt");
+                }
+
+                @Test
+                @TestMetadata("ifConstVal.kt")
+                public void testIfConstVal() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/modifiers/const/ifConstVal.kt");
+                }
+
+                @Test
+                @TestMetadata("kCallable.kt")
+                public void testKCallable() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/modifiers/const/kCallable.kt");
                 }
 
                 @Test
@@ -19382,6 +19400,12 @@ public class DiagnosticTestGenerated extends AbstractDiagnosticTest {
                 @TestMetadata("noDivisionByZeroFeature.kt")
                 public void testNoDivisionByZeroFeature() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/modifiers/const/noDivisionByZeroFeature.kt");
+                }
+
+                @Test
+                @TestMetadata("stdlibConstFun.kt")
+                public void testStdlibConstFun() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/modifiers/const/stdlibConstFun.kt");
                 }
 
                 @Test
