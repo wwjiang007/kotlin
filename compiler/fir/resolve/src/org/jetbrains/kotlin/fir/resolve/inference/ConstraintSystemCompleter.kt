@@ -212,9 +212,6 @@ class ConstraintSystemCompleter(private val components: BodyResolveComponents, p
         collectVariablesFromContext: Boolean,
         postponedArguments: List<PostponedResolvedAtom>,
     ): Boolean {
-        if (topLevelType is ConeClassErrorType) {
-            return false
-        }
         while (true) {
             val variableForFixation = variableFixationFinder.findFirstVariableForFixation(
                 this,
