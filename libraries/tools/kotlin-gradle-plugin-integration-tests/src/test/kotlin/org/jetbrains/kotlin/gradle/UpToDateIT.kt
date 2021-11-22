@@ -1,5 +1,6 @@
 package org.jetbrains.kotlin.gradle
 
+import org.gradle.util.GradleVersion
 import org.jetbrains.kotlin.gradle.util.modify
 import org.junit.Assert
 import org.junit.Assume
@@ -78,16 +79,21 @@ class UpToDateIT : BaseGradleIT() {
         val originalPaths get() = originalCompilerCp.map { it.replace("\\", "/") }.joinToString(", ") { "'$it'" }
 
         override fun initProject(project: Project) = with(project) {
+            val pluginSuffix = if (GradleVersion.version(project.chooseWrapperVersionOrFinishTest()) < GradleVersion.version("7.0")) {
+                "kotlin_gradle_plugin"
+            } else {
+                "kotlin_gradle_plugin_gradle70"
+            }
             buildGradle.appendText(
-                "\nafterEvaluate { println 'compiler_cp=' + compileKotlin.getDefaultCompilerClasspath\$kotlin_gradle_plugin().toList() }"
+                "\nafterEvaluate { println 'compiler_cp=' + compileKotlin.getDefaultCompilerClasspath\$$pluginSuffix().toList() }"
             )
             build("clean") { originalCompilerCp = "compiler_cp=\\[(.*)]".toRegex().find(output)!!.groupValues[1].split(", ") }
             buildGradle.appendText("""${'\n'}
                 // Add Kapt to the project to test its input checks as well:
                 apply plugin: 'kotlin-kapt'
-                compileKotlin.getDefaultCompilerClasspath${'$'}kotlin_gradle_plugin().setFrom(files($originalPaths).toList())
+                compileKotlin.getDefaultCompilerClasspath${'$'}$pluginSuffix().setFrom(files($originalPaths).toList())
                 afterEvaluate {
-                    kaptGenerateStubsKotlin.getDefaultCompilerClasspath${'$'}kotlin_gradle_plugin().setFrom(files($originalPaths).toList())
+                    kaptGenerateStubsKotlin.getDefaultCompilerClasspath${'$'}$pluginSuffix().setFrom(files($originalPaths).toList())
                 }
             """.trimIndent())
         }
