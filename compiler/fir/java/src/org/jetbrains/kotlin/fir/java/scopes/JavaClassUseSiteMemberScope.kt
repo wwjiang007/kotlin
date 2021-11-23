@@ -8,10 +8,12 @@ package org.jetbrains.kotlin.fir.java.scopes
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.fir.*
 import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.declarations.builder.buildSimpleFunctionCopy
 import org.jetbrains.kotlin.fir.declarations.synthetic.FirSyntheticProperty
 import org.jetbrains.kotlin.fir.declarations.synthetic.buildSyntheticProperty
 import org.jetbrains.kotlin.fir.declarations.utils.*
 import org.jetbrains.kotlin.fir.java.declarations.FirJavaClass
+import org.jetbrains.kotlin.fir.java.declarations.FirJavaMethod
 import org.jetbrains.kotlin.fir.java.declarations.buildJavaMethodCopy
 import org.jetbrains.kotlin.fir.java.declarations.buildJavaValueParameterCopy
 import org.jetbrains.kotlin.fir.java.symbols.FirJavaOverriddenSyntheticPropertySymbol
@@ -257,6 +259,7 @@ class JavaClassUseSiteMemberScope(
         }
 
         addOverriddenSpecialMethods(name, result, declaredMemberScope)
+        addOverriddenSpecialMethods(name, result, superTypesScope)
 
         val overrideCandidates = result.toMutableSet()
 
@@ -322,10 +325,17 @@ class JavaClassUseSiteMemberScope(
 
         for (candidateSymbol in scope.getFunctions(nameInJava)) {
             val candidateFir = candidateSymbol.fir
-            val renamedCopy = buildJavaMethodCopy(candidateFir) {
-                this.name = name
-                this.symbol = FirNamedFunctionSymbol(CallableId(candidateFir.symbol.callableId.classId!!, name))
-                this.status = candidateFir.status.copy(isOperator = symbol.isOperator)
+            val renamedCopy = when (candidateFir) {
+                is FirJavaMethod -> buildJavaMethodCopy(candidateFir) {
+                    this.name = name
+                    this.symbol = FirNamedFunctionSymbol(CallableId(candidateFir.symbol.callableId.classId!!, name))
+                    this.status = candidateFir.status.copy(isOperator = symbol.isOperator)
+                }
+                else -> buildSimpleFunctionCopy(candidateFir) {
+                    this.name = name
+                    this.symbol = FirNamedFunctionSymbol(CallableId(candidateFir.symbol.callableId.classId!!, name))
+                    this.status = candidateFir.status.copy(isOperator = symbol.isOperator)
+                }
             }.apply {
                 initialSignatureAttr = candidateFir
             }

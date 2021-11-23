@@ -239,6 +239,9 @@ class FakeOverrideGenerator(
                 return
             }
         }
+        if (baseFirSymbolsForFakeOverride.all { it.fir.modality == Modality.FINAL }) {
+            return
+        }
         val irDeclaration = cachedIrDeclaration(fakeOverrideFirDeclaration, null) {
             // Sometimes we can have clashing here when FIR substitution/intersection override
             // have the same signature.

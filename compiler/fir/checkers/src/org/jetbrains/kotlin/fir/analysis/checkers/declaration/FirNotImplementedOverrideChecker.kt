@@ -102,7 +102,7 @@ object FirNotImplementedOverrideChecker : FirClassChecker() {
         if (!canHaveAbstractDeclarations && notImplementedSymbols.isNotEmpty()) {
             val notImplemented = notImplementedSymbols.first().unwrapFakeOverrides()
             if (notImplemented.isFromInterfaceOrEnum(context)) {
-                reporter.reportOn(source, ABSTRACT_MEMBER_NOT_IMPLEMENTED, classSymbol, notImplemented, context)
+//                reporter.reportOn(source, ABSTRACT_MEMBER_NOT_IMPLEMENTED, classSymbol, notImplemented, context)
             } else {
                 reporter.reportOn(source, ABSTRACT_CLASS_MEMBER_NOT_IMPLEMENTED, classSymbol, notImplemented, context)
             }

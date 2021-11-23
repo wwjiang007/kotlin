@@ -1,13 +1,25 @@
-// IGNORE_BACKEND_FIR: JVM_IR
-// FIR status: wrong ABSTRACT_MEMBER_NOT_IMPLEMENTED, probably provoked by override mapping error
 // TARGET_BACKEND: JVM
-
+// DUMP_IR
 // FILE: J.java
 
 public class J {
     public static class A extends AImpl implements CharSequence {
         public CharSequence subSequence(int start, int end) {
             return null;
+        }
+    }
+
+    public static class B implements CharSequence {
+        public CharSequence subSequence(int start, int end) {
+            return null;
+        }
+
+        public char charAt(int index) {
+            return 'A';
+        }
+
+        public int length() {
+            return 56;
         }
     }
 }
