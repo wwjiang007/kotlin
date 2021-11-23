@@ -298,3 +298,12 @@ fun IrGetValue.isAccessToObject(): Boolean {
     if (expectedClass == null || !expectedClass.isObject) return false
     return owner.origin == IrDeclarationOrigin.INSTANCE_RECEIVER || owner.name.asString() == "<this>"
 }
+
+internal fun State.unsignedToString(): String {
+    return when (val value = (this.fields.values.single() as Primitive<*>).value) {
+        is Byte -> value.toUByte().toString()
+        is Short -> value.toUShort().toString()
+        is Int -> value.toUInt().toString()
+        else -> (value as Number).toLong().toULong().toString()
+    }
+}
