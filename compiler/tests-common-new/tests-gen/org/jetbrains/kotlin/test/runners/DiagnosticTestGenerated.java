@@ -33264,6 +33264,12 @@ public class DiagnosticTestGenerated extends AbstractDiagnosticTest {
             }
 
             @Test
+            @TestMetadata("dontPropagateExact.kt")
+            public void testDontPropagateExact() throws Exception {
+                runTest("compiler/testData/diagnostics/testsWithStdLib/annotations/dontPropagateExact.kt");
+            }
+
+            @Test
             @TestMetadata("explicitMetadata.kt")
             public void testExplicitMetadata() throws Exception {
                 runTest("compiler/testData/diagnostics/testsWithStdLib/annotations/explicitMetadata.kt");
