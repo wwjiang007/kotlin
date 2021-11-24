@@ -673,6 +673,10 @@ project(':kotlinx-serialization-compiler-plugin').projectDir = file("$rootDir/pl
 project(':kotlin-serialization').projectDir = file("$rootDir/libraries/tools/kotlin-serialization")
 project(':kotlin-serialization-unshaded').projectDir = file("$rootDir/libraries/tools/kotlin-serialization-unshaded")
 
+project(':kotlinx-atomicfu-compiler-plugin').projectDir = file("$rootDir/plugins/atomicfu/atomicfu-compiler")
+project(':kotlinx-atomicfu-runtime').projectDir = file("$rootDir/plugins/atomicfu/atomicfu-runtime")
+project(':atomicfu').projectDir = file("$rootDir/libraries/tools/atomicfu")
+
 project(':kotlin-scripting-ide-services-unshaded').projectDir = "$rootDir/plugins/scripting/scripting-ide-services" as File
 project(':kotlin-scripting-ide-services-test').projectDir = "$rootDir/plugins/scripting/scripting-ide-services-test" as File
 project(':kotlin-scripting-ide-services').projectDir = "$rootDir/plugins/scripting/scripting-ide-services-embeddable" as File
