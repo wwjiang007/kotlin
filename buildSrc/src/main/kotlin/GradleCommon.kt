@@ -113,6 +113,12 @@ fun Project.createGradleCommonSourceSet(): SourceSet {
         }
     }
 
+    plugins.withId("org.jetbrains.kotlin.jvm") {
+        tasks.named("compileCommonKotlin") {
+            enabled = false
+        }
+    }
+
     return commonSourceSet
 }
 
@@ -141,6 +147,9 @@ fun Project.wireGradleVariantToCommonGradleVariant(
     )
     configurations[wireSourceSet.runtimeOnlyConfigurationName].extendsFrom(
         configurations[commonSourceSet.runtimeOnlyConfigurationName]
+    )
+    configurations[wireSourceSet.compileOnlyConfigurationName].extendsFrom(
+        configurations[commonSourceSet.compileOnlyConfigurationName]
     )
 
     fixWiredSourceSetSecondaryVariants(wireSourceSet, commonSourceSet)
@@ -403,6 +412,7 @@ fun Project.configureKotlinCompileTasksGradleCompatibility() {
         kotlinOptions.freeCompilerArgs += listOf(
             "-Xskip-prerelease-check",
             "-Xsuppress-version-warnings",
+            "-Xmulti-platform", // To use MPP expect/actual without actual MPP
             "-Xuse-ir" // Needed as long as languageVersion is less than 1.5.
         )
     }
