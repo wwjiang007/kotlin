@@ -33,8 +33,6 @@ abstract class FirRegisteredPluginAnnotations(val session: FirSession) : FirSess
     abstract val metaAnnotations: Set<AnnotationFqn>
     abstract fun getAnnotationsWithMetaAnnotation(metaAnnotation: AnnotationFqn): Collection<AnnotationFqn>
 
-    abstract fun registerUserDefinedAnnotation(metaAnnotation: AnnotationFqn, annotationClasses: Collection<FirRegularClass>)
-
     abstract fun getAnnotationsForPredicate(predicate: DeclarationPredicate): Set<AnnotationFqn>
 
     @PluginServicesInitialization
@@ -42,7 +40,7 @@ abstract class FirRegisteredPluginAnnotations(val session: FirSession) : FirSess
 }
 
 @NoMutableState
-private class FirRegisteredPluginAnnotationsImpl(session: FirSession) : FirRegisteredPluginAnnotations(session) {
+internal class FirRegisteredPluginAnnotationsImpl(session: FirSession) : FirRegisteredPluginAnnotations(session) {
     override val annotations: MutableSet<AnnotationFqn> = mutableSetOf()
     override val metaAnnotations: MutableSet<AnnotationFqn> = mutableSetOf()
 
@@ -55,7 +53,7 @@ private class FirRegisteredPluginAnnotationsImpl(session: FirSession) : FirRegis
         return userDefinedAnnotations[metaAnnotation]
     }
 
-    override fun registerUserDefinedAnnotation(metaAnnotation: AnnotationFqn, annotationClasses: Collection<FirRegularClass>) {
+    fun registerUserDefinedAnnotation(metaAnnotation: AnnotationFqn, annotationClasses: Collection<FirRegularClass>) {
         require(annotationClasses.all { it.classKind == ClassKind.ANNOTATION_CLASS })
         val annotations = annotationClasses.map { it.symbol.classId.asSingleFqName() }
         this.annotations += annotations
