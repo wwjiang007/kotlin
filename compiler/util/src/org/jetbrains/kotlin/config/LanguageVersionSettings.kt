@@ -241,6 +241,7 @@ enum class LanguageFeature(
     PartiallySpecifiedTypeArguments(KOTLIN_1_7),
     EliminateAmbiguitiesWithExternalTypeParameters(KOTLIN_1_7),
     EliminateAmbiguitiesOnInheritedSamInterfaces(KOTLIN_1_7),
+    ProperInternalVisibilityCheckInImportingScope(KOTLIN_1_7, kind = BUG_FIX),
 
     // 1.8
 

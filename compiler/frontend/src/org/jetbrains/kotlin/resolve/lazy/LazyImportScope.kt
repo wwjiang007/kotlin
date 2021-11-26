@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableListMultimap
 import com.google.common.collect.ListMultimap
 import gnu.trove.THashSet
 import org.jetbrains.kotlin.builtins.PlatformToKotlinClassMapper
+import org.jetbrains.kotlin.config.LanguageFeature
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.*
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilityUtils.isVisibleIgnoringReceiver
@@ -241,8 +242,14 @@ class LazyImportScope(
         val visibility = (descriptor as DeclarationDescriptorWithVisibility).visibility
         val includeVisible = filteringKind == FilteringKind.VISIBLE_CLASSES
         if (!visibility.mustCheckInImports()) return includeVisible
+        val fromDescriptor =
+            if (components.languageVersionSettings.supportsFeature(LanguageFeature.ProperInternalVisibilityCheckInImportingScope)) {
+                packageFragment ?: components.moduleDescriptor
+            } else {
+                components.moduleDescriptor
+            }
         return isVisibleIgnoringReceiver(
-            descriptor, packageFragment ?: components.moduleDescriptor, components.languageVersionSettings
+            descriptor, fromDescriptor, components.languageVersionSettings
         ) == includeVisible
     }
 
