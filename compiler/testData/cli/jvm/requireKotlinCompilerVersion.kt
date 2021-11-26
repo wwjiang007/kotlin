@@ -1,3 +1,5 @@
+// Library part (build separately)
+
 //@file:Suppress("INVISIBLE_REFERENCE", "INVISIBLE_MEMBER")
 //package test.access
 //
