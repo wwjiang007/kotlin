@@ -527,3 +527,14 @@ internal object CheckDeprecatedSinceKotlin : ResolutionStage() {
         }
     }
 }
+
+internal object ConstraintSystemForks : ResolutionStage() {
+    override suspend fun check(candidate: Candidate, callInfo: CallInfo, sink: CheckerSink, context: ResolutionContext) {
+        if (candidate.system.hasContradiction) return
+        candidate.system.processForkConstraints()
+
+        if (candidate.system.hasContradiction) {
+            sink.yieldDiagnostic(InapplicableCandidate)
+        }
+    }
+}

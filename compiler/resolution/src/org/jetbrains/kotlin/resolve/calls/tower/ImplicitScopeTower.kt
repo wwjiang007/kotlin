@@ -127,6 +127,13 @@ class VisibilityError(val invisibleMember: DeclarationDescriptorWithVisibility) 
     }
 }
 
+class ForkError : ResolutionDiagnostic(INAPPLICABLE) {
+    override fun report(reporter: DiagnosticReporter) {
+        reporter.onCall(this)
+    }
+}
+
+
 class VisibilityErrorOnArgument(
     val argument: KotlinCallArgument,
     val invisibleMember: DeclarationDescriptorWithVisibility

@@ -226,4 +226,6 @@ internal class MutableConstraintStorage : ConstraintStorage {
         LinkedHashMap()
     override val builtFunctionalTypesForPostponedArgumentsByExpectedTypeVariables: MutableMap<TypeConstructorMarker, KotlinTypeMarker> =
         LinkedHashMap()
+
+    override val constraintsFromAllForks: MutableList<Pair<IncorporationConstraintPosition, List<Set<Pair<TypeVariableMarker, Constraint>>>>> = SmartList()
 }

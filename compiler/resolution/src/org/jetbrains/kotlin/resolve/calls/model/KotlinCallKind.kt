@@ -5,6 +5,7 @@
 
 package org.jetbrains.kotlin.resolve.calls.model
 
+import org.jetbrains.kotlin.resolve.calls.components.*
 import org.jetbrains.kotlin.resolve.calls.components.ArgumentsToCandidateParameterDescriptor
 import org.jetbrains.kotlin.resolve.calls.components.CheckArgumentsInParenthesis
 import org.jetbrains.kotlin.resolve.calls.components.CheckCallableReference
@@ -19,6 +20,7 @@ import org.jetbrains.kotlin.resolve.calls.components.CheckVisibility
 import org.jetbrains.kotlin.resolve.calls.components.CollectionTypeVariableUsagesInfo
 import org.jetbrains.kotlin.resolve.calls.components.CompatibilityOfPartiallyApplicableSamConversion
 import org.jetbrains.kotlin.resolve.calls.components.CompatibilityOfTypeVariableAsIntersectionTypePart
+import org.jetbrains.kotlin.resolve.calls.components.ConstraintSystemForks
 import org.jetbrains.kotlin.resolve.calls.components.CreateFreshVariablesSubstitutor
 import org.jetbrains.kotlin.resolve.calls.components.EagerResolveOfCallableReferences
 import org.jetbrains.kotlin.resolve.calls.components.MapArguments
@@ -38,7 +40,8 @@ enum class KotlinCallKind(vararg resolutionPart: ResolutionPart) {
         CheckExplicitReceiverKindConsistency,
         CheckReceivers,
         PostponedVariablesInitializerResolutionPart,
-        CheckContextReceiversResolutionPart
+        CheckContextReceiversResolutionPart,
+        ConstraintSystemForks,
     ),
     FUNCTION(
         CheckVisibility,
@@ -59,6 +62,7 @@ enum class KotlinCallKind(vararg resolutionPart: ResolutionPart) {
         CompatibilityOfPartiallyApplicableSamConversion,
         PostponedVariablesInitializerResolutionPart,
         CheckContextReceiversResolutionPart
+        ConstraintSystemForks,
     ),
     INVOKE(*FUNCTION.resolutionSequence.toTypedArray()),
     CALLABLE_REFERENCE(
@@ -69,7 +73,8 @@ enum class KotlinCallKind(vararg resolutionPart: ResolutionPart) {
         CollectionTypeVariableUsagesInfo,
         CheckReceivers,
         CheckCallableReference,
-        CompatibilityOfTypeVariableAsIntersectionTypePart
+        CompatibilityOfTypeVariableAsIntersectionTypePart,
+        ConstraintSystemForks,
     ),
     UNSUPPORTED();
 

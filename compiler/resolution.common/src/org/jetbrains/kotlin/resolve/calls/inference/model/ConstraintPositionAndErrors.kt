@@ -140,3 +140,6 @@ fun Constraint.isExpectedTypePosition() =
     position.from is ExpectedTypeConstraintPosition<*> || position.from is DelegatedPropertyConstraintPosition<*>
 
 fun NewConstraintError.transformToWarning() = NewConstraintWarning(lowerType, upperType, position)
+
+class NoSuccessfulFork : ConstraintSystemError(INAPPLICABLE)
+class AmbiguousFork : ConstraintSystemError(INAPPLICABLE)

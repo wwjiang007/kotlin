@@ -13,16 +13,16 @@ import org.jetbrains.kotlin.descriptors.impl.TypeAliasConstructorDescriptor
 import org.jetbrains.kotlin.resolve.calls.components.TypeArgumentsToParametersMapper.TypeArgumentsMapping.NoExplicitArguments
 import org.jetbrains.kotlin.resolve.calls.components.candidate.CallableReferenceResolutionCandidate
 import org.jetbrains.kotlin.resolve.calls.components.candidate.ResolutionCandidate
-import org.jetbrains.kotlin.resolve.calls.inference.*
+import org.jetbrains.kotlin.resolve.calls.inference.ConstraintSystemOperation
+import org.jetbrains.kotlin.resolve.calls.inference.NewConstraintSystem
 import org.jetbrains.kotlin.resolve.calls.inference.components.*
+import org.jetbrains.kotlin.resolve.calls.inference.isSubtypeConstraintCompatible
 import org.jetbrains.kotlin.resolve.calls.inference.model.*
+import org.jetbrains.kotlin.resolve.calls.inference.substitute
 import org.jetbrains.kotlin.resolve.calls.model.*
 import org.jetbrains.kotlin.resolve.calls.smartcasts.getReceiverValueWithSmartCast
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind.*
-import org.jetbrains.kotlin.resolve.calls.tower.ContextReceiverAmbiguity
-import org.jetbrains.kotlin.resolve.calls.tower.InfixCallNoInfixModifier
-import org.jetbrains.kotlin.resolve.calls.tower.InvokeConventionCallNoOperatorModifier
-import org.jetbrains.kotlin.resolve.calls.tower.VisibilityError
+import org.jetbrains.kotlin.resolve.calls.tower.*
 import org.jetbrains.kotlin.resolve.scopes.LexicalScope
 import org.jetbrains.kotlin.resolve.scopes.receivers.ReceiverValueWithSmartCastInfo
 import org.jetbrains.kotlin.resolve.scopes.utils.parentsWithSelf
@@ -30,7 +30,9 @@ import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.model.KotlinTypeMarker
 import org.jetbrains.kotlin.types.model.TypeConstructorMarker
 import org.jetbrains.kotlin.types.model.typeConstructor
-import org.jetbrains.kotlin.types.typeUtil.*
+import org.jetbrains.kotlin.types.typeUtil.contains
+import org.jetbrains.kotlin.types.typeUtil.makeNotNullable
+import org.jetbrains.kotlin.types.typeUtil.makeNullable
 import org.jetbrains.kotlin.utils.SmartList
 import org.jetbrains.kotlin.utils.addToStdlib.cast
 import org.jetbrains.kotlin.utils.addToStdlib.compactIfPossible
@@ -887,5 +889,16 @@ internal object CheckContextReceiversResolutionPart : ResolutionPart() {
         }
         addDiagnostic(NoContextReceiver(candidateContextReceiverParameter))
         return null
+    }
+}
+internal object ConstraintSystemForks : ResolutionPart() {
+    override fun ResolutionCandidate.process(workIndex: Int) {
+        val system = this.getSystem()
+        if (system.hasContradiction) return
+        system.processForkConstraints()
+
+        if (system.hasContradiction) {
+            addDiagnostic(ForkError())
+        }
     }
 }
