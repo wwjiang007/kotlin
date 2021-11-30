@@ -383,7 +383,7 @@ class NewConstraintSystemImpl(
                 val first = successFullConstraintsSets.first()
 
                 successFullConstraintsSets.removeAll {
-                    it !== first /*&& first.size == it.size && first.containsAll(it)*/
+                    it !== first && first.size == it.size && first.containsAll(it)
                 }
             }
 
