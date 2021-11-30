@@ -21,9 +21,7 @@ import org.jetbrains.kotlin.resolve.calls.inference.substitute
 import org.jetbrains.kotlin.resolve.calls.model.*
 import org.jetbrains.kotlin.resolve.calls.smartcasts.getReceiverValueWithSmartCast
 import org.jetbrains.kotlin.resolve.calls.tasks.ExplicitReceiverKind.*
-import org.jetbrains.kotlin.resolve.calls.tower.InfixCallNoInfixModifier
-import org.jetbrains.kotlin.resolve.calls.tower.InvokeConventionCallNoOperatorModifier
-import org.jetbrains.kotlin.resolve.calls.tower.VisibilityError
+import org.jetbrains.kotlin.resolve.calls.tower.*
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.model.KotlinTypeMarker
 import org.jetbrains.kotlin.types.model.TypeConstructorMarker
@@ -796,6 +794,18 @@ internal object ErrorDescriptorResolutionPart : ResolutionPart() {
 
         kotlinCall.externalArgument?.let {
             resolveKotlinArgument(it, null, ReceiverInfo.notReceiver)
+        }
+    }
+}
+
+internal object ConstraintSystemForks : ResolutionPart() {
+    override fun ResolutionCandidate.process(workIndex: Int) {
+        val system = this.getSystem()
+        if (system.hasContradiction) return
+        system.processForkConstraints()
+
+        if (system.hasContradiction) {
+            addDiagnostic(ForkError())
         }
     }
 }

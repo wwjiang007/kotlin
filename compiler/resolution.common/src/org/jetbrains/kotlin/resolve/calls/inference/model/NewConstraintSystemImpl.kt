@@ -205,6 +205,7 @@ class NewConstraintSystemImpl(
         val beforeTypeVariablesTransactionSize = typeVariablesTransaction.size
         val beforeMissedConstraintsCount = storage.missedConstraints.size
         val beforeConstraintCountByVariables = storage.notFixedTypeVariables.mapValues { it.value.rawConstraintsCount }
+        val beforeConstraintsFromAllForks = storage.constraintsFromAllForks.size
 
         state = State.TRANSACTION
         // typeVariablesTransaction is clear
@@ -220,6 +221,7 @@ class NewConstraintSystemImpl(
         storage.maxTypeDepthFromInitialConstraints = beforeMaxTypeDepthFromInitialConstraints
         storage.errors.trimToSize(beforeErrorsCount)
         storage.missedConstraints.trimToSize(beforeMissedConstraintsCount)
+        storage.constraintsFromAllForks.trimToSize(beforeConstraintsFromAllForks)
 
         val addedInitialConstraints = storage.initialConstraints.subList(beforeInitialConstraintCount, storage.initialConstraints.size)
 
@@ -338,6 +340,64 @@ class NewConstraintSystemImpl(
             checkState(State.BUILDING, State.COMPLETION, State.TRANSACTION)
             return storage.postponedTypeVariables
         }
+
+    override val constraintsFromAllForks: MutableList<Pair<IncorporationConstraintPosition, List<Set<Pair<TypeVariableMarker, Constraint>>>>>
+        get() {
+            checkState(State.BUILDING, State.COMPLETION, State.TRANSACTION)
+            return storage.constraintsFromAllForks
+        }
+
+    override fun processForkConstraints() {
+        if (constraintsFromAllForks.isEmpty()) return
+        val currentConstraints = constraintsFromAllForks.toList()
+        constraintsFromAllForks.clear()
+
+        for ((position, constraintSets) in currentConstraints) {
+            val successFullConstraintsSets = mutableListOf<Set<Pair<TypeVariableMarker, Constraint>>>()
+            for (constraintSet in constraintSets) {
+                var isSuccessful: Boolean = false
+                runTransaction {
+                    constraintInjector.processForkConstraints(
+                        this@NewConstraintSystemImpl.apply { checkState(State.BUILDING, State.COMPLETION, State.TRANSACTION) },
+                        constraintSet,
+                        position,
+                    )
+
+                    if (constraintsFromAllForks.isNotEmpty()) {
+                        processForkConstraints()
+                    }
+
+                    if (!hasContradiction) {
+                        isSuccessful = true
+                    }
+
+                    false
+                }
+
+                if (isSuccessful) {
+                    successFullConstraintsSets.add(constraintSet)
+                }
+            }
+
+            if (successFullConstraintsSets.size > 1) {
+                val first = successFullConstraintsSets.first()
+
+                successFullConstraintsSets.removeAll {
+                    it !== first /*&& first.size == it.size && first.containsAll(it)*/
+                }
+            }
+
+            when (successFullConstraintsSets.size) {
+                1 -> constraintInjector.processForkConstraints(
+                    this@NewConstraintSystemImpl.apply { checkState(State.BUILDING, State.COMPLETION, State.TRANSACTION) },
+                    successFullConstraintsSets.single(),
+                    position,
+                )
+                0 -> addError(NoSuccessfulFork())
+                else -> addError(AmbiguousFork())
+            }
+        }
+    }
 
     // ConstraintInjector.Context, KotlinConstraintSystemCompleter.Context
     override fun addError(error: ConstraintSystemError) {

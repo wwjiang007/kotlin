@@ -62,6 +62,16 @@ open class TypeCheckerState(
         isFromNullabilityConstraint: Boolean = false
     ): Boolean? = null
 
+    open fun <T> withForkMode(block: Forking.() -> T): T = block(Forking.Default)
+
+    interface Forking {
+        fun fork(block: () -> Boolean): Boolean
+
+        object Default : Forking {
+            override fun fork(block: () -> Boolean) = block()
+        }
+    }
+
     enum class LowerCapturedTypePolicy {
         CHECK_ONLY_LOWER,
         CHECK_SUBTYPE_AND_LOWER,
@@ -338,11 +348,11 @@ object AbstractTypeChecker {
         if (areEqualTypeConstructors(subType.typeConstructor(), superConstructor) && superConstructor.parametersCount() == 0) return true
         if (superType.typeConstructor().isAnyConstructor()) return true
 
-        val supertypesWithSameConstructor = findCorrespondingSupertypes(state, subType, superConstructor)
+        val subTypesWithSameConstructors = findCorrespondingSupertypes(state, subType, superConstructor)
             .map { state.prepareType(it).asSimpleType() ?: it }
-        when (supertypesWithSameConstructor.size) {
+        when (subTypesWithSameConstructors.size) {
             0 -> return hasNothingSupertype(state, subType) // todo Nothing & Array<Number> <: Array<String>
-            1 -> return state.isSubtypeForSameConstructor(supertypesWithSameConstructor.first().asArgumentList(), superType)
+            1 -> return state.isSubtypeForSameConstructor(subTypesWithSameConstructors.first().asArgumentList(), superType)
 
             else -> { // at least 2 supertypes with same constructors. Such case is rare
                 val newArguments = ArgumentList(superConstructor.parametersCount())
@@ -350,7 +360,7 @@ object AbstractTypeChecker {
                 for (index in 0 until superConstructor.parametersCount()) {
                     anyNonOutParameter = anyNonOutParameter || superConstructor.getParameter(index).getVariance() != TypeVariance.OUT
                     if (anyNonOutParameter) continue
-                    val allProjections = supertypesWithSameConstructor.map {
+                    val allProjections = subTypesWithSameConstructors.map {
                         it.getArgumentOrNull(index)?.takeIf { it.getVariance() == TypeVariance.INV }?.getType()
                             ?: error("Incorrect type: $it, subType: $subType, superType: $superType")
                     }
@@ -362,8 +372,15 @@ object AbstractTypeChecker {
 
                 if (!anyNonOutParameter && state.isSubtypeForSameConstructor(newArguments, superType)) return true
 
-                // TODO: rethink this; now components order in intersection type affects semantic due to run subtyping (which can add constraints) only until the first successful candidate
-                return supertypesWithSameConstructor.any { state.isSubtypeForSameConstructor(it.asArgumentList(), superType) }
+                return state.withForkMode {
+                    var result = false
+                    for (subTypeArguments in subTypesWithSameConstructors) {
+                        if (fork { state.isSubtypeForSameConstructor(subTypeArguments.asArgumentList(), superType) }) {
+                            result = true
+                        }
+                    }
+                    result
+                }
             }
         }
     }

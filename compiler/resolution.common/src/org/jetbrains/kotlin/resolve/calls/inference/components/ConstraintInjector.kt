@@ -16,6 +16,8 @@ import org.jetbrains.kotlin.types.TypeApproximatorConfiguration
 import org.jetbrains.kotlin.types.TypeCheckerState
 import org.jetbrains.kotlin.types.model.*
 import org.jetbrains.kotlin.utils.SmartList
+import org.jetbrains.kotlin.utils.addIfNotNull
+import org.jetbrains.kotlin.utils.addToStdlib.popLast
 import kotlin.math.max
 
 class ConstraintInjector(
@@ -31,6 +33,7 @@ class ConstraintInjector(
         var maxTypeDepthFromInitialConstraints: Int
         val notFixedTypeVariables: MutableMap<TypeConstructorMarker, MutableVariableWithConstraints>
         val fixedTypeVariables: MutableMap<TypeConstructorMarker, KotlinTypeMarker>
+        val constraintsFromAllForks: MutableList<Pair<IncorporationConstraintPosition, List<Set<Pair<TypeVariableMarker, Constraint>>>>>
 
         fun addInitialConstraint(initialConstraint: InitialConstraint)
         fun addError(error: ConstraintSystemError)
@@ -133,6 +136,18 @@ class ConstraintInjector(
         processConstraints(c, typeCheckerState, skipProperEqualityConstraints = false)
     }
 
+    fun processForkConstraints(
+        c: Context,
+        constraintSet: Collection<Pair<TypeVariableMarker, Constraint>>,
+        position: IncorporationConstraintPosition
+    ) {
+        processGivenConstraints(
+            c,
+            TypeCheckerStateForConstraintInjector(c, position),
+            constraintSet,
+        )
+    }
+
     private fun processConstraints(
         c: Context,
         typeCheckerState: TypeCheckerStateForConstraintInjector,
@@ -140,6 +155,12 @@ class ConstraintInjector(
     ): MutableList<Pair<TypeVariableMarker, Constraint>>? {
         val properConstraintsProcessingEnabled =
             languageVersionSettings.supportsFeature(LanguageFeature.ProperTypeInferenceConstraintsProcessing)
+
+        typeCheckerState.extractConstraintsFromAllForks()?.let { forkData ->
+            forkData.mapTo(c.constraintsFromAllForks) { constraintSets ->
+                typeCheckerState.position to constraintSets.mapTo(SmartList()) { it.toSet() }
+            }
+        }
 
         while (typeCheckerState.hasConstraintsToProcess()) {
             processGivenConstraints(c, typeCheckerState, typeCheckerState.extractAllConstraints()!!)
@@ -165,7 +186,7 @@ class ConstraintInjector(
     private fun processGivenConstraints(
         c: Context,
         typeCheckerState: TypeCheckerStateForConstraintInjector,
-        constraintsToProcess: MutableList<Pair<TypeVariableMarker, Constraint>>
+        constraintsToProcess: Collection<Pair<TypeVariableMarker, Constraint>>
     ) {
         for ((typeVariable, constraint) in constraintsToProcess) {
             if (c.shouldWeSkipConstraint(typeVariable, constraint)) continue
@@ -234,6 +255,11 @@ class ConstraintInjector(
 
         // We use `var` intentionally to avoid extra allocations as this property is quite "hot"
         private var possibleNewConstraints: MutableList<Pair<TypeVariableMarker, Constraint>>? = null
+        private var constraintsFromAllForks: MutableList<List<List<Pair<TypeVariableMarker, Constraint>>>>? = null
+        private var stackForConstraintsSetsFromCurrentFork: MutableList<
+                MutableList<List<Pair<TypeVariableMarker, Constraint>>>
+                >? = null
+        private var stackForCurrentConstraintSetForFork: MutableList<MutableList<Pair<TypeVariableMarker, Constraint>>>? = null
 
         override val isInferenceCompatibilityEnabled = languageVersionSettings.supportsFeature(LanguageFeature.InferenceCompatibility)
 
@@ -243,12 +269,55 @@ class ConstraintInjector(
         private var isIncorporatingConstraintFromDeclaredUpperBound = false
 
         fun extractAllConstraints() = possibleNewConstraints.also { possibleNewConstraints = null }
+        fun extractConstraintsFromAllForks() = constraintsFromAllForks.also { constraintsFromAllForks = null }
 
         fun addPossibleNewConstraint(variable: TypeVariableMarker, constraint: Constraint) {
+            val constraintsSetsFromCurrentFork = stackForConstraintsSetsFromCurrentFork?.lastOrNull()
+            if (constraintsSetsFromCurrentFork != null) {
+                val currentConstraintSetForFork = stackForCurrentConstraintSetForFork?.lastOrNull()
+                require(currentConstraintSetForFork != null) { "Constraint has been added not under fork {...} call " }
+                currentConstraintSetForFork.add(variable to constraint)
+                return
+            }
+
             if (possibleNewConstraints == null) {
                 possibleNewConstraints = SmartList()
             }
             possibleNewConstraints!!.add(variable to constraint)
+        }
+
+        override fun <T> withForkMode(block: Forking.() -> T): T {
+            if (stackForConstraintsSetsFromCurrentFork == null) {
+                stackForConstraintsSetsFromCurrentFork = SmartList()
+            }
+            if (stackForCurrentConstraintSetForFork == null) {
+                stackForCurrentConstraintSetForFork = SmartList()
+            }
+
+            stackForConstraintsSetsFromCurrentFork!!.add(SmartList())
+            val res = block(MyForking())
+
+            if (constraintsFromAllForks == null) {
+                constraintsFromAllForks = SmartList()
+            }
+
+            constraintsFromAllForks!!.addIfNotNull(
+                stackForConstraintsSetsFromCurrentFork?.popLast()?.takeIf { it.isNotEmpty() }
+            )
+
+            return res
+        }
+
+        private inner class MyForking : Forking {
+            override fun fork(block: () -> Boolean): Boolean {
+                stackForCurrentConstraintSetForFork!!.add(SmartList())
+                block()
+                stackForConstraintsSetsFromCurrentFork!!.last()
+                    .addIfNotNull(
+                        stackForCurrentConstraintSetForFork?.popLast()?.takeIf { it.isNotEmpty() }
+                    )
+                return true
+            }
         }
 
         fun hasConstraintsToProcess() = possibleNewConstraints != null

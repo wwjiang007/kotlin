@@ -21,4 +21,5 @@ interface NewConstraintSystem {
 
     fun asConstraintSystemCompleterContext(): ConstraintSystemCompletionContext
     fun asPostponedArgumentsAnalyzerContext(): PostponedArgumentsAnalyzerContext
+    fun processForkConstraints()
 }
