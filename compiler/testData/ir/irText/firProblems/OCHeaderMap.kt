@@ -1,3 +1,4 @@
+// MODULE: m1
 // FILE: THashMap.java
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -763,6 +764,7 @@ public class THashMap<K,V> /*extends TObjectHash<K>*/ implements Map<K,V> {
     }
 }
 
+// MODULE: m2(m1)
 // FILE: OCHeaderMap.kt
 
 interface OCHeaderMap : Map<String, String> {

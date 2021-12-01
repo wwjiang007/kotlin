@@ -1,3 +1,5 @@
+Module: m1
+Module: m2
 FILE fqName:<root> fileName:/OCHeaderMap.kt
   CLASS INTERFACE name:OCHeaderMap modality:ABSTRACT visibility:public superTypes:[kotlin.collections.Map<kotlin.String, kotlin.String>]
     $this: VALUE_PARAMETER INSTANCE_RECEIVER name:<this> type:<root>.OCHeaderMap

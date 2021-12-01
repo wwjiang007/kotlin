@@ -1,3 +1,7 @@
+// MODULE: m1
+// MODULE: m2
+// FILE: OCHeaderMap.kt
+
 interface OCHeaderMap : Map<String, String> {
 
 }

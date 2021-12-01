@@ -1,10 +1,14 @@
+// MODULE: m1
+// MODULE: m2
+// FILE: OCHeaderMap.kt
+
 interface OCHeaderMap : Map<String, String> {
 
 }
 
-abstract class OCMutableHeaderMap : OCHeaderMap, MutableMap<String, String>, AbstractMap<String, String> {
+abstract class OCMutableHeaderMap : OCHeaderMap, MutableMap<String, String>, THashMap<String, String> {
   constructor() /* primary */ {
-    super/*AbstractMap*/<String, String>()
+    super/*THashMap*/<String, String>()
     /* <init>() */
 
   }
