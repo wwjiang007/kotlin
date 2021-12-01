@@ -2,9 +2,9 @@ interface OCHeaderMap : Map<String, String> {
 
 }
 
-abstract class OCMutableHeaderMap : OCHeaderMap, MutableMap<String, String>, AbstractMap<String, String> {
+abstract class OCMutableHeaderMap : OCHeaderMap, MutableMap<String, String>, THashMap<String, String> {
   constructor() /* primary */ {
-    super/*AbstractMap*/<@FlexibleNullability String?, @FlexibleNullability String?>()
+    super/*THashMap*/<@FlexibleNullability String?, @FlexibleNullability String?>()
     /* <init>() */
 
   }
