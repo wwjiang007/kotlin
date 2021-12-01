@@ -112,11 +112,11 @@ class FirTypeIntersectionScope private constructor(
                     mostSpecific,
                     FirIntersectionOverrideStorage.ContextForIntersectionOverrideConstruction(
                         this,
-                        extractedOverrides,
+                        baseMembersForIntersection,
                         scopeForMostSpecific
                     )
                 )
-                overriddenSymbols[intersectionOverride.member] = extractedOverrides
+                overriddenSymbols[intersectionOverride.member] = baseMembersForIntersection
                 @Suppress("UNCHECKED_CAST")
                 processor(intersectionOverride.member as D)
             } else {
