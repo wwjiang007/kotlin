@@ -2315,6 +2315,12 @@ public class Fir2IrTextTestGenerated extends AbstractFir2IrTextTest {
         }
 
         @Test
+        @TestMetadata("irrelevantImplCharSequenceKotlin.kt")
+        public void testIrrelevantImplCharSequenceKotlin() throws Exception {
+            runTest("compiler/testData/ir/irText/firProblems/irrelevantImplCharSequenceKotlin.kt");
+        }
+
+        @Test
         @TestMetadata("JCTree.kt")
         public void testJCTree() throws Exception {
             runTest("compiler/testData/ir/irText/firProblems/JCTree.kt");

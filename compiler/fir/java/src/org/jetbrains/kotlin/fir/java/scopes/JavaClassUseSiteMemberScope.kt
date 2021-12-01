@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.fir.java.scopes
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.fir.*
 import org.jetbrains.kotlin.fir.declarations.*
+import org.jetbrains.kotlin.fir.declarations.builder.FirFunctionBuilder
 import org.jetbrains.kotlin.fir.declarations.builder.buildSimpleFunctionCopy
 import org.jetbrains.kotlin.fir.declarations.synthetic.FirSyntheticProperty
 import org.jetbrains.kotlin.fir.declarations.synthetic.buildSyntheticProperty
@@ -325,19 +326,8 @@ class JavaClassUseSiteMemberScope(
 
         for (candidateSymbol in scope.getFunctions(nameInJava)) {
             val candidateFir = candidateSymbol.fir
-            val renamedCopy = when (candidateFir) {
-                is FirJavaMethod -> buildJavaMethodCopy(candidateFir) {
-                    this.name = name
-                    this.symbol = FirNamedFunctionSymbol(CallableId(candidateFir.symbol.callableId.classId!!, name))
-                    this.status = candidateFir.status.copy(isOperator = symbol.isOperator)
-                }
-                else -> buildSimpleFunctionCopy(candidateFir) {
-                    this.name = name
-                    this.symbol = FirNamedFunctionSymbol(CallableId(candidateFir.symbol.callableId.classId!!, name))
-                    this.status = candidateFir.status.copy(isOperator = symbol.isOperator)
-                }
-            }.apply {
-                initialSignatureAttr = candidateFir
+            val renamedCopy = buildMethodOrFunctionCopy(candidateFir, name) {
+                this.status = candidateFir.status.copy(isOperator = symbol.isOperator)
             }
 
             if (overrideChecker.isOverriddenFunction(renamedCopy, overriddenBuiltin.fir)) {
@@ -346,6 +336,27 @@ class JavaClassUseSiteMemberScope(
         }
 
         return null
+    }
+
+    private fun buildMethodOrFunctionCopy(
+        candidateFir: FirSimpleFunction,
+        name: Name,
+        init: FirFunctionBuilder.() -> Unit
+    ): FirSimpleFunction {
+        return when (candidateFir) {
+            is FirJavaMethod -> buildJavaMethodCopy(candidateFir) {
+                this.name = name
+                this.symbol = FirNamedFunctionSymbol(CallableId(candidateFir.symbol.callableId.classId!!, name))
+                init()
+            }
+            else -> buildSimpleFunctionCopy(candidateFir) {
+                this.name = name
+                this.symbol = FirNamedFunctionSymbol(CallableId(candidateFir.symbol.callableId.classId!!, name))
+                init()
+            }
+        }.apply {
+            initialSignatureAttr = candidateFir
+        }
     }
 
     private fun obtainOverrideForBuiltInWithErasedValueParametersInJava(
@@ -368,7 +379,7 @@ class JavaClassUseSiteMemberScope(
             candidateOverride.fir.computeJvmDescriptor() == overriddenBuiltin.fir.computeJvmDescriptor() &&
                     candidateOverride.hasErasedParameters()
         }?.let { override ->
-            buildJavaMethodCopy(override.fir) {
+            buildMethodOrFunctionCopy(override.fir, override.fir.name) {
                 this.valueParameters.clear()
                 override.fir.valueParameters.zip(fromSupertype.fir.valueParameters)
                     .mapTo(this.valueParameters) { (overrideParameter, parameterFromSupertype) ->
@@ -376,10 +387,6 @@ class JavaClassUseSiteMemberScope(
                             this@buildJavaValueParameterCopy.returnTypeRef = parameterFromSupertype.returnTypeRef
                         }
                     }
-
-                symbol = FirNamedFunctionSymbol(override.callableId)
-            }.apply {
-                initialSignatureAttr = override.fir
             }.symbol
         }
     }

@@ -1,0 +1,45 @@
+abstract class AImpl {
+  constructor() /* primary */ {
+    super/*Any*/()
+    /* <init>() */
+
+  }
+
+  fun charAt(index: Int): Char {
+    return 'A'
+  }
+
+  fun length(): Int {
+    return 56
+  }
+
+}
+
+class X : A {
+  constructor() /* primary */ {
+    super/*A*/()
+    /* <init>() */
+
+  }
+
+}
+
+class Y : B {
+  constructor() /* primary */ {
+    super/*B*/()
+    /* <init>() */
+
+  }
+
+}
+
+fun box(): String {
+  val x: X = X()
+  when {
+    EQEQ(arg0 = x.<get-length>(), arg1 = 56).not() -> return "fail 1"
+  }
+  when {
+    EQEQ(arg0 = x.get(index = 0), arg1 = 'A').not() -> return "fail 2"
+  }
+  return "OK"
+}
