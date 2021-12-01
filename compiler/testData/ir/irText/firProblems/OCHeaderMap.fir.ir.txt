@@ -250,3 +250,11 @@ FILE fqName:<root> fileName:/OCHeaderMap.kt
         protected/*protected and package*/ open fun removeAt (index: kotlin.Int): kotlin.Unit declared in <root>.THashMap
       $this: VALUE_PARAMETER name:<this> type:<root>.THashMap<K of <root>.THashMap, V of <root>.THashMap>
       VALUE_PARAMETER name:index index:0 type:kotlin.Int
+  FUN name:foo visibility:public modality:FINAL <> (map:<root>.OCMutableHeaderMap) returnType:kotlin.Unit
+    VALUE_PARAMETER name:map index:0 type:<root>.OCMutableHeaderMap
+    BLOCK_BODY
+      TYPE_OP type=kotlin.Unit origin=IMPLICIT_COERCION_TO_UNIT typeOperand=kotlin.Unit
+        CALL 'public open fun put (key: @[FlexibleNullability] kotlin.String?, value: @[FlexibleNullability] kotlin.String?): kotlin.String? [fake_override] declared in <root>.OCMutableHeaderMap' type=kotlin.String? origin=null
+          $this: GET_VAR 'map: <root>.OCMutableHeaderMap declared in <root>.foo' type=<root>.OCMutableHeaderMap origin=null
+          key: CONST String type=kotlin.String value="Alpha"
+          value: CONST String type=kotlin.String value="Omega"

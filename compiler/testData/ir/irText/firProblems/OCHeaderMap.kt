@@ -772,3 +772,7 @@ interface OCHeaderMap : Map<String, String> {
 
 abstract class OCMutableHeaderMap : OCHeaderMap, MutableMap<String, String>, THashMap<String, String>() {
 }
+
+fun foo(map: OCMutableHeaderMap) {
+    map.put("Alpha", "Omega")
+}
