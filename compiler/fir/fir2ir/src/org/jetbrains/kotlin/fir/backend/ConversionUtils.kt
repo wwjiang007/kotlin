@@ -295,8 +295,10 @@ private fun ConstantValueKind<*>.toIrConstKind(): IrConstKind<*> = when (this) {
 
 
 internal tailrec fun FirCallableSymbol<*>.unwrapSubstitutionAndIntersectionOverrides(): FirCallableSymbol<*> {
-    val originalForSubstitutionOverride = originalForSubstitutionOverride
-    if (originalForSubstitutionOverride != null) return originalForSubstitutionOverride.unwrapSubstitutionAndIntersectionOverrides()
+    // Note: under the general contract of BE IR, we must select override from first super-type here
+    val fir = fir
+    val originalForSubstitutionOverride = fir.allOverridesForSubstitutionOverrideAttr?.first() ?: fir.originalForSubstitutionOverride
+    if (originalForSubstitutionOverride != null) return originalForSubstitutionOverride.symbol.unwrapSubstitutionAndIntersectionOverrides()
 
     val baseForIntersectionOverride = baseForIntersectionOverride
     if (baseForIntersectionOverride != null) return baseForIntersectionOverride.unwrapSubstitutionAndIntersectionOverrides()

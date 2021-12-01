@@ -166,8 +166,8 @@ class FirClassSubstitutionScope(
             newParameterTypes,
             newTypeParameters as List<FirTypeParameter>,
             newOwnerClassId,
-            makeExpect,
-            fakeOverrideSubstitution
+            isExpect = makeExpect,
+            fakeOverrideSubstitution = fakeOverrideSubstitution
         )
     }
 
@@ -241,8 +241,8 @@ class FirClassSubstitutionScope(
             newReturnType,
             newTypeParameters as List<FirTypeParameter>,
             newOwnerClassId,
-            makeExpect,
-            fakeOverrideSubstitution
+            isExpect = makeExpect,
+            fakeOverrideSubstitution = fakeOverrideSubstitution
         )
     }
 
