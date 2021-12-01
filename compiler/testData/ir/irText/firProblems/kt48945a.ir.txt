@@ -1,0 +1,269 @@
+FILE fqName:<root> fileName:/kt48945a.kt
+  CLASS INTERFACE name:MSS modality:ABSTRACT visibility:public superTypes:[kotlin.collections.Map<kotlin.String, kotlin.String>]
+    $this: VALUE_PARAMETER INSTANCE_RECEIVER name:<this> type:<root>.MSS
+    PROPERTY FAKE_OVERRIDE name:entries visibility:public modality:ABSTRACT [fake_override,val]
+      overridden:
+        public abstract entries: kotlin.collections.Set<kotlin.collections.Map.Entry<K of kotlin.collections.Map, V of kotlin.collections.Map>> [val]
+      FUN FAKE_OVERRIDE name:<get-entries> visibility:public modality:ABSTRACT <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>) returnType:kotlin.collections.Set<kotlin.collections.Map.Entry<kotlin.String, kotlin.String>> [fake_override]
+        correspondingProperty: PROPERTY FAKE_OVERRIDE name:entries visibility:public modality:ABSTRACT [fake_override,val]
+        overridden:
+          public abstract fun <get-entries> (): kotlin.collections.Set<kotlin.collections.Map.Entry<K of kotlin.collections.Map, V of kotlin.collections.Map>> declared in kotlin.collections.Map
+        $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+    PROPERTY FAKE_OVERRIDE name:keys visibility:public modality:ABSTRACT [fake_override,val]
+      overridden:
+        public abstract keys: kotlin.collections.Set<K of kotlin.collections.Map> [val]
+      FUN FAKE_OVERRIDE name:<get-keys> visibility:public modality:ABSTRACT <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>) returnType:kotlin.collections.Set<kotlin.String> [fake_override]
+        correspondingProperty: PROPERTY FAKE_OVERRIDE name:keys visibility:public modality:ABSTRACT [fake_override,val]
+        overridden:
+          public abstract fun <get-keys> (): kotlin.collections.Set<K of kotlin.collections.Map> declared in kotlin.collections.Map
+        $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+    PROPERTY FAKE_OVERRIDE name:size visibility:public modality:ABSTRACT [fake_override,val]
+      overridden:
+        public abstract size: kotlin.Int [val]
+      FUN FAKE_OVERRIDE name:<get-size> visibility:public modality:ABSTRACT <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>) returnType:kotlin.Int [fake_override]
+        correspondingProperty: PROPERTY FAKE_OVERRIDE name:size visibility:public modality:ABSTRACT [fake_override,val]
+        overridden:
+          public abstract fun <get-size> (): kotlin.Int declared in kotlin.collections.Map
+        $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+    PROPERTY FAKE_OVERRIDE name:values visibility:public modality:ABSTRACT [fake_override,val]
+      overridden:
+        public abstract values: kotlin.collections.Collection<V of kotlin.collections.Map> [val]
+      FUN FAKE_OVERRIDE name:<get-values> visibility:public modality:ABSTRACT <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>) returnType:kotlin.collections.Collection<kotlin.String> [fake_override]
+        correspondingProperty: PROPERTY FAKE_OVERRIDE name:values visibility:public modality:ABSTRACT [fake_override,val]
+        overridden:
+          public abstract fun <get-values> (): kotlin.collections.Collection<V of kotlin.collections.Map> declared in kotlin.collections.Map
+        $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+    FUN FAKE_OVERRIDE name:containsKey visibility:public modality:ABSTRACT <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>, key:kotlin.String) returnType:kotlin.Boolean [fake_override]
+      overridden:
+        public abstract fun containsKey (key: K of kotlin.collections.Map): kotlin.Boolean declared in kotlin.collections.Map
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+      VALUE_PARAMETER name:key index:0 type:kotlin.String
+    FUN FAKE_OVERRIDE name:containsValue visibility:public modality:ABSTRACT <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>, value:kotlin.String) returnType:kotlin.Boolean [fake_override]
+      overridden:
+        public abstract fun containsValue (value: V of kotlin.collections.Map): kotlin.Boolean declared in kotlin.collections.Map
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+      VALUE_PARAMETER name:value index:0 type:kotlin.String
+    FUN FAKE_OVERRIDE name:equals visibility:public modality:OPEN <> ($this:kotlin.Any, other:kotlin.Any?) returnType:kotlin.Boolean [fake_override,operator]
+      overridden:
+        public open fun equals (other: kotlin.Any?): kotlin.Boolean [fake_override,operator] declared in kotlin.collections.Map
+      $this: VALUE_PARAMETER name:<this> type:kotlin.Any
+      VALUE_PARAMETER name:other index:0 type:kotlin.Any?
+    FUN FAKE_OVERRIDE name:forEach visibility:public modality:OPEN <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>, p0:@[EnhancedNullability] java.util.function.BiConsumer<in @[EnhancedNullability] kotlin.String, in @[EnhancedNullability] kotlin.String>) returnType:kotlin.Unit [fake_override]
+      overridden:
+        public open fun forEach (p0: @[EnhancedNullability] java.util.function.BiConsumer<in @[EnhancedNullability] K of kotlin.collections.Map, in @[EnhancedNullability] V of kotlin.collections.Map>): kotlin.Unit declared in kotlin.collections.Map
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+      VALUE_PARAMETER name:p0 index:0 type:@[EnhancedNullability] java.util.function.BiConsumer<in @[EnhancedNullability] kotlin.String, in @[EnhancedNullability] kotlin.String>
+    FUN FAKE_OVERRIDE name:get visibility:public modality:ABSTRACT <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>, key:kotlin.String) returnType:kotlin.String? [fake_override,operator]
+      overridden:
+        public abstract fun get (key: K of kotlin.collections.Map): V of kotlin.collections.Map? [operator] declared in kotlin.collections.Map
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+      VALUE_PARAMETER name:key index:0 type:kotlin.String
+    FUN FAKE_OVERRIDE name:getOrDefault visibility:public modality:OPEN <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>, key:kotlin.String, defaultValue:kotlin.String) returnType:kotlin.String [fake_override]
+      annotations:
+        SinceKotlin(version = '1.1')
+        PlatformDependent
+      overridden:
+        public open fun getOrDefault (key: K of kotlin.collections.Map, defaultValue: V of kotlin.collections.Map): V of kotlin.collections.Map declared in kotlin.collections.Map
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+      VALUE_PARAMETER name:key index:0 type:kotlin.String
+      VALUE_PARAMETER name:defaultValue index:1 type:kotlin.String
+    FUN FAKE_OVERRIDE name:hashCode visibility:public modality:OPEN <> ($this:kotlin.Any) returnType:kotlin.Int [fake_override]
+      overridden:
+        public open fun hashCode (): kotlin.Int [fake_override] declared in kotlin.collections.Map
+      $this: VALUE_PARAMETER name:<this> type:kotlin.Any
+    FUN FAKE_OVERRIDE name:isEmpty visibility:public modality:ABSTRACT <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>) returnType:kotlin.Boolean [fake_override]
+      overridden:
+        public abstract fun isEmpty (): kotlin.Boolean declared in kotlin.collections.Map
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+    FUN FAKE_OVERRIDE name:toString visibility:public modality:OPEN <> ($this:kotlin.Any) returnType:kotlin.String [fake_override]
+      overridden:
+        public open fun toString (): kotlin.String [fake_override] declared in kotlin.collections.Map
+      $this: VALUE_PARAMETER name:<this> type:kotlin.Any
+  CLASS CLASS name:Test modality:FINAL visibility:public superTypes:[<root>.MSS; java.util.AbstractMap<kotlin.String, kotlin.String>]
+    $this: VALUE_PARAMETER INSTANCE_RECEIVER name:<this> type:<root>.Test
+    CONSTRUCTOR visibility:public <> () returnType:<root>.Test [primary]
+      BLOCK_BODY
+        DELEGATING_CONSTRUCTOR_CALL 'protected/*protected and package*/ constructor <init> () declared in java.util.AbstractMap'
+          <K>: @[FlexibleNullability] kotlin.String?
+          <V>: @[FlexibleNullability] kotlin.String?
+        INSTANCE_INITIALIZER_CALL classDescriptor='CLASS CLASS name:Test modality:FINAL visibility:public superTypes:[<root>.MSS; java.util.AbstractMap<kotlin.String, kotlin.String>]'
+    PROPERTY name:entries visibility:public modality:OPEN [val]
+      overridden:
+        public abstract entries: kotlin.collections.Set<kotlin.collections.Map.Entry<kotlin.String, kotlin.String>> [fake_override,val]
+        public abstract entries: @[EnhancedNullability] kotlin.collections.MutableSet<@[EnhancedNullability] kotlin.collections.MutableMap.MutableEntry<@[FlexibleNullability] K of java.util.AbstractMap?, @[FlexibleNullability] V of java.util.AbstractMap?>> [val]
+      FUN name:<get-entries> visibility:public modality:OPEN <> ($this:<root>.Test) returnType:kotlin.collections.MutableSet<kotlin.collections.MutableMap.MutableEntry<kotlin.String, kotlin.String>>
+        correspondingProperty: PROPERTY name:entries visibility:public modality:OPEN [val]
+        overridden:
+          public abstract fun <get-entries> (): kotlin.collections.Set<kotlin.collections.Map.Entry<kotlin.String, kotlin.String>> [fake_override] declared in <root>.MSS
+          public abstract fun <get-entries> (): @[EnhancedNullability] kotlin.collections.MutableSet<@[EnhancedNullability] kotlin.collections.MutableMap.MutableEntry<@[FlexibleNullability] K of java.util.AbstractMap?, @[FlexibleNullability] V of java.util.AbstractMap?>> declared in java.util.AbstractMap
+        $this: VALUE_PARAMETER name:<this> type:<root>.Test
+        BLOCK_BODY
+          THROW type=kotlin.Nothing
+            CONSTRUCTOR_CALL 'public constructor <init> () declared in java.lang.Exception' type=java.lang.Exception origin=null
+    PROPERTY FAKE_OVERRIDE name:keys visibility:public modality:OPEN [fake_override,val]
+      overridden:
+        public abstract keys: kotlin.collections.Set<kotlin.String> [fake_override,val]
+        public open keys: @[EnhancedNullability] kotlin.collections.MutableSet<@[FlexibleNullability] K of java.util.AbstractMap?> [val]
+      FUN FAKE_OVERRIDE name:<get-keys> visibility:public modality:OPEN <> ($this:java.util.AbstractMap<kotlin.String, kotlin.String>) returnType:@[EnhancedNullability] kotlin.collections.MutableSet<@[FlexibleNullability] kotlin.String?> [fake_override]
+        correspondingProperty: PROPERTY FAKE_OVERRIDE name:keys visibility:public modality:OPEN [fake_override,val]
+        overridden:
+          public abstract fun <get-keys> (): kotlin.collections.Set<kotlin.String> [fake_override] declared in <root>.MSS
+          public open fun <get-keys> (): @[EnhancedNullability] kotlin.collections.MutableSet<@[FlexibleNullability] K of java.util.AbstractMap?> declared in java.util.AbstractMap
+        $this: VALUE_PARAMETER name:<this> type:java.util.AbstractMap<kotlin.String, kotlin.String>
+    PROPERTY FAKE_OVERRIDE name:size visibility:public modality:OPEN [fake_override,val]
+      overridden:
+        public abstract size: kotlin.Int [fake_override,val]
+        public open size: kotlin.Int [val]
+      FUN FAKE_OVERRIDE name:<get-size> visibility:public modality:OPEN <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>) returnType:kotlin.Int [fake_override]
+        correspondingProperty: PROPERTY FAKE_OVERRIDE name:size visibility:public modality:OPEN [fake_override,val]
+        overridden:
+          public abstract fun <get-size> (): kotlin.Int [fake_override] declared in <root>.MSS
+          public open fun <get-size> (): kotlin.Int declared in java.util.AbstractMap
+        $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+    PROPERTY FAKE_OVERRIDE name:values visibility:public modality:OPEN [fake_override,val]
+      overridden:
+        public abstract values: kotlin.collections.Collection<kotlin.String> [fake_override,val]
+        public open values: @[EnhancedNullability] kotlin.collections.MutableCollection<@[FlexibleNullability] V of java.util.AbstractMap?> [val]
+      FUN FAKE_OVERRIDE name:<get-values> visibility:public modality:OPEN <> ($this:java.util.AbstractMap<kotlin.String, kotlin.String>) returnType:@[EnhancedNullability] kotlin.collections.MutableCollection<@[FlexibleNullability] kotlin.String?> [fake_override]
+        correspondingProperty: PROPERTY FAKE_OVERRIDE name:values visibility:public modality:OPEN [fake_override,val]
+        overridden:
+          public abstract fun <get-values> (): kotlin.collections.Collection<kotlin.String> [fake_override] declared in <root>.MSS
+          public open fun <get-values> (): @[EnhancedNullability] kotlin.collections.MutableCollection<@[FlexibleNullability] V of java.util.AbstractMap?> declared in java.util.AbstractMap
+        $this: VALUE_PARAMETER name:<this> type:java.util.AbstractMap<kotlin.String, kotlin.String>
+    FUN FAKE_OVERRIDE name:containsKey visibility:public modality:OPEN <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>, key:kotlin.String) returnType:kotlin.Boolean [fake_override]
+      overridden:
+        public abstract fun containsKey (key: kotlin.String): kotlin.Boolean [fake_override] declared in <root>.MSS
+        public open fun containsKey (key: @[FlexibleNullability] K of java.util.AbstractMap?): kotlin.Boolean declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+      VALUE_PARAMETER name:key index:0 type:kotlin.String
+    FUN FAKE_OVERRIDE name:containsValue visibility:public modality:OPEN <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>, value:kotlin.String) returnType:kotlin.Boolean [fake_override]
+      overridden:
+        public abstract fun containsValue (value: kotlin.String): kotlin.Boolean [fake_override] declared in <root>.MSS
+        public open fun containsValue (value: @[FlexibleNullability] V of java.util.AbstractMap?): kotlin.Boolean declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+      VALUE_PARAMETER name:value index:0 type:kotlin.String
+    FUN FAKE_OVERRIDE name:equals visibility:public modality:OPEN <> ($this:kotlin.Any, other:kotlin.Any?) returnType:kotlin.Boolean [fake_override,operator]
+      overridden:
+        public open fun equals (other: kotlin.Any?): kotlin.Boolean [fake_override,operator] declared in <root>.MSS
+        public open fun equals (other: @[EnhancedNullability] kotlin.Any?): kotlin.Boolean [operator] declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.Any
+      VALUE_PARAMETER name:other index:0 type:kotlin.Any?
+    FUN FAKE_OVERRIDE name:forEach visibility:public modality:OPEN <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>, p0:@[EnhancedNullability] java.util.function.BiConsumer<in @[EnhancedNullability] kotlin.String, in @[EnhancedNullability] kotlin.String>) returnType:kotlin.Unit [fake_override]
+      overridden:
+        public open fun forEach (p0: @[EnhancedNullability] java.util.function.BiConsumer<in @[EnhancedNullability] kotlin.String, in @[EnhancedNullability] kotlin.String>): kotlin.Unit [fake_override] declared in <root>.MSS
+        public open fun forEach (p0: @[EnhancedNullability] java.util.function.BiConsumer<in @[EnhancedNullability] @[FlexibleNullability] K of java.util.AbstractMap?, in @[EnhancedNullability] @[FlexibleNullability] V of java.util.AbstractMap?>): kotlin.Unit [fake_override] declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+      VALUE_PARAMETER name:p0 index:0 type:@[EnhancedNullability] java.util.function.BiConsumer<in @[EnhancedNullability] kotlin.String, in @[EnhancedNullability] kotlin.String>
+    FUN FAKE_OVERRIDE name:get visibility:public modality:OPEN <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>, key:kotlin.String) returnType:kotlin.String? [fake_override,operator]
+      overridden:
+        public abstract fun get (key: kotlin.String): kotlin.String? [fake_override,operator] declared in <root>.MSS
+        public open fun get (key: @[FlexibleNullability] K of java.util.AbstractMap?): @[EnhancedNullability] V of java.util.AbstractMap? [operator] declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+      VALUE_PARAMETER name:key index:0 type:kotlin.String
+    FUN FAKE_OVERRIDE name:getOrDefault visibility:public modality:OPEN <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>, key:kotlin.String, defaultValue:kotlin.String) returnType:kotlin.String [fake_override]
+      annotations:
+        SinceKotlin(version = '1.1')
+        PlatformDependent
+      overridden:
+        public open fun getOrDefault (key: kotlin.String, defaultValue: kotlin.String): kotlin.String [fake_override] declared in <root>.MSS
+        public open fun getOrDefault (key: @[FlexibleNullability] K of java.util.AbstractMap?, defaultValue: @[FlexibleNullability] V of java.util.AbstractMap?): @[FlexibleNullability] V of java.util.AbstractMap? [fake_override] declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+      VALUE_PARAMETER name:key index:0 type:kotlin.String
+      VALUE_PARAMETER name:defaultValue index:1 type:kotlin.String
+    FUN FAKE_OVERRIDE name:hashCode visibility:public modality:OPEN <> ($this:kotlin.Any) returnType:kotlin.Int [fake_override]
+      overridden:
+        public open fun hashCode (): kotlin.Int [fake_override] declared in <root>.MSS
+        public open fun hashCode (): kotlin.Int declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.Any
+    FUN FAKE_OVERRIDE name:isEmpty visibility:public modality:OPEN <> ($this:kotlin.collections.Map<kotlin.String, kotlin.String>) returnType:kotlin.Boolean [fake_override]
+      overridden:
+        public abstract fun isEmpty (): kotlin.Boolean [fake_override] declared in <root>.MSS
+        public open fun isEmpty (): kotlin.Boolean declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.Map<kotlin.String, kotlin.String>
+    FUN FAKE_OVERRIDE name:toString visibility:public modality:OPEN <> ($this:kotlin.Any) returnType:kotlin.String [fake_override]
+      overridden:
+        public open fun toString (): kotlin.String [fake_override] declared in <root>.MSS
+        public open fun toString (): @[EnhancedNullability] kotlin.String declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.Any
+    FUN FAKE_OVERRIDE name:clear visibility:public modality:OPEN <> ($this:java.util.AbstractMap<kotlin.String, kotlin.String>) returnType:kotlin.Unit [fake_override]
+      overridden:
+        public open fun clear (): kotlin.Unit declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:java.util.AbstractMap<kotlin.String, kotlin.String>
+    FUN FAKE_OVERRIDE name:put visibility:public modality:OPEN <> ($this:java.util.AbstractMap<kotlin.String, kotlin.String>, key:@[FlexibleNullability] kotlin.String?, value:@[FlexibleNullability] kotlin.String?) returnType:@[EnhancedNullability] kotlin.String? [fake_override]
+      overridden:
+        public open fun put (key: @[FlexibleNullability] K of java.util.AbstractMap?, value: @[FlexibleNullability] V of java.util.AbstractMap?): @[EnhancedNullability] V of java.util.AbstractMap? declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:java.util.AbstractMap<kotlin.String, kotlin.String>
+      VALUE_PARAMETER name:key index:0 type:@[FlexibleNullability] kotlin.String?
+      VALUE_PARAMETER name:value index:1 type:@[FlexibleNullability] kotlin.String?
+    FUN FAKE_OVERRIDE name:putAll visibility:public modality:OPEN <> ($this:java.util.AbstractMap<kotlin.String, kotlin.String>, from:@[EnhancedNullability] kotlin.collections.Map<out @[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>) returnType:kotlin.Unit [fake_override]
+      overridden:
+        public open fun putAll (from: @[EnhancedNullability] kotlin.collections.Map<out @[FlexibleNullability] K of java.util.AbstractMap?, @[FlexibleNullability] V of java.util.AbstractMap?>): kotlin.Unit declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:java.util.AbstractMap<kotlin.String, kotlin.String>
+      VALUE_PARAMETER name:from index:0 type:@[EnhancedNullability] kotlin.collections.Map<out @[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>
+    FUN FAKE_OVERRIDE name:remove visibility:public modality:OPEN <> ($this:java.util.AbstractMap<kotlin.String, kotlin.String>, key:@[FlexibleNullability] kotlin.String?) returnType:@[EnhancedNullability] kotlin.String? [fake_override]
+      overridden:
+        public open fun remove (key: @[FlexibleNullability] K of java.util.AbstractMap?): @[EnhancedNullability] V of java.util.AbstractMap? declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:java.util.AbstractMap<kotlin.String, kotlin.String>
+      VALUE_PARAMETER name:key index:0 type:@[FlexibleNullability] kotlin.String?
+    FUN FAKE_OVERRIDE name:remove visibility:public modality:OPEN <> ($this:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>, key:@[FlexibleNullability] kotlin.String?, value:@[FlexibleNullability] kotlin.String?) returnType:kotlin.Boolean [fake_override]
+      annotations:
+        SinceKotlin(version = '1.1')
+        PlatformDependent
+      overridden:
+        public open fun remove (key: @[FlexibleNullability] K of java.util.AbstractMap?, value: @[FlexibleNullability] V of java.util.AbstractMap?): kotlin.Boolean [fake_override] declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>
+      VALUE_PARAMETER name:key index:0 type:@[FlexibleNullability] kotlin.String?
+      VALUE_PARAMETER name:value index:1 type:@[FlexibleNullability] kotlin.String?
+    FUN FAKE_OVERRIDE name:replaceAll visibility:public modality:OPEN <> ($this:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>, p0:@[EnhancedNullability] java.util.function.BiFunction<in @[EnhancedNullability] @[FlexibleNullability] kotlin.String?, in @[EnhancedNullability] @[FlexibleNullability] kotlin.String?, out @[EnhancedNullability] @[FlexibleNullability] kotlin.String?>) returnType:kotlin.Unit [fake_override]
+      overridden:
+        public open fun replaceAll (p0: @[EnhancedNullability] java.util.function.BiFunction<in @[EnhancedNullability] @[FlexibleNullability] K of java.util.AbstractMap?, in @[EnhancedNullability] @[FlexibleNullability] V of java.util.AbstractMap?, out @[EnhancedNullability] @[FlexibleNullability] V of java.util.AbstractMap?>): kotlin.Unit [fake_override] declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>
+      VALUE_PARAMETER name:p0 index:0 type:@[EnhancedNullability] java.util.function.BiFunction<in @[EnhancedNullability] @[FlexibleNullability] kotlin.String?, in @[EnhancedNullability] @[FlexibleNullability] kotlin.String?, out @[EnhancedNullability] @[FlexibleNullability] kotlin.String?>
+    FUN FAKE_OVERRIDE name:putIfAbsent visibility:public modality:OPEN <> ($this:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>, p0:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?, p1:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?) returnType:@[EnhancedNullability] kotlin.String? [fake_override]
+      overridden:
+        public open fun putIfAbsent (p0: @[EnhancedNullability] @[FlexibleNullability] K of java.util.AbstractMap?, p1: @[EnhancedNullability] @[FlexibleNullability] V of java.util.AbstractMap?): @[EnhancedNullability] V of java.util.AbstractMap? [fake_override] declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>
+      VALUE_PARAMETER name:p0 index:0 type:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?
+      VALUE_PARAMETER name:p1 index:1 type:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?
+    FUN FAKE_OVERRIDE name:replace visibility:public modality:OPEN <> ($this:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>, p0:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?, p1:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?, p2:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?) returnType:kotlin.Boolean [fake_override]
+      overridden:
+        public open fun replace (p0: @[EnhancedNullability] @[FlexibleNullability] K of java.util.AbstractMap?, p1: @[EnhancedNullability] @[FlexibleNullability] V of java.util.AbstractMap?, p2: @[EnhancedNullability] @[FlexibleNullability] V of java.util.AbstractMap?): kotlin.Boolean [fake_override] declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>
+      VALUE_PARAMETER name:p0 index:0 type:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?
+      VALUE_PARAMETER name:p1 index:1 type:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?
+      VALUE_PARAMETER name:p2 index:2 type:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?
+    FUN FAKE_OVERRIDE name:replace visibility:public modality:OPEN <> ($this:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>, p0:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?, p1:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?) returnType:@[EnhancedNullability] kotlin.String? [fake_override]
+      overridden:
+        public open fun replace (p0: @[EnhancedNullability] @[FlexibleNullability] K of java.util.AbstractMap?, p1: @[EnhancedNullability] @[FlexibleNullability] V of java.util.AbstractMap?): @[EnhancedNullability] V of java.util.AbstractMap? [fake_override] declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>
+      VALUE_PARAMETER name:p0 index:0 type:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?
+      VALUE_PARAMETER name:p1 index:1 type:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?
+    FUN FAKE_OVERRIDE name:computeIfAbsent visibility:public modality:OPEN <> ($this:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>, p0:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?, p1:@[EnhancedNullability] java.util.function.Function<in @[EnhancedNullability] @[FlexibleNullability] kotlin.String?, out @[EnhancedNullability] @[FlexibleNullability] kotlin.String?>) returnType:@[EnhancedNullability] @[FlexibleNullability] kotlin.String? [fake_override]
+      overridden:
+        public open fun computeIfAbsent (p0: @[EnhancedNullability] @[FlexibleNullability] K of java.util.AbstractMap?, p1: @[EnhancedNullability] java.util.function.Function<in @[EnhancedNullability] @[FlexibleNullability] K of java.util.AbstractMap?, out @[EnhancedNullability] @[FlexibleNullability] V of java.util.AbstractMap?>): @[EnhancedNullability] @[FlexibleNullability] V of java.util.AbstractMap? [fake_override] declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>
+      VALUE_PARAMETER name:p0 index:0 type:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?
+      VALUE_PARAMETER name:p1 index:1 type:@[EnhancedNullability] java.util.function.Function<in @[EnhancedNullability] @[FlexibleNullability] kotlin.String?, out @[EnhancedNullability] @[FlexibleNullability] kotlin.String?>
+    FUN FAKE_OVERRIDE name:computeIfPresent visibility:public modality:OPEN <> ($this:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>, p0:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?, p1:@[EnhancedNullability] java.util.function.BiFunction<in @[EnhancedNullability] @[FlexibleNullability] kotlin.String?, in @[EnhancedNullability] kotlin.String, out @[EnhancedNullability] kotlin.String?>) returnType:@[EnhancedNullability] kotlin.String? [fake_override]
+      overridden:
+        public open fun computeIfPresent (p0: @[EnhancedNullability] @[FlexibleNullability] K of java.util.AbstractMap?, p1: @[EnhancedNullability] java.util.function.BiFunction<in @[EnhancedNullability] @[FlexibleNullability] K of java.util.AbstractMap?, in @[EnhancedNullability] V of java.util.AbstractMap, out @[EnhancedNullability] V of java.util.AbstractMap?>): @[EnhancedNullability] V of java.util.AbstractMap? [fake_override] declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>
+      VALUE_PARAMETER name:p0 index:0 type:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?
+      VALUE_PARAMETER name:p1 index:1 type:@[EnhancedNullability] java.util.function.BiFunction<in @[EnhancedNullability] @[FlexibleNullability] kotlin.String?, in @[EnhancedNullability] kotlin.String, out @[EnhancedNullability] kotlin.String?>
+    FUN FAKE_OVERRIDE name:compute visibility:public modality:OPEN <> ($this:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>, p0:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?, p1:@[EnhancedNullability] java.util.function.BiFunction<in @[EnhancedNullability] @[FlexibleNullability] kotlin.String?, in @[EnhancedNullability] kotlin.String?, out @[EnhancedNullability] kotlin.String?>) returnType:@[EnhancedNullability] kotlin.String? [fake_override]
+      overridden:
+        public open fun compute (p0: @[EnhancedNullability] @[FlexibleNullability] K of java.util.AbstractMap?, p1: @[EnhancedNullability] java.util.function.BiFunction<in @[EnhancedNullability] @[FlexibleNullability] K of java.util.AbstractMap?, in @[EnhancedNullability] V of java.util.AbstractMap?, out @[EnhancedNullability] V of java.util.AbstractMap?>): @[EnhancedNullability] V of java.util.AbstractMap? [fake_override] declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>
+      VALUE_PARAMETER name:p0 index:0 type:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?
+      VALUE_PARAMETER name:p1 index:1 type:@[EnhancedNullability] java.util.function.BiFunction<in @[EnhancedNullability] @[FlexibleNullability] kotlin.String?, in @[EnhancedNullability] kotlin.String?, out @[EnhancedNullability] kotlin.String?>
+    FUN FAKE_OVERRIDE name:merge visibility:public modality:OPEN <> ($this:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>, p0:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?, p1:@[EnhancedNullability] kotlin.String, p2:@[EnhancedNullability] java.util.function.BiFunction<in @[EnhancedNullability] kotlin.String, in @[EnhancedNullability] kotlin.String, out @[EnhancedNullability] kotlin.String?>) returnType:@[EnhancedNullability] kotlin.String? [fake_override]
+      overridden:
+        public open fun merge (p0: @[EnhancedNullability] @[FlexibleNullability] K of java.util.AbstractMap?, p1: @[EnhancedNullability] V of java.util.AbstractMap, p2: @[EnhancedNullability] java.util.function.BiFunction<in @[EnhancedNullability] V of java.util.AbstractMap, in @[EnhancedNullability] V of java.util.AbstractMap, out @[EnhancedNullability] V of java.util.AbstractMap?>): @[EnhancedNullability] V of java.util.AbstractMap? [fake_override] declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:kotlin.collections.MutableMap<@[FlexibleNullability] kotlin.String?, @[FlexibleNullability] kotlin.String?>
+      VALUE_PARAMETER name:p0 index:0 type:@[EnhancedNullability] @[FlexibleNullability] kotlin.String?
+      VALUE_PARAMETER name:p1 index:1 type:@[EnhancedNullability] kotlin.String
+      VALUE_PARAMETER name:p2 index:2 type:@[EnhancedNullability] java.util.function.BiFunction<in @[EnhancedNullability] kotlin.String, in @[EnhancedNullability] kotlin.String, out @[EnhancedNullability] kotlin.String?>
+    FUN FAKE_OVERRIDE name:clone visibility:protected/*protected and package*/ modality:OPEN <> ($this:java.util.AbstractMap<kotlin.String, kotlin.String>) returnType:@[FlexibleNullability] kotlin.Any? [fake_override]
+      overridden:
+        protected/*protected and package*/ open fun clone (): @[FlexibleNullability] kotlin.Any? declared in java.util.AbstractMap
+      $this: VALUE_PARAMETER name:<this> type:java.util.AbstractMap<kotlin.String, kotlin.String>
