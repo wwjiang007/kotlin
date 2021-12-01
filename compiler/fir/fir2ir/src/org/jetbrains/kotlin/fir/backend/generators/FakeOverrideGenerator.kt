@@ -107,6 +107,7 @@ class FakeOverrideGenerator(
             createFakeOverriddenIfNeeded(
                 firClass, irClass, isLocal, functionSymbol,
                 declarationStorage::getCachedIrFunction,
+                declarationStorage::cacheIrFunction,
                 declarationStorage::createIrFunction,
                 createFakeOverrideSymbol = { firFunction, callableSymbol, modality ->
                     FirFakeOverrideGenerator.createSubstitutionOverrideFunction(
@@ -132,6 +133,7 @@ class FakeOverrideGenerator(
             createFakeOverriddenIfNeeded(
                 firClass, irClass, isLocal, propertySymbol,
                 declarationStorage::getCachedIrProperty,
+                declarationStorage::cacheIrProperty,
                 declarationStorage::createIrProperty,
                 createFakeOverrideSymbol = { firProperty, callableSymbol, modality ->
                     FirFakeOverrideGenerator.createSubstitutionOverrideProperty(
@@ -180,6 +182,7 @@ class FakeOverrideGenerator(
         isLocal: Boolean,
         originalSymbol: FirCallableSymbol<*>,
         cachedIrDeclaration: (firDeclaration: D, dispatchReceiverLookupTag: ConeClassLikeLookupTag?, () -> IdSignature?) -> I?,
+        cacheIrDeclaration: (firDeclaration: D, irDeclaration: I) -> Unit,
         createIrDeclaration: (firDeclaration: D, irParent: IrClass, thisReceiverOwner: IrClass?, origin: IrDeclarationOrigin, isLocal: Boolean) -> I,
         createFakeOverrideSymbol: (firDeclaration: D, baseSymbol: S, modality: Modality?) -> S,
         baseSymbols: MutableMap<I, List<S>>,
@@ -204,6 +207,7 @@ class FakeOverrideGenerator(
         val origin = IrDeclarationOrigin.FAKE_OVERRIDE
         val baseSymbol = originalSymbol.unwrapSubstitutionAndIntersectionOverrides() as S
 
+        var remapOriginalDeclaration = false
         val (fakeOverrideFirDeclaration, baseFirSymbolsForFakeOverride) = when {
             originalSymbol.shouldHaveComputedBaseSymbolsForClass(classLookupTag) -> {
                 // Substitution or intersection case
@@ -219,6 +223,7 @@ class FakeOverrideGenerator(
                     (fakeOverrideSymbol.fir as FirCallableDeclaration).allOverridesForSubstitutionOverrideAttr = allOverrides
                     declarationStorage.saveFakeOverrideInClass(irClass, firstOverride, fakeOverrideSymbol.fir)
                     classifierStorage.preCacheTypeParameters(originalDeclaration)
+                    remapOriginalDeclaration = true
                     fakeOverrideSymbol.fir to computeBaseSymbols(originalSymbol, computeDirectOverridden, scope, classLookupTag)
                 }
             }
@@ -248,6 +253,9 @@ class FakeOverrideGenerator(
                 origin,
                 isLocal
             )
+        if (remapOriginalDeclaration) {
+            cacheIrDeclaration(originalDeclaration, irDeclaration)
+        }
         if (containsErrorTypes(irDeclaration)) {
             return
         }

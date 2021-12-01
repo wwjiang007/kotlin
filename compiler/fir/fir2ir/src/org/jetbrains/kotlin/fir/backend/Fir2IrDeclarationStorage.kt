@@ -430,6 +430,12 @@ class Fir2IrDeclarationStorage(
         }
     }
 
+    internal fun cacheIrFunction(function: FirSimpleFunction, irFunction: IrFunction) {
+        if (irFunction is IrSimpleFunction) {
+            functionCache[function] = irFunction
+        }
+    }
+
     internal fun cacheDelegationFunction(function: FirSimpleFunction, irFunction: IrSimpleFunction) {
         functionCache[function] = irFunction
         delegatedReverseCache[irFunction] = function
@@ -899,6 +905,10 @@ class Fir2IrDeclarationStorage(
         return getCachedIrCallable(property, dispatchReceiverLookupTag, propertyCache, signatureCalculator) { signature ->
             symbolTable.referencePropertyIfAny(signature)?.owner
         }
+    }
+
+    internal fun cacheIrProperty(property: FirProperty, irProperty: IrProperty) {
+        propertyCache[property] = irProperty
     }
 
     private inline fun <reified FC : FirCallableDeclaration, reified IC : IrDeclaration> getCachedIrCallable(

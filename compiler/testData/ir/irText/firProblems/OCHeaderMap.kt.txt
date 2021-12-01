@@ -1,0 +1,17 @@
+interface OCHeaderMap : Map<String, String> {
+
+}
+
+abstract class OCMutableHeaderMap : OCHeaderMap, MutableMap<String, String>, AbstractMap<String, String> {
+  constructor() /* primary */ {
+    super/*AbstractMap*/<@FlexibleNullability String?, @FlexibleNullability String?>()
+    /* <init>() */
+
+  }
+
+}
+
+fun foo(map: OCMutableHeaderMap) {
+  map.put(key = "Alpha", value = "Omega") /*~> Unit */
+}
+
