@@ -39,6 +39,7 @@ object FirFakeOverrideGenerator {
         newParameterTypes: List<ConeKotlinType?>? = null,
         newTypeParameters: List<FirTypeParameter>? = null,
         derivedClassId: ClassId? = null,
+        newModality: Modality? = null,
         isExpect: Boolean = baseFunction.isExpect,
         fakeOverrideSubstitution: FakeOverrideSubstitution? = null
     ): FirNamedFunctionSymbol {
@@ -49,7 +50,7 @@ object FirFakeOverrideGenerator {
         }
         createSubstitutionOverrideFunction(
             symbol, session, baseFunction, newDispatchReceiverType, newReceiverType, newReturnType,
-            newParameterTypes, newTypeParameters, isExpect, fakeOverrideSubstitution
+            newParameterTypes, newTypeParameters, newModality, isExpect, fakeOverrideSubstitution
         )
         return symbol
     }
@@ -63,6 +64,7 @@ object FirFakeOverrideGenerator {
         newReturnType: ConeKotlinType?,
         newParameterTypes: List<ConeKotlinType?>?,
         newTypeParameters: List<FirTypeParameter>?,
+        newModality: Modality? = null,
         isExpect: Boolean = baseFunction.isExpect,
         fakeOverrideSubstitution: FakeOverrideSubstitution?,
     ): FirSimpleFunction {
@@ -79,6 +81,7 @@ object FirFakeOverrideGenerator {
             newTypeParameters,
             newReceiverType,
             newReturnType,
+            newModality,
             fakeOverrideSubstitution = fakeOverrideSubstitution
         ).apply {
             originalForSubstitutionOverrideAttr = baseFunction
@@ -115,6 +118,8 @@ object FirFakeOverrideGenerator {
                 session, baseFunction, newParameterTypes, newTypeParameters, newReceiverType, newReturnType, fakeOverrideSubstitution
             ).filterIsInstance<FirTypeParameter>()
             deprecation = baseFunction.deprecation
+        }.apply {
+            allOverridesForSubstitutionOverrideAttr = null
         }
     }
 
@@ -261,6 +266,7 @@ object FirFakeOverrideGenerator {
         newReturnType: ConeKotlinType? = null,
         newTypeParameters: List<FirTypeParameter>? = null,
         derivedClassId: ClassId? = null,
+        newModality: Modality? = null,
         isExpect: Boolean = baseProperty.isExpect,
         fakeOverrideSubstitution: FakeOverrideSubstitution? = null
     ): FirPropertySymbol {
@@ -271,7 +277,7 @@ object FirFakeOverrideGenerator {
         }
         createCopyForFirProperty(
             symbol, baseProperty, session, FirDeclarationOrigin.SubstitutionOverride, isExpect,
-            newDispatchReceiverType, newTypeParameters, newReceiverType, newReturnType,
+            newDispatchReceiverType, newTypeParameters, newReceiverType, newReturnType, newModality,
             fakeOverrideSubstitution = fakeOverrideSubstitution
         ).apply {
             originalForSubstitutionOverrideAttr = baseProperty
@@ -315,6 +321,8 @@ object FirFakeOverrideGenerator {
                 fakeOverrideSubstitution
             )
             deprecation = baseProperty.deprecation
+        }.apply {
+            allOverridesForSubstitutionOverrideAttr = null
         }
     }
 

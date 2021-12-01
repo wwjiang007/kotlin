@@ -121,6 +121,18 @@ class FirTypeIntersectionScope private constructor(
                 processor(intersectionOverride.member as D)
             } else {
                 val mostSpecific = baseMembersForIntersection.single().member
+                if (extractedOverrides.size > 1) {
+                    val allOverrides = extractedOverrides.mapNotNull {
+                        if (it.member !== mostSpecific) it.member.fir
+                        else mostSpecific.fir.originalForSubstitutionOverride
+                    }
+                    if (allOverrides.size > 1) {
+                        // Necessary for BE only, to store all overrides for "trivial" intersections like
+                        //   class Intermediate : Base
+                        //   class Derived : Intermediate(), Base
+                        mostSpecific.fir.allOverridesForSubstitutionOverrideAttr = allOverrides
+                    }
+                }
                 overriddenSymbols[mostSpecific] = extractedOverrides
                 processor(mostSpecific)
             }

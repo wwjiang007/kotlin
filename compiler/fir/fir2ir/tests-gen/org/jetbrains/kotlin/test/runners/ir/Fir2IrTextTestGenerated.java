@@ -2333,6 +2333,12 @@ public class Fir2IrTextTestGenerated extends AbstractFir2IrTextTest {
         }
 
         @Test
+        @TestMetadata("kt48945a.kt")
+        public void testKt48945a() throws Exception {
+            runTest("compiler/testData/ir/irText/firProblems/kt48945a.kt");
+        }
+
+        @Test
         @TestMetadata("localClassUsedBeforeDeclaration.kt")
         public void testLocalClassUsedBeforeDeclaration() throws Exception {
             runTest("compiler/testData/ir/irText/firProblems/localClassUsedBeforeDeclaration.kt");
