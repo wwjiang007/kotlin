@@ -105,7 +105,7 @@ FILE: transform.kt
             lval variable: R|FirVariable<*>?| = R|<local>/expression|.R|/FirWhenExpression.subjectVariable|
             when () {
                 !=(R|<local>/variable|, Null(null)) ->  {
-                    R|<local>/variable|.R|/FirElement.accept|(this@R|/FirRenderer|)
+                    R|<local>/variable|.R|SubstitutionOverride</FirVariable.accept: R|kotlin/Unit|>|(this@R|/FirRenderer|)
                 }
             }
 
