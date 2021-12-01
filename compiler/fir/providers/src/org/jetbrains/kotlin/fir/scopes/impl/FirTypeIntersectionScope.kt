@@ -116,7 +116,7 @@ class FirTypeIntersectionScope private constructor(
                         scopeForMostSpecific
                     )
                 )
-                overriddenSymbols[intersectionOverride.member] = baseMembersForIntersection
+                overriddenSymbols[intersectionOverride.member] = extractedOverrides
                 @Suppress("UNCHECKED_CAST")
                 processor(intersectionOverride.member as D)
             } else {
