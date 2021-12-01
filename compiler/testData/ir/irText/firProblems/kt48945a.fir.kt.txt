@@ -1,0 +1,17 @@
+interface MSS : Map<String, String> {
+
+}
+
+class Test : MSS, AbstractMap<String, String> {
+  constructor() /* primary */ {
+    super/*AbstractMap*/<String, String>()
+    /* <init>() */
+
+  }
+
+  override val entries: MutableSet<MutableEntry<String, String>>
+    override get(): MutableSet<MutableEntry<String, String>> {
+      return throw Exception()
+    }
+
+}
