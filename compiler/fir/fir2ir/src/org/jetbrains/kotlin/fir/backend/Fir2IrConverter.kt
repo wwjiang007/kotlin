@@ -8,6 +8,7 @@ package org.jetbrains.kotlin.fir.backend
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.backend.common.ir.BuiltinSymbolsBase
+import org.jetbrains.kotlin.backend.common.serialization.DescriptorByIdSignatureFinderImpl
 import org.jetbrains.kotlin.config.AnalysisFlags
 import org.jetbrains.kotlin.config.LanguageVersionSettings
 import org.jetbrains.kotlin.descriptors.ModuleDescriptor
@@ -61,6 +62,7 @@ class Fir2IrConverter(
         irGenerationExtensions: Collection<IrGenerationExtension>,
         fir2irVisitor: Fir2IrVisitor,
         languageVersionSettings: LanguageVersionSettings,
+        descriptorMangler: KotlinMangler.DescriptorMangler,
         extensions: StubGeneratorExtensions,
     ) {
         for (firFile in allFirFiles) {
@@ -68,7 +70,11 @@ class Fir2IrConverter(
         }
 
         val irProviders =
-            generateTypicalIrProviderList(irModuleFragment.descriptor, irBuiltIns, symbolTable, extensions = extensions)
+            generateTypicalIrProviderList(
+                irModuleFragment.descriptor, irBuiltIns, symbolTable,
+                descriptorFinder = DescriptorByIdSignatureFinderImpl(irModuleFragment.descriptor, descriptorMangler),
+                extensions = extensions
+            )
         val externalDependenciesGenerator = ExternalDependenciesGenerator(
             symbolTable,
             irProviders
@@ -456,7 +462,8 @@ class Fir2IrConverter(
             }
 
             converter.runSourcesConversion(
-                allFirFiles, irModuleFragment, irGenerationExtensions, fir2irVisitor, languageVersionSettings, generatorExtensions
+                allFirFiles, irModuleFragment, irGenerationExtensions, fir2irVisitor, languageVersionSettings,
+                descriptorMangler, generatorExtensions
             )
 
             return Fir2IrResult(irModuleFragment, symbolTable, components)
