@@ -16,7 +16,7 @@ annotation class Protected
 
 abstract class AbstractArrayMapOwner<K : Any, V : Any> : Iterable<V> {
     protected abstract val arrayMap: ArrayMap<V>
-    protected abstract val typeRegistry: TypeRegistry<K, V>
+    protected abstract val typeRegistry: TypeRegistryBase<K, V>
 
     abstract class AbstractArrayMapAccessor<K : Any, V : Any, T : V>(
         protected val key: KClass<out K>,
@@ -60,7 +60,7 @@ class NullableArrayMapAccessor<K : Any, V : Any, T : V>(
     }
 }
 
-abstract class TypeRegistry<K : Any, V : Any> {
+abstract class TypeRegistryBase<K : Any, V : Any> {
     private val idPerType = ConcurrentHashMap<KClass<out K>, Int>()
     private val idCounter = AtomicInteger(0)
 
@@ -78,8 +78,17 @@ abstract class TypeRegistry<K : Any, V : Any> {
     }
 
     fun <T : K> getId(kClass: KClass<T>): Int {
-        return idPerType.computeIfAbsent(kClass) { idCounter.getAndIncrement() }
+        return idPerType.customComputeIfAbsent(kClass) { idCounter.getAndIncrement() }
     }
+
+    /*
+     * This method is needed only for keep compatibility with JDK 6 and should be replaced
+     *   with regular ConcurrentHashMap.computeIfAbsent after migration of :core modules to JDK 8
+     */
+    protected abstract fun <T : K> ConcurrentHashMap<KClass<out K>, Int>.customComputeIfAbsent(
+        kClass: KClass<T>,
+        compute: (KClass<out K>) -> Int
+    ): Int
 
     fun allValuesThreadUnsafeForRendering(): Map<KClass<out K>, Int> {
         return idPerType
