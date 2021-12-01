@@ -352,12 +352,18 @@ class FakeOverrideGenerator(
             when (declaration) {
                 is IrSimpleFunction -> {
                     val baseSymbols = getOverriddenSymbolsForFakeOverride(declaration)!!
+                    if (baseSymbols.isEmpty()) {
+                        throw AssertionError()
+                    }
                     declaration.withFunction {
                         overriddenSymbols = baseSymbols
                     }
                 }
                 is IrProperty -> {
                     val baseSymbols = basePropertySymbols[declaration]!!
+                    if (baseSymbols.isEmpty()) {
+                        throw AssertionError()
+                    }
                     declaration.withProperty {
                         discardAccessorsAccordingToBaseVisibility(baseSymbols)
                         setOverriddenSymbolsForProperty(declarationStorage, declaration.isVar, baseSymbols)
