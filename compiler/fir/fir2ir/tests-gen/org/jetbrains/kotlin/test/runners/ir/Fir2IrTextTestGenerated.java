@@ -2357,6 +2357,12 @@ public class Fir2IrTextTestGenerated extends AbstractFir2IrTextTest {
         }
 
         @Test
+        @TestMetadata("OCHeaderMap.kt")
+        public void testOCHeaderMap() throws Exception {
+            runTest("compiler/testData/ir/irText/firProblems/OCHeaderMap.kt");
+        }
+
+        @Test
         @TestMetadata("putIfAbsent.kt")
         public void testPutIfAbsent() throws Exception {
             runTest("compiler/testData/ir/irText/firProblems/putIfAbsent.kt");

@@ -1773,6 +1773,11 @@ public class KlibTextTestCaseGenerated extends AbstractKlibTextTestCase {
             runTest("compiler/testData/ir/irText/firProblems/localClassUsedBeforeDeclaration.kt");
         }
 
+        @TestMetadata("OCHeaderMap.kt")
+        public void testOCHeaderMap() throws Exception {
+            runTest("compiler/testData/ir/irText/firProblems/OCHeaderMap.kt");
+        }
+
         @TestMetadata("readWriteProperty.kt")
         public void testReadWriteProperty() throws Exception {
             runTest("compiler/testData/ir/irText/firProblems/readWriteProperty.kt");
