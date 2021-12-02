@@ -315,8 +315,10 @@ public fun Path.copyRecursively(
         return onError(this, error) != OnErrorAction.TERMINATE
     }
     try {
+        val options = arrayOf(PathWalkOption.INCLUDE_DIRECTORIES_BEFORE) +
+                if (followLinks) arrayOf(PathWalkOption.FOLLOW_LINKS) else emptyArray()
         // We cannot break for loop from inside a lambda, so we have to use an exception here
-        for (src in walkTopDown(followLinks).onFail { p, e -> if (onError(p, e) == OnErrorAction.TERMINATE) throw TerminateException(p) }) {
+        for (src in walk(*options).onFail { p, e -> if (onError(p, e) == OnErrorAction.TERMINATE) throw TerminateException(p) }) {
             if (!src.exists(LinkOption.NOFOLLOW_LINKS)) {
                 val error = NoSuchFileException(src.toString(), target.toString(), "The source file doesn't exist.")
                 if (onError(src, error) == OnErrorAction.TERMINATE)
@@ -389,8 +391,10 @@ public fun Path.copyRecursively(
  * @throws IOException if an I/O error occurs
  */
 public fun Path.deleteRecursively(followLinks: Boolean = false): Boolean {
+    val options = arrayOf(PathWalkOption.INCLUDE_DIRECTORIES_AFTER) +
+            if (followLinks) arrayOf(PathWalkOption.FOLLOW_LINKS) else emptyArray()
     var success = true
-    for (file in walkBottomUp(followLinks).onFail { _, _ -> success = false }) {
+    for (file in walk(*options).onFail { _, _ -> success = false }) {
         try {
             file.deleteIfExists()
         } catch (_: DirectoryNotEmptyException) {

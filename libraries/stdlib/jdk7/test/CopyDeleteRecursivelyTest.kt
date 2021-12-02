@@ -41,6 +41,8 @@ class CopyDeleteRecursivelyTest : AbstractPathTest() {
         assertTrue(dir.deleteRecursively()) // successfully deletes recursively a non-existent directory
     }
 
+    private fun Path.walkTopDown() = walk(PathWalkOption.INCLUDE_DIRECTORIES_BEFORE)
+
     @Test
     fun deleteRestrictedRead() {
         val basedir = createTestFiles().cleanupRecursively()

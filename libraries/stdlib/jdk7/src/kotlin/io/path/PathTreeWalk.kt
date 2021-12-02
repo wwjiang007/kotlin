@@ -11,20 +11,21 @@ package kotlin.io.path
 import java.io.IOException
 import java.nio.file.LinkOption
 import java.nio.file.Path
-import java.util.ArrayDeque
 
 
 /**
- * An enumeration to describe possible walk directions.
- * There are two of them: beginning from parents, ending with children,
- * and beginning from children, ending with parents. Both use depth-first search.
+ * An enumeration to describe possible walk options.
+ * The options can be combined to get the walk order and behavior needed.
  */
-public enum class PathWalkDirection {
-    /** Depth-first search, directory is visited BEFORE its files */
-    TOP_DOWN,
-    /** Depth-first search, directory is visited AFTER its files */
-    BOTTOM_UP
-    // Do we want also breadth-first search?
+public enum class PathWalkOption {
+    /** Depth-first search, directory is visited BEFORE its entries */
+    INCLUDE_DIRECTORIES_BEFORE,
+    /** Depth-first search, directory is visited AFTER its entries */
+    INCLUDE_DIRECTORIES_AFTER,
+    /** Breadth-first search, if combined with [INCLUDE_DIRECTORIES_BEFORE], directory and its siblings are visited BEFORE the directory entries */
+    BFS,
+    /** Symlinks are followed to the directories they point to */
+    FOLLOW_LINKS
 }
 
 /**
@@ -32,101 +33,99 @@ public enum class PathWalkDirection {
  * It allows to iterate through all files inside a given directory.
  * Iteration order of sibling files is unspecified.
  *
- * Use [Path.walk], [Path.walkTopDown] or [Path.walkBottomUp] extension functions to instantiate a `PathTreeWalk` instance.
+ * Use [Path.walk] extension function to instantiate a `PathTreeWalk` instance.
  *
  * If the file path given is just a file, walker iterates only it.
  * If the file path given does not exist, walker iterates nothing, i.e. it's equivalent to an empty sequence.
  */
 public class PathTreeWalk private constructor(
     private val start: Path,
-    private val direction: PathWalkDirection,
-    private val linkOptions: Array<out LinkOption>,
+    private val options: Array<out PathWalkOption>,
     private val onEnter: ((Path) -> Boolean)?,
     private val onLeave: ((Path) -> Unit)?,
     private val onFail: ((f: Path, e: IOException) -> Unit)?,
     private val maxDepth: Int = Int.MAX_VALUE
 ) : Sequence<Path> {
 
-    internal constructor(start: Path, direction: PathWalkDirection, followLinks: Boolean) : this(
+    internal constructor(start: Path, options: Array<out PathWalkOption>) : this(
         start,
-        direction,
-        LinkFollowing.toOptions(followLinks),
+        options,
         onEnter = null,
         onLeave = null,
         onFail = null
     )
 
-
-    /** Returns an iterator walking through files. */
-    override fun iterator(): Iterator<Path> = PathTreeWalkIterator()
-
-    /** Abstract class that encapsulates file visiting in some order, beginning from a given [root] */
-    private abstract class WalkState(val root: Path) {
-        /** Call of this function proceeds to a next file for visiting and returns it */
-        public abstract fun step(): Path?
-    }
-
-    /** Abstract class that encapsulates directory visiting in some order, beginning from a given [rootDir] */
-    private abstract class DirectoryState(rootDir: Path, linkOptions: Array<out LinkOption>) : WalkState(rootDir) {
-        init {
-            assert(rootDir.isDirectory(*linkOptions)) { "rootDir must be verified to be directory beforehand." }
+    init {
+        val isBFS = options.contains(PathWalkOption.BFS)
+        val isDirectoryAfter = options.contains(PathWalkOption.INCLUDE_DIRECTORIES_AFTER)
+        require(!isBFS || !isDirectoryAfter) {
+            "INCLUDE_DIRECTORIES_AFTER option is not applicable when BFS option is selected."
         }
     }
 
-    private inner class PathTreeWalkIterator : AbstractIterator<Path>() {
+    private val linkOptions: Array<LinkOption>
+        get() = LinkFollowing.toOptions(followLinks = options.contains(PathWalkOption.FOLLOW_LINKS))
+
+    private val excludeDirectories: Boolean
+        get() = !(options.contains(PathWalkOption.INCLUDE_DIRECTORIES_BEFORE) || options.contains(PathWalkOption.INCLUDE_DIRECTORIES_AFTER))
+
+    private val isBFS: Boolean
+        get() = options.contains(PathWalkOption.BFS)
+
+
+    /** Returns an iterator walking through files. */
+    override fun iterator(): Iterator<Path> = if (isBFS) BFSPathTreeWalkIterator() else DSFPathTreeWalkIterator()
+
+    private inner class DSFPathTreeWalkIterator : AbstractIterator<Path>() {
 
         // Stack of directory states, beginning from the start directory
-        private val state = ArrayDeque<WalkState>()
+        private val state = ArrayList<WalkState>()
 
         init {
             when {
-                start.isDirectory(*linkOptions) -> state.push(directoryState(start))
-                start.exists(LinkOption.NOFOLLOW_LINKS) -> state.push(SingleFileState(start))
+                start.isDirectory(*linkOptions) -> state.add(DirectoryState(start))
+                start.exists(LinkOption.NOFOLLOW_LINKS) -> state.add(SingleFileState(start))
                 else -> done()
             }
         }
 
         override fun computeNext() {
-            val nextFile = gotoNext()
-            if (nextFile != null)
-                setNext(nextFile)
+            val next = gotoNext()
+            if (next != null)
+                setNext(next)
             else
                 done()
         }
 
-
-        private fun directoryState(root: Path): DirectoryState {
-            return when (direction) {
-                PathWalkDirection.TOP_DOWN -> TopDownDirectoryState(root)
-                PathWalkDirection.BOTTOM_UP -> BottomUpDirectoryState(root)
-            }
-        }
-
         private tailrec fun gotoNext(): Path? {
             // Take next file from the top of the stack or return if there's nothing left
-            val topState = state.peek() ?: return null
+            val topState = state.lastOrNull() ?: return null
             val path = topState.step()
             if (path == null) {
                 // There is nothing more on the top of the stack, go back
-                state.pop()
+                state.removeLast()
                 return gotoNext()
             } else {
                 // Check that file/directory matches the filter
-                if (path == topState.root || !path.isDirectory(*linkOptions) || state.size >= maxDepth) {
+                if (path == topState.root || !path.isDirectory(*linkOptions)) {
                     // Proceed to a root directory or a simple file
                     return path
+                } else if (state.size >= maxDepth) {
+                    return if (excludeDirectories) gotoNext() else path
                 } else {
                     // Proceed to a sub-directory
-                    state.push(directoryState(path))
+                    state.add(DirectoryState(path))
                     return gotoNext()
                 }
             }
         }
 
         /** Visiting in bottom-up order */
-        private inner class BottomUpDirectoryState(rootDir: Path) : DirectoryState(rootDir, linkOptions) {
+        private inner class DirectoryState(rootDir: Path) : WalkState(rootDir) {
 
-            private var rootVisited = false
+            private var invokeOnEnter = true
+            private var visitRootBefore = options.contains(PathWalkOption.INCLUDE_DIRECTORIES_BEFORE)
+            private var visitRootAfter = options.contains(PathWalkOption.INCLUDE_DIRECTORIES_AFTER)
 
             private var fileList: List<Path>? = null
 
@@ -134,13 +133,21 @@ public class PathTreeWalk private constructor(
 
             private var failed = false
 
-            /** First all children, then root directory */
             override fun step(): Path? {
-                if (!failed && fileList == null) {
+                if (invokeOnEnter) {
+                    invokeOnEnter = false
+
                     if (onEnter?.invoke(root) == false) {
+                        // skip this directory
                         return null
                     }
-
+                }
+                if (visitRootBefore) {
+                    visitRootBefore = false
+                    // visit the root dir before entries
+                    return root
+                }
+                if (!failed && fileList == null) {
                     try {
                         fileList = root.listDirectoryEntries()
                     } catch (e: IOException) { // NotDirectoryException is also an IOException
@@ -149,59 +156,18 @@ public class PathTreeWalk private constructor(
                     }
                 }
                 if (fileList != null && fileIndex < fileList!!.size) {
-                    // First visit all files
+                    // visit all entries
                     return fileList!![fileIndex++]
-                } else if (!rootVisited) {
-                    // Then visit root
-                    rootVisited = true
-                    return root
-                } else {
-                    // That's all
-                    onLeave?.invoke(root)
-                    return null
                 }
-            }
-        }
-
-        /** Visiting in top-down order */
-        private inner class TopDownDirectoryState(rootDir: Path) : DirectoryState(rootDir, linkOptions) {
-
-            private var rootVisited = false
-
-            private var fileList: List<Path>? = null
-
-            private var fileIndex = 0
-
-            /** First root directory, then all children */
-            override fun step(): Path? {
-                if (!rootVisited) {
-                    // First visit root
-                    if (onEnter?.invoke(root) == false) {
-                        return null
-                    }
-
-                    rootVisited = true
+                if (visitRootAfter) {
+                    visitRootAfter = false
+                    // visit the root dir after entries
                     return root
-                } else if (fileList == null || fileIndex < fileList!!.size) {
-                    if (fileList == null) {
-                        // Then read a list of entries
-                        try {
-                            fileList = root.listDirectoryEntries()
-                        } catch (e: IOException) { // NotDirectoryException is also an IOException
-                            onFail?.invoke(root, e)
-                        }
-                        if (fileList == null || fileList!!.size == 0) {
-                            onLeave?.invoke(root)
-                            return null
-                        }
-                    }
-                    // Then visit all files
-                    return fileList!![fileIndex++]
-                } else {
-                    // That's all
-                    onLeave?.invoke(root)
-                    return null
                 }
+
+                // That's all
+                onLeave?.invoke(root)
+                return null
             }
         }
 
@@ -219,6 +185,64 @@ public class PathTreeWalk private constructor(
             }
         }
 
+        /** Abstract class that encapsulates file visiting in some order, beginning from a given [root] */
+        private abstract inner class WalkState(val root: Path) {
+            /** Call of this function proceeds to a next file for visiting and returns it */
+            public abstract fun step(): Path?
+        }
+    }
+
+    private inner class BFSPathTreeWalkIterator : AbstractIterator<Path>() {
+        // Queue of entries to be visited. Entries at current depth are divided from the next depth entries by a `null`.
+        private val queue = ArrayDeque<Path?>()
+        private var depth = 0
+
+        init {
+            queue.addLast(start)
+            queue.addLast(null)
+        }
+
+        override fun computeNext() {
+            val next = gotoNext()
+            if (next != null)
+                setNext(next)
+            else
+                done()
+        }
+
+        private tailrec fun gotoNext(): Path? {
+            if (queue.isEmpty()) return null
+
+            val path = queue.removeFirst()
+
+            if (path == null) {
+                if (queue.isNotEmpty()) {
+                    // all entries in current depth were visited, seperated entries at the next depth from their children
+                    queue.addLast(null)
+                }
+                depth += 1
+                return gotoNext()
+            }
+            if (!path.isDirectory(*linkOptions)) {
+                return path
+            }
+            if (onEnter?.invoke(path) == false) {
+                // skip this directory
+                return gotoNext()
+            }
+            if (depth < maxDepth) {
+                var failed = false
+                try {
+                    val entries = path.listDirectoryEntries()
+                    queue.addAll(entries)
+                } catch (e: IOException) { // NotDirectoryException is also an IOException
+                    onFail?.invoke(path, e)
+                    failed = true
+                }
+                if (failed) return gotoNext()
+            }
+            return if (excludeDirectories) gotoNext() else path
+        }
     }
 
     /**
@@ -231,14 +255,14 @@ public class PathTreeWalk private constructor(
      * Thus any changes in the directory won't affect the list of visited immediate children.
      */
     public fun onEnter(function: (Path) -> Boolean): PathTreeWalk {
-        return PathTreeWalk(start, direction, linkOptions, onEnter = function, onLeave, onFail, maxDepth)
+        return PathTreeWalk(start, options, onEnter = function, onLeave, onFail, maxDepth)
     }
 
     /**
      * Sets a callback [function], that is called on any left directory after its files are visited and after it is visited itself.
      */
     public fun onLeave(function: (Path) -> Unit): PathTreeWalk {
-        return PathTreeWalk(start, direction, linkOptions, onEnter, onLeave = function, onFail, maxDepth)
+        return PathTreeWalk(start, options, onEnter, onLeave = function, onFail, maxDepth)
     }
 
     /**
@@ -248,7 +272,7 @@ public class PathTreeWalk private constructor(
      * and [onLeave] callback function is called after the specified [function] if the latter doesn't throw.
      */
     public fun onFail(function: (Path, IOException) -> Unit): PathTreeWalk {
-        return PathTreeWalk(start, direction, linkOptions, onEnter, onLeave, onFail = function, maxDepth)
+        return PathTreeWalk(start, options, onEnter, onLeave, onFail = function, maxDepth)
     }
 
     /**
@@ -262,34 +286,15 @@ public class PathTreeWalk private constructor(
     public fun maxDepth(depth: Int): PathTreeWalk {
         if (depth <= 0)
             throw IllegalArgumentException("depth must be positive, but was $depth.")
-        return PathTreeWalk(start, direction, linkOptions, onEnter, onLeave, onFail, maxDepth = depth)
+        return PathTreeWalk(start, options, onEnter, onLeave, onFail, maxDepth = depth)
     }
 }
 
 /**
  * Gets a sequence for visiting this directory and all its content.
  *
- * @param direction walk direction, top-down (by default) or bottom-up.
- * @param followLinks `true` to follow to the directory a symbolic link points to and visit all its content,
- * `false` (by default) to not follow through symbolic links.
+ * By default only files are visited, in depth-first search order, and symbolic links are not followed.
+ * The combination of [options] (see [PathWalkOption]) overrides the default behavior.
  */
-public fun Path.walk(direction: PathWalkDirection = PathWalkDirection.TOP_DOWN, followLinks: Boolean = false): PathTreeWalk =
-    PathTreeWalk(this, direction, followLinks)
-
-/**
- * Gets a sequence for visiting this directory and all its content in top-down order.
- * Depth-first search is used and directories are visited before all their files.
- *
- * @param followLinks `true` to follow to the directory a symbolic link points to and visit all its content,
- * `false` (by default) to not follow through symbolic links.
- */
-public fun Path.walkTopDown(followLinks: Boolean = false): PathTreeWalk = walk(PathWalkDirection.TOP_DOWN, followLinks)
-
-/**
- * Gets a sequence for visiting this directory and all its content in bottom-up order.
- * Depth-first search is used and directories are visited after all their files.
- *
- * @param followLinks `true` to follow to the directory a symbolic link points to and visit all its content,
- * `false` (by default) to not follow through symbolic links.
- */
-public fun Path.walkBottomUp(followLinks: Boolean = false): PathTreeWalk = walk(PathWalkDirection.BOTTOM_UP, followLinks)
+public fun Path.walk(vararg options: PathWalkOption): PathTreeWalk =
+    PathTreeWalk(this, options)
