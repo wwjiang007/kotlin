@@ -5,19 +5,16 @@
 
 package org.jetbrains.kotlin.gradle.plugin.mpp.pm20
 
-import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.FileCollection
 import org.gradle.api.publish.maven.MavenPublication
-import org.gradle.api.tasks.TaskProvider
-import org.gradle.api.tasks.bundling.AbstractArchiveTask
-import org.jetbrains.kotlin.gradle.plugin.*
+import org.jetbrains.kotlin.gradle.plugin.KotlinCompilationOutput
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 import org.jetbrains.kotlin.gradle.plugin.mpp.DefaultKotlinCompilationOutput
 import org.jetbrains.kotlin.gradle.plugin.mpp.MavenPublicationCoordinatesProvider
 import org.jetbrains.kotlin.gradle.plugin.mpp.pm20.util.ComputedCapability
 import org.jetbrains.kotlin.gradle.plugin.mpp.publishedConfigurationName
-import org.jetbrains.kotlin.gradle.tasks.withType
 import org.jetbrains.kotlin.gradle.utils.dashSeparatedName
 import org.jetbrains.kotlin.project.model.KotlinAttributeKey
 import org.jetbrains.kotlin.project.model.KotlinPlatformTypeAttribute
@@ -30,11 +27,14 @@ abstract class KotlinGradleVariantInternal(
     override val variantAttributes: Map<KotlinAttributeKey, String>
         get() = mapOf(KotlinPlatformTypeAttribute to kotlinPlatformTypeAttributeFromPlatform(platformType)) // TODO user attributes
 
-    // TODO generalize with KotlinCompilation?
-    override val compileDependencyConfigurationName: String
-        get() = disambiguateName("CompileDependencies")
-
-    override lateinit var compileDependencyFiles: FileCollection
+    internal val compileDependencyFilesHolder =
+        project.newDependencyFilesHolder(disambiguateName("CompileDependencies"))
+    override val compileDependencyConfigurationName: String get() = compileDependencyFilesHolder.dependencyConfigurationName
+    override var compileDependencyFiles: FileCollection
+        get() = compileDependencyFilesHolder.dependencyFiles
+        set(value) {
+            compileDependencyFilesHolder.dependencyFiles = value
+        }
 
     internal abstract val compilationData: KotlinVariantCompilationDataInternal<*>
 
@@ -92,11 +92,13 @@ abstract class KotlinGradleVariantWithRuntimeInternal(
     containingModule: KotlinGradleModule,
     fragmentName: String
 ) : KotlinGradleVariantInternal(containingModule, fragmentName), KotlinGradleVariantWithRuntime {
-    // TODO deduplicate with KotlinCompilation?
-    override val runtimeDependencyConfigurationName: String
-        get() = disambiguateName("RuntimeDependencies")
-
-    override lateinit var runtimeDependencyFiles: FileCollection
+    internal val runtimeDependencyFilesHolder = project.newDependencyFilesHolder(disambiguateName("RuntimeDependencies"))
+    override val runtimeDependencyConfigurationName: String get() = runtimeDependencyFilesHolder.dependencyConfigurationName
+    override var runtimeDependencyFiles: FileCollection
+        get() = runtimeDependencyFilesHolder.dependencyFiles
+        set(value) {
+            runtimeDependencyFilesHolder.dependencyFiles = value
+        }
 
     override val runtimeFiles: ConfigurableFileCollection = project.files(
         listOf(
