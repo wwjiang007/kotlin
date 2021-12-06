@@ -1,17 +1,22 @@
 // !DIAGNOSTICS: -UNUSED_PARAMETER -UNUSED_VARIABLE -UNUSED_EXPRESSION
+// FULL_JDK
+// FILE: DataIndexer.java
+import java.util.Map;
+import org.jetbrains.annotations.NotNull;
 
-interface Bound1
-interface Bound2
-object First : Bound1, Bound2
-object Second : Bound1, Bound2
-
-fun <S : Bound1> select(vararg args: S): S = TODO()
-
-class Cls {
-    val property = select(First, Second)
+public interface DataIndexer<Key, Value, Data> {
+    @NotNull
+    Map<Key, Value> map(@NotNull Data var1);
 }
 
-fun test() {
-    val v = Cls().property
-    v
+// FILE: main.kt
+import java.util.*
+
+interface A
+interface B
+
+private val INDEXER = DataIndexer { inputData: A ->
+    val result = HashMap<B, Void?>()
+
+    result
 }
