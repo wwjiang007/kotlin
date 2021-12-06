@@ -216,6 +216,7 @@ class FakeOverrideGenerator(
                 val firstOverride = allOverrides?.first()
                 if (firstOverride == null || originalDeclaration.baseForIntersectionOverride === firstOverride) {
                     // Just take it, it's from the first supertype or from the only supertype
+                    declarationStorage.saveFakeOverrideInClass(irClass, baseSymbol.fir, originalDeclaration)
                     originalDeclaration to computeBaseSymbols(originalSymbol, computeDirectOverridden, scope, classLookupTag)
                 } else {
                     // According to BE rules we have to replace it with fake override based on the first supertype
