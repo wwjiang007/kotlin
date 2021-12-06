@@ -133,6 +133,6 @@ public abstract class KtAnalysisSession(final override val token: ValidityToken)
 
     @PublishedApi
     internal val typesCreator: KtTypeCreator
-        get() = typesCreatorImpl
+        get() = typesCreatorImpl.also { it.hashCode() }
     protected abstract val typesCreatorImpl: KtTypeCreator
 }

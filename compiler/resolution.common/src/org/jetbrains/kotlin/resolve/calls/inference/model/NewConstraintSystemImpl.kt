@@ -40,6 +40,8 @@ class NewConstraintSystemImpl(
 
     private var couldBeResolvedWithUnrestrictedBuilderInference: Boolean = false
 
+    override var completionRun: Boolean = false
+
     private enum class State {
         BUILDING,
         TRANSACTION,
@@ -100,7 +102,11 @@ class NewConstraintSystemImpl(
         storage.missedConstraints.add(position to constraints)
     }
 
-    override fun asConstraintSystemCompleterContext() = apply { checkState(State.BUILDING) }
+    override fun asConstraintSystemCompleterContext() = apply {
+        checkState(State.BUILDING)
+
+        this.completionRun = true
+    }
 
     override fun asPostponedArgumentsAnalyzerContext() = apply { checkState(State.BUILDING) }
 

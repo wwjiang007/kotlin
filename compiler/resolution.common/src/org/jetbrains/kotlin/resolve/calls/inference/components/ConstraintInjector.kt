@@ -34,6 +34,7 @@ class ConstraintInjector(
         val notFixedTypeVariables: MutableMap<TypeConstructorMarker, MutableVariableWithConstraints>
         val fixedTypeVariables: MutableMap<TypeConstructorMarker, KotlinTypeMarker>
         val constraintsFromAllForks: MutableList<Pair<IncorporationConstraintPosition, List<Set<Pair<TypeVariableMarker, Constraint>>>>>
+        val completionRun: Boolean
 
         fun addInitialConstraint(initialConstraint: InitialConstraint)
         fun addError(error: ConstraintSystemError)
@@ -42,6 +43,8 @@ class ConstraintInjector(
             position: IncorporationConstraintPosition,
             constraints: MutableList<Pair<TypeVariableMarker, Constraint>>
         )
+
+        fun processForkConstraints()
     }
 
     fun addInitialSubtypeConstraint(c: Context, lowerType: KotlinTypeMarker, upperType: KotlinTypeMarker, position: ConstraintPosition) {
@@ -158,6 +161,9 @@ class ConstraintInjector(
             typeCheckerState.extractConstraintsFromAllForks()?.let { forkData ->
                 forkData.mapTo(c.constraintsFromAllForks) { constraintSets ->
                     typeCheckerState.position to constraintSets.mapTo(SmartList()) { it.toSet() }
+                }
+                if (c.completionRun) {
+                    c.processForkConstraints()
                 }
             }
         }
