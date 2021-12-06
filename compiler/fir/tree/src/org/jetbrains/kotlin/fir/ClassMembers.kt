@@ -5,10 +5,8 @@
 
 package org.jetbrains.kotlin.fir
 
-import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.declarations.utils.isLocal
-import org.jetbrains.kotlin.fir.declarations.utils.modality
 import org.jetbrains.kotlin.fir.symbols.ConeClassLikeLookupTag
 import org.jetbrains.kotlin.fir.symbols.impl.FirCallableSymbol
 import org.jetbrains.kotlin.fir.types.ConeClassLikeType
@@ -36,10 +34,12 @@ fun FirRegularClass.containingClassForLocal(): ConeClassLikeLookupTag? =
     if (isLocal) containingClassForLocalAttr else null
 
 private object ContainingClassKey : FirDeclarationDataKey()
+
 var FirCallableDeclaration.containingClassForStaticMemberAttr: ConeClassLikeLookupTag? by FirDeclarationDataRegistry.data(ContainingClassKey)
 var FirRegularClass.containingClassForLocalAttr: ConeClassLikeLookupTag? by FirDeclarationDataRegistry.data(ContainingClassKey)
 
 private object IsNewPlaceForBodyGeneration : FirDeclarationDataKey()
+
 var FirRegularClass.isNewPlaceForBodyGeneration: Boolean? by FirDeclarationDataRegistry.data(IsNewPlaceForBodyGeneration)
 
 val FirCallableDeclaration.isIntersectionOverride: Boolean get() = origin == FirDeclarationOrigin.IntersectionOverride
