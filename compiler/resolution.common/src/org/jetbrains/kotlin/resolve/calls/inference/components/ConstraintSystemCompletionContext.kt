@@ -35,4 +35,5 @@ interface ConstraintSystemCompletionContext : VariableFixationFinder.Context, Re
     fun asConstraintSystemCompletionContext(): ConstraintSystemCompletionContext
 
     fun couldBeResolvedWithUnrestrictedBuilderInference(): Boolean
+    fun processForkConstraints()
 }
