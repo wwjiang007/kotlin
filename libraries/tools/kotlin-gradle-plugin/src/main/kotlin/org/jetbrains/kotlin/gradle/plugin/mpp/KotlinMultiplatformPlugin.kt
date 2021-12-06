@@ -100,9 +100,10 @@ class KotlinMultiplatformPlugin : Plugin<Project> {
             KotlinMetadataTargetPreset(project),
             METADATA_TARGET_NAME
         )
-        configurePublishingWithMavenPublish(project)
-
-        targetsContainer.withType(AbstractKotlinTarget::class.java).all { applyUserDefinedAttributes(it) }
+        if (!project.hasKpmModel) {
+            configurePublishingWithMavenPublish(project)
+            targetsContainer.withType(AbstractKotlinTarget::class.java).all { applyUserDefinedAttributes(it) }
+        }
 
         // propagate compiler plugin options to the source set language settings
         setupAdditionalCompilerArguments(project)
