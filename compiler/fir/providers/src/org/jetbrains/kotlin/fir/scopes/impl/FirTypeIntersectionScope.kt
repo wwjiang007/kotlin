@@ -58,7 +58,7 @@ class FirTypeIntersectionScope private constructor(
         }
     }
 
-    private inline fun <D : FirCallableSymbol<*>> processCallablesByName(
+    private inline fun <reified D : FirCallableSymbol<*>> processCallablesByName(
         name: Name,
         noinline processor: (D) -> Unit,
         absentNames: MutableSet<Name>,
@@ -120,8 +120,8 @@ class FirTypeIntersectionScope private constructor(
                 @Suppress("UNCHECKED_CAST")
                 processor(intersectionOverride.member as D)
             } else {
-                val mostSpecific = baseMembersForIntersection.single().member
-                if (extractedOverrides.size > 1) {
+                val (mostSpecific, scopeForMostSpecific) = baseMembersForIntersection.single()
+                val mostSpecificOrIntersection = if (extractedOverrides.size > 1) {
                     val allOverrides = extractedOverrides.mapNotNull {
                         if (it.member !== mostSpecific) it.member.fir
                         else mostSpecific.fir.originalForSubstitutionOverride
@@ -130,11 +130,27 @@ class FirTypeIntersectionScope private constructor(
                         // Necessary for BE only, to store all overrides for "trivial" intersections like
                         //   class Intermediate : Base
                         //   class Derived : Intermediate(), Base
-                        mostSpecific.fir.allOverridesForSubstitutionOverrideAttr = allOverrides
+                        val intersectionOverride = intersectionOverrides.getValue(
+                            mostSpecific,
+                            FirIntersectionOverrideStorage.ContextForIntersectionOverrideConstruction(
+                                this,
+                                baseMembersForIntersection,
+                                scopeForMostSpecific
+                            )
+                        )
+                        intersectionOverride.member.fir.originalForIntersectionOverrideAttr =
+                            mostSpecific.fir.originalForSubstitutionOverride ?: mostSpecific.fir
+                        intersectionOverride.member.fir.allOverridesForIntersectionOverrideAttr = allOverrides
+                        @Suppress("UNCHECKED_CAST")
+                        intersectionOverride.member as D
+                    } else {
+                        mostSpecific
                     }
+                } else {
+                    mostSpecific
                 }
-                overriddenSymbols[mostSpecific] = extractedOverrides
-                processor(mostSpecific)
+                overriddenSymbols[mostSpecificOrIntersection] = extractedOverrides
+                processor(mostSpecificOrIntersection)
             }
         }
 

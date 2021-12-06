@@ -212,15 +212,15 @@ class FakeOverrideGenerator(
             originalSymbol.shouldHaveComputedBaseSymbolsForClass(classLookupTag) -> {
                 // Substitution or intersection case
                 // We have already a FIR declaration for such fake override
-                val allOverrides = originalDeclaration.allOverridesForSubstitutionOverrideAttr
+                val allOverrides = originalDeclaration.allOverridesForIntersectionOverrideAttr
                 val firstOverride = allOverrides?.first()
-                if (firstOverride == null || originalDeclaration.originalForSubstitutionOverride === firstOverride) {
+                if (firstOverride == null || originalDeclaration.baseForIntersectionOverride === firstOverride) {
                     // Just take it, it's from the first supertype or from the only supertype
                     originalDeclaration to computeBaseSymbols(originalSymbol, computeDirectOverridden, scope, classLookupTag)
                 } else {
                     // According to BE rules we have to replace it with fake override based on the first supertype
                     val fakeOverrideSymbol = createFakeOverrideSymbol(firstOverride, baseSymbol, originalDeclaration.modality)
-                    (fakeOverrideSymbol.fir as FirCallableDeclaration).allOverridesForSubstitutionOverrideAttr = allOverrides
+                    (fakeOverrideSymbol.fir as FirCallableDeclaration).allOverridesForIntersectionOverrideAttr = allOverrides
                     declarationStorage.saveFakeOverrideInClass(irClass, firstOverride, fakeOverrideSymbol.fir)
                     classifierStorage.preCacheTypeParameters(originalDeclaration)
                     remapOriginalDeclaration = true
@@ -269,17 +269,15 @@ class FakeOverrideGenerator(
         scope: FirTypeScope,
         containingClass: ConeClassLikeLookupTag,
     ): List<S> {
-        val allOverrides = symbol.fir.allOverridesForSubstitutionOverrideAttr
         if (symbol.fir.origin == FirDeclarationOrigin.SubstitutionOverride) {
-            return allOverrides?.map {
-                (if (it.isSubstitutionOverride && it.dispatchReceiverClassOrNull() == containingClass)
-                    it.originalForSubstitutionOverride!!.symbol
-                else
-                    it.symbol) as S
-            } ?: listOf(symbol.originalForSubstitutionOverride!!)
+            return listOf(symbol.originalForSubstitutionOverride!!)
         }
-
-        return scope.directOverridden(symbol).map {
+        return symbol.fir.allOverridesForIntersectionOverrideAttr?.map {
+            (if (it.isSubstitutionOverride && it.dispatchReceiverClassOrNull() == containingClass)
+                it.originalForSubstitutionOverride!!.symbol
+            else
+                it.symbol) as S
+        } ?: scope.directOverridden(symbol).map {
             // Unwrapping should happen only for fake overrides members from the same class, not from supertypes
             if (it.fir.isSubstitutionOverride && it.dispatchReceiverClassOrNull() == containingClass)
                 it.originalForSubstitutionOverride!!

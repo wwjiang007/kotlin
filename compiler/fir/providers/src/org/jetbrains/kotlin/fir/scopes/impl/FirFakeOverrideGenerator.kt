@@ -119,7 +119,7 @@ object FirFakeOverrideGenerator {
             ).filterIsInstance<FirTypeParameter>()
             deprecation = baseFunction.deprecation
         }.apply {
-            allOverridesForSubstitutionOverrideAttr = null
+            allOverridesForIntersectionOverrideAttr = null
         }
     }
 
@@ -322,7 +322,7 @@ object FirFakeOverrideGenerator {
             )
             deprecation = baseProperty.deprecation
         }.apply {
-            allOverridesForSubstitutionOverrideAttr = null
+            allOverridesForIntersectionOverrideAttr = null
         }
     }
 

@@ -97,7 +97,7 @@ var <D : FirCallableDeclaration>
 private object AllOverridesForSubstitutionOverrideKey : FirDeclarationDataKey()
 
 var <D : FirCallableDeclaration>
-        D.allOverridesForSubstitutionOverrideAttr: List<D>? by FirDeclarationDataRegistry.data(AllOverridesForSubstitutionOverrideKey)
+        D.allOverridesForIntersectionOverrideAttr: List<D>? by FirDeclarationDataRegistry.data(AllOverridesForSubstitutionOverrideKey)
 
 private object IntersectionOverrideOriginalKey : FirDeclarationDataKey()
 
