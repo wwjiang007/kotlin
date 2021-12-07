@@ -498,6 +498,8 @@ interface TypeSystemContext : TypeSystemOptimizationContext {
 
     fun KotlinTypeMarker.getAttributes(): List<AnnotationMarker>
 
+    fun KotlinTypeMarker.hasCustomAttributes(): Boolean
+
     fun KotlinTypeMarker.getCustomAttributes(): List<AnnotationMarker>
 
     fun substitutionSupertypePolicy(type: SimpleTypeMarker): TypeCheckerState.SupertypesPolicy

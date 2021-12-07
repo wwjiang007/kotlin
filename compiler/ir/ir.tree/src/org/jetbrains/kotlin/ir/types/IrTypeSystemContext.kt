@@ -398,6 +398,10 @@ interface IrTypeSystemContext : TypeSystemContext, TypeSystemCommonSuperTypesCon
         return this.annotations.map { object : AnnotationMarker, IrElement by it {} }
     }
 
+    override fun KotlinTypeMarker.hasCustomAttributes(): Boolean {
+        return false
+    }
+
     override fun KotlinTypeMarker.getCustomAttributes(): List<AnnotationMarker> {
         require(this is IrType)
         return emptyList()

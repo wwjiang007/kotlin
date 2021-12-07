@@ -663,6 +663,11 @@ interface ClassicTypeSystemContext : TypeSystemInferenceExtensionContext, TypeSy
         return this.attributes.toList()
     }
 
+    override fun KotlinTypeMarker.hasCustomAttributes(): Boolean {
+        require(this is KotlinType, this::errorMessage)
+        return this.attributes.size > 1
+    }
+
     override fun KotlinTypeMarker.getCustomAttributes(): List<AnnotationMarker> {
         require(this is KotlinType, this::errorMessage)
         return this.attributes.filterNot { it is AnnotationsTypeAttribute }
