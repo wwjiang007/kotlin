@@ -13,7 +13,6 @@ import org.jetbrains.kotlin.backend.common.lower.inline.LocalClassesInInlineFunc
 import org.jetbrains.kotlin.backend.common.lower.inline.LocalClassesInInlineLambdasLowering
 import org.jetbrains.kotlin.backend.common.lower.loops.ForLoopsLowering
 import org.jetbrains.kotlin.backend.common.lower.optimizations.FoldConstantLowering
-import org.jetbrains.kotlin.backend.common.lower.optimizations.PropertyAccessorInlineLowering
 import org.jetbrains.kotlin.backend.common.phaser.*
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.backend.js.codegen.JsGenerationGranularity
@@ -189,12 +188,6 @@ private val stripTypeAliasDeclarationsPhase = makeDeclarationTransformerPhase(
     { StripTypeAliasDeclarationsLowering() },
     name = "StripTypeAliasDeclarations",
     description = "Strip typealias declarations"
-)
-
-private val jsCodeOutliningPhase = makeBodyLoweringPhase(
-    ::JsCodeOutliningLowering,
-    name = "JsCodeOutliningLowering",
-    description = "Outline js() calls where JS code references Kotlin locals"
 )
 
 private val arrayConstructorReferencePhase = makeBodyLoweringPhase(
@@ -810,7 +803,6 @@ val loweringList = listOf<Lowering>(
     annotationInstantiationLowering,
     expectDeclarationsRemovingPhase,
     stripTypeAliasDeclarationsPhase,
-    jsCodeOutliningPhase,
     arrayConstructorReferencePhase,
     arrayConstructorPhase,
     lateinitNullableFieldsPhase,
