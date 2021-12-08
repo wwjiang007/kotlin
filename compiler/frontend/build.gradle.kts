@@ -26,5 +26,5 @@ sourceSets {
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-    kotlinOptions.freeCompilerArgs += "-Xjvm-default=compatibility"
+    kotlinOptions.freeCompilerArgs += "-Xjvm-default=all"
 }
