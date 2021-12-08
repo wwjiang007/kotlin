@@ -172,6 +172,11 @@ object Renderers {
     }
 
     @JvmField
+    val DELEGATED_MEMBERS = Renderer { members: Collection<CallableMemberDescriptor> ->
+        renderAmbiguousDescriptors(members)
+    }
+
+    @JvmField
     val AMBIGUOUS_CALLS = Renderer { calls: Collection<ResolvedCall<*>> ->
         val descriptors = calls.map { it.resultingDescriptor }
         renderAmbiguousDescriptors(descriptors)

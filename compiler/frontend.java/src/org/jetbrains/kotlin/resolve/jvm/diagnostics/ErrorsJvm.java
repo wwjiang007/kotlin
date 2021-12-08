@@ -13,6 +13,8 @@ import org.jetbrains.kotlin.name.FqName;
 import org.jetbrains.kotlin.psi.*;
 import org.jetbrains.kotlin.types.KotlinType;
 
+import java.util.Collection;
+
 import static org.jetbrains.kotlin.diagnostics.PositioningStrategies.*;
 import static org.jetbrains.kotlin.diagnostics.Severity.ERROR;
 import static org.jetbrains.kotlin.diagnostics.Severity.WARNING;
@@ -187,6 +189,8 @@ public interface ErrorsJvm {
 
     DiagnosticFactory0<PsiElement> TYPEOF_SUSPEND_TYPE = DiagnosticFactory0.create(ERROR);
     DiagnosticFactory1<PsiElement, String> TYPEOF_NON_REIFIED_TYPE_PARAMETER_WITH_RECURSIVE_BOUND = DiagnosticFactory1.create(ERROR);
+
+    DiagnosticFactory1<PsiElement, Collection<FunctionDescriptor>> DELEGATION_TO_JAVA_DEFAULT_METHODS = DiagnosticFactory1.create(WARNING);
 
     @SuppressWarnings("UnusedDeclaration")
     Object _initializer = new Object() {

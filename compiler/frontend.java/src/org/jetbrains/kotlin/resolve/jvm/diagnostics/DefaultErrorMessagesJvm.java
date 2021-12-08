@@ -223,6 +223,10 @@ public class DefaultErrorMessagesJvm implements DefaultErrorMessages.Extension {
 
         MAP.put(TYPEOF_SUSPEND_TYPE, "Suspend functional types are not supported in typeOf");
         MAP.put(TYPEOF_NON_REIFIED_TYPE_PARAMETER_WITH_RECURSIVE_BOUND, "Non-reified type parameters with recursive bounds are not supported yet: {0}", STRING);
+
+        MAP.put(DELEGATION_TO_JAVA_DEFAULT_METHODS,
+                "Delegated members listed below are default Java methods. Behavior will change for implicitly delegated default Java methods in 1.8. " +
+                "Please either use @DelegateToDefaults, or override the methods manually: {0}", DELEGATED_MEMBERS);
     }
 
     @NotNull

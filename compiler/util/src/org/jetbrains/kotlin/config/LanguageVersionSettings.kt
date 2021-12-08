@@ -244,6 +244,7 @@ enum class LanguageFeature(
     ConsiderExtensionReceiverFromConstrainsInLambda(KOTLIN_1_7, kind = BUG_FIX), // KT-49832
     ProperInternalVisibilityCheckInImportingScope(KOTLIN_1_7, kind = BUG_FIX),
     InlineClassImplementationByDelegation(KOTLIN_1_7),
+    WarnOnDelegationToJvmDefaultInterfaceMembers(KOTLIN_1_7, kind = BUG_FIX),
 
     // 1.8
 
