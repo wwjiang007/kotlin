@@ -25,7 +25,7 @@ dependencies {
     testRuntimeOnly("xerces:xercesImpl:2.12.0")
     testRuntimeOnly(intellijPluginDep("java"))
 
-    testApi(commonDep("junit:junit"))
+    testApi(commonDependency("junit:junit"))
     testCompileOnly(project(":kotlin-test:kotlin-test-jvm"))
     testCompileOnly(project(":kotlin-test:kotlin-test-junit"))
     testApi(projectTests(":compiler:tests-common"))

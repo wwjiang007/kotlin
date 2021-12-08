@@ -11,7 +11,7 @@ val embeddableTestRuntime by configurations.creating {
 }
 
 dependencies {
-    testApi(commonDep("junit"))
+    testApi(commonDependency("junit"))
     testCompileOnly(project(":kotlin-scripting-jvm-host-unshaded"))
     testCompileOnly(project(":compiler:cli"))
     testCompileOnly(project(":core:util.runtime"))
@@ -20,7 +20,7 @@ dependencies {
     testRuntimeOnly(project(":kotlin-compiler"))
     testRuntimeOnly(project(":kotlin-reflect"))
 
-    embeddableTestRuntime(commonDep("junit"))
+    embeddableTestRuntime(commonDependency("junit"))
     embeddableTestRuntime(project(":kotlin-scripting-jsr223"))
     embeddableTestRuntime(project(":kotlin-scripting-compiler-embeddable"))
     embeddableTestRuntime(testSourceSet.output)
