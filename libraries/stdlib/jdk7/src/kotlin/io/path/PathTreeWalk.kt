@@ -9,8 +9,8 @@
 package kotlin.io.path
 
 import java.io.IOException
-import java.nio.file.LinkOption
-import java.nio.file.Path
+import java.nio.file.*
+import java.nio.file.attribute.BasicFileAttributeView
 
 
 /**
@@ -38,22 +38,10 @@ public enum class PathWalkOption {
  * If the file path given is just a file, walker iterates only it.
  * If the file path given does not exist, walker iterates nothing, i.e. it's equivalent to an empty sequence.
  */
-public class PathTreeWalk private constructor(
+private class PathTreeWalk(
     private val start: Path,
-    private val options: Array<out PathWalkOption>,
-    private val onEnter: ((Path) -> Boolean)?,
-    private val onLeave: ((Path) -> Unit)?,
-    private val onFail: ((f: Path, e: IOException) -> Unit)?,
-    private val maxDepth: Int = Int.MAX_VALUE
+    private val options: Array<out PathWalkOption>
 ) : Sequence<Path> {
-
-    internal constructor(start: Path, options: Array<out PathWalkOption>) : this(
-        start,
-        options,
-        onEnter = null,
-        onLeave = null,
-        onFail = null
-    )
 
     init {
         val isBFS = options.contains(PathWalkOption.BFS)
@@ -110,8 +98,6 @@ public class PathTreeWalk private constructor(
                 if (path == topState.root || !path.isDirectory(*linkOptions)) {
                     // Proceed to a root directory or a simple file
                     return path
-                } else if (state.size >= maxDepth) {
-                    return if (excludeDirectories) gotoNext() else path
                 } else {
                     // Proceed to a sub-directory
                     state.add(DirectoryState(path))
@@ -123,7 +109,6 @@ public class PathTreeWalk private constructor(
         /** Visiting in bottom-up order */
         private inner class DirectoryState(rootDir: Path) : WalkState(rootDir) {
 
-            private var invokeOnEnter = true
             private var visitRootBefore = options.contains(PathWalkOption.INCLUDE_DIRECTORIES_BEFORE)
             private var visitRootAfter = options.contains(PathWalkOption.INCLUDE_DIRECTORIES_AFTER)
 
@@ -134,14 +119,6 @@ public class PathTreeWalk private constructor(
             private var failed = false
 
             override fun step(): Path? {
-                if (invokeOnEnter) {
-                    invokeOnEnter = false
-
-                    if (onEnter?.invoke(root) == false) {
-                        // skip this directory
-                        return null
-                    }
-                }
                 if (visitRootBefore) {
                     visitRootBefore = false
                     // visit the root dir before entries
@@ -149,10 +126,11 @@ public class PathTreeWalk private constructor(
                 }
                 if (!failed && fileList == null) {
                     try {
+                        // TODO: the path may have been deleted using deleteRecursively applied to the parent path
                         fileList = root.listDirectoryEntries()
                     } catch (e: IOException) { // NotDirectoryException is also an IOException
-                        onFail?.invoke(root, e)
                         failed = true
+                        throw e
                     }
                 }
                 if (fileList != null && fileIndex < fileList!!.size) {
@@ -166,7 +144,6 @@ public class PathTreeWalk private constructor(
                 }
 
                 // That's all
-                onLeave?.invoke(root)
                 return null
             }
         }
@@ -213,6 +190,7 @@ public class PathTreeWalk private constructor(
         private tailrec fun gotoNext(): Path? {
             if (queue.isEmpty()) return null
 
+            // TODO: the path may have been deleted using deleteRecursively applied to the parent path
             val path = queue.removeFirst()
 
             if (path == null) {
@@ -226,67 +204,10 @@ public class PathTreeWalk private constructor(
             if (!path.isDirectory(*linkOptions)) {
                 return path
             }
-            if (onEnter?.invoke(path) == false) {
-                // skip this directory
-                return gotoNext()
-            }
-            if (depth < maxDepth) {
-                var failed = false
-                try {
-                    val entries = path.listDirectoryEntries()
-                    queue.addAll(entries)
-                } catch (e: IOException) { // NotDirectoryException is also an IOException
-                    onFail?.invoke(path, e)
-                    failed = true
-                }
-                if (failed) return gotoNext()
-            }
+            val entries = path.listDirectoryEntries() // Don't catch IOExceptions
+            queue.addAll(entries)
             return if (excludeDirectories) gotoNext() else path
         }
-    }
-
-    /**
-     * Sets a predicate [function], that is called on any entered directory before its files are visited
-     * and before it is visited itself.
-     *
-     * If the [function] returns `false` the directory is not entered and neither it nor its files are visited.
-     *
-     * When a directory is entered, all its files are retrieved eagerly.
-     * Thus any changes in the directory won't affect the list of visited immediate children.
-     */
-    public fun onEnter(function: (Path) -> Boolean): PathTreeWalk {
-        return PathTreeWalk(start, options, onEnter = function, onLeave, onFail, maxDepth)
-    }
-
-    /**
-     * Sets a callback [function], that is called on any left directory after its files are visited and after it is visited itself.
-     */
-    public fun onLeave(function: (Path) -> Unit): PathTreeWalk {
-        return PathTreeWalk(start, options, onEnter, onLeave = function, onFail, maxDepth)
-    }
-
-    /**
-     * Set a callback [function], that is called on a directory when it's impossible to get its file list.
-     *
-     * The provided [function] is called after [onEnter] callback function,
-     * and [onLeave] callback function is called after the specified [function] if the latter doesn't throw.
-     */
-    public fun onFail(function: (Path, IOException) -> Unit): PathTreeWalk {
-        return PathTreeWalk(start, options, onEnter, onLeave, onFail = function, maxDepth)
-    }
-
-    /**
-     * Sets the maximum [depth] of a directory tree to traverse. By default there is no limit.
-     *
-     * The value must be positive and [Int.MAX_VALUE] is used to specify an unlimited depth.
-     *
-     * With a value of 1, walker visits only the origin directory and all its immediate children,
-     * with a value of 2 also grandchildren, etc.
-     */
-    public fun maxDepth(depth: Int): PathTreeWalk {
-        if (depth <= 0)
-            throw IllegalArgumentException("depth must be positive, but was $depth.")
-        return PathTreeWalk(start, options, onEnter, onLeave, onFail, maxDepth = depth)
     }
 }
 
@@ -296,5 +217,147 @@ public class PathTreeWalk private constructor(
  * By default only files are visited, in depth-first search order, and symbolic links are not followed.
  * The combination of [options] (see [PathWalkOption]) overrides the default behavior.
  */
-public fun Path.walk(vararg options: PathWalkOption): PathTreeWalk =
-    PathTreeWalk(this, options)
+public fun Path.walk(vararg options: PathWalkOption): Sequence<Path> = PathTreeWalk(this, options)
+
+public fun Path.walk(visitor: PathTreeVisitor, followLinks: Boolean = false): Unit = visitor.walk(this, followLinks)
+
+
+public class PathTreeVisitor private constructor(
+    private val onFile: ((Path) -> Unit)?,
+    private val onEnter: ((Path) -> Boolean)?,
+    private val onLeave: ((Path) -> Unit)?,
+    private val onFail: ((f: Path, e: IOException) -> Unit)?,
+    private val maxDepth: Int = Int.MAX_VALUE
+) {
+    public constructor() : this(
+        onFile = null,
+        onEnter = null,
+        onLeave = null,
+        onFail = null
+    )
+
+    public fun onFile(function: (Path) -> Unit): PathTreeVisitor {
+        return PathTreeVisitor(onFile = function, onEnter, onLeave, onFail, maxDepth)
+    }
+
+    public fun onEnterDirectory(function: (Path) -> Boolean): PathTreeVisitor {
+        return PathTreeVisitor(onFile, onEnter = function, onLeave, onFail, maxDepth)
+    }
+
+    public fun onLeaveDirectory(function: (Path) -> Unit): PathTreeVisitor {
+        return PathTreeVisitor(onFile, onEnter, onLeave = function, onFail, maxDepth)
+    }
+
+    public fun onFail(function: (Path, IOException) -> Unit): PathTreeVisitor {
+        return PathTreeVisitor(onFile, onEnter, onLeave, onFail = function, maxDepth)
+    }
+
+    public fun maxDepth(depth: Int): PathTreeVisitor {
+        if (depth <= 0)
+            throw IllegalArgumentException("depth must be positive, but was $depth.")
+        return PathTreeVisitor(onFile, onEnter, onLeave, onFail, maxDepth = depth)
+    }
+
+    internal fun walk(path: Path, followLinks: Boolean): Unit {
+        val linkOptions = LinkFollowing.toOptions(followLinks)
+
+        if (path.isDirectory(*linkOptions)) {
+            if (onEnter?.invoke(path) == false) {
+                return
+            }
+        } else {
+            if (path.exists(LinkOption.NOFOLLOW_LINKS)) {
+                onFile?.invoke(path)
+            }
+            return
+        }
+
+        try {
+            // test start symlink to a directory
+            // behavior not documented for symlinks
+            Files.newDirectoryStream(path).use { directoryStream ->
+                if (directoryStream is SecureDirectoryStream) {
+                    directoryStream.walkEntries(linkOptions, 1)
+                } else {
+                    directoryStream.walkEntries(linkOptions, 1)
+                }
+            }
+        } catch (e: IOException) {
+            // should SecurityException be also caught and passed to onFail?
+            onFail?.invoke(path, e)
+        }
+
+        onLeave?.invoke(path)
+
+        /* catch (_: NotDirectoryException) {
+            // test a file with limited read access
+            // test a non-existent file
+            // test a non-existent directory
+            if (start.exists(LinkOption.NOFOLLOW_LINKS)) {
+                onFile?.invoke(start)
+            }
+        }*/
+    }
+
+    // secure walk
+
+    private fun SecureDirectoryStream<Path>.walkEntries(linkOptions: Array<LinkOption>, depth: Int) {
+        for (entry in this) {
+            if (isDirectory(entry, linkOptions)) {
+                enterDirectory(entry, linkOptions, depth)
+            } else {
+                onFile?.invoke(entry)
+            }
+        }
+    }
+
+    private fun SecureDirectoryStream<Path>.enterDirectory(path: Path, linkOptions: Array<LinkOption>, depth: Int) {
+        if (onEnter?.invoke(path) == false) {
+            return
+        }
+
+        if (depth < maxDepth) {
+            try {
+                newDirectoryStream(path).use { it.walkEntries(linkOptions, depth + 1) }
+            } catch (e: IOException) {
+                // should SecurityException be also caught and passed to onFail?
+                onFail?.invoke(path, e)
+            }
+        }
+
+        onLeave?.invoke(path)
+    }
+
+    private fun SecureDirectoryStream<Path>.isDirectory(path: Path, linkOptions: Array<LinkOption>): Boolean {
+        return getFileAttributeView(path, BasicFileAttributeView::class.java, *linkOptions).readAttributes().isDirectory
+    }
+
+    // insecure walk
+
+    private fun DirectoryStream<Path>.walkEntries(linkOptions: Array<LinkOption>, depth: Int) {
+        for (entry in this) {
+            if (entry.isDirectory(*linkOptions)) {
+                enterDirectory(entry, linkOptions, depth)
+            } else {
+                onFile?.invoke(entry)
+            }
+        }
+    }
+
+    private fun DirectoryStream<Path>.enterDirectory(path: Path, linkOptions: Array<LinkOption>, depth: Int) {
+        if (onEnter?.invoke(path) == false) {
+            return
+        }
+
+        if (depth < maxDepth) {
+            try {
+                Files.newDirectoryStream(path).use { it.walkEntries(linkOptions, depth + 1) }
+            } catch (e: IOException) {
+                // should SecurityException be also caught and passed to onFail?
+                onFail?.invoke(path, e)
+            }
+        }
+
+        onLeave?.invoke(path)
+    }
+}
