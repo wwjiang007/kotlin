@@ -113,7 +113,6 @@ object JVM_DIAGNOSTICS_LIST : DiagnosticList("FirJvmErrors") {
             parameter<String>("annotation")
         }
         val JVM_DEFAULT_THROUGH_INHERITANCE by error<KtDeclaration>(PositioningStrategy.DECLARATION_SIGNATURE)
-        val USAGE_OF_JVM_DEFAULT_THROUGH_SUPER_CALL by error<PsiElement>()
         val NON_JVM_DEFAULT_OVERRIDES_JAVA_DEFAULT by warning<KtDeclaration>(PositioningStrategy.DECLARATION_SIGNATURE)
     }
 

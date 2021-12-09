@@ -2863,10 +2863,6 @@ sealed class KtFirDiagnostic<PSI : PsiElement> : KtDiagnosticWithPsi<PSI> {
         override val diagnosticClass get() = JvmDefaultThroughInheritance::class
     }
 
-    abstract class UsageOfJvmDefaultThroughSuperCall : KtFirDiagnostic<PsiElement>() {
-        override val diagnosticClass get() = UsageOfJvmDefaultThroughSuperCall::class
-    }
-
     abstract class NonJvmDefaultOverridesJavaDefault : KtFirDiagnostic<KtDeclaration>() {
         override val diagnosticClass get() = NonJvmDefaultOverridesJavaDefault::class
     }
