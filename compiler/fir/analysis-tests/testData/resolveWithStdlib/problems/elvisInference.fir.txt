@@ -8,31 +8,7 @@ FILE: test.kt
             public get(): R|kotlin/String|
 
     }
-    public final class Obj : R|Value| {
-        public constructor(s: R|kotlin/String|): R|Obj| {
-            super<R|Value|>(R|<local>/s|)
-        }
-
-    }
     public final val generator: R|Generator| = R|/Generator.Generator|()
         public get(): R|Generator|
-    public final fun doIt(s: R|kotlin/String?|): R|Obj| {
-        ^doIt (R|/generator|.<CS errors: /Generator.createValue>#<R|ERROR CLASS: Cannot infer argument for type parameter T|>(R|<local>/s| ?: String({})) as? R|Obj|).R|kotlin/also|<R|Obj?|>(<L> = also@fun <anonymous>(it: R|Obj?|): R|kotlin/Unit| <inline=Inline, kind=EXACTLY_ONCE>  {
-            when () {
-                ==(R|<local>/it|, Null(null)) ->  {
-                    R|kotlin/io/println|()
-                }
-            }
-
-        }
-        ) ?: R|/generator|.R|/Generator.createObject|(String())
-    }
-    public final val x: R|Obj|by R|kotlin/lazy|<R|Obj|>(<L> = lazy@fun <anonymous>(): R|Obj| <inline=NoInline>  {
-        ^ (R|/generator|.<CS errors: /Generator.createValue>#<R|ERROR CLASS: Cannot infer argument for type parameter T|>(String(AlphaBeta)) as R|Obj|)
-    }
-    )
-        public get(): R|Obj| {
-            ^ D|/x|.R|kotlin/getValue|<R|Obj|>(Null(null), ::R|/x|)
-        }
-    public final val y: R|Obj| = (R|/generator|.<CS errors: /Generator.createValue>#<R|ERROR CLASS: Cannot infer argument for type parameter T|>(String(Omega)) as R|Obj|)
-        public get(): R|Obj|
+    public final val y: R|Value| = (R|/generator|.<CS errors: /Generator.createValue>#<R|ERROR CLASS: Cannot infer argument for type parameter T|>(String(Omega)) as R|Value|)
+        public get(): R|Value|
