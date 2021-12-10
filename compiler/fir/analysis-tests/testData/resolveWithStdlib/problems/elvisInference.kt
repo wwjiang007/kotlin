@@ -3,16 +3,20 @@ open class Value(val s: String)
 class Obj(s: String) : Value(s)
 
 object Generator {
-    fun <T : Value> createValue(s: String) = if (s.isEmpty()) Obj(s) else Value(s)
+    fun <T : Value> createValue(s: String): T = (if (s.isEmpty()) Obj(s) else Value(s)) <!UNCHECKED_CAST!>as T<!>
 
     fun createObject(s: String) = Obj(s)
 }
 
 fun doIt(s: String?) =
-    (Generator.<!NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>createValue<!>(s ?: "{}") as? Obj) ?: Generator.createObject("")
+    (Generator.createValue(s ?: "{}") as? Obj).also {
+        if (it == null) {
+            println()
+        }
+    } ?: Generator.createObject("")
 
 val x by lazy {
-    Generator.<!NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>createValue<!>("AlphaBeta") as Obj
+    Generator.createValue("AlphaBeta") as Obj
 }
 
-val y = Generator.<!NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>createValue<!>("Omega") as Obj
+val y = Generator.createValue("Omega") as Obj

@@ -19,8 +19,8 @@ FILE: elvisInference.kt
             super<R|kotlin/Any|>()
         }
 
-        public final fun <T : R|Value|> createValue(s: R|kotlin/String|): R|Value| {
-            ^createValue when () {
+        public final fun <T : R|Value|> createValue(s: R|kotlin/String|): R|T| {
+            ^createValue (when () {
                 R|<local>/s|.R|kotlin/text/isEmpty|() ->  {
                     R|/Obj.Obj|(R|<local>/s|)
                 }
@@ -28,7 +28,7 @@ FILE: elvisInference.kt
                     R|/Value.Value|(R|<local>/s|)
                 }
             }
-
+             as R|T|)
         }
 
         public final fun createObject(s: R|kotlin/String|): R|Obj| {
@@ -37,14 +37,22 @@ FILE: elvisInference.kt
 
     }
     public final fun doIt(s: R|kotlin/String?|): R|Obj| {
-        ^doIt (Q|Generator|.<CS errors: /Generator.createValue>#<R|ERROR CLASS: Cannot infer argument for type parameter T|>(R|<local>/s| ?: String({})) as? R|Obj|) ?: Q|Generator|.R|/Generator.createObject|(String())
+        ^doIt (Q|Generator|.R|/Generator.createValue|<R|Obj|>(R|<local>/s| ?: String({})) as? R|Obj|).R|kotlin/also|<R|Obj?|>(<L> = also@fun <anonymous>(it: R|Obj?|): R|kotlin/Unit| <inline=Inline, kind=EXACTLY_ONCE>  {
+            when () {
+                ==(R|<local>/it|, Null(null)) ->  {
+                    R|kotlin/io/println|()
+                }
+            }
+
+        }
+        ) ?: Q|Generator|.R|/Generator.createObject|(String())
     }
     public final val x: R|Obj|by R|kotlin/lazy|<R|Obj|>(<L> = lazy@fun <anonymous>(): R|Obj| <inline=NoInline>  {
-        ^ (Q|Generator|.<CS errors: /Generator.createValue>#<R|ERROR CLASS: Cannot infer argument for type parameter T|>(String(AlphaBeta)) as R|Obj|)
+        ^ (Q|Generator|.R|/Generator.createValue|<R|Obj|>(String(AlphaBeta)) as R|Obj|)
     }
     )
         public get(): R|Obj| {
             ^ D|/x|.R|kotlin/getValue|<R|Obj|>(Null(null), ::R|/x|)
         }
-    public final val y: R|Obj| = (Q|Generator|.<CS errors: /Generator.createValue>#<R|ERROR CLASS: Cannot infer argument for type parameter T|>(String(Omega)) as R|Obj|)
+    public final val y: R|Obj| = (Q|Generator|.R|/Generator.createValue|<R|Obj|>(String(Omega)) as R|Obj|)
         public get(): R|Obj|
