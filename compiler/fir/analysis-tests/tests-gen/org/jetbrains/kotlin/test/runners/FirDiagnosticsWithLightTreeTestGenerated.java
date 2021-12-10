@@ -5610,6 +5610,12 @@ public class FirDiagnosticsWithLightTreeTestGenerated extends AbstractFirDiagnos
             }
 
             @Test
+            @TestMetadata("elvisInference.kt")
+            public void testElvisInference() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/problems/elvisInference.kt");
+            }
+
+            @Test
             @TestMetadata("EnumMapGet.kt")
             public void testEnumMapGet() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/problems/EnumMapGet.kt");

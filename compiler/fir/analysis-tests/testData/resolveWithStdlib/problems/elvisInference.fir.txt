@@ -1,0 +1,50 @@
+FILE: elvisInference.kt
+    public open class Value : R|kotlin/Any| {
+        public constructor(s: R|kotlin/String|): R|Value| {
+            super<R|kotlin/Any|>()
+        }
+
+        public final val s: R|kotlin/String| = R|<local>/s|
+            public get(): R|kotlin/String|
+
+    }
+    public final class Obj : R|Value| {
+        public constructor(s: R|kotlin/String|): R|Obj| {
+            super<R|Value|>(R|<local>/s|)
+        }
+
+    }
+    public final object Generator : R|kotlin/Any| {
+        private constructor(): R|Generator| {
+            super<R|kotlin/Any|>()
+        }
+
+        public final fun <T : R|Value|> createValue(s: R|kotlin/String|): R|Value| {
+            ^createValue when () {
+                R|<local>/s|.R|kotlin/text/isEmpty|() ->  {
+                    R|/Obj.Obj|(R|<local>/s|)
+                }
+                else ->  {
+                    R|/Value.Value|(R|<local>/s|)
+                }
+            }
+
+        }
+
+        public final fun createObject(s: R|kotlin/String|): R|Obj| {
+            ^createObject R|/Obj.Obj|(R|<local>/s|)
+        }
+
+    }
+    public final fun doIt(s: R|kotlin/String?|): R|Obj| {
+        ^doIt (Q|Generator|.<CS errors: /Generator.createValue>#<R|ERROR CLASS: Cannot infer argument for type parameter T|>(R|<local>/s| ?: String({})) as? R|Obj|) ?: Q|Generator|.R|/Generator.createObject|(String())
+    }
+    public final val x: R|Obj|by R|kotlin/lazy|<R|Obj|>(<L> = lazy@fun <anonymous>(): R|Obj| <inline=NoInline>  {
+        ^ (Q|Generator|.<CS errors: /Generator.createValue>#<R|ERROR CLASS: Cannot infer argument for type parameter T|>(String(AlphaBeta)) as R|Obj|)
+    }
+    )
+        public get(): R|Obj| {
+            ^ D|/x|.R|kotlin/getValue|<R|Obj|>(Null(null), ::R|/x|)
+        }
+    public final val y: R|Obj| = (Q|Generator|.<CS errors: /Generator.createValue>#<R|ERROR CLASS: Cannot infer argument for type parameter T|>(String(Omega)) as R|Obj|)
+        public get(): R|Obj|
