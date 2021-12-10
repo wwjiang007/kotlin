@@ -14,4 +14,4 @@ open class Value(val s: String)
 
 val generator = Generator()
 
-val y = generator.<!NEW_INFERENCE_NO_INFORMATION_FOR_PARAMETER!>createValue<!>("Omega") as Value
+val y = generator.createValue("Omega") <!USELESS_CAST!>as Value<!>
