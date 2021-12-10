@@ -5592,6 +5592,12 @@ public class FirDiagnosticsWithLightTreeTestGenerated extends AbstractFirDiagnos
             }
 
             @Test
+            @TestMetadata("builderInference.kt")
+            public void testBuilderInference() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/problems/builderInference.kt");
+            }
+
+            @Test
             @TestMetadata("capturedTypeInEquality.kt")
             public void testCapturedTypeInEquality() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/problems/capturedTypeInEquality.kt");
