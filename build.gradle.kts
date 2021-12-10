@@ -522,6 +522,18 @@ allprojects {
                 freeCompilerArgs += "-Xuse-fir"
                 freeCompilerArgs += "-Xabi-stability=stable"
             }
+
+            //TODO: remove after removing 1.6 target
+            //HACK: filter modules with JVM target 1.6
+            if (!project.path.startsWith(":core") &&
+                !project.path.contains("runtime") &&
+                !project.path.startsWith(":kotlin-stdlib") &&
+                !project.path.startsWith(":kotlinx-metadata") &&
+                !project.path.startsWith(":kotlin-scripting") &&
+                !project.path.startsWith(":compiler:tests-common-jvm6")
+            ) {
+                freeCompilerArgs += "-Xjvm-default=all"
+            }
         }
     }
 
