@@ -602,8 +602,10 @@ internal fun captureFromTypeParameterUpperBoundIfNeeded(
     expectedType: ConeKotlinType,
     session: FirSession
 ): ConeKotlinType {
-    val expectedTypeClassId = expectedType.upperBoundIfFlexible().classId ?: return argumentType
-    val simplifiedArgumentType = argumentType.lowerBoundIfFlexible() as? ConeTypeParameterType ?: return argumentType
+    val expectedTypeClassId =
+        expectedType.upperBoundIfFlexible().classId ?: return argumentType
+    val simplifiedArgumentType =
+        argumentType.lowerBoundIfFlexible().unwrapDefinitelyNotNull() as? ConeTypeParameterType ?: return argumentType
     val typeParameter = simplifiedArgumentType.lookupTag.typeParameterSymbol.fir
 
     val context = session.typeContext

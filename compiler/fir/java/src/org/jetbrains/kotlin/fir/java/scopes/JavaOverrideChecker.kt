@@ -153,7 +153,7 @@ class JavaOverrideChecker internal constructor(
     }
 
     private fun FirTypeRef?.isTypeParameterDependent(): Boolean =
-        this is FirResolvedTypeRef && type.lowerBoundIfFlexible().isTypeParameterDependent()
+        this is FirResolvedTypeRef && type.lowerBoundIfFlexible().unwrapDefinitelyNotNull().isTypeParameterDependent()
 
     private fun ConeKotlinType.isTypeParameterDependent(): Boolean =
         this is ConeTypeParameterType || this is ConeClassLikeType && typeArguments.any { argument ->
@@ -167,7 +167,7 @@ class JavaOverrideChecker internal constructor(
 
     private fun FirTypeRef.extractTypeParametersTo(result: MutableCollection<FirTypeParameterRef>) {
         if (this is FirResolvedTypeRef) {
-            type.lowerBoundIfFlexible().extractTypeParametersTo(result)
+            type.lowerBoundIfFlexible().unwrapDefinitelyNotNull().extractTypeParametersTo(result)
         }
     }
 

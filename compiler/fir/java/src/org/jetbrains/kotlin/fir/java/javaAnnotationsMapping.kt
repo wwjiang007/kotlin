@@ -76,7 +76,7 @@ internal fun JavaAnnotationArgument.toFirExpression(
             val argumentTypeRef = expectedTypeRef?.let {
                 typeRef = it
                 buildResolvedTypeRef {
-                    type = it.coneTypeSafe<ConeKotlinType>()?.lowerBoundIfFlexible()?.arrayElementType()
+                    type = it.coneTypeSafe<ConeKotlinType>()?.arrayElementType()
                         ?: ConeClassErrorType(ConeSimpleDiagnostic("expected type is not array type"))
                 }
             }

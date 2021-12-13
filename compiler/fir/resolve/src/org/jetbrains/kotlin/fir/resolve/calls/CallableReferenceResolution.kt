@@ -162,7 +162,7 @@ private fun CallableReferenceAdaptation?.needCompatibilityResolveForCallableRefe
 private fun BodyResolveComponents.getCallableReferenceAdaptation(
     session: FirSession,
     function: FirFunction,
-    expectedType: ConeKotlinType?,
+    expectedType: ConeSimpleKotlinType?,
     unboundReceiverCount: Int
 ): CallableReferenceAdaptation? {
     if (expectedType == null) return null
@@ -306,9 +306,9 @@ val ConeKotlinType.isUnitOrFlexibleUnit: Boolean
         return classId == StandardClassIds.Unit
     }
 
-private val ConeKotlinType.isBaseTypeForNumberedReferenceTypes: Boolean
+private val ConeSimpleKotlinType.isBaseTypeForNumberedReferenceTypes: Boolean
     get() {
-        val classId = lowerBoundIfFlexible().classId ?: return false
+        val classId = classId ?: return false
         return when (classId) {
             StandardClassIds.KProperty,
             StandardClassIds.KMutableProperty,
@@ -390,7 +390,7 @@ class FirFakeArgumentForCallableReference(
     }
 }
 
-fun ConeKotlinType.isKCallableType(): Boolean {
+private fun ConeSimpleKotlinType.isKCallableType(): Boolean {
     return this.classId == StandardClassIds.KCallable
 }
 

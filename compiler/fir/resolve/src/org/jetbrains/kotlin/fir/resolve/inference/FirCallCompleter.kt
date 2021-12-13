@@ -356,7 +356,5 @@ internal fun FirFunction.isFunctionForExpectTypeFromCastFeature(): Boolean {
     return true
 }
 
-private fun ConeKotlinType.unwrap(): ConeSimpleKotlinType = lowerBoundIfFlexible().let {
-    if (it is ConeDefinitelyNotNullType) it.original.unwrap() else it
-}
+private fun ConeKotlinType.unwrap(): ConeSimpleKotlinType = lowerBoundIfFlexible().unwrapDefinitelyNotNull()
 

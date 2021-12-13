@@ -692,12 +692,13 @@ fun FirFunctionSymbol<*>.isFunctionForExpectTypeFromCastFeature(): Boolean {
     val typeParameterSymbol = typeParameterSymbols.singleOrNull() ?: return false
 
     val returnType = resolvedReturnTypeRef.coneType
-
-    if ((returnType.lowerBoundIfFlexible() as? ConeTypeParameterType)?.lookupTag != typeParameterSymbol.toLookupTag()) return false
+    val typeParameterType = returnType.lowerBoundIfFlexible().unwrapDefinitelyNotNull() as? ConeTypeParameterType
+    if (typeParameterType?.lookupTag != typeParameterSymbol.toLookupTag()) return false
 
     fun FirTypeRef.isBadType() =
-        coneTypeSafe<ConeKotlinType>()
-            ?.contains { (it.lowerBoundIfFlexible() as? ConeTypeParameterType)?.lookupTag == typeParameterSymbol.toLookupTag() } != false
+        coneTypeSafe<ConeKotlinType>()?.contains {
+            (it.lowerBoundIfFlexible().unwrapDefinitelyNotNull() as? ConeTypeParameterType)?.lookupTag == typeParameterSymbol.toLookupTag()
+        } != false
 
     if (valueParameterSymbols.any { it.resolvedReturnTypeRef.isBadType() } || resolvedReceiverTypeRef?.isBadType() == true) return false
 
