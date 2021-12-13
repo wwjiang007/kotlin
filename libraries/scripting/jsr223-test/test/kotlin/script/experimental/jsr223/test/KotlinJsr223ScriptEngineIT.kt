@@ -7,7 +7,6 @@ package kotlin.script.experimental.jsr223.test
 
 import org.jetbrains.kotlin.cli.common.environment.setIdeaIoUseFallback
 import org.jetbrains.kotlin.config.KotlinCompilerVersion
-import org.jetbrains.kotlin.scripting.compiler.plugin.runAndCheckResults
 import org.jetbrains.kotlin.test.util.KtTestUtil
 import org.junit.Assert
 import org.junit.Ignore
@@ -393,7 +392,8 @@ obj
             println("IGNORED: Test infrastructure doesn't work yet with embeddable compiler")
             return
         }
-        val javaExe = if (System.getProperty("os.name").contains("windows", ignoreCase = true)) "java.exe" else "java"
+        val isWindows = System.getProperty("os.name").contains("windows", ignoreCase = true)
+        val javaExe = if (isWindows) "java.exe" else "java"
 
         val tempDir = createTempDirectory(KotlinJsr223ScriptEngineIT::class.simpleName!!)
         try {
@@ -403,13 +403,14 @@ obj
                 "Expecting \"testCompilationClasspath\" property to contain stdlib jar:\n$compileCp",
                 compileCp.any { it.name.startsWith("kotlin-stdlib") }
             )
+            val classpath = compileCp.joinToString(File.pathSeparator) { it.path }
             runWithKotlinLauncherScript1(
                 "kotlinc", arrayOf(
-                            "-no-stdlib",
-                            "-cp", compileCp.joinToString(File.pathSeparator) { it.path },
-                            "-d", outJar,
-                            "-jvm-target", "17",
-                            "libraries/scripting/jsr223-test/testData/testJsr223Inlining.kt"
+                    "-no-stdlib",
+                    "-cp", if (isWindows) "\"$classpath\"" else classpath,
+                    "-d", outJar,
+                    "-jvm-target", "17",
+                    "libraries/scripting/jsr223-test/testData/testJsr223Inlining.kt"
                         ).asIterable(), additionalEnvVars = listOf("JAVA_HOME" to jdk17.absolutePath)
             )
 
