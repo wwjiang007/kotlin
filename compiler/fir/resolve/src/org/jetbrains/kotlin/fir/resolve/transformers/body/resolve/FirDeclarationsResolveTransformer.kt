@@ -579,7 +579,6 @@ open class FirDeclarationsResolveTransformer(transformer: FirBodyResolveTransfor
                         returnExpression.resultType.approximatedIfNeededOrSelf(
                             session.typeApproximator,
                             simpleFunction?.visibilityForApproximation(),
-                            transformer.session.typeContext,
                             simpleFunction?.isInline == true
                         )
                     )
@@ -941,7 +940,6 @@ open class FirDeclarationsResolveTransformer(transformer: FirBodyResolveTransfor
                 expectedType.approximatedIfNeededOrSelf(
                     session.typeApproximator,
                     backingField.visibilityForApproximation(),
-                    session.typeContext,
                 )
             )
         )
@@ -966,7 +964,6 @@ open class FirDeclarationsResolveTransformer(transformer: FirBodyResolveTransfor
                         expectedType.approximatedIfNeededOrSelf(
                             session.typeApproximator,
                             variable.visibilityForApproximation(),
-                            session.typeContext,
                         )
                     )
                 )

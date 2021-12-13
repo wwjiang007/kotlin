@@ -76,7 +76,7 @@ fun ConeClassLikeType.directExpansionType(
 
     val resultType = expandedConeType(typeAlias)
         ?.applyNullabilityFrom(useSiteSession, this)
-        ?.applyAttributesFrom(useSiteSession, this)
+        ?.applyAttributesFrom(this)
         ?: return null
 
     if (resultType.typeArguments.isEmpty()) return resultType
@@ -92,11 +92,10 @@ private fun ConeClassLikeType.applyNullabilityFrom(
 }
 
 private fun ConeClassLikeType.applyAttributesFrom(
-    session: FirSession,
     abbreviation: ConeClassLikeType
 ): ConeClassLikeType {
     val combinedAttributes = attributes.add(abbreviation.attributes)
-    return withAttributes(combinedAttributes, session.typeContext)
+    return withAttributes(combinedAttributes)
 }
 
 private fun mapTypeAliasArguments(
@@ -126,7 +125,7 @@ private fun mapTypeAliasArguments(
                 is ConeDefinitelyNotNullType,
                 is ConeTypeParameterTypeImpl,
                 is ConeFlexibleType -> {
-                    mappedType.withAttributes(type.attributes.add(mappedType.attributes), useSiteSession.typeContext)
+                    mappedType.withAttributes(type.attributes.add(mappedType.attributes))
                 }
                 null -> return mappedProjection
                 else -> mappedType

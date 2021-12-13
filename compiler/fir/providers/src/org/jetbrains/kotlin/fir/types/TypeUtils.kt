@@ -85,7 +85,7 @@ fun ConeKotlinType.makeConeTypeDefinitelyNotNullOrNotNull(typeContext: ConeTypeC
     return ConeDefinitelyNotNullType.create(this, typeContext) ?: this.withNullability(ConeNullability.NOT_NULL, typeContext)
 }
 
-fun <T : ConeKotlinType> T.withArguments(arguments: Array<out ConeTypeProjection>, typeSystemContext: ConeTypeContext): T {
+fun <T : ConeKotlinType> T.withArguments(arguments: Array<out ConeTypeProjection>): T {
     if (this.typeArguments === arguments) {
         return this
     }
@@ -94,15 +94,15 @@ fun <T : ConeKotlinType> T.withArguments(arguments: Array<out ConeTypeProjection
     return when (this) {
         is ConeClassErrorType -> this
         is ConeClassLikeTypeImpl -> ConeClassLikeTypeImpl(lookupTag, arguments, nullability.isNullable) as T
-        is ConeDefinitelyNotNullType -> ConeDefinitelyNotNullType(original.withArguments(arguments, typeSystemContext)) as T
+        is ConeDefinitelyNotNullType -> ConeDefinitelyNotNullType(original.withArguments(arguments)) as T
         else -> error("Not supported: $this: ${this.render()}")
     }
 }
 
-fun <T : ConeKotlinType> T.withArguments(replacement: (ConeTypeProjection) -> ConeTypeProjection, typeSystemContext: ConeTypeContext) =
-    withArguments(typeArguments.map(replacement).toTypedArray(), typeSystemContext)
+fun <T : ConeKotlinType> T.withArguments(replacement: (ConeTypeProjection) -> ConeTypeProjection) =
+    withArguments(typeArguments.map(replacement).toTypedArray())
 
-fun <T : ConeKotlinType> T.withAttributes(attributes: ConeAttributes, typeSystemContext: ConeTypeContext): T {
+fun <T : ConeKotlinType> T.withAttributes(attributes: ConeAttributes): T {
     if (this.attributes == attributes) {
         return this
     }
@@ -111,11 +111,11 @@ fun <T : ConeKotlinType> T.withAttributes(attributes: ConeAttributes, typeSystem
     return when (this) {
         is ConeClassErrorType -> this
         is ConeClassLikeTypeImpl -> ConeClassLikeTypeImpl(lookupTag, typeArguments, nullability.isNullable, attributes)
-        is ConeDefinitelyNotNullType -> ConeDefinitelyNotNullType(original.withAttributes(attributes, typeSystemContext))
+        is ConeDefinitelyNotNullType -> ConeDefinitelyNotNullType(original.withAttributes(attributes))
         is ConeTypeParameterTypeImpl -> ConeTypeParameterTypeImpl(lookupTag, nullability.isNullable, attributes)
         is ConeFlexibleType -> ConeFlexibleType(
-            lowerBound.withAttributes(attributes, typeSystemContext),
-            upperBound.withAttributes(attributes, typeSystemContext)
+            lowerBound.withAttributes(attributes),
+            upperBound.withAttributes(attributes)
         )
         is ConeTypeVariableType -> ConeTypeVariableType(nullability, lookupTag, attributes)
         is ConeCapturedType -> ConeCapturedType(
@@ -243,7 +243,7 @@ fun FirTypeRef.isUnsafeVarianceType(session: FirSession): Boolean {
 fun FirTypeRef.hasEnhancedNullability(): Boolean =
     coneTypeSafe<ConeKotlinType>()?.hasEnhancedNullability == true
 
-fun FirTypeRef.withoutEnhancedNullability(typeSystemContext: ConeTypeContext): FirTypeRef {
+fun FirTypeRef.withoutEnhancedNullability(): FirTypeRef {
     require(this is FirResolvedTypeRef)
     if (!hasEnhancedNullability()) return this
     return buildResolvedTypeRef {
@@ -252,7 +252,6 @@ fun FirTypeRef.withoutEnhancedNullability(typeSystemContext: ConeTypeContext): F
             ConeAttributes.create(
                 this@withoutEnhancedNullability.type.attributes.filter { it != CompilerConeAttributes.EnhancedNullability }
             ),
-            typeSystemContext,
         )
         annotations += this@withoutEnhancedNullability.annotations
     }
@@ -314,14 +313,13 @@ fun FirTypeRef.approximated(
 fun FirTypeRef.approximatedIfNeededOrSelf(
     approximator: ConeTypeApproximator,
     containingCallableVisibility: Visibility?,
-    typeSystemContext: ConeTypeContext,
     isInlineFunction: Boolean = false,
 ): FirTypeRef {
     val approximated = if (containingCallableVisibility == Visibilities.Public || containingCallableVisibility == Visibilities.Protected)
         approximatedForPublicPosition(approximator)
     else
         this
-    return approximated.hideLocalTypeIfNeeded(containingCallableVisibility, isInlineFunction).withoutEnhancedNullability(typeSystemContext)
+    return approximated.hideLocalTypeIfNeeded(containingCallableVisibility, isInlineFunction).withoutEnhancedNullability()
 }
 
 fun FirTypeRef.approximatedForPublicPosition(approximator: ConeTypeApproximator): FirTypeRef =
@@ -394,15 +392,15 @@ fun FirDeclaration.visibilityForApproximation(container: FirDeclaration?): Visib
 }
 
 
-fun ConeTypeContext.captureFromArgumentsInternal(type: ConeKotlinType, status: CaptureStatus): ConeKotlinType? {
+internal fun ConeTypeContext.captureFromArgumentsInternal(type: ConeKotlinType, status: CaptureStatus): ConeKotlinType? {
     val capturedArguments = captureArguments(type, status) ?: return null
     return if (type is ConeFlexibleType) {
         ConeFlexibleType(
-            type.lowerBound.withArguments(capturedArguments, this),
-            type.upperBound.withArguments(capturedArguments, this),
+            type.lowerBound.withArguments(capturedArguments),
+            type.upperBound.withArguments(capturedArguments),
         )
     } else {
-        type.withArguments(capturedArguments, this)
+        type.withArguments(capturedArguments)
     }
 }
 
@@ -458,7 +456,7 @@ fun ConeTypeContext.captureArguments(type: ConeKotlinType, status: CaptureStatus
     return newArguments
 }
 
-fun ConeTypeContext.captureFromExpressionInternal(type: ConeKotlinType): ConeKotlinType? {
+internal fun ConeTypeContext.captureFromExpressionInternal(type: ConeKotlinType): ConeKotlinType? {
     if (type !is ConeIntersectionType && type !is ConeFlexibleType) {
         return captureFromArgumentsInternal(type, CaptureStatus.FROM_EXPRESSION)
     }
@@ -483,12 +481,12 @@ fun ConeTypeContext.captureFromExpressionInternal(type: ConeKotlinType): ConeKot
             typeToReplace.intersectedTypes.map { componentType ->
                 val capturedArguments = findCorrespondingCapturedArgumentsForType(componentType)
                     ?: return@map componentType
-                componentType.withArguments(capturedArguments, this)
+                componentType.withArguments(capturedArguments)
             }
         } else {
             val capturedArguments = findCorrespondingCapturedArgumentsForType(typeToReplace)
                 ?: return listOf(typeToReplace)
-            listOf(typeToReplace.withArguments(capturedArguments, this))
+            listOf(typeToReplace.withArguments(capturedArguments))
         }
     }
 
