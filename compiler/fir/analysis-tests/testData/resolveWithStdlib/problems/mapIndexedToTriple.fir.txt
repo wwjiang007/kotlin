@@ -1,0 +1,38 @@
+FILE: test.kt
+    public final fun build(): R|kotlin/Any| {
+        ^build object : R|kotlin/Any| {
+            private constructor(): R|<anonymous>| {
+                super<R|kotlin/Any|>()
+            }
+
+            public final fun foo(holder: R|Holder|): R|kotlin/Unit| {
+                lval catches: R|ft<kotlin/Array<ft<Catch, Catch?>>, kotlin/Array<out ft<Catch, Catch?>>>| = R|<local>/holder|.R|/Holder.catchClauses|
+                 {
+                    lval <iterator>: R|kotlin/collections/Iterator<kotlin/collections/IndexedValue<ft<Catch, Catch?>>>| = R|<local>/catches|.R|kotlin/collections/withIndex|<R|ft<Catch, Catch?>|>().R|SubstitutionOverride<kotlin/collections/Iterable.iterator: R|kotlin/collections/Iterator<kotlin/collections/IndexedValue<ft<Catch, Catch?>>>|>|()
+                    while(R|<local>/<iterator>|.R|SubstitutionOverride<kotlin/collections/Iterator.hasNext: R|kotlin/Boolean|>|()) {
+                        lval <destruct>: R|kotlin/collections/IndexedValue<ft<Catch, Catch?>>| = R|<local>/<iterator>|.R|SubstitutionOverride<kotlin/collections/Iterator.next: R|kotlin/collections/IndexedValue<ft<Catch, Catch?>>|>|()
+                        lval catchIndex: R|kotlin/Int| = R|<local>/<destruct>|.R|SubstitutionOverride<kotlin/collections/IndexedValue.component1: R|kotlin/Int|>|()
+                        lval catch: R|ft<Catch, Catch?>| = R|<local>/<destruct>|.R|SubstitutionOverride<kotlin/collections/IndexedValue.component2: R|ft<Catch, Catch?>|>|()
+                        lval triples: R|kotlin/collections/List<kotlin/Triple<@R|kotlin/ParameterName|(name = String(index))  kotlin/Int, ft<Reference, Reference?>, @EnhancedNullability Type>>| = R|<local>/catch|.R|/Catch.references|.R|kotlin/collections/mapIndexed|<R|ft<Reference, Reference?>|, R|kotlin/Triple<@R|kotlin/ParameterName|(name = String(index))  kotlin/Int, ft<Reference, Reference?>, @EnhancedNullability Type>|>(<L> = mapIndexed@fun <anonymous>(i: R|@R|kotlin/ParameterName|(name = String(index))  kotlin/Int|, reference: R|ft<Reference, Reference?>|): R|kotlin/Triple<@R|kotlin/ParameterName|(name = String(index))  kotlin/Int, ft<Reference, Reference?>, @EnhancedNullability Type>| <inline=Inline, kind=UNKNOWN>  {
+                            ^ R|kotlin/Triple.Triple|<R|@R|kotlin/ParameterName|(name = String(index))  kotlin/Int|, R|ft<Reference, Reference?>|, R|@EnhancedNullability Type|>(R|<local>/i|, R|<local>/reference|, R|<local>/reference|.R|/Reference.getType|())
+                        }
+                        ).R|kotlin/collections/filter|<R|kotlin/Triple<@R|kotlin/ParameterName|(name = String(index))  kotlin/Int, ft<Reference, Reference?>, @EnhancedNullability Type>|>(<L> = filter@fun <anonymous>(it: R|kotlin/Triple<@R|kotlin/ParameterName|(name = String(index))  kotlin/Int, ft<Reference, Reference?>, @EnhancedNullability Type>|): R|kotlin/Boolean| <inline=Inline, kind=UNKNOWN>  {
+                            ^ R|<local>/it|.R|SubstitutionOverride<kotlin/Triple.third: R|@EnhancedNullability Type|>|.R|/Type.isEmpty|.R|kotlin/Boolean.not|()
+                        }
+                        )
+                    }
+
+                }
+
+            }
+
+            private final fun R|Reference|.getType(): R|PhpType| {
+                ^getType Q|PhpThrownExceptionsAnalyzer|.R|/PhpThrownExceptionsAnalyzer.filterNonThrowable|(this@R|/<anonymous>.getType|.R|/Reference.type|).R|kotlin/collections/fold|<R|ft<kotlin/String, kotlin/String?>|, R|PhpType|>(R|/PhpType.PhpType|(), fold@fun <anonymous>(acc: R|PhpType|, it: R|ft<kotlin/String, kotlin/String?>|): R|PhpType| <inline=Inline, kind=UNKNOWN>  {
+                    ^ R|<local>/acc|.R|/PhpType.add|(R|<local>/it|)
+                }
+                )
+            }
+
+        }
+
+    }

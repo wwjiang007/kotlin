@@ -5598,6 +5598,12 @@ public class FirDiagnosticsWithLightTreeTestGenerated extends AbstractFirDiagnos
             }
 
             @Test
+            @TestMetadata("mapIndexedToTriple.kt")
+            public void testMapIndexedToTriple() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/problems/mapIndexedToTriple.kt");
+            }
+
+            @Test
             @TestMetadata("qualifierPriority.kt")
             public void testQualifierPriority() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/problems/qualifierPriority.kt");
