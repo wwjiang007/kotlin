@@ -13,10 +13,20 @@ class Derived : Base() {
     }
 }
 
-fun bar(arg: Any) {
+interface First
+
+interface Second : First {
+    val baz: Third
+}
+
+interface Third : First {
+    val s: String
+}
+
+fun bar(arg: First) {
     var v = arg
-    if (v is List<*>) {
-        v = v.joinToString()
-        v.length
+    if (v is Second) {
+        v = v.baz
+        v.s.length
     }
 }

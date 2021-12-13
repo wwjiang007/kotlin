@@ -15,12 +15,24 @@ FILE: test.kt
         }
 
     }
-    public final fun bar(arg: R|kotlin/Any|): R|kotlin/Unit| {
-        lvar v: R|kotlin/Any| = R|<local>/arg|
+    public abstract interface First : R|kotlin/Any| {
+    }
+    public abstract interface Second : R|First| {
+        public abstract val baz: R|Third|
+            public get(): R|Third|
+
+    }
+    public abstract interface Third : R|First| {
+        public abstract val s: R|kotlin/String|
+            public get(): R|kotlin/String|
+
+    }
+    public final fun bar(arg: R|First|): R|kotlin/Unit| {
+        lvar v: R|First| = R|<local>/arg|
         when () {
-            (R|<local>/v| is R|kotlin/collections/List<*>|) ->  {
-                R|<local>/v| = R|<local>/v|.R|kotlin/collections/joinToString|<R|kotlin/Any?|>()
-                R|<local>/v|.R|kotlin/String.length|
+            (R|<local>/v| is R|Second|) ->  {
+                R|<local>/v| = R|<local>/v|.R|/Second.baz|
+                R|<local>/v|.R|/Third.s|.R|kotlin/String.length|
             }
         }
 
