@@ -71,10 +71,10 @@ fun ConeDefinitelyNotNullType.Companion.create(
     original: ConeKotlinType,
     typeContext: ConeTypeContext
 ): ConeDefinitelyNotNullType? {
-    return when {
-        original is ConeDefinitelyNotNullType -> original
-        typeContext.makesSenseToBeDefinitelyNotNull(original) -> ConeDefinitelyNotNullType(original)
-        else -> null
+    return when (original) {
+        is ConeDefinitelyNotNullType -> original
+        is ConeFlexibleType -> create(original.lowerBound, typeContext)
+        is ConeSimpleKotlinType -> if (typeContext.makesSenseToBeDefinitelyNotNull(original)) ConeDefinitelyNotNullType(original) else null
     }
 }
 
