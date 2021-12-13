@@ -8,16 +8,18 @@ package kotlin.script.experimental.jsr223.test
 import org.jetbrains.kotlin.cli.common.environment.setIdeaIoUseFallback
 import org.jetbrains.kotlin.config.KotlinCompilerVersion
 import org.jetbrains.kotlin.scripting.compiler.plugin.runAndCheckResults
-import org.jetbrains.kotlin.scripting.compiler.plugin.runWithKotlinc
 import org.jetbrains.kotlin.test.util.KtTestUtil
 import org.junit.Assert
 import org.junit.Ignore
 import org.junit.Test
 import java.io.File
+import java.io.InputStream
 import java.lang.management.ManagementFactory
 import java.nio.file.Files.createTempDirectory
 import java.nio.file.Files.createTempFile
+import java.util.concurrent.TimeUnit
 import javax.script.*
+import kotlin.concurrent.thread
 import kotlin.script.experimental.jvmhost.jsr223.KotlinJsr223ScriptEngineImpl
 
 // duplicating it here to avoid dependency on the implementation - it may interfere with tests
@@ -401,15 +403,14 @@ obj
                 "Expecting \"testCompilationClasspath\" property to contain stdlib jar:\n$compileCp",
                 compileCp.any { it.name.startsWith("kotlin-stdlib") }
             )
-            runWithKotlinc(
-                arrayOf(
-                    "-no-stdlib",
-                    "-cp", compileCp.joinToString(File.pathSeparator) { it.path },
-                    "-d", outJar,
-                    "-jvm-target", "17",
-                    "libraries/scripting/jsr223-test/testData/testJsr223Inlining.kt"
-                ),
-                additionalEnvVars = listOf("JAVA_HOME" to jdk17.absolutePath)
+            runWithKotlinLauncherScript1(
+                "kotlinc", arrayOf(
+                            "-no-stdlib",
+                            "-cp", compileCp.joinToString(File.pathSeparator) { it.path },
+                            "-d", outJar,
+                            "-jvm-target", "17",
+                            "libraries/scripting/jsr223-test/testData/testJsr223Inlining.kt"
+                        ).asIterable(), additionalEnvVars = listOf("JAVA_HOME" to jdk17.absolutePath)
             )
 
             val runtime = File(jdk17, "bin" + File.separator + javaExe)
@@ -419,7 +420,7 @@ obj
                 runtimeCp.contains("kotlin-scripting-jsr223")
             )
 
-            runAndCheckResults(
+            runAndCheckResults1(
                 listOf(runtime.absolutePath, "-cp", "$runtimeCp:$outJar", "TestJsr223InliningKt"),
                 listOf("OK")
             )
@@ -438,4 +439,97 @@ fun assertThrows(exceptionClass: Class<*>, body: () -> Unit) {
             Assert.fail("Expecting an exception of type ${exceptionClass.name} but got ${e.javaClass.name}")
         }
     }
+}
+
+private fun runAndCheckResults1(
+    args: List<String>,
+    expectedOutPatterns: List<String> = emptyList(),
+    expectedExitCode: Int = 0,
+    workDirectory: File? = null,
+    additionalEnvVars: Iterable<Pair<String, String>>? = null
+) {
+    val processBuilder = ProcessBuilder(args)
+    if (workDirectory != null) {
+        processBuilder.directory(workDirectory)
+    }
+    if (additionalEnvVars != null) {
+        processBuilder.environment().putAll(additionalEnvVars)
+    }
+    println("!!! Run: " + processBuilder.command().joinToString(" "))
+    val process = processBuilder.start()
+
+    data class ExceptionContainer(
+        var value: Throwable? = null
+    )
+
+    fun InputStream.captureStream(): Triple<Thread, ExceptionContainer, ArrayList<String>> {
+        val out = ArrayList<String>()
+        val exceptionContainer = ExceptionContainer()
+        val thread = thread {
+            try {
+                reader().forEachLine {
+                    out.add(it.trim())
+                }
+            } catch (e: Throwable) {
+                exceptionContainer.value = e
+            }
+        }
+        return Triple(thread, exceptionContainer, out)
+    }
+
+    val (stdoutThread, stdoutException, processOut) = process.inputStream.captureStream()
+    val (stderrThread, stderrException, processErr) = process.errorStream.captureStream()
+
+    process.waitFor(30000, TimeUnit.MILLISECONDS)
+
+    try {
+        if (process.isAlive) {
+            process.destroyForcibly()
+            Assert.fail("Process terminated forcibly")
+        }
+        stdoutThread.join(300)
+        Assert.assertFalse("stdout thread not finished", stdoutThread.isAlive)
+        Assert.assertNull(stdoutException.value)
+        stderrThread.join(300)
+        Assert.assertFalse("stderr thread not finished", stderrThread.isAlive)
+        Assert.assertNull(stderrException.value)
+        Assert.assertEquals(expectedOutPatterns.size, processOut.size)
+        for ((expectedPattern, actualLine) in expectedOutPatterns.zip(processOut)) {
+            Assert.assertTrue(
+                "line \"$actualLine\" do not match with expected pattern \"$expectedPattern\"",
+                Regex(expectedPattern).matches(actualLine)
+            )
+        }
+        Assert.assertEquals(expectedExitCode, process.exitValue())
+
+    } catch (e: Throwable) {
+        println("OUT:\n${processOut.joinToString("\n")}")
+        println("ERR:\n${processErr.joinToString("\n")}")
+        throw e
+    }
+}
+
+private fun runWithKotlinLauncherScript1(
+    launcherScriptName: String,
+    compilerArgs: Iterable<String>,
+    expectedOutPatterns: List<String> = emptyList(),
+    expectedExitCode: Int = 0,
+    workDirectory: File? = null,
+    classpath: List<File> = emptyList(),
+    additionalEnvVars: Iterable<Pair<String, String>>? = null
+) {
+    val executableFileName =
+        if (System.getProperty("os.name").contains("windows", ignoreCase = true)) "$launcherScriptName.bat" else launcherScriptName
+    val launcherFile = File("dist/kotlinc/bin/$executableFileName")
+    Assert.assertTrue("Launcher script not found, run dist task: ${launcherFile.absolutePath}", launcherFile.exists())
+
+    val args = arrayListOf(launcherFile.absolutePath).apply {
+        if (classpath.isNotEmpty()) {
+            add("-cp")
+            add(classpath.joinToString(File.pathSeparator))
+        }
+        addAll(compilerArgs)
+    }
+
+    runAndCheckResults1(args, expectedOutPatterns, expectedExitCode, workDirectory, additionalEnvVars)
 }
