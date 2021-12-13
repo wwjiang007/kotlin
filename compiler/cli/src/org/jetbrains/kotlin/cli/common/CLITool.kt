@@ -46,6 +46,7 @@ abstract class CLITool<A : CommonToolArguments> {
         args: Array<out String>
     ): ExitCode {
         val arguments = createArguments()
+        println("!!! Args: $args")
         parseCommandLineArguments(args.asList(), arguments)
         val collector = PrintingMessageCollector(errStream, messageRenderer, arguments.verbose)
 

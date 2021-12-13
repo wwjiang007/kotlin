@@ -59,6 +59,8 @@ class K2JVMCompiler : CLICompiler<K2JVMCompilerArguments>() {
         rootDisposable: Disposable,
         paths: KotlinPaths?
     ): ExitCode {
+        println("!!! cp: ${arguments.classpath}")
+        println("!!! freeargs: ${arguments.freeArgs}")
         val messageCollector = configuration.getNotNull(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY)
 
         configuration.putIfNotNull(CLIConfigurationKeys.REPEAT_COMPILE_MODULES, arguments.repeatCompileModules?.toIntOrNull())
