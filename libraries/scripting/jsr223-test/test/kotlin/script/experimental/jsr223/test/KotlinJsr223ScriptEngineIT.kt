@@ -6,8 +6,10 @@
 package kotlin.script.experimental.jsr223.test
 
 import org.jetbrains.kotlin.cli.common.environment.setIdeaIoUseFallback
+import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
 import org.jetbrains.kotlin.config.KotlinCompilerVersion
 import org.jetbrains.kotlin.test.util.KtTestUtil
+import org.jetbrains.kotlin.utils.PathUtil
 import org.junit.Assert
 import org.junit.Ignore
 import org.junit.Test
@@ -394,6 +396,7 @@ obj
         }
         val isWindows = System.getProperty("os.name").contains("windows", ignoreCase = true)
         val javaExe = if (isWindows) "java.exe" else "java"
+        val runtime = File(jdk17, "bin" + File.separator + javaExe)
 
         val tempDir = createTempDirectory(KotlinJsr223ScriptEngineIT::class.simpleName!!)
         try {
@@ -404,17 +407,31 @@ obj
                 compileCp.any { it.name.startsWith("kotlin-stdlib") }
             )
             val classpath = compileCp.joinToString(File.pathSeparator) { it.path }
-            runWithKotlinLauncherScript1(
-                "kotlinc", arrayOf(
+            val paths = PathUtil.kotlinPathsForDistDirectory
+            runAndCheckResults1(
+                listOf(
+                    runtime.absolutePath,
+                    "-cp", paths.compilerClasspath.joinToString(File.pathSeparator),
+                    K2JVMCompiler::class.java.name,
                     "-no-stdlib",
-                    "-cp", if (isWindows) "\"$classpath\"" else classpath,
+                    "-cp", classpath,
                     "-d", outJar,
                     "-jvm-target", "17",
                     "libraries/scripting/jsr223-test/testData/testJsr223Inlining.kt"
-                        ).asIterable(), additionalEnvVars = listOf("JAVA_HOME" to jdk17.absolutePath)
+                ),
+                additionalEnvVars = listOf("JAVA_HOME" to jdk17.absolutePath)
             )
+//            runWithKotlinLauncherScript1(
+//                "kotlinc", arrayOf(
+//                    "-no-stdlib",
+//                    "-cp", classpath,
+//                    "-d", outJar,
+//                    "-jvm-target", "17",
+//                    "libraries/scripting/jsr223-test/testData/testJsr223Inlining.kt"
+//                        ).asIterable(),
+//                additionalEnvVars = listOf("JAVA_HOME" to jdk17.absolutePath)
+//            )
 
-            val runtime = File(jdk17, "bin" + File.separator + javaExe)
             val runtimeCp = System.getProperty("testJsr223RuntimeClasspath")
             Assert.assertTrue(
                 "Expecting \"testJsr223RuntimeClasspath\" property to contain JSR223 jar:\n$runtimeCp",
@@ -506,7 +523,7 @@ private fun runAndCheckResults1(
     } catch (e: Throwable) {
         println("OUT:\n${processOut.joinToString("\n")}")
         println("ERR:\n${processErr.joinToString("\n")}")
-        throw e
+//        throw e
     }
 }
 
