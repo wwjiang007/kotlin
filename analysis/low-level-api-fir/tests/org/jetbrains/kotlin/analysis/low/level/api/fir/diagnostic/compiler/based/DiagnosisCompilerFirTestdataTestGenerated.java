@@ -5616,6 +5616,12 @@ public class DiagnosisCompilerFirTestdataTestGenerated extends AbstractDiagnosis
             }
 
             @Test
+            @TestMetadata("smartCastAfterAssignment.kt")
+            public void testSmartCastAfterAssignment() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/problems/smartCastAfterAssignment.kt");
+            }
+
+            @Test
             @TestMetadata("SpecialCallsWithLambdas.kt")
             public void testSpecialCallsWithLambdas() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolveWithStdlib/problems/SpecialCallsWithLambdas.kt");

@@ -1,0 +1,27 @@
+FILE: test.kt
+    public final class Derived : R|Base| {
+        public constructor(): R|Derived| {
+            super<R|Base|>()
+        }
+
+        public final fun foo(): R|kotlin/Unit| {
+            when () {
+                ==(this@R|/Derived|.R|/Base.field|, Null(null)) ->  {
+                    this@R|/Derived|.R|/Base.field| = String(Alpha)
+                    this@R|/Derived|.R|/Base.field|.<Inapplicable(UNSAFE_CALL): kotlin/String.length>#
+                }
+            }
+
+        }
+
+    }
+    public final fun bar(arg: R|kotlin/Any|): R|kotlin/Unit| {
+        lvar v: R|kotlin/Any| = R|<local>/arg|
+        when () {
+            (R|<local>/v| is R|kotlin/collections/List<*>|) ->  {
+                R|<local>/v| = R|<local>/v|.R|kotlin/collections/joinToString|<R|kotlin/Any?|>()
+                R|<local>/v|.R|kotlin/String.length|
+            }
+        }
+
+    }
