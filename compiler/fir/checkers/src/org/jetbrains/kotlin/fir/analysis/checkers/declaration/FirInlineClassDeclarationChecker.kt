@@ -18,7 +18,6 @@ import org.jetbrains.kotlin.fir.analysis.checkers.toRegularClassSymbol
 import org.jetbrains.kotlin.fir.analysis.diagnostics.*
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.declarations.utils.*
-import org.jetbrains.kotlin.fir.expressions.toResolvedCallableReference
 import org.jetbrains.kotlin.fir.expressions.toResolvedCallableSymbol
 import org.jetbrains.kotlin.fir.resolve.fullyExpandedType
 import org.jetbrains.kotlin.fir.resolve.lookupSuperTypes

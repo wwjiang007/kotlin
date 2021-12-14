@@ -43,7 +43,7 @@ class FirDelegatedPropertyInferenceSession(
     }
 
     val expectedType: ConeKotlinType? by lazy { property.returnTypeRef.coneTypeSafe() }
-    private val unitType: ConeKotlinType = components.session.builtinTypes.unitType.type
+    private val unitType: ConeClassLikeType = components.session.builtinTypes.unitType.type
     private lateinit var resultingConstraintSystem: NewConstraintSystem
 
     override fun <T> shouldRunCompletion(call: T): Boolean where T : FirResolvable, T : FirStatement = false
