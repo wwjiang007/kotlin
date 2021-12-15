@@ -19425,6 +19425,18 @@ public class FirOldFrontendDiagnosticsWithLightTreeTestGenerated extends Abstrac
                 public void testTypes() throws Exception {
                     runTest("compiler/testData/diagnostics/tests/modifiers/const/types.kt");
                 }
+
+                @Test
+                @TestMetadata("unsigned_after.kt")
+                public void testUnsigned_after() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/modifiers/const/unsigned_after.kt");
+                }
+
+                @Test
+                @TestMetadata("unsigned_before.kt")
+                public void testUnsigned_before() throws Exception {
+                    runTest("compiler/testData/diagnostics/tests/modifiers/const/unsigned_before.kt");
+                }
             }
 
             @Nested
