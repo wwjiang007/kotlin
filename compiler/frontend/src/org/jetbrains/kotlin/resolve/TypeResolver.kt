@@ -55,6 +55,8 @@ import org.jetbrains.kotlin.resolve.source.getPsi
 import org.jetbrains.kotlin.resolve.source.toSourceElement
 import org.jetbrains.kotlin.types.*
 import org.jetbrains.kotlin.types.Variance.*
+import org.jetbrains.kotlin.types.checker.SimpleClassicTypeSystemContext
+import org.jetbrains.kotlin.types.model.CaptureStatus
 import org.jetbrains.kotlin.types.typeUtil.*
 import org.jetbrains.kotlin.utils.addToStdlib.safeAs
 import kotlin.math.min
@@ -616,6 +618,25 @@ class TypeResolver(
 
                 if (typeReference != null) {
                     upperBoundChecker.checkBounds(typeReference, argument, parameter, substitutor, c.trace)
+                }
+            }
+
+            val captured = SimpleClassicTypeSystemContext.captureFromArguments(resultingType, CaptureStatus.FOR_SUBTYPING) as? SimpleType
+
+            if (captured != null) {
+                val capturedSubstitutor = TypeSubstitutor.create(captured)
+
+                for (i in parameters.indices) {
+                    val parameter = parameters[i]
+                    val argumentProjection = arguments[i]
+                    if (argumentProjection.projectionKind == OUT_VARIANCE || parameter.variance == OUT_VARIANCE) continue
+                    val argumentType = argumentProjection.type
+
+                    val typeReference = collectedArgumentAsTypeProjections.getOrNull(i)?.typeReference
+
+                    if (typeReference != null) {
+                        upperBoundChecker.checkBounds(typeReference, argumentType, parameter, capturedSubstitutor, c.trace)
+                    }
                 }
             }
         }
