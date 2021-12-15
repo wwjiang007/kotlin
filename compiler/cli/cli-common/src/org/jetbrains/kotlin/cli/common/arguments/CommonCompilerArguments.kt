@@ -382,6 +382,13 @@ abstract class CommonCompilerArguments : CommonToolArguments() {
     )
     var contextReceivers: Boolean by FreezableVar(false)
 
+    @Argument(
+        value = "-Xenable-foldable",
+        description = "Enable a compiler optimization that might evaluates a function marked with @Foldable at compile-time " +
+                "and replaces calls to it with the computed result."
+    )
+    var foldableDeclarations: Boolean by FreezableVar(false)
+
     open fun configureAnalysisFlags(collector: MessageCollector, languageVersion: LanguageVersion): MutableMap<AnalysisFlag<*>, Any> {
         return HashMap<AnalysisFlag<*>, Any>().apply {
             put(AnalysisFlags.skipMetadataVersionCheck, skipMetadataVersionCheck)

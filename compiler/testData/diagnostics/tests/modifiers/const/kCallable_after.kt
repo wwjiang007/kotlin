@@ -1,3 +1,4 @@
+// !LANGUAGE: +FoldableDeclarations
 class SomeClassWithName(val property: Int) {
     val anotherProperty: String = ""
 
@@ -15,4 +16,4 @@ const val stringClassName = <!CONST_VAL_WITH_NON_CONST_INITIALIZER!>::String.nam
 const val lengthPropName = <!CONST_VAL_WITH_NON_CONST_INITIALIZER!>String::length.name<!>
 
 const val errorAccess = <!CONST_VAL_WITH_NON_CONST_INITIALIZER!>SomeClassWithName(1)::property.name<!>
-const val errorPlus = <!CONST_VAL_WITH_NON_CONST_INITIALIZER!>"" + ::SomeClassWithName.property<!>
+const val errorPlus = <!CONST_VAL_WITH_NON_CONST_INITIALIZER!>"" + SomeClassWithName(1)::property<!>

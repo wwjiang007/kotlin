@@ -25036,9 +25036,14 @@ public class IrCodegenBoxWasmTestGenerated extends AbstractIrCodegenBoxWasmTest 
             runTest("compiler/testData/codegen/box/secondaryConstructors/enums.kt");
         }
 
-        @TestMetadata("fieldInitializerOptimization.kt")
-        public void testFieldInitializerOptimization() throws Exception {
-            runTest("compiler/testData/codegen/box/secondaryConstructors/fieldInitializerOptimization.kt");
+        @TestMetadata("fieldInitializerOptimization_after.kt")
+        public void testFieldInitializerOptimization_after() throws Exception {
+            runTest("compiler/testData/codegen/box/secondaryConstructors/fieldInitializerOptimization_after.kt");
+        }
+
+        @TestMetadata("fieldInitializerOptimization_before.kt")
+        public void testFieldInitializerOptimization_before() throws Exception {
+            runTest("compiler/testData/codegen/box/secondaryConstructors/fieldInitializerOptimization_before.kt");
         }
 
         @TestMetadata("fieldInitializerOptimization_inlineClass.kt")

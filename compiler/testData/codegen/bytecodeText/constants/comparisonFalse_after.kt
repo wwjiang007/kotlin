@@ -1,3 +1,4 @@
+// !LANGUAGE: +FoldableDeclarations
 // TARGET_BACKEND: JVM_IR
 
 fun foo(): Array<Boolean> {

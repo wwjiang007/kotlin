@@ -8,6 +8,8 @@ package org.jetbrains.kotlin.backend.jvm.lower
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
 import org.jetbrains.kotlin.backend.common.phaser.makeIrModulePhase
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
+import org.jetbrains.kotlin.config.LanguageFeature
+import org.jetbrains.kotlin.config.languageVersionSettings
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.interpreter.IrInterpreter
 import org.jetbrains.kotlin.ir.interpreter.checker.EvaluationMode
@@ -25,6 +27,7 @@ class ConstEvaluationLowering(val context: JvmBackendContext) : FileLoweringPass
     val interpreter = IrInterpreter(context.irBuiltIns)
 
     override fun lower(irFile: IrFile) {
+        if (!context.configuration.languageVersionSettings.supportsFeature(LanguageFeature.FoldableDeclarations)) return
         val transformer = IrConstTransformer(interpreter, irFile, mode = EvaluationMode.ONLY_FOLDABLE) { element, error ->
             context.ktDiagnosticReporter.at(element, irFile)
                 .report(JvmBackendErrors.EXCEPTION_IN_CONST_VAL_INITIALIZER, error.description)

@@ -1,3 +1,4 @@
+// !LANGUAGE: +FoldableDeclarations
 const val flag = true
 const val value = 10
 
@@ -18,5 +19,5 @@ const val withWhen3 = when(value) {
 const val multibranchIf = if (value == 100) 1 else if (value == 1000) 2 else 3
 
 val nonConstFlag = true
-const val errorConstIf = <!CONST_VAL_WITH_NON_CONST_INITIALIZER!>if (nonConstFlag) 1 else 2<!>
-const val errorBranch = <!CONST_VAL_WITH_NON_CONST_INITIALIZER!>if (flag) nonConstFlag else false<!>
+const val errorConstIf = if (nonConstFlag) 1 else 2
+const val errorBranch = if (flag) nonConstFlag else false

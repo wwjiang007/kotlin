@@ -1,3 +1,4 @@
+// !LANGUAGE: +FoldableDeclarations
 // WITH_STDLIB
 const val trimMargin = "123".trimMargin()
 

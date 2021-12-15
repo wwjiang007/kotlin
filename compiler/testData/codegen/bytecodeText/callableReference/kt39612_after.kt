@@ -1,3 +1,4 @@
+// !LANGUAGE: +FoldableDeclarations
 fun foo() {}
 
 fun id(s: String) = s

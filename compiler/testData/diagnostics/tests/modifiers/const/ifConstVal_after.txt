@@ -10,4 +10,3 @@ public const val value: kotlin.Int = 10
 public const val withWhen: kotlin.String
 public const val withWhen2: kotlin.String
 public const val withWhen3: kotlin.String
-

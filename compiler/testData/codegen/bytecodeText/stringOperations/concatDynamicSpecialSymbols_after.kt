@@ -1,3 +1,4 @@
+// !LANGUAGE: -FoldableDeclarations
 // JVM_TARGET: 11
 
 fun box(a: String, b: String?) {

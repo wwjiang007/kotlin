@@ -1,3 +1,4 @@
+// !LANGUAGE: -FoldableDeclarations
 class A
 
 fun foo(x: Any?) {}

@@ -16,9 +16,11 @@
 
 package org.jetbrains.kotlin.backend.common.lower
 
-import org.jetbrains.kotlin.backend.common.BackendContext
+import org.jetbrains.kotlin.backend.common.CommonBackendContext
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
 import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
+import org.jetbrains.kotlin.config.LanguageFeature
+import org.jetbrains.kotlin.config.languageVersionSettings
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrProperty
@@ -38,8 +40,9 @@ val kCallableNamePropertyPhase = makeIrFilePhase(
     description = "Replace name references for callables with constants"
 )
 
-private class KCallableNamePropertyLowering(val context: BackendContext) : FileLoweringPass {
+private class KCallableNamePropertyLowering(val context: CommonBackendContext) : FileLoweringPass {
     override fun lower(irFile: IrFile) {
+        if (context.configuration.languageVersionSettings.supportsFeature(LanguageFeature.FoldableDeclarations)) return
         irFile.transformChildrenVoid(KCallableNamePropertyTransformer(this))
     }
 }

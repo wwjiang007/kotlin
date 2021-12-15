@@ -1,3 +1,4 @@
+// !LANGUAGE: +FoldableDeclarations
 // FIR_IDENTICAL
 // WITH_STDLIB
 

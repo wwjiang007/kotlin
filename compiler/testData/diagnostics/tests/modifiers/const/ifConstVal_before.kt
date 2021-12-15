@@ -1,3 +1,4 @@
+// !LANGUAGE: -FoldableDeclarations
 const val flag = true
 const val value = 10
 

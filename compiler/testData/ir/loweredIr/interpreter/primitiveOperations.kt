@@ -1,3 +1,4 @@
+// !LANGUAGE: +FoldableDeclarations
 const val add = 1 + 2 + 3 + 4
 const val concat = "1" + 2 + 3 + 4
 const val divide = 1 / 2.0

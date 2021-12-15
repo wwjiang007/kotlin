@@ -1,3 +1,4 @@
+// !LANGUAGE: +FoldableDeclarations
 // WITH_STDLIB
 const val trimIndent = "123".trimIndent()
 const val complexTrimIndent =

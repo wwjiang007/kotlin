@@ -31166,9 +31166,15 @@ public class NativeExtBlackBoxTestGenerated extends AbstractNativeBlackBoxTest {
             }
 
             @Test
-            @TestMetadata("fieldInitializerOptimization.kt")
-            public void testFieldInitializerOptimization() throws Exception {
-                runTest("compiler/testData/codegen/box/secondaryConstructors/fieldInitializerOptimization.kt");
+            @TestMetadata("fieldInitializerOptimization_after.kt")
+            public void testFieldInitializerOptimization_after() throws Exception {
+                runTest("compiler/testData/codegen/box/secondaryConstructors/fieldInitializerOptimization_after.kt");
+            }
+
+            @Test
+            @TestMetadata("fieldInitializerOptimization_before.kt")
+            public void testFieldInitializerOptimization_before() throws Exception {
+                runTest("compiler/testData/codegen/box/secondaryConstructors/fieldInitializerOptimization_before.kt");
             }
 
             @Test

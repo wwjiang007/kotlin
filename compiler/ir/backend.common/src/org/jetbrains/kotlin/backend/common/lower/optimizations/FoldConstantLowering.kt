@@ -7,8 +7,11 @@ package org.jetbrains.kotlin.backend.common.lower.optimizations
 
 import org.jetbrains.kotlin.backend.common.BodyLoweringPass
 import org.jetbrains.kotlin.backend.common.CommonBackendContext
+import org.jetbrains.kotlin.backend.common.FileLoweringPass
 import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
 import org.jetbrains.kotlin.builtins.PrimitiveType
+import org.jetbrains.kotlin.config.LanguageFeature
+import org.jetbrains.kotlin.config.languageVersionSettings
 import org.jetbrains.kotlin.ir.BuiltInOperatorNames
 import org.jetbrains.kotlin.ir.IrBuiltIns
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
@@ -31,7 +34,13 @@ import kotlin.math.max
 import kotlin.math.min
 
 val foldConstantLoweringPhase = makeIrFilePhase(
-    { ctx: CommonBackendContext -> FoldConstantLowering(ctx) },
+    { ctx: CommonBackendContext ->
+        val supportsFoldable = ctx.configuration.languageVersionSettings.supportsFeature(LanguageFeature.FoldableDeclarations)
+        if (!supportsFoldable)
+            FoldConstantLowering(ctx)
+        else
+            FileLoweringPass.Empty
+    },
     name = "FoldConstantLowering",
     description = "Constant Folding"
 )

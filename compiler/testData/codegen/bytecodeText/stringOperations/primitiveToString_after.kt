@@ -1,3 +1,4 @@
+// !LANGUAGE: +FoldableDeclarations
 fun boolConst() = false.toString()
 fun byteConst() = 1.toByte().toString()
 fun shortConst() = 1.toShort().toString()

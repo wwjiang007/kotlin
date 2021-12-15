@@ -56,9 +56,15 @@ public class IrBytecodeListingTestGenerated extends AbstractIrBytecodeListingTes
     }
 
     @Test
-    @TestMetadata("callableNameIntrinsic.kt")
-    public void testCallableNameIntrinsic() throws Exception {
-        runTest("compiler/testData/codegen/bytecodeListing/callableNameIntrinsic.kt");
+    @TestMetadata("callableNameIntrinsic_after.kt")
+    public void testCallableNameIntrinsic_after() throws Exception {
+        runTest("compiler/testData/codegen/bytecodeListing/callableNameIntrinsic_after.kt");
+    }
+
+    @Test
+    @TestMetadata("callableNameIntrinsic_before.kt")
+    public void testCallableNameIntrinsic_before() throws Exception {
+        runTest("compiler/testData/codegen/bytecodeListing/callableNameIntrinsic_before.kt");
     }
 
     @Test

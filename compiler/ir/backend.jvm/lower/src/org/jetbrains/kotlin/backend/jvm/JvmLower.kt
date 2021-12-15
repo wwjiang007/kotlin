@@ -14,6 +14,8 @@ import org.jetbrains.kotlin.backend.common.phaser.*
 import org.jetbrains.kotlin.backend.jvm.ir.constantValue
 import org.jetbrains.kotlin.backend.jvm.ir.shouldContainSuspendMarkers
 import org.jetbrains.kotlin.backend.jvm.lower.*
+import org.jetbrains.kotlin.config.LanguageFeature
+import org.jetbrains.kotlin.config.languageVersionSettings
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.ir.IrElement
@@ -156,7 +158,8 @@ private val jvmLocalClassExtractionPhase = makeIrFilePhase(
 
 private val computeStringTrimPhase = makeIrFilePhase<JvmBackendContext>(
     { context ->
-        if (context.state.canReplaceStdlibRuntimeApiBehavior)
+        val supportsFoldable = context.configuration.languageVersionSettings.supportsFeature(LanguageFeature.FoldableDeclarations)
+        if (context.state.canReplaceStdlibRuntimeApiBehavior && !supportsFoldable)
             StringTrimLowering(context)
         else
             FileLoweringPass.Empty

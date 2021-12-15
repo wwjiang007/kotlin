@@ -1,3 +1,4 @@
+// !LANGUAGE: -FoldableDeclarations
 fun box(): String {
     return "O" + "K".toString() + 1.toLong()
 }

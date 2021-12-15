@@ -1,3 +1,4 @@
+// !LANGUAGE: +FoldableDeclarations
 fun constant(): String {
     return """
         |Hello,

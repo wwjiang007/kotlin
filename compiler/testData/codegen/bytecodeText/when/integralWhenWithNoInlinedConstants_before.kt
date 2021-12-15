@@ -1,3 +1,4 @@
+// !LANGUAGE: -FoldableDeclarations
 fun foo1(x: Int): Boolean {
     when(x) {
         0 -> return true

@@ -1,3 +1,4 @@
+// !LANGUAGE: +FoldableDeclarations
 class A(val OK: Int, val somePropertyWithLongName: String) {
     fun foo() {}
 }

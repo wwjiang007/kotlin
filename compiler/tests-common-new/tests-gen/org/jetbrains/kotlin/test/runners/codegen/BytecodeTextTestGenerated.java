@@ -923,9 +923,15 @@ public class BytecodeTextTestGenerated extends AbstractBytecodeTextTest {
         }
 
         @Test
-        @TestMetadata("kt39612.kt")
-        public void testKt39612() throws Exception {
-            runTest("compiler/testData/codegen/bytecodeText/callableReference/kt39612.kt");
+        @TestMetadata("kt39612_after.kt")
+        public void testKt39612_after() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/callableReference/kt39612_after.kt");
+        }
+
+        @Test
+        @TestMetadata("kt39612_before.kt")
+        public void testKt39612_before() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/callableReference/kt39612_before.kt");
         }
 
         @Test
@@ -1543,9 +1549,15 @@ public class BytecodeTextTestGenerated extends AbstractBytecodeTextTest {
         }
 
         @Test
-        @TestMetadata("string.kt")
-        public void testString() throws Exception {
-            runTest("compiler/testData/codegen/bytecodeText/constants/string.kt");
+        @TestMetadata("string_after.kt")
+        public void testString_after() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/constants/string_after.kt");
+        }
+
+        @Test
+        @TestMetadata("string_before.kt")
+        public void testString_before() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/constants/string_before.kt");
         }
     }
 
@@ -1991,15 +2003,21 @@ public class BytecodeTextTestGenerated extends AbstractBytecodeTextTest {
         }
 
         @Test
-        @TestMetadata("boxing.kt")
-        public void testBoxing() throws Exception {
-            runTest("compiler/testData/codegen/bytecodeText/deadCodeElimination/boxing.kt");
-        }
-
-        @Test
         @TestMetadata("boxingNotOptimizable.kt")
         public void testBoxingNotOptimizable() throws Exception {
             runTest("compiler/testData/codegen/bytecodeText/deadCodeElimination/boxingNotOptimizable.kt");
+        }
+
+        @Test
+        @TestMetadata("boxing_after.kt")
+        public void testBoxing_after() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/deadCodeElimination/boxing_after.kt");
+        }
+
+        @Test
+        @TestMetadata("boxing_before.kt")
+        public void testBoxing_before() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/deadCodeElimination/boxing_before.kt");
         }
 
         @Test
@@ -3945,9 +3963,15 @@ public class BytecodeTextTestGenerated extends AbstractBytecodeTextTest {
         }
 
         @Test
-        @TestMetadata("trimIndentPositive.kt")
-        public void testTrimIndentPositive() throws Exception {
-            runTest("compiler/testData/codegen/bytecodeText/intrinsicsTrim/trimIndentPositive.kt");
+        @TestMetadata("trimIndentPositive_after.kt")
+        public void testTrimIndentPositive_after() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/intrinsicsTrim/trimIndentPositive_after.kt");
+        }
+
+        @Test
+        @TestMetadata("trimIndentPositive_before.kt")
+        public void testTrimIndentPositive_before() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/intrinsicsTrim/trimIndentPositive_before.kt");
         }
 
         @Test
@@ -3957,9 +3981,15 @@ public class BytecodeTextTestGenerated extends AbstractBytecodeTextTest {
         }
 
         @Test
-        @TestMetadata("trimMarginPositive.kt")
-        public void testTrimMarginPositive() throws Exception {
-            runTest("compiler/testData/codegen/bytecodeText/intrinsicsTrim/trimMarginPositive.kt");
+        @TestMetadata("trimMarginPositive_after.kt")
+        public void testTrimMarginPositive_after() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/intrinsicsTrim/trimMarginPositive_after.kt");
+        }
+
+        @Test
+        @TestMetadata("trimMarginPositive_before.kt")
+        public void testTrimMarginPositive_before() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/intrinsicsTrim/trimMarginPositive_before.kt");
         }
     }
 
@@ -5161,9 +5191,15 @@ public class BytecodeTextTestGenerated extends AbstractBytecodeTextTest {
         }
 
         @Test
-        @TestMetadata("concatDynamicSpecialSymbols.kt")
-        public void testConcatDynamicSpecialSymbols() throws Exception {
-            runTest("compiler/testData/codegen/bytecodeText/stringOperations/concatDynamicSpecialSymbols.kt");
+        @TestMetadata("concatDynamicSpecialSymbols_after.kt")
+        public void testConcatDynamicSpecialSymbols_after() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/stringOperations/concatDynamicSpecialSymbols_after.kt");
+        }
+
+        @Test
+        @TestMetadata("concatDynamicSpecialSymbols_before.kt")
+        public void testConcatDynamicSpecialSymbols_before() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/stringOperations/concatDynamicSpecialSymbols_before.kt");
         }
 
         @Test
@@ -5257,15 +5293,21 @@ public class BytecodeTextTestGenerated extends AbstractBytecodeTextTest {
         }
 
         @Test
-        @TestMetadata("primitiveToString.kt")
-        public void testPrimitiveToString() throws Exception {
-            runTest("compiler/testData/codegen/bytecodeText/stringOperations/primitiveToString.kt");
-        }
-
-        @Test
         @TestMetadata("primitiveToStringNotOptimizable.kt")
         public void testPrimitiveToStringNotOptimizable() throws Exception {
             runTest("compiler/testData/codegen/bytecodeText/stringOperations/primitiveToStringNotOptimizable.kt");
+        }
+
+        @Test
+        @TestMetadata("primitiveToString_after.kt")
+        public void testPrimitiveToString_after() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/stringOperations/primitiveToString_after.kt");
+        }
+
+        @Test
+        @TestMetadata("primitiveToString_before.kt")
+        public void testPrimitiveToString_before() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/stringOperations/primitiveToString_before.kt");
         }
 
         @Test
@@ -5535,9 +5577,15 @@ public class BytecodeTextTestGenerated extends AbstractBytecodeTextTest {
         }
 
         @Test
-        @TestMetadata("integralWhenWithNoInlinedConstants.kt")
-        public void testIntegralWhenWithNoInlinedConstants() throws Exception {
-            runTest("compiler/testData/codegen/bytecodeText/when/integralWhenWithNoInlinedConstants.kt");
+        @TestMetadata("integralWhenWithNoInlinedConstants_after.kt")
+        public void testIntegralWhenWithNoInlinedConstants_after() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/when/integralWhenWithNoInlinedConstants_after.kt");
+        }
+
+        @Test
+        @TestMetadata("integralWhenWithNoInlinedConstants_before.kt")
+        public void testIntegralWhenWithNoInlinedConstants_before() throws Exception {
+            runTest("compiler/testData/codegen/bytecodeText/when/integralWhenWithNoInlinedConstants_before.kt");
         }
 
         @Test
