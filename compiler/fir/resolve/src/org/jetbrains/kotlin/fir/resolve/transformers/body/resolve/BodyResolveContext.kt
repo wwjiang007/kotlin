@@ -174,8 +174,9 @@ class BodyResolveContext(
     }
 
     @PrivateForInline
-    fun replaceTowerDataContext(newContext: FirTowerDataContext) {
+    fun replaceTowerDataContext(newContext: FirTowerDataContext): BodyResolveContext {
         towerDataContextsForClassParts.currentContext = newContext
+        return this
     }
 
     @PrivateForInline

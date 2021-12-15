@@ -84,6 +84,7 @@ fun <F : FirClassLikeDeclaration> F.runContractAndBodiesResolutionForLocalClass(
 
     val newContext = components.context.createSnapshotForLocalClasses(returnTypeCalculator, targetedClasses)
     returnTypeCalculator.outerBodyResolveContext = newContext
+    returnTypeCalculator.outerTowerDataContext = newContext.towerDataContext
 
     runContractResolveForLocalClass(components.session, components.scopeSession, components.context, targetedClasses)
 
@@ -206,6 +207,7 @@ private class ReturnTypeCalculatorWithJump(
 ) : ReturnTypeCalculator {
 
     var outerBodyResolveContext: BodyResolveContext? = null
+    var outerTowerDataContext: FirTowerDataContext? = null
 
     override fun tryCalculateReturnType(declaration: FirTypedDeclaration): FirResolvedTypeRef {
         if (declaration is FirValueParameter && declaration.returnTypeRef is FirImplicitTypeRef) {
@@ -253,6 +255,7 @@ private class ReturnTypeCalculatorWithJump(
         }
     }
 
+    @OptIn(PrivateForInline::class)
     private fun computeReturnTypeRef(declaration: FirCallableDeclaration): FirResolvedTypeRef {
         val symbol = declaration.symbol
         val provider = session.firProvider
@@ -283,7 +286,7 @@ private class ReturnTypeCalculatorWithJump(
             scopeSession,
             implicitBodyResolveComputationSession,
             this,
-            outerBodyResolveContext
+            outerBodyResolveContext?.replaceTowerDataContext(outerTowerDataContext!!)
         )
 
         designation.first().transform<FirElement, ResolutionMode>(transformer, ResolutionMode.ContextDependent)
