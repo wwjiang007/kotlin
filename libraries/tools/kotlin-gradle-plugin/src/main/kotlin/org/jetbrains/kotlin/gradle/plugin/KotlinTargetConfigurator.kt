@@ -457,7 +457,7 @@ abstract class KotlinOnlyTargetConfigurator<KotlinCompilationType : KotlinCompil
     }
 }
 
-internal interface KotlinTargetWithTestsConfigurator<R : KotlinTargetTestRun<*>, T : KotlinTargetWithTests<*, R>>
+internal interface KotlinTargetWithTestsConfigurator<R : KotlinTargetTestRun<*>, T : KotlinTargetWithTests<R>>
     : KotlinTargetConfigurator<T> {
 
     override fun configureTarget(target: T) {
@@ -477,7 +477,7 @@ internal interface KotlinTargetWithTestsConfigurator<R : KotlinTargetTestRun<*>,
     private fun initializeTestRuns(target: T) {
         val project = target.project
 
-        val testRunsPropertyName = KotlinTargetWithTests<*, *>::testRuns.name
+        val testRunsPropertyName = KotlinTargetWithTests<*>::testRuns.name
         val mutableProperty =
             target::class.memberProperties
                 .find { it.name == testRunsPropertyName } as? KMutableProperty1<*, *>
@@ -489,7 +489,7 @@ internal interface KotlinTargetWithTestsConfigurator<R : KotlinTargetTestRun<*>,
         val testRunsContainer = project.container(testRunClass) { testRunName -> createTestRun(testRunName, target) }
 
         @Suppress("UNCHECKED_CAST")
-        (mutableProperty as KMutableProperty1<KotlinTargetWithTests<*, R>, NamedDomainObjectContainer<R>>)
+        (mutableProperty as KMutableProperty1<KotlinTargetWithTests<R>, NamedDomainObjectContainer<R>>)
             .set(target, testRunsContainer)
 
         (target as ExtensionAware).extensions.add(target::testRuns.name, testRunsContainer)

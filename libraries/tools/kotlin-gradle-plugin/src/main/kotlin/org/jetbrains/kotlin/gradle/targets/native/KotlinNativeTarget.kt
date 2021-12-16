@@ -190,7 +190,7 @@ internal fun getHostSpecificSourceSets(project: Project): Set<KotlinSourceSet> {
 abstract class KotlinNativeTargetWithTests<T : KotlinNativeBinaryTestRun>(
     project: Project,
     konanTarget: KonanTarget
-) : KotlinNativeTarget(project, konanTarget), KotlinTargetWithTests<NativeBinaryTestRunSource, T> {
+) : KotlinNativeTarget(project, konanTarget), KotlinTargetWithTests<T> {
 
     override lateinit var testRuns: NamedDomainObjectContainer<T>
         internal set

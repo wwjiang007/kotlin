@@ -29,7 +29,7 @@ open class KotlinMultiplatformExtension(project: Project) :
         internal set
 
     @Suppress("unused") // DSL
-    val testableTargets: NamedDomainObjectCollection<KotlinTargetWithTests<*, *>>
+    val testableTargets: NamedDomainObjectCollection<KotlinTargetWithTests<*>>
         get() = targets.withType(KotlinTargetWithTests::class.java)
 
     fun metadata(configure: KotlinOnlyTarget<AbstractKotlinCompilation<*>>.() -> Unit = { }): KotlinOnlyTarget<AbstractKotlinCompilation<*>> =

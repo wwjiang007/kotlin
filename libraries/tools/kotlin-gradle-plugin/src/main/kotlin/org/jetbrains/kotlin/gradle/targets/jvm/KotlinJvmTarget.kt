@@ -32,7 +32,7 @@ import kotlin.reflect.full.functions
 open class KotlinJvmTarget @Inject constructor(
     project: Project
 ) : KotlinOnlyTarget<KotlinJvmCompilation>(project, KotlinPlatformType.jvm),
-    KotlinTargetWithTests<JvmClasspathTestRunSource, KotlinJvmTestRun> {
+    KotlinTargetWithTests<KotlinJvmTestRun> {
 
     override lateinit var testRuns: NamedDomainObjectContainer<KotlinJvmTestRun>
 

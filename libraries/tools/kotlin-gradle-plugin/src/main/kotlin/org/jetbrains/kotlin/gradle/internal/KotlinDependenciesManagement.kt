@@ -313,7 +313,7 @@ private fun kotlinTestCapabilityForJvmSourceSet(project: Project, kotlinSourceSe
     val testTaskLists: List<List<Task>?> = compilations.map { compilation ->
         val target = compilation.target
         when {
-            target is KotlinTargetWithTests<*, *> ->
+            target is KotlinTargetWithTests<*> ->
                 target.findTestRunsByCompilation(compilation)?.filterIsInstance<KotlinTaskTestRun<*, *>>()?.map { it.executionTask.get() }
             target is KotlinWithJavaTarget<*> ->
                 if (compilation.name == KotlinCompilation.TEST_COMPILATION_NAME)
@@ -358,7 +358,7 @@ private fun testFrameworkOf(testTask: Test): KotlinTestJvmFramework = when (test
         KotlinTestJvmFramework.junit
 }
 
-private fun KotlinTargetWithTests<*, *>.findTestRunsByCompilation(byCompilation: KotlinCompilation<*>): List<KotlinTargetTestRun<*>>? {
+private fun KotlinTargetWithTests<*>.findTestRunsByCompilation(byCompilation: KotlinCompilation<*>): List<KotlinTargetTestRun<*>>? {
     fun KotlinExecution.ExecutionSource.isProducedFromTheCompilation(): Boolean = when (this) {
         is CompilationExecutionSource<*> -> compilation == byCompilation
         is JvmCompilationsTestRunSource -> byCompilation in testCompilations
