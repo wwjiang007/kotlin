@@ -28,9 +28,11 @@ import org.jetbrains.kotlin.inline.inlineFunctionsJvmNames
 import org.jetbrains.kotlin.load.kotlin.header.KotlinClassHeader
 import org.jetbrains.kotlin.load.kotlin.incremental.components.IncrementalCache
 import org.jetbrains.kotlin.load.kotlin.incremental.components.JvmPackagePartProto
+import org.jetbrains.kotlin.metadata.ProtoBuf
 import org.jetbrains.kotlin.metadata.jvm.deserialization.BitEncoding
 import org.jetbrains.kotlin.metadata.jvm.deserialization.JvmProtoBufUtil
 import org.jetbrains.kotlin.metadata.jvm.deserialization.ModuleMapping
+import org.jetbrains.kotlin.metadata.jvm.serialization.JvmStringTable
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.SpecialNames.DEFAULT_NAME_FOR_COMPANION_OBJECT
@@ -197,6 +199,13 @@ open class IncrementalJvmCache(
         }
     }
 
+    fun collectClassChangesByMetadata(
+        className: JvmClassName, classProto: ProtoBuf.Class, stringTable: JvmStringTable, changesCollector: ChangesCollector
+    ) {
+        //class
+        protoMap.check(className, classProto, stringTable, changesCollector)
+    }
+
     fun saveJavaClassProto(source: File?, serializedJavaClass: SerializedJavaClass, collector: ChangesCollector) {
         val jvmClassName = JvmClassName.byClassId(serializedJavaClass.classId)
         javaSourcesProtoMap.process(jvmClassName, serializedJavaClass, collector)
@@ -325,6 +334,15 @@ open class IncrementalJvmCache(
 
             val packageFqName = kotlinClassInfo.className.packageFqName
             changesCollector.collectProtoChanges(oldData?.toProtoData(packageFqName), newData.toProtoData(packageFqName), packageProtoKey = key)
+        }
+
+        internal fun check(
+            className: JvmClassName, classProto: ProtoBuf.Class, stringTable: JvmStringTable, changesCollector: ChangesCollector
+        ) {
+            val key = className.internalName
+            val oldProtoData = storage[key]?.toProtoData(className.packageFqName)
+            val newProtoData = ClassProtoData(classProto, stringTable.toNameResolver())
+            changesCollector.collectProtoChanges(oldProtoData, newProtoData, packageProtoKey = key)
         }
 
         operator fun contains(className: JvmClassName): Boolean =
