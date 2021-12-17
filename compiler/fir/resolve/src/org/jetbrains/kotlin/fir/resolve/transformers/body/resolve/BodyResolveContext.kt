@@ -424,8 +424,10 @@ class BodyResolveContext(
         holder: SessionHolder,
         crossinline f: () -> T
     ): T {
-        return withScopesForClass(anonymousObject, holder) {
-            withContainer(anonymousObject, f)
+        return withTowerDataMode(FirTowerDataMode.MEMBER_DECLARATION) {
+            withScopesForClass(anonymousObject, holder) {
+                withContainer(anonymousObject, f)
+            }
         }
     }
 
