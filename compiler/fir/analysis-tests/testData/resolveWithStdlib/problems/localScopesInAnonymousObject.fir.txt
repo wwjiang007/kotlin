@@ -11,7 +11,7 @@ FILE: localScopesInAnonymousObject.kt
             ^foo R|kotlin/with|<R|kotlin/String|, R|kotlin/Unit|>(this@R|/<anonymous>|.R|/<anonymous>.someString|, <L> = with@fun R|kotlin/String|.<anonymous>(): R|kotlin/Unit| <inline=Inline, kind=EXACTLY_ONCE>  {
                 lval presentations: R|kotlin/collections/MutableList<kotlin/String>| = R|kotlin/collections/mutableListOf|<R|kotlin/String|>()
                 this@R|/<anonymous>|.R|/<anonymous>.bar|(Boolean(true))?.{ $subj$.R|kotlin/let|<R|kotlin/String|, R|kotlin/Unit|>(<L> = let@fun <anonymous>(it: R|kotlin/String|): R|kotlin/Unit| <inline=Inline, kind=EXACTLY_ONCE>  {
-                    <Unresolved name: presentations>#.<Unresolved name: add>#(R|<local>/it|)
+                    R|<local>/presentations|.R|SubstitutionOverride<kotlin/collections/MutableList.add: R|kotlin/Boolean|>|(R|<local>/it|)
                 }
                 ) }
             }
@@ -49,7 +49,7 @@ FILE: localScopesInAnonymousObject.kt
                 ^foo R|kotlin/with|<R|kotlin/String|, R|kotlin/Unit|>(this@R|/Local|.R|<local>/someString|, <L> = with@fun R|kotlin/String|.<anonymous>(): R|kotlin/Unit| <inline=Inline, kind=EXACTLY_ONCE>  {
                     lval presentations: R|kotlin/collections/MutableList<kotlin/String>| = R|kotlin/collections/mutableListOf|<R|kotlin/String|>()
                     this@R|/Local|.R|<local>/bar|(Boolean(true))?.{ $subj$.R|kotlin/let|<R|kotlin/String|, R|kotlin/Unit|>(<L> = let@fun <anonymous>(it: R|kotlin/String|): R|kotlin/Unit| <inline=Inline, kind=EXACTLY_ONCE>  {
-                        <Unresolved name: presentations>#.<Unresolved name: add>#(R|<local>/it|)
+                        R|<local>/presentations|.R|SubstitutionOverride<kotlin/collections/MutableList.add: R|kotlin/Boolean|>|(R|<local>/it|)
                     }
                     ) }
                 }

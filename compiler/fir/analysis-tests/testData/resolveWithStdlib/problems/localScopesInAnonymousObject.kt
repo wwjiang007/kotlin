@@ -4,7 +4,7 @@ val x = object {
     private fun foo(): Unit = with(someString) {
         val presentations = mutableListOf<String>()
         bar(true)?.let {
-            <!UNRESOLVED_REFERENCE!>presentations<!>.add(it)
+            presentations.add(it)
         }
     }
 
@@ -20,7 +20,7 @@ fun owner() {
         private fun foo(): Unit = with(someString) {
             val presentations = mutableListOf<String>()
             bar(true)?.let {
-                <!UNRESOLVED_REFERENCE!>presentations<!>.add(it)
+                presentations.add(it)
             }
         }
 
