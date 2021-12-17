@@ -15,33 +15,58 @@ enum class FirTowerDataMode {
     COMPANION_OBJECT,
     CONSTRUCTOR_HEADER,
     ENUM_ENTRY,
-    SPECIAL,
 }
 
-class FirRegularTowerDataContexts(
-    forMemberDeclarations: FirTowerDataContext,
-    forNestedClasses: FirTowerDataContext? = null,
-    forCompanionObject: FirTowerDataContext? = null,
-    forConstructorHeaders: FirTowerDataContext? = null,
-    forEnumEntries: FirTowerDataContext? = null,
-    val primaryConstructorPureParametersScope: FirLocalScope? = null,
-    val primaryConstructorAllParametersScope: FirLocalScope? = null,
+class FirRegularTowerDataContexts private constructor(
+    private val modeMap: EnumMap<FirTowerDataMode, FirTowerDataContext>,
+    val primaryConstructorPureParametersScope: FirLocalScope?,
+    val primaryConstructorAllParametersScope: FirLocalScope?,
+    val mode: FirTowerDataMode,
 ) {
-    private val modeMap = EnumMap<FirTowerDataMode, FirTowerDataContext>(FirTowerDataMode::class.java)
+    constructor(
+        forMemberDeclarations: FirTowerDataContext,
+        forNestedClasses: FirTowerDataContext? = null,
+        forCompanionObject: FirTowerDataContext? = null,
+        forConstructorHeaders: FirTowerDataContext? = null,
+        forEnumEntries: FirTowerDataContext? = null,
+        primaryConstructorPureParametersScope: FirLocalScope? = null,
+        primaryConstructorAllParametersScope: FirLocalScope? = null,
+    ) : this(
+        enumMap(forMemberDeclarations, forNestedClasses, forCompanionObject, forConstructorHeaders, forEnumEntries),
+        primaryConstructorPureParametersScope,
+        primaryConstructorAllParametersScope,
+        FirTowerDataMode.MEMBER_DECLARATION
+    )
 
-    init {
-        modeMap[FirTowerDataMode.MEMBER_DECLARATION] = forMemberDeclarations
-        modeMap[FirTowerDataMode.NESTED_CLASS] = forNestedClasses
-        modeMap[FirTowerDataMode.COMPANION_OBJECT] = forCompanionObject
-        modeMap[FirTowerDataMode.CONSTRUCTOR_HEADER] = forConstructorHeaders
-        modeMap[FirTowerDataMode.ENUM_ENTRY] = forEnumEntries
+    val currentContext: FirTowerDataContext?
+        get() = modeMap[mode]
+
+    fun copy(newContext: FirTowerDataContext): FirRegularTowerDataContexts {
+        val modeMap = EnumMap<FirTowerDataMode, FirTowerDataContext>(FirTowerDataMode::class.java)
+        modeMap.putAll(this.modeMap)
+        modeMap[mode] = newContext
+        return FirRegularTowerDataContexts(modeMap, primaryConstructorPureParametersScope, primaryConstructorAllParametersScope, mode)
     }
 
-    var mode: FirTowerDataMode = FirTowerDataMode.MEMBER_DECLARATION
+    fun copy(newMode: FirTowerDataMode): FirRegularTowerDataContexts {
+        return FirRegularTowerDataContexts(modeMap, primaryConstructorPureParametersScope, primaryConstructorAllParametersScope, newMode)
+    }
 
-    var currentContext: FirTowerDataContext?
-        get() = modeMap[mode]
-        set(value) {
-            modeMap[mode] = value
+    companion object {
+        private fun enumMap(
+            forMemberDeclarations: FirTowerDataContext,
+            forNestedClasses: FirTowerDataContext?,
+            forCompanionObject: FirTowerDataContext?,
+            forConstructorHeaders: FirTowerDataContext?,
+            forEnumEntries: FirTowerDataContext?,
+        ): EnumMap<FirTowerDataMode, FirTowerDataContext> {
+            val modeMap = EnumMap<FirTowerDataMode, FirTowerDataContext>(FirTowerDataMode::class.java)
+            modeMap[FirTowerDataMode.MEMBER_DECLARATION] = forMemberDeclarations
+            modeMap[FirTowerDataMode.NESTED_CLASS] = forNestedClasses
+            modeMap[FirTowerDataMode.COMPANION_OBJECT] = forCompanionObject
+            modeMap[FirTowerDataMode.CONSTRUCTOR_HEADER] = forConstructorHeaders
+            modeMap[FirTowerDataMode.ENUM_ENTRY] = forEnumEntries
+            return modeMap
         }
+    }
 }
