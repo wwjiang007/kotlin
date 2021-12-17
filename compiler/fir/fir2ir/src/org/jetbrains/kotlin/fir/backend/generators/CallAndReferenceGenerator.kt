@@ -203,7 +203,7 @@ class CallAndReferenceGenerator(
         val fir = calleeReference.resolvedSymbol.fir
         if (this is FirFunctionCall && fir is FirSimpleFunction && fir.origin == FirDeclarationOrigin.SamConstructor) {
             return convertWithOffsets { startOffset, endOffset ->
-                IrTypeOperatorCallImpl(
+                IrTypeOperatorCall(
                     startOffset, endOffset, type, IrTypeOperator.SAM_CONVERSION, type, visitor.convertToIrExpression(argument)
                 )
             }
@@ -756,7 +756,7 @@ class CallAndReferenceGenerator(
                             // NB: for FE 1.0, this type cast is added by InterfaceObjectCallsLowering
                             // However, it doesn't work for FIR due to different f/o structure
                             // (FIR calls Any method directly, but FE 1.0 calls its interface f/o instead)
-                            IrTypeOperatorCallImpl(
+                            IrTypeOperatorCall(
                                 baseDispatchReceiver.startOffset,
                                 baseDispatchReceiver.endOffset,
                                 irBuiltIns.anyType,

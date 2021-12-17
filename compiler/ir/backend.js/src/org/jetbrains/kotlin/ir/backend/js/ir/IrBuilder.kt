@@ -150,7 +150,7 @@ object JsIrBuilder {
         IrWhenImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, origin, branches)
 
     fun buildTypeOperator(type: IrType, operator: IrTypeOperator, argument: IrExpression, toType: IrType) =
-        IrTypeOperatorCallImpl(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, operator, toType, argument)
+        IrTypeOperatorCall(UNDEFINED_OFFSET, UNDEFINED_OFFSET, type, operator, toType, argument)
 
     fun buildImplicitCast(value: IrExpression, toType: IrType) =
         buildTypeOperator(toType, IrTypeOperator.IMPLICIT_CAST, value, toType)

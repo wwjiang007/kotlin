@@ -300,7 +300,7 @@ fun IrBuilderWithScope.typeOperator(
     typeOperator: IrTypeOperator,
     typeOperand: IrType
 ) =
-    IrTypeOperatorCallImpl(startOffset, endOffset, resultType, typeOperator, typeOperand, argument)
+    IrTypeOperatorCall(startOffset, endOffset, resultType, typeOperator, typeOperand, argument)
 
 fun IrBuilderWithScope.irIs(argument: IrExpression, type: IrType) =
     typeOperator(context.irBuiltIns.booleanType, argument, IrTypeOperator.INSTANCEOF, type)
@@ -309,13 +309,13 @@ fun IrBuilderWithScope.irNotIs(argument: IrExpression, type: IrType) =
     typeOperator(context.irBuiltIns.booleanType, argument, IrTypeOperator.NOT_INSTANCEOF, type)
 
 fun IrBuilderWithScope.irAs(argument: IrExpression, type: IrType) =
-    IrTypeOperatorCallImpl(startOffset, endOffset, type, IrTypeOperator.CAST, type, argument)
+    IrTypeOperatorCall(startOffset, endOffset, type, IrTypeOperator.CAST, type, argument)
 
 fun IrBuilderWithScope.irImplicitCast(argument: IrExpression, type: IrType) =
-    IrTypeOperatorCallImpl(startOffset, endOffset, type, IrTypeOperator.IMPLICIT_CAST, type, argument)
+    IrTypeOperatorCall(startOffset, endOffset, type, IrTypeOperator.IMPLICIT_CAST, type, argument)
 
 fun IrBuilderWithScope.irReinterpretCast(argument: IrExpression, type: IrType) =
-    IrTypeOperatorCallImpl(startOffset, endOffset, type, IrTypeOperator.REINTERPRET_CAST, type, argument)
+    IrTypeOperatorCall(startOffset, endOffset, type, IrTypeOperator.REINTERPRET_CAST, type, argument)
 
 fun IrBuilderWithScope.irSamConversion(argument: IrExpression, type: IrType) =
     typeOperator(type, argument, IrTypeOperator.SAM_CONVERSION, type)

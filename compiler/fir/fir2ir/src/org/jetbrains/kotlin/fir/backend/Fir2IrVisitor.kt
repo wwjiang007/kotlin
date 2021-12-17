@@ -1042,7 +1042,7 @@ class Fir2IrVisitor(
                 else -> TODO("Should not be here: ${typeOperatorCall.operation} in type operator call")
             }
 
-            IrTypeOperatorCallImpl(
+            IrTypeOperatorCall(
                 startOffset, endOffset, irType, irTypeOperator, irTypeOperand,
                 convertToIrExpression(typeOperatorCall.argument)
             )

@@ -379,7 +379,7 @@ class FunctionInlining(
             if (type == this.type)
                 this
             else
-                IrTypeOperatorCallImpl(startOffset, endOffset, type, IrTypeOperator.IMPLICIT_CAST, type, this)
+                IrTypeOperatorCall(startOffset, endOffset, type, IrTypeOperator.IMPLICIT_CAST, type, this)
 
         private fun isLambdaCall(irCall: IrCall): Boolean {
             val callee = irCall.symbol.owner

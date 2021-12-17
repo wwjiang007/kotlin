@@ -18,7 +18,6 @@ import org.jetbrains.kotlin.ir.declarations.IrDeclarationBase
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationParent
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrCompositeImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrTypeParameterSymbol
 import org.jetbrains.kotlin.ir.types.*
@@ -112,7 +111,7 @@ class TypeOperatorLowering(val context: JsIrBackendContext) : BodyLoweringPass {
                 // TODO: there is possible some situation which could be visible for AutoboxingLowering
                 // They are: 1. Inline classes, 2. Unit materialization. Using unsafe cast makes lowering work wrong.
                 return if (!needBoxingOrUnboxing(arg.type, typeOperand)) {
-                    IrTypeOperatorCallImpl(startOffset, endOffset, type, IrTypeOperator.REINTERPRET_CAST, typeOperand, arg)
+                    IrTypeOperatorCall(startOffset, endOffset, type, IrTypeOperator.REINTERPRET_CAST, typeOperand, arg)
                 } else arg
             }
 

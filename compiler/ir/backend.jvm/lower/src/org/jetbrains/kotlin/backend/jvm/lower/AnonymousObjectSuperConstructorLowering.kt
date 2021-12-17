@@ -21,7 +21,6 @@ import org.jetbrains.kotlin.ir.declarations.IrVariable
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstructorCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrGetValueImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
 import org.jetbrains.kotlin.ir.util.transformInPlace
 
 internal val anonymousObjectSuperConstructorPhase = makeIrFilePhase(
@@ -84,7 +83,7 @@ private class AnonymousObjectSuperConstructorLowering(val context: JvmBackendCon
                 is IrConst<*> -> this
                 is IrGetValue -> IrGetValueImpl(startOffset, endOffset, remapping[symbol.owner]?.symbol ?: symbol)
                 is IrTypeOperatorCall ->
-                    IrTypeOperatorCallImpl(startOffset, endOffset, type, operator, typeOperand, argument.transform(remapping))
+                    IrTypeOperatorCall(startOffset, endOffset, type, operator, typeOperand, argument.transform(remapping))
                 else -> IrGetValueImpl(startOffset, endOffset, addArgument(this).symbol)
             }
 

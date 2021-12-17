@@ -10,12 +10,8 @@ import org.jetbrains.kotlin.backend.common.phaser.makeIrFilePhase
 import org.jetbrains.kotlin.backend.jvm.JvmBackendContext
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFile
-import org.jetbrains.kotlin.ir.expressions.IrCall
-import org.jetbrains.kotlin.ir.expressions.IrExpression
-import org.jetbrains.kotlin.ir.expressions.IrTypeOperator
-import org.jetbrains.kotlin.ir.expressions.copyTypeArgumentsFrom
+import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
 import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.ir.util.isKFunction
 import org.jetbrains.kotlin.ir.util.isKSuspendFunction
@@ -54,7 +50,7 @@ private class ReplaceKFunctionInvokeWithFunctionInvoke : FileLoweringPass, IrEle
                 copyTypeArgumentsFrom(expression)
                 dispatchReceiver = expression.dispatchReceiver?.transform(this@ReplaceKFunctionInvokeWithFunctionInvoke, null)?.let {
                     val newType = newCallee.owner.parentAsClass.defaultType
-                    IrTypeOperatorCallImpl(startOffset, endOffset, newType, IrTypeOperator.IMPLICIT_CAST, newType, it)
+                    IrTypeOperatorCall(startOffset, endOffset, newType, IrTypeOperator.IMPLICIT_CAST, newType, it)
                 }
                 extensionReceiver = expression.extensionReceiver?.transform(this@ReplaceKFunctionInvokeWithFunctionInvoke, null)
                 for (i in 0 until valueArgumentsCount) {

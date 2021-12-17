@@ -22,7 +22,6 @@ import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrBlockImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrFunctionReferenceImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
@@ -65,7 +64,7 @@ internal fun IrDeclaration.isJvmStaticInObject(): Boolean =
 
 // `coerceToUnit()` is private in InsertImplicitCasts, have to reproduce it here
 private fun IrExpression.coerceToUnit(irBuiltIns: IrBuiltIns) =
-    IrTypeOperatorCallImpl(startOffset, endOffset, irBuiltIns.unitType, IrTypeOperator.IMPLICIT_COERCION_TO_UNIT, irBuiltIns.unitType, this)
+    IrTypeOperatorCall(startOffset, endOffset, irBuiltIns.unitType, IrTypeOperator.IMPLICIT_COERCION_TO_UNIT, irBuiltIns.unitType, this)
 
 private fun IrMemberAccessExpression<*>.makeStatic(irBuiltIns: IrBuiltIns, replaceCallee: IrSimpleFunction?) =
     dispatchReceiver?.let { receiver ->

@@ -23,7 +23,6 @@ import org.jetbrains.kotlin.ir.descriptors.IrBuiltInsOverDescriptors
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrBlockImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrGetValueImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.inlineStatement
 import org.jetbrains.kotlin.ir.types.impl.originalKotlinType
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
@@ -143,12 +142,12 @@ class ArrayAccessAssignmentReceiver(
 
         val implicitCast = mostSpecificSamConversion.argument as IrTypeOperatorCall
 
-        return IrTypeOperatorCallImpl(
+        return IrTypeOperatorCall(
             startOffset, endOffset,
             mostSpecificSamConversion.type,
             IrTypeOperator.SAM_CONVERSION,
             mostSpecificSamConversion.typeOperand,
-            IrTypeOperatorCallImpl(
+            IrTypeOperatorCall(
                 startOffset, endOffset,
                 implicitCast.type,
                 IrTypeOperator.IMPLICIT_CAST,

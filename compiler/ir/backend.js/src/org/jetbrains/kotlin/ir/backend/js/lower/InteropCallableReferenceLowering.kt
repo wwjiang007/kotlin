@@ -118,7 +118,7 @@ class InteropCallableReferenceLowering(val context: JsIrBackendContext) : BodyLo
 
         fun IrExpression.getValue(d: IrValueSymbol): IrExpression = IrGetValueImpl(startOffset, endOffset, d)
         fun IrExpression.getCastedValue(d: IrValueSymbol, toType: IrType): IrExpression =
-            IrTypeOperatorCallImpl(startOffset, endOffset, toType, IrTypeOperator.IMPLICIT_CAST, toType, getValue(d))
+            IrTypeOperatorCall(startOffset, endOffset, toType, IrTypeOperator.IMPLICIT_CAST, toType, getValue(d))
 
         // TODO: remap type parameters???
         body.transformChildrenVoid(object : IrElementTransformerVoid() {

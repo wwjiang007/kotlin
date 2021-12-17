@@ -14,7 +14,6 @@ import org.jetbrains.kotlin.ir.builders.irGet
 import org.jetbrains.kotlin.ir.builders.irIfNull
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
-import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
 import org.jetbrains.kotlin.ir.symbols.IrVariableSymbol
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.isNullable
@@ -214,7 +213,7 @@ class IfNullExpressionsFusionLowering(val context: CommonBackendContext) : FileL
         when {
             this is IrGetValue && symbol == from.symbol -> to
             this is IrTypeOperatorCall ->
-                IrTypeOperatorCallImpl(startOffset, endOffset, type, operator, typeOperand, argument.remap(from, to))
+                IrTypeOperatorCall(startOffset, endOffset, type, operator, typeOperand, argument.remap(from, to))
             // TODO other expressions may not require a temporary even if they read the variable.
             else ->
                 context.createIrBuilder((from.parent as IrSymbolOwner).symbol, startOffset, endOffset).irBlock {

@@ -18,6 +18,9 @@ package org.jetbrains.kotlin.ir.expressions
 
 import org.jetbrains.kotlin.ir.symbols.IrClassifierSymbol
 import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.classifierOrFail
+import org.jetbrains.kotlin.ir.visitors.IrElementTransformer
+import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 
 enum class IrTypeOperator {
     /** Explicit cast: `e as Type` */
@@ -66,9 +69,26 @@ enum class IrTypeOperator {
     REINTERPRET_CAST;
 }
 
-abstract class IrTypeOperatorCall : IrExpression() {
-    abstract val operator: IrTypeOperator
-    abstract var argument: IrExpression
-    abstract var typeOperand: IrType
-    abstract val typeOperandClassifier: IrClassifierSymbol
+class IrTypeOperatorCall(
+    override val startOffset: Int,
+    override val endOffset: Int,
+    override var type: IrType,
+    val operator: IrTypeOperator,
+    var typeOperand: IrType,
+    var argument: IrExpression,
+) : IrExpression() {
+
+    val typeOperandClassifier: IrClassifierSymbol
+        get() = typeOperand.classifierOrFail
+
+    override fun <R, D> accept(visitor: IrElementVisitor<R, D>, data: D): R =
+        visitor.visitTypeOperator(this, data)
+
+    override fun <D> acceptChildren(visitor: IrElementVisitor<Unit, D>, data: D) {
+        argument.accept(visitor, data)
+    }
+
+    override fun <D> transformChildren(transformer: IrElementTransformer<D>, data: D) {
+        argument = argument.transform(transformer, data)
+    }
 }

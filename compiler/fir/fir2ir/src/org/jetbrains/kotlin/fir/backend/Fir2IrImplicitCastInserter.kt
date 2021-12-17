@@ -19,7 +19,6 @@ import org.jetbrains.kotlin.fir.visitors.FirDefaultVisitor
 import org.jetbrains.kotlin.ir.IrBuiltIns
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.expressions.*
-import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.classId
 import org.jetbrains.kotlin.ir.util.parentAsClass
@@ -325,7 +324,7 @@ class Fir2IrImplicitCastInserter(
 
     companion object {
         private fun implicitCast(original: IrExpression, castType: IrType): IrExpression {
-            return IrTypeOperatorCallImpl(
+            return IrTypeOperatorCall(
                 original.startOffset,
                 original.endOffset,
                 castType,
@@ -340,7 +339,7 @@ class Fir2IrImplicitCastInserter(
             return if (valueType.isUnit() || valueType.isNothing())
                 original
             else
-                IrTypeOperatorCallImpl(
+                IrTypeOperatorCall(
                     original.startOffset, original.endOffset,
                     irBuiltIns.unitType,
                     IrTypeOperator.IMPLICIT_COERCION_TO_UNIT,
@@ -357,7 +356,7 @@ class Fir2IrImplicitCastInserter(
                 classId == StandardClassIds.Annotations.EnhancedNullability ||
                         classId == StandardClassIds.Annotations.FlexibleNullability
             }.withHasQuestionMark(false)
-            return IrTypeOperatorCallImpl(
+            return IrTypeOperatorCall(
                 original.startOffset,
                 original.endOffset,
                 castType,

@@ -70,7 +70,7 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
         val targetKotlinType = descriptor.returnType!!
         val targetType = targetKotlinType.toIrType()
 
-        return IrTypeOperatorCallImpl(
+        return IrTypeOperatorCall(
             startOffset, endOffset,
             targetType,
             IrTypeOperator.SAM_CONVERSION,
@@ -93,7 +93,7 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
         context.fragmentContext?.capturedDescriptorToFragmentParameterMap?.get(descriptor)?.let {
             val getValue = IrGetValueImpl(startOffset, endOffset, it.descriptor.type.toIrType(), it, origin)
             return if (smartCastIrType != null) {
-                IrTypeOperatorCallImpl(startOffset, endOffset, smartCastIrType, IrTypeOperator.IMPLICIT_CAST, smartCastIrType, getValue)
+                IrTypeOperatorCall(startOffset, endOffset, smartCastIrType, IrTypeOperator.IMPLICIT_CAST, smartCastIrType, getValue)
             } else {
                 getValue
             }
@@ -110,7 +110,7 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
             is PropertyDescriptor -> {
                 val irCall = generateCall(startOffset, endOffset, statementGenerator.pregenerateCall(resolvedCall!!))
                 if (smartCastIrType != null)
-                    IrTypeOperatorCallImpl(startOffset, endOffset, smartCastIrType, IrTypeOperator.IMPLICIT_CAST, smartCastIrType, irCall)
+                    IrTypeOperatorCall(startOffset, endOffset, smartCastIrType, IrTypeOperator.IMPLICIT_CAST, smartCastIrType, irCall)
                 else
                     irCall
             }
@@ -148,7 +148,7 @@ class CallGenerator(statementGenerator: StatementGenerator) : StatementGenerator
             val getValue =
                 IrGetValueImpl(startOffset, endOffset, descriptor.type.toIrType(), context.symbolTable.referenceValue(descriptor), origin)
             if (irType != null) {
-                IrTypeOperatorCallImpl(startOffset, endOffset, irType, IrTypeOperator.IMPLICIT_CAST, irType, getValue)
+                IrTypeOperatorCall(startOffset, endOffset, irType, IrTypeOperator.IMPLICIT_CAST, irType, getValue)
             } else {
                 getValue
             }

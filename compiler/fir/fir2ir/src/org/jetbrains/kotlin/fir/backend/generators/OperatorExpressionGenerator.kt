@@ -15,7 +15,6 @@ import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrGetValueImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
 import org.jetbrains.kotlin.ir.symbols.IrClassifierSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.types.IrSimpleType
@@ -186,7 +185,7 @@ internal class OperatorExpressionGenerator(
                             simpleType.annotations,
                             simpleType.abbreviation
                         )
-                        return IrTypeOperatorCallImpl(
+                        return IrTypeOperatorCall(
                             irExpression.startOffset,
                             irExpression.endOffset,
                             nullableDoubleOrFloatType,

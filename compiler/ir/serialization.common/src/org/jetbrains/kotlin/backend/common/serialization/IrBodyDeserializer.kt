@@ -635,7 +635,7 @@ class IrBodyDeserializer(
         val operator = deserializeTypeOperator(proto.operator)
         val operand = declarationDeserializer.deserializeIrType(proto.operand)//.brokenIr
         val argument = deserializeExpression(proto.argument)
-        return IrTypeOperatorCallImpl(start, end, type, operator, operand, argument)
+        return IrTypeOperatorCall(start, end, type, operator, operand, argument)
     }
 
     private fun deserializeVararg(proto: ProtoVararg, start: Int, end: Int, type: IrType): IrVararg {

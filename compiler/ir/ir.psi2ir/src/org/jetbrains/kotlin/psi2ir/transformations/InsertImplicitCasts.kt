@@ -31,7 +31,6 @@ import org.jetbrains.kotlin.ir.descriptors.IrBasedDeclarationDescriptor
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
 import org.jetbrains.kotlin.ir.symbols.IrConstructorSymbol
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.impl.originalKotlinType
@@ -406,7 +405,7 @@ internal class InsertImplicitCasts(
 
     private fun IrExpression.implicitCast(targetType: KotlinType, typeOperator: IrTypeOperator): IrExpression {
         val irType = targetType.toIrType()
-        return IrTypeOperatorCallImpl(startOffset, endOffset, irType, typeOperator, irType, this)
+        return IrTypeOperatorCall(startOffset, endOffset, irType, typeOperator, irType, this)
     }
 
     private fun IrExpression.coerceIntToAnotherIntegerType(targetType: KotlinType): IrExpression {
@@ -515,7 +514,7 @@ internal class InsertImplicitCasts(
         return if (KotlinTypeChecker.DEFAULT.isSubtypeOf(type.toKotlinType(), irBuiltIns.unitType.toKotlinType()))
             this
         else
-            IrTypeOperatorCallImpl(
+            IrTypeOperatorCall(
                 startOffset, endOffset,
                 irBuiltIns.unitType,
                 IrTypeOperator.IMPLICIT_COERCION_TO_UNIT,

@@ -411,7 +411,7 @@ internal class AdapterGenerator(
         }
         // Make sure the converted IrType owner indeed has a single abstract method, since FunctionReferenceLowering relies on it.
         if (!samType.isSamType) return this
-        return IrTypeOperatorCallImpl(this.startOffset, this.endOffset, samType, IrTypeOperator.SAM_CONVERSION, samType, this)
+        return IrTypeOperatorCall(this.startOffset, this.endOffset, samType, IrTypeOperator.SAM_CONVERSION, samType, this)
     }
 
     private fun IrVararg.applyConversionOnVararg(
@@ -697,7 +697,7 @@ internal class AdapterGenerator(
                 listOf(
                     IrReturnImpl(
                         startOffset, endOffset, components.irBuiltIns.nothingType, irAdapterFunction.symbol,
-                        IrTypeOperatorCallImpl(
+                        IrTypeOperatorCall(
                             startOffset, endOffset, irSamType, IrTypeOperator.SAM_CONVERSION, irSamType,
                             IrCallImpl(
                                 startOffset, endOffset, irFunctionType, irBuiltIns.checkNotNullSymbol,

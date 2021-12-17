@@ -209,7 +209,7 @@ private fun StatementGenerator.generateThisOrSuperReceiver(receiver: ReceiverVal
 fun IrExpression.implicitCastTo(expectedType: IrType?): IrExpression {
     if (expectedType == null) return this
 
-    return IrTypeOperatorCallImpl(startOffset, endOffset, expectedType, IrTypeOperator.IMPLICIT_CAST, expectedType, this)
+    return IrTypeOperatorCall(startOffset, endOffset, expectedType, IrTypeOperator.IMPLICIT_CAST, expectedType, this)
 }
 
 fun StatementGenerator.generateBackingFieldReceiver(
@@ -670,7 +670,7 @@ fun StatementGenerator.generateSamConversionForValueArgumentsIfRequired(call: Ca
             this is IrBlock && (origin == IrStatementOrigin.SUSPEND_CONVERSION || origin == IrStatementOrigin.ADAPTED_FUNCTION_REFERENCE)
 
         fun IrExpression.applySamConversion() =
-            IrTypeOperatorCallImpl(
+            IrTypeOperatorCall(
                 startOffset, endOffset,
                 irSamType,
                 IrTypeOperator.SAM_CONVERSION, irSamType,

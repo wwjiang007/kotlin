@@ -159,7 +159,7 @@ fun IrExpression.coerceToUnitIfNeeded(valueType: IrType, irBuiltIns: IrBuiltIns,
     return if (valueType.isSubtypeOf(irBuiltIns.unitType, typeSystem))
         this
     else
-        IrTypeOperatorCallImpl(
+        IrTypeOperatorCall(
             startOffset, endOffset,
             irBuiltIns.unitType,
             IrTypeOperator.IMPLICIT_COERCION_TO_UNIT,

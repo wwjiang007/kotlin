@@ -109,7 +109,7 @@ fun IrBuilderWithScope.irCatch(catchParameter: IrVariable, result: IrExpression)
     IrCatchImpl(startOffset, endOffset, catchParameter, result)
 
 fun IrBuilderWithScope.irImplicitCoercionToUnit(arg: IrExpression) =
-    IrTypeOperatorCallImpl(
+    IrTypeOperatorCall(
         startOffset, endOffset, context.irBuiltIns.unitType,
         IrTypeOperator.IMPLICIT_COERCION_TO_UNIT, context.irBuiltIns.unitType,
         arg

@@ -701,7 +701,7 @@ open class DeepCopyIrTreeWithSymbols(
         ).copyAttributes(expression)
 
     override fun visitTypeOperator(expression: IrTypeOperatorCall): IrTypeOperatorCall =
-        IrTypeOperatorCallImpl(
+        IrTypeOperatorCall(
             expression.startOffset, expression.endOffset,
             expression.type.remapType(),
             expression.operator,

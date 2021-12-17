@@ -14,7 +14,6 @@ import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.expressions.impl.IrReturnImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
 import org.jetbrains.kotlin.ir.types.isUnit
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.util.parentAsClass
@@ -46,7 +45,7 @@ private class TailCallOptimizationLowering(private val context: JvmBackendContex
         }, null)
     }
 
-    private fun IrExpression.coerceToUnit() = if (type == context.irBuiltIns.unitType) this else IrTypeOperatorCallImpl(
+    private fun IrExpression.coerceToUnit() = if (type == context.irBuiltIns.unitType) this else IrTypeOperatorCall(
         startOffset, endOffset, context.irBuiltIns.unitType, IrTypeOperator.IMPLICIT_COERCION_TO_UNIT, context.irBuiltIns.unitType, this
     )
 }

@@ -211,7 +211,7 @@ class BranchingExpressionGenerator(statementGenerator: StatementGenerator) : Sta
         val irTypeOperand = typeOperand.toIrType()
         val startOffset = ktCondition.startOffsetSkippingComments
         val endOffset = ktCondition.endOffset
-        val irInstanceOf = IrTypeOperatorCallImpl(
+        val irInstanceOf = IrTypeOperatorCall(
             startOffset, endOffset,
             context.irBuiltIns.booleanType,
             IrTypeOperator.INSTANCEOF,

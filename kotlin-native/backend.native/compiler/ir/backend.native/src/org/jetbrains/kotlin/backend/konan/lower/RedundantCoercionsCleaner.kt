@@ -38,7 +38,7 @@ internal class RedundantCoercionsCleaner(val context: Context) : FileLoweringPas
                     if (cast == null)
                         expression
                     else with (cast) {
-                        IrTypeOperatorCallImpl(startOffset, endOffset, type, operator,
+                        IrTypeOperatorCall(startOffset, endOffset, type, operator,
                                 typeOperand, expression)
                     }
             with (coercion) {

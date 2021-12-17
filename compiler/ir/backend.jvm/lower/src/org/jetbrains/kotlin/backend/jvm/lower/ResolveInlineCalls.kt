@@ -16,8 +16,8 @@ import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrTypeOperator
+import org.jetbrains.kotlin.ir.expressions.IrTypeOperatorCall
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
 import org.jetbrains.kotlin.ir.util.copyTypeAndValueArgumentsFrom
 import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.ir.util.parentAsClass
@@ -56,7 +56,7 @@ class ResolveInlineCalls(val context: JvmBackendContext) : IrElementTransformerV
                 copyTypeAndValueArgumentsFrom(expression)
                 dispatchReceiver?.let { receiver ->
                     val receiverType = resolved.parentAsClass.defaultType
-                    dispatchReceiver = IrTypeOperatorCallImpl(
+                    dispatchReceiver = IrTypeOperatorCall(
                         receiver.startOffset,
                         receiver.endOffset,
                         receiverType,

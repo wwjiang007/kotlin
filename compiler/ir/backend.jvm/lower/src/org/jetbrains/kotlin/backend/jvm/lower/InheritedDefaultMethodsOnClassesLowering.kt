@@ -30,7 +30,7 @@ import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.expressions.IrTypeOperator
-import org.jetbrains.kotlin.ir.expressions.impl.IrTypeOperatorCallImpl
+import org.jetbrains.kotlin.ir.expressions.IrTypeOperatorCall
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.*
@@ -195,7 +195,7 @@ internal fun IrExpression.reinterpretAsDispatchReceiverOfType(irType: IrType): I
     if (this.type.isInlineClassType())
         this
     else
-        IrTypeOperatorCallImpl(
+        IrTypeOperatorCall(
             this.startOffset, this.endOffset,
             irType, IrTypeOperator.REINTERPRET_CAST, irType,
             this

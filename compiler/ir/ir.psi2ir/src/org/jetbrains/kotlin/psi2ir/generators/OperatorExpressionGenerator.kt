@@ -104,7 +104,7 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
                 throw AssertionError("Unexpected IrTypeOperator: $irOperator")
         }
 
-        return IrTypeOperatorCallImpl(
+        return IrTypeOperatorCall(
             expression.startOffsetSkippingComments, expression.endOffset, resultType.toIrType(), irOperator, rhsType.toIrType(),
             expression.left.genExpr()
         )
@@ -115,7 +115,7 @@ class OperatorExpressionGenerator(statementGenerator: StatementGenerator) : Stat
         val irOperator = getIrTypeOperator(ktOperator)!!
         val againstType = getOrFail(BindingContext.TYPE, expression.typeReference)
 
-        return IrTypeOperatorCallImpl(
+        return IrTypeOperatorCall(
             expression.startOffsetSkippingComments, expression.endOffset, context.irBuiltIns.booleanType, irOperator,
             againstType.toIrType(),
             expression.leftHandSide.genExpr()
