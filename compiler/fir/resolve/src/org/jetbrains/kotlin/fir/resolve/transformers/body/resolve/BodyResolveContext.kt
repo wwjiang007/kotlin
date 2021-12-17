@@ -401,15 +401,17 @@ class BodyResolveContext(
                 withContainerClass(regularClass, f)
             }
         }
-        return withTowerModeCleanup {
-            if (!regularClass.isInner && containerIfAny is FirRegularClass) {
-                towerDataMode = if (regularClass.isCompanion) {
-                    FirTowerDataMode.COMPANION_OBJECT
-                } else {
-                    FirTowerDataMode.NESTED_CLASS
-                }
+        val newTowerDataMode = if (!regularClass.isInner && containerIfAny is FirRegularClass) {
+            if (regularClass.isCompanion) {
+                FirTowerDataMode.COMPANION_OBJECT
+            } else {
+                FirTowerDataMode.NESTED_CLASS
             }
+        } else {
+            towerDataMode
+        }
 
+        return withTowerDataMode(newTowerDataMode) {
             withScopesForClass(regularClass, holder) {
                 withContainerClass(regularClass, f)
             }
