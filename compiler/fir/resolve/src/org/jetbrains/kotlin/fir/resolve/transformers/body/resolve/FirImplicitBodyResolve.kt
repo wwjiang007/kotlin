@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.fir.declarations.synthetic.FirSyntheticProperty
 import org.jetbrains.kotlin.fir.declarations.utils.hasExplicitBackingField
 import org.jetbrains.kotlin.fir.diagnostics.ConeSimpleDiagnostic
 import org.jetbrains.kotlin.fir.diagnostics.DiagnosticKind
+import org.jetbrains.kotlin.fir.resolve.FirRegularTowerDataContexts
 import org.jetbrains.kotlin.fir.resolve.ResolutionMode
 import org.jetbrains.kotlin.fir.resolve.ScopeSession
 import org.jetbrains.kotlin.fir.resolve.providers.firProvider
@@ -205,7 +206,17 @@ private class ReturnTypeCalculatorWithJump(
     ) -> FirDesignatedBodyResolveTransformerForReturnTypeCalculator = ::FirDesignatedBodyResolveTransformerForReturnTypeCalculator,
 ) : ReturnTypeCalculator {
 
+    @OptIn(PrivateForInline::class)
     var outerBodyResolveContext: BodyResolveContext? = null
+        get() {
+            field?.regularTowerDataContexts = outerTowerDataContexts!!
+            return field
+        }
+        set(context) {
+            field = context
+            outerTowerDataContexts = context?.regularTowerDataContexts
+        }
+    private var outerTowerDataContexts: FirRegularTowerDataContexts? = null
 
     override fun tryCalculateReturnType(declaration: FirTypedDeclaration): FirResolvedTypeRef {
         if (declaration is FirValueParameter && declaration.returnTypeRef is FirImplicitTypeRef) {

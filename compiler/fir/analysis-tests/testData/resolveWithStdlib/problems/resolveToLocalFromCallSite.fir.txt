@@ -13,7 +13,7 @@ FILE: resolveToLocalFromCallSite.kt
         }
 
         private final fun R|kotlin/String|.getFilteredType(): R|kotlin/Int| {
-            ^getFilteredType <Inapplicable(INAPPLICABLE): /bar>#(R|<local>/length|)
+            ^getFilteredType R|/bar|(this@R|/<anonymous>.getFilteredType|.R|kotlin/String.length|)
         }
 
     }

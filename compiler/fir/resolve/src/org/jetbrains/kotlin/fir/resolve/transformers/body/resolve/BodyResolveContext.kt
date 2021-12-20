@@ -52,7 +52,7 @@ class BodyResolveContext(
     @set:PrivateForInline
     lateinit var file: FirFile
 
-    private var regularTowerDataContexts = FirRegularTowerDataContexts(forMemberDeclarations = FirTowerDataContext())
+    internal var regularTowerDataContexts = FirRegularTowerDataContexts(forMemberDeclarations = FirTowerDataContext())
 
     @PrivateForInline
     val specialTowerDataContexts = FirSpecialTowerDataContexts()

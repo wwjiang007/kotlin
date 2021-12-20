@@ -4,7 +4,7 @@ val x = object {
         types.mapIndexed { i, length -> Triple(i, length, length.getFilteredType()) }
     }
 
-    private fun String.getFilteredType() = bar(<!ARGUMENT_TYPE_MISMATCH!>length<!>)
+    private fun String.getFilteredType() = bar(length)
 }
 
 fun bar(x: Int) = x
