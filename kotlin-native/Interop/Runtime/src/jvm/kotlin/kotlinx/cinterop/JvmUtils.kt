@@ -139,24 +139,34 @@ private fun initializePath(): Array<String> {
     return paths
 }
 
-private fun tryLoadKonanLibrary(dir: String, fullLibraryName: String): Boolean {
-    if (!Files.exists(Paths.get(dir, fullLibraryName))) return false
+private fun tryLoadKonanLibrary(libraryDir: String, fullLibraryName: String): Boolean {
+    if (!Files.exists(Paths.get(libraryDir, fullLibraryName))) return false
 
-    val tempDir = Files.createTempDirectory(null).toAbsolutePath().toString()
-    Files.copy(Paths.get(dir, fullLibraryName), Paths.get(tempDir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)
-    // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
-    File(tempDir).deleteOnExit()
-    File("$tempDir/$fullLibraryName").deleteOnExit()
+    val dir = if (File("$libraryDir/$fullLibraryName").canWrite())
+        libraryDir
+    else {
+        val tempDir = Files.createTempDirectory(null).toAbsolutePath().toString()
+        Files.copy(Paths.get(libraryDir, fullLibraryName), Paths.get(tempDir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)
+        // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
+        File(tempDir).deleteOnExit()
+        File("$tempDir/$fullLibraryName").deleteOnExit()
+        tempDir
+    }
+//    val dir = try {
+//        System.getSecurityManager().checkWrite("$libraryDir/$fullLibraryName")
+//        libraryDir
+//    } catch (e: SecurityException) {
+//    }
 
     try {
-        System.load("$tempDir/$fullLibraryName")
+        System.load("$dir/$fullLibraryName")
     } catch (e: UnsatisfiedLinkError) {
         if (fullLibraryName.endsWith(".dylib") && e.message?.contains("library load disallowed by system policy") == true) {
             throw UnsatisfiedLinkError("""
-                    |Library $dir/$fullLibraryName can't be loaded.
+                    |Library $libraryDir/$fullLibraryName can't be loaded.
                     |${'\t'}This can happen because library file is marked as untrusted (e.g because it was downloaded from browser).
                     |${'\t'}You can trust libraries in distribution by running
-                    |${'\t'}${'\t'}xattr -d com.apple.quarantine '$dir'/*
+                    |${'\t'}${'\t'}xattr -d com.apple.quarantine '$libraryDir'/*
                     |${'\t'}command in terminal
                     |${'\t'}Original exception message:
                     |${'\t'}${e.message}
