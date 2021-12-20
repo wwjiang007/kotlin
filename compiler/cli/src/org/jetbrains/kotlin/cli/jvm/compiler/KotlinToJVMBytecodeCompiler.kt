@@ -270,7 +270,8 @@ object KotlinToJVMBytecodeCompiler {
             result.moduleDescriptor,
             result.bindingContext,
             configuration.languageVersionSettings,
-            false,
+            ignoreErrors = false,
+            skipBodies = false,
         )
         val backendInput = codegenFactory.convertToIr(input)
         return Pair(codegenFactory, backendInput)
