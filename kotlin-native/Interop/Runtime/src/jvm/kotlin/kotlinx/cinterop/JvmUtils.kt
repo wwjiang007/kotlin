@@ -142,8 +142,10 @@ private fun initializePath(): Array<String> {
 private fun tryLoadKonanLibrary(dir: String, fullLibraryName: String): Boolean {
     if (!Files.exists(Paths.get(dir, fullLibraryName))) return false
 
-    val tempDir = Files.createTempDirectory(null).toAbsolutePath().toString()
-    Files.copy(Paths.get(dir, fullLibraryName), Paths.get(tempDir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)
+//    val tempDir = Files.createTempDirectory(null).toAbsolutePath().toString()
+//    Files.copy(Paths.get(dir, fullLibraryName), Paths.get(tempDir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)
+    val tempDir = Files.createTempDirectory(Paths.get(dir), null).toAbsolutePath().toString()
+    Files.createLink(Paths.get(tempDir, fullLibraryName), Paths.get(dir, fullLibraryName))
     // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
     File(tempDir).deleteOnExit()
     File("$tempDir/$fullLibraryName").deleteOnExit()
