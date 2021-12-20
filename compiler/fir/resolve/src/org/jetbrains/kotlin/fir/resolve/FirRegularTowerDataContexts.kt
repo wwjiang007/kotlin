@@ -49,6 +49,7 @@ class FirRegularTowerDataContexts private constructor(
     }
 
     fun copy(newMode: FirTowerDataMode): FirRegularTowerDataContexts {
+        if (newMode == mode) return this
         return FirRegularTowerDataContexts(modeMap, primaryConstructorPureParametersScope, primaryConstructorAllParametersScope, newMode)
     }
 
