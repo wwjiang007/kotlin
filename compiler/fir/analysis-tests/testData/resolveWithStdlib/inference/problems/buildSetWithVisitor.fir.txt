@@ -1,0 +1,50 @@
+FILE: buildSetWithVisitor.kt
+    public abstract class AnyVisitor : R|kotlin/Any| {
+        public constructor(): R|AnyVisitor| {
+            super<R|kotlin/Any|>()
+        }
+
+        public abstract fun visit(arg: R|kotlin/Any|): R|kotlin/Unit|
+
+    }
+    public final class ListWrapper : R|kotlin/Any| {
+        public constructor(tags: R|kotlin/collections/List<kotlin/String>|): R|ListWrapper| {
+            super<R|kotlin/Any|>()
+        }
+
+        public final val tags: R|kotlin/collections/List<kotlin/String>| = R|<local>/tags|
+            public get(): R|kotlin/collections/List<kotlin/String>|
+
+    }
+    public final fun R|kotlin/Any|.accept(visitor: R|AnyVisitor|): R|kotlin/Unit| {
+        R|<local>/visitor|.R|/AnyVisitor.visit|(this@R|/accept|)
+    }
+    public final fun bar(wrapper: R|ListWrapper|): R|kotlin/collections/Set<ERROR CLASS: Cannot infer argument for type parameter E>| {
+        ^bar <CS errors: kotlin/collections/buildSet>#<R|ERROR CLASS: Cannot infer argument for type parameter E|>(<L> = buildSet@fun R|kotlin/collections/MutableSet<ERROR CLASS: Cannot infer argument for type parameter E>|.<anonymous>(): R|kotlin/Unit| <inline=Inline, kind=EXACTLY_ONCE>  {
+            R|<local>/wrapper|.R|/accept|(object : R|AnyVisitor| {
+                private constructor(): R|<anonymous>| {
+                    super<R|AnyVisitor|>()
+                }
+
+                public final override fun visit(arg: R|kotlin/Any|): R|kotlin/Unit| {
+                    when () {
+                        (R|<local>/arg| is R|ListWrapper|) ->  {
+                             {
+                                lval <iterator>: R|kotlin/collections/Iterator<kotlin/String>| = R|<local>/arg|.R|/ListWrapper.tags|.R|SubstitutionOverride<kotlin/collections/List.iterator: R|kotlin/collections/Iterator<kotlin/String>|>|()
+                                while(R|<local>/<iterator>|.R|SubstitutionOverride<kotlin/collections/Iterator.hasNext: R|kotlin/Boolean|>|()) {
+                                    lval tag: R|kotlin/String| = R|<local>/<iterator>|.R|SubstitutionOverride<kotlin/collections/Iterator.next: R|kotlin/String|>|()
+                                    this@R|special/anonymous|.R|SubstitutionOverride<kotlin/collections/MutableSet.add: R|kotlin/Boolean|>|(R|<local>/tag|)
+                                }
+
+                            }
+
+                        }
+                    }
+
+                }
+
+            }
+            )
+        }
+        )
+    }
