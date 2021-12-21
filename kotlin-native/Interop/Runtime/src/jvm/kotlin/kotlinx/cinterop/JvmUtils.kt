@@ -144,15 +144,9 @@ private fun initializePath(): Array<String> {
 private fun tryLoadKonanLibrary(libraryDir: String, fullLibraryName: String): Boolean {
     if (!Files.exists(Paths.get(libraryDir, fullLibraryName))) return false
 
-    val libFile = File("$libraryDir/$fullLibraryName")
-    val bytes = libFile.readBytes()
-    bytes[0] = bytes[0].inv()
-    val dir = try {
-        libFile.writeBytes(bytes)
-        bytes[0] = bytes[0].inv()
-        libFile.writeBytes(bytes)
+    val dir = if (!fullLibraryName.contains("callbacks"))
         libraryDir
-    } catch (e: IOException) {
+    else {
         val tempDir = Files.createTempDirectory(null).toAbsolutePath().toString()
         Files.copy(Paths.get(libraryDir, fullLibraryName), Paths.get(tempDir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)
         // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
@@ -160,6 +154,22 @@ private fun tryLoadKonanLibrary(libraryDir: String, fullLibraryName: String): Bo
         File("$tempDir/$fullLibraryName").deleteOnExit()
         tempDir
     }
+//    val libFile = File("$libraryDir/$fullLibraryName")
+//    val bytes = libFile.readBytes()
+//    bytes[0] = bytes[0].inv()
+//    val dir = try {
+//        libFile.writeBytes(bytes)
+//        bytes[0] = bytes[0].inv()
+//        libFile.writeBytes(bytes)
+//        libraryDir
+//    } catch (e: IOException) {
+//        val tempDir = Files.createTempDirectory(null).toAbsolutePath().toString()
+//        Files.copy(Paths.get(libraryDir, fullLibraryName), Paths.get(tempDir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)
+//        // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
+//        File(tempDir).deleteOnExit()
+//        File("$tempDir/$fullLibraryName").deleteOnExit()
+//        tempDir
+//    }
 
 //    val dir = if (File("$libraryDir/$fullLibraryName").canWrite())
 //        libraryDir
