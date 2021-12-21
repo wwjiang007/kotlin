@@ -26,7 +26,14 @@ internal val DEFAULT_GROOVY_SETTINGS_FILE =
             id "org.jetbrains.kotlin.multiplatform" version "${'$'}kotlin_version"
             id "org.jetbrains.kotlin.multiplatform.pm20" version "${'$'}kotlin_version"
             id "org.jetbrains.kotlin.plugin.allopen" version "${'$'}kotlin_version"
+            id "org.jetbrains.kotlin.plugin.spring" version "${'$'}kotlin_version"
+            id "org.jetbrains.kotlin.plugin.jpa" version "${'$'}kotlin_version"
+            id "org.jetbrains.kotlin.plugin.noarg" version "${'$'}kotlin_version"
+            id "org.jetbrains.kotlin.plugin.sam.with.receiver" version "${'$'}kotlin_version"
+            id "org.jetbrains.kotlin.plugin.lombok" version "${'$'}kotlin_version"
+            id "org.jetbrains.kotlin.plugin.serialization" version "${'$'}kotlin_version"
             id "org.jetbrains.kotlin.test.fixes.android" version "${'$'}test_fixes_version"
+            id "org.jetbrains.kotlin.gradle-subplugin-example" version "${'$'}kotlin_version"
         }
         
         resolutionStrategy {
@@ -76,7 +83,14 @@ internal val DEFAULT_KOTLIN_SETTINGS_FILE =
             id("org.jetbrains.kotlin.multiplatform") version kotlin_version
             id("org.jetbrains.kotlin.multiplatform.pm20") version kotlin_version
             id("org.jetbrains.kotlin.plugin.allopen") version kotlin_version
+            id("org.jetbrains.kotlin.plugin.spring") version kotlin_version
+            id("org.jetbrains.kotlin.plugin.jpa") version kotlin_version
+            id("org.jetbrains.kotlin.plugin.noarg") version kotlin_version
+            id("org.jetbrains.kotlin.plugin.sam.with.receiver") version kotlin_version
+            id("org.jetbrains.kotlin.plugin.lombok") version kotlin_version
+            id("org.jetbrains.kotlin.plugin.serialization") version kotlin_version
             id("org.jetbrains.kotlin.test.fixes.android") version test_fixes_version
+            id("org.jetbrains.kotlin.gradle-subplugin-example") version kotlin_version
         }
         
         resolutionStrategy {
