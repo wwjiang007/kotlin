@@ -18,9 +18,11 @@ package kotlinx.cinterop
 
 import org.jetbrains.kotlin.konan.util.KonanHomeProvider
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
+import kotlin.experimental.inv
 
 private fun decodeFromUtf8(bytes: ByteArray) = String(bytes)
 internal fun encodeToUtf8(str: String) = str.toByteArray()
@@ -142,9 +144,15 @@ private fun initializePath(): Array<String> {
 private fun tryLoadKonanLibrary(libraryDir: String, fullLibraryName: String): Boolean {
     if (!Files.exists(Paths.get(libraryDir, fullLibraryName))) return false
 
-    val dir = if (File("$libraryDir/$fullLibraryName").canWrite())
+    val libFile = File("$libraryDir/$fullLibraryName")
+    val bytes = libFile.readBytes()
+    bytes[0] = bytes[0].inv()
+    val dir = try {
+        libFile.writeBytes(bytes)
+        bytes[0] = bytes[0].inv()
+        libFile.writeBytes(bytes)
         libraryDir
-    else {
+    } catch (e: IOException) {
         val tempDir = Files.createTempDirectory(null).toAbsolutePath().toString()
         Files.copy(Paths.get(libraryDir, fullLibraryName), Paths.get(tempDir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)
         // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
@@ -152,6 +160,11 @@ private fun tryLoadKonanLibrary(libraryDir: String, fullLibraryName: String): Bo
         File("$tempDir/$fullLibraryName").deleteOnExit()
         tempDir
     }
+
+//    val dir = if (File("$libraryDir/$fullLibraryName").canWrite())
+//        libraryDir
+//    else {
+//    }
 //    val dir = try {
 //        System.getSecurityManager().checkWrite("$libraryDir/$fullLibraryName")
 //        libraryDir
