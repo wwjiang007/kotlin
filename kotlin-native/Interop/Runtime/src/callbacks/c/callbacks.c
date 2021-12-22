@@ -6,29 +6,29 @@
 
 #ifdef __APPLE__
 
-JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlopen(JNIEnv *env, long libPath) {
+JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlopen(JNIEnv *env, jlong libPath) {
     return 0;
 }
 
-JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlclose(JNIEnv *env, long libHandle) {
+JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlclose(JNIEnv *env, jlong libHandle) {
     return;
 }
 
-JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlsym(JNIEnv *env, long libHandle, long symName) {
+JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlsym(JNIEnv *env, jlong libHandle, long symName) {
     return 0;
 }
 
 #elif _WIN32
 
-JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlopen(JNIEnv *env, long libPath) {
+JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlopen(JNIEnv *env, jlong libPath) {
     return 0;
 }
 
-JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlclose(JNIEnv *env, long libHandle) {
+JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlclose(JNIEnv *env, jlong libHandle) {
     return;
 }
 
-JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlsym(JNIEnv *env, long libHandle, long symName) {
+JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlsym(JNIEnv *env, jlong libHandle, jlong symName) {
     return 0;
 }
 
@@ -36,15 +36,15 @@ JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlsym(JNIEnv *env, 
 
 #include <dlfcn.h>
 
-JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlopen(JNIEnv *env, long libPath) {
+JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlopen(JNIEnv *env, jlong libPath) {
     return (jlong)dlopen((const char*)libPath, RTLD_LAZY);
 }
 
-JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlclose(JNIEnv *env, long libHandle) {
+JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlclose(JNIEnv *env, jlong libHandle) {
     dlclose((void*)libHandle);
 }
 
-JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlsym(JNIEnv *env, long libHandle, long symName) {
+JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlsym(JNIEnv *env, jlong libHandle, jlong symName) {
     return (jlong)dlsym((void*)libHandle, (const char*)symName);
 }
 
