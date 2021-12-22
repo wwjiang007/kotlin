@@ -17,6 +17,7 @@ import org.jetbrains.kotlin.fir.declarations.utils.*
 import org.jetbrains.kotlin.fir.java.declarations.FirJavaClass
 import org.jetbrains.kotlin.fir.java.declarations.FirJavaMethod
 import org.jetbrains.kotlin.fir.java.declarations.buildJavaMethodCopy
+import org.jetbrains.kotlin.fir.java.declarations.buildJavaValueParameterCopy
 import org.jetbrains.kotlin.fir.java.symbols.FirJavaOverriddenSyntheticPropertySymbol
 import org.jetbrains.kotlin.fir.java.toConeKotlinTypeProbablyFlexible
 import org.jetbrains.kotlin.fir.resolve.defaultType
@@ -61,11 +62,13 @@ class JavaClassUseSiteMemberScope(
         return this.toString() == "Java use site scope of /$className" && name.asString() == methodName
     }
 
-    fun someByteValue(name: Name) = myScope("Some", "byteValue", name)
-    fun someToByte(name: Name) = myScope("Some", "toByte", name)
+    fun someMapContainsKey(name: Name) = myScope("SomeMap", "containsKey", name)
+    fun someMapRemove(name: Name) = myScope("SomeMap", "remove", name)
+
+    fun myMapContainsKey(name: Name) = myScope("MyMap", "containsKey", name)
+    fun myBaseMapContainsKey(name: Name) = myScope("MyBaseMap", "containsKey", name)
 
     private val typeParameterStack = klass.javaTypeParameterStack
-    private val specialFunctions = hashMapOf<Name, Collection<FirNamedFunctionSymbol>>()
     private val syntheticPropertyByNameMap = hashMapOf<Name, FirSyntheticPropertySymbol>()
 
     private val canUseSpecialGetters: Boolean by lazy { !klass.hasKotlinSuper(session) }
@@ -354,100 +357,156 @@ class JavaClassUseSiteMemberScope(
          * 7.1 create renamed copies of (c): (c')
          * 7.2 save direct overrides
          */
-        val list =
-            result + processOverridesForFunctionsWithDifferentJvmName(name, explicitlyDeclaredFunctions, functionsWithScopeFromSupertypes)
-        return list
+        processSpecialFunctions(name, explicitlyDeclaredFunctions, functionsWithScopeFromSupertypes, result)
+        return result.toSet()
     }
 
-    private fun processOverridesForFunctionsWithDifferentJvmName(
+    private fun processSpecialFunctions(
         naturalName: Name,
         explicitlyDeclaredFunctionsWithNaturalName: Collection<FirNamedFunctionSymbol>,
-        functionsFromSupertypesWithNaturalName: MembersByScope<FirNamedFunctionSymbol> // candidates for override
-    ): MutableList<FirNamedFunctionSymbol> {
+        functionsFromSupertypesWithNaturalName: MembersByScope<FirNamedFunctionSymbol>, // candidates for override
+        destination: MutableCollection<FirNamedFunctionSymbol>
+    ) {
         val resultsOfIntersectionToSaveInCache = mutableListOf<ResultOfIntersection<FirNamedFunctionSymbol>>()
-        val result = mutableListOf<FirNamedFunctionSymbol>()
-        for (resultOfIntersectionWithNaturalName in supertypeScopeContext.collectCallablesImpl(functionsFromSupertypesWithNaturalName)) {
+        val list = supertypeScopeContext.collectCallablesImpl(functionsFromSupertypesWithNaturalName)
+        for (resultOfIntersectionWithNaturalName in list) {
             val (chosenSymbol, overriddenMembers, _) = resultOfIntersectionWithNaturalName
             val someSymbolWithNaturalNameFromSuperType = chosenSymbol.extractSomeSymbolFromSuperType()
             val explicitlyDeclaredFunctionWithNaturalName = explicitlyDeclaredFunctionsWithNaturalName.firstOrNull {
                 overrideChecker.isOverriddenFunction(it, someSymbolWithNaturalNameFromSuperType)
             }
             val jvmName = overriddenMembers.firstNotNullOfOrNull { it.member.getJvmMethodNameIfSpecial(it.baseScope, session) }
-            if (jvmName == null) {
-                // regular rules
-                when (explicitlyDeclaredFunctionWithNaturalName) {
-                    null -> {
-                        result += chosenSymbol.symbol
-                        resultsOfIntersectionToSaveInCache += resultOfIntersectionWithNaturalName
-                    }
-                    else -> {
-                        result += explicitlyDeclaredFunctionWithNaturalName
-                        directOverriddenFunctions[explicitlyDeclaredFunctionWithNaturalName] = listOf(resultOfIntersectionWithNaturalName)
-                        for (overriddenMember in overriddenMembers) {
-                            overrideByBase[overriddenMember.member] = explicitlyDeclaredFunctionWithNaturalName
-                        }
-                    }
-                }
+            if (jvmName != null) {
+                processOverridesForFunctionsWithDifferentJvmName(
+                    jvmName,
+                    someSymbolWithNaturalNameFromSuperType,
+                    explicitlyDeclaredFunctionWithNaturalName,
+                    naturalName,
+                    resultOfIntersectionWithNaturalName,
+                    destination,
+                    resultsOfIntersectionToSaveInCache
+                )
                 continue
             }
-            val explicitlyDeclaredFunctionWithBuiltinJvmName = declaredMemberScope.getFunctions(jvmName).firstOrNull {
-                overrideChecker.isOverriddenFunction(it, someSymbolWithNaturalNameFromSuperType)
-            }
-            val functionsFromSupertypesWithBuiltinJvmName = supertypeScopeContext.collectFunctions(jvmName).firstOrNull {
-                overrideChecker.similarFunctionsOrBothProperties(it.chosenSymbol.extractSomeSymbolFromSuperType(), someSymbolWithNaturalNameFromSuperType)
-            }
 
-            val declaredFunction = explicitlyDeclaredFunctionWithNaturalName ?: explicitlyDeclaredFunctionWithBuiltinJvmName?.let {
-                buildJavaMethodCopy(it.fir as FirJavaMethod) {
-                    name = naturalName
-                    symbol = FirNamedFunctionSymbol(it.callableId.copy(callableName = naturalName))
-                }.apply {
-                    initialSignatureAttr = it.fir
-                }.symbol
-            }
+            val overriddenMemberWithErasedValueParameters = overriddenMembers.firstOrNull {
+                BuiltinMethodsWithSpecialGenericSignature.getOverriddenBuiltinFunctionWithErasedValueParametersInJava(it.member, it.baseScope) != null
+            }?.member
 
-            val renamedFunctionsFromSupertypes = functionsFromSupertypesWithBuiltinJvmName?.overriddenMembers?.map {
-                val renamedFunction = buildSimpleFunctionCopy(it.member.fir) {
-                    name = naturalName
-                    symbol = FirNamedFunctionSymbol(it.member.callableId.copy(callableName = naturalName))
-                    origin = FirDeclarationOrigin.RenamedForOverride
-                }.apply {
-                    initialSignatureAttr = it.member.fir
+            if (overriddenMemberWithErasedValueParameters != null) {
+                // processOverridesForFunctionsWithErasedValueParameter
+                require(explicitlyDeclaredFunctionWithNaturalName == null) // ??????????
+                val originalDeclaredFunction = declaredMemberScope.getFunctions(naturalName).firstOrNull {
+                    overrideChecker.isOverriddenFunction(it, someSymbolWithNaturalNameFromSuperType) && !it.isVisibleInCurrentClass()
                 }
-                it.baseScope to listOf(renamedFunction.symbol)
+                if (originalDeclaredFunction != null) {
+                    val renamedDeclaredFunction = buildJavaMethodCopy(originalDeclaredFunction.fir as FirJavaMethod) {
+                        name = naturalName
+                        symbol = FirNamedFunctionSymbol(originalDeclaredFunction.callableId)
+                        this.valueParameters.clear()
+                        originalDeclaredFunction.fir.valueParameters.zip(overriddenMemberWithErasedValueParameters.fir.valueParameters)
+                            .mapTo(this.valueParameters) { (overrideParameter, parameterFromSupertype) ->
+                                buildJavaValueParameterCopy(overrideParameter) {
+                                    this@buildJavaValueParameterCopy.returnTypeRef = parameterFromSupertype.returnTypeRef
+                                }
+                            }
+                    }.apply {
+                        initialSignatureAttr = originalDeclaredFunction.fir
+                    }.symbol
+
+                    destination += renamedDeclaredFunction
+                    directOverriddenFunctions[renamedDeclaredFunction] = listOf(resultOfIntersectionWithNaturalName)
+                    for (overriddenMember in overriddenMembers) {
+                        overrideByBase[overriddenMember.member] = explicitlyDeclaredFunctionWithNaturalName
+                    }
+                    continue
+                }
             }
 
-            val resultsOfIntersection = when (renamedFunctionsFromSupertypes) {
-                null -> listOf(resultOfIntersectionWithNaturalName)
+            // regular rules
+            when (explicitlyDeclaredFunctionWithNaturalName) {
+                null -> {
+                    destination += chosenSymbol.symbol
+                    resultsOfIntersectionToSaveInCache += resultOfIntersectionWithNaturalName
+                }
                 else -> {
-                    val membersByScope = buildList {
-                        overriddenMembers.mapTo(this) { it.baseScope to listOf(it.member) }
-                        addAll(renamedFunctionsFromSupertypes)
-                    }
-                    supertypeScopeContext.collectCallablesImpl(membersByScope)
-                }
-            }
-
-
-            if (declaredFunction != null) {
-                result += declaredFunction
-                directOverriddenFunctions[declaredFunction] = resultsOfIntersection
-                for (resultOfIntersection in resultsOfIntersection) {
-                    for (overriddenMember in resultOfIntersection.overriddenMembers) {
-                        overrideByBase[overriddenMember.member] = declaredFunction
+                    destination += explicitlyDeclaredFunctionWithNaturalName
+                    directOverriddenFunctions[explicitlyDeclaredFunctionWithNaturalName] = listOf(resultOfIntersectionWithNaturalName)
+                    for (overriddenMember in overriddenMembers) {
+                        overrideByBase[overriddenMember.member] = explicitlyDeclaredFunctionWithNaturalName
                     }
                 }
-            } else {
-                for (resultOfIntersection in resultsOfIntersection) {
-                    result += resultOfIntersection.chosenSymbol.symbol
-                }
-                resultsOfIntersectionToSaveInCache += resultsOfIntersection
             }
         }
         functionsFromSupertypes[naturalName] = resultsOfIntersectionToSaveInCache
-        return result
     }
 
+    private fun processOverridesForFunctionsWithDifferentJvmName(
+        jvmName: Name,
+        someSymbolWithNaturalNameFromSuperType: FirNamedFunctionSymbol,
+        explicitlyDeclaredFunctionWithNaturalName: FirNamedFunctionSymbol?,
+        naturalName: Name,
+        resultOfIntersectionWithNaturalName: ResultOfIntersection<FirNamedFunctionSymbol>,
+        destination: MutableCollection<FirNamedFunctionSymbol>,
+        resultsOfIntersectionToSaveInCache: MutableList<ResultOfIntersection<FirNamedFunctionSymbol>>
+    ) {
+        val (_, overriddenMembers, _) = resultOfIntersectionWithNaturalName
+        val explicitlyDeclaredFunctionWithBuiltinJvmName = declaredMemberScope.getFunctions(jvmName).firstOrNull {
+            overrideChecker.isOverriddenFunction(it, someSymbolWithNaturalNameFromSuperType)
+        }
+        val functionsFromSupertypesWithBuiltinJvmName = supertypeScopeContext.collectFunctions(jvmName).firstOrNull {
+            overrideChecker.similarFunctionsOrBothProperties(
+                it.chosenSymbol.extractSomeSymbolFromSuperType(),
+                someSymbolWithNaturalNameFromSuperType
+            )
+        }
+
+        val declaredFunction = explicitlyDeclaredFunctionWithNaturalName ?: explicitlyDeclaredFunctionWithBuiltinJvmName?.let {
+            buildJavaMethodCopy(it.fir as FirJavaMethod) {
+                name = naturalName
+                symbol = FirNamedFunctionSymbol(it.callableId.copy(callableName = naturalName))
+            }.apply {
+                initialSignatureAttr = it.fir
+            }.symbol
+        }
+
+        val renamedFunctionsFromSupertypes = functionsFromSupertypesWithBuiltinJvmName?.overriddenMembers?.map {
+            val renamedFunction = buildSimpleFunctionCopy(it.member.fir) {
+                name = naturalName
+                symbol = FirNamedFunctionSymbol(it.member.callableId.copy(callableName = naturalName))
+                origin = FirDeclarationOrigin.RenamedForOverride
+            }.apply {
+                initialSignatureAttr = it.member.fir
+            }
+            it.baseScope to listOf(renamedFunction.symbol)
+        }
+
+        val resultsOfIntersection = when (renamedFunctionsFromSupertypes) {
+            null -> listOf(resultOfIntersectionWithNaturalName)
+            else -> {
+                val membersByScope = buildList {
+                    overriddenMembers.mapTo(this) { it.baseScope to listOf(it.member) }
+                    addAll(renamedFunctionsFromSupertypes)
+                }
+                supertypeScopeContext.collectCallablesImpl(membersByScope)
+            }
+        }
+
+        if (declaredFunction != null) {
+            destination += declaredFunction
+            directOverriddenFunctions[declaredFunction] = resultsOfIntersection
+            for (resultOfIntersection in resultsOfIntersection) {
+                for (overriddenMember in resultOfIntersection.overriddenMembers) {
+                    overrideByBase[overriddenMember.member] = declaredFunction
+                }
+            }
+        } else {
+            for (resultOfIntersection in resultsOfIntersection) {
+                destination += resultOfIntersection.chosenSymbol.symbol
+            }
+            resultsOfIntersectionToSaveInCache += resultsOfIntersection
+        }
+    }
 
     private fun searchDeclaredMethodsByNameWithoutBuiltinMagic(name: Name): List<FirNamedFunctionSymbol> {
         return declaredMemberScope.getFunctions(name)

@@ -349,7 +349,7 @@ class FirClassSubstitutionScope(
     }
 
     override fun toString(): String {
-        return "Substitution scope for $dispatchReceiverTypeForSubstitutedMembers"
+        return "Substitution scope for [$useSiteMemberScope] for type $dispatchReceiverTypeForSubstitutedMembers"
     }
 }
 

@@ -40,20 +40,23 @@ class FirClassUseSiteMemberScope(
                 add(symbol)
             }
 
-            for ((chosenSymbolFromSupertype, _, _) in getPropertiesFromSupertypesByName(name)) {
+
+            val (properties, fields) = getPropertiesAndFieldsFromSupertypesByName(name)
+            for ((chosenSymbolFromSupertype, _, _) in properties) {
                 val superSymbol = chosenSymbolFromSupertype.extractSomeSymbolFromSuperType()
                 val overriddenBy = superSymbol.getOverridden(explicitlyDeclaredProperties)
                 if (overriddenBy == null) {
                     add(chosenSymbolFromSupertype.symbol)
                 }
             }
+            addAll(fields)
         }
     }
 
     private fun computeDirectOverriddenForDeclaredProperty(declaredPropertySymbol: FirPropertySymbol): List<FirTypeIntersectionScopeContext.ResultOfIntersection<FirPropertySymbol>> {
         val result = mutableListOf<FirTypeIntersectionScopeContext.ResultOfIntersection<FirPropertySymbol>>()
         val declaredProperty = declaredPropertySymbol.fir
-        for (resultOfIntersection in getPropertiesFromSupertypesByName(declaredPropertySymbol.name)) {
+        for (resultOfIntersection in getPropertiesAndFieldsFromSupertypesByName(declaredPropertySymbol.name).first) {
             val symbolFromSupertype = resultOfIntersection.chosenSymbol.extractSomeSymbolFromSuperType()
             if (overrideChecker.isOverriddenProperty(declaredProperty, symbolFromSupertype.fir)) {
                 result.add(resultOfIntersection)
@@ -62,16 +65,24 @@ class FirClassUseSiteMemberScope(
         return result
     }
 
-    private fun getPropertiesFromSupertypesByName(name: Name): List<FirTypeIntersectionScopeContext.ResultOfIntersection<FirPropertySymbol>> {
-        return propertiesFromSupertypes.getOrPut(name) {
-            supertypeScopeContext.collectCallables(name) { name, processor ->
-                processPropertiesByName(name) {
-                    if (it is FirPropertySymbol) {
-                        processor(it)
-                    }
+    private fun getPropertiesAndFieldsFromSupertypesByName(name: Name): Pair<List<FirTypeIntersectionScopeContext.ResultOfIntersection<FirPropertySymbol>>, List<FirFieldSymbol>> {
+        propertiesFromSupertypes[name]?.let {
+            return it to fieldsFromSupertypes.getValue(name)
+        }
+
+        val fields = mutableListOf<FirFieldSymbol>()
+        val properties = supertypeScopeContext.collectCallables<FirPropertySymbol>(name) { propertyName, processor ->
+            processPropertiesByName(propertyName) {
+                when (it) {
+                    is FirPropertySymbol -> processor(it)
+                    is FirFieldSymbol -> fields += it
+                    else -> {}
                 }
             }
         }
+        propertiesFromSupertypes[name] = properties
+        fieldsFromSupertypes[name] = fields
+        return properties to fields
     }
 
     override fun FirNamedFunctionSymbol.isVisibleInCurrentClass(): Boolean {

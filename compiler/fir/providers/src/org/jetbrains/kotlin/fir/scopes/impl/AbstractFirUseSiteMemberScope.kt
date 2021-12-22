@@ -32,6 +32,7 @@ abstract class AbstractFirUseSiteMemberScope(
 
     protected val functionsFromSupertypes: MutableMap<Name, List<ResultOfIntersection<FirNamedFunctionSymbol>>> = mutableMapOf()
     protected val propertiesFromSupertypes: MutableMap<Name, List<ResultOfIntersection<FirPropertySymbol>>> = mutableMapOf()
+    protected val fieldsFromSupertypes: MutableMap<Name, List<FirFieldSymbol>> = mutableMapOf()
 
     private val absentClassifiersFromSupertypes = mutableSetOf<Name>()
 
