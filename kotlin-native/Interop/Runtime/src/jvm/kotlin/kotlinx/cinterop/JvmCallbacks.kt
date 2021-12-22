@@ -587,8 +587,13 @@ private fun test(libPath: String, symName: String) {
             throw IllegalStateException("Unable to load $libPath: ${buf.toKStringFromUtf8()}")
         }
         val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
+        val builder = StringBuilder()
+        for (i in 0 until 5) {
+            builder.append(unsafe.getByte(symPtr + i).toString(16))
+        }
         dlclose(libHandle)
-        throw IllegalStateException("ZZZ: 0x${symPtr.toString(16)}")
+        throw IllegalStateException("ZZZ: 0x$builder")
+//        throw IllegalStateException("ZZZ: 0x${symPtr.toString(16)}")
     }
 }
 
@@ -596,7 +601,7 @@ fun testManualLibLoad() {
 //    val libraryName = "callbacks"
 //    val symbolName = "Java_kotlinx_cinterop_JvmCallbacksKt_ffiTypeVoid"
     val libraryName = "orgjetbrainskotlinbackendkonanenvstubs"
-    val symbolName = "_setEnv"
+    val symbolName = "Java_org_jetbrains_kotlin_backend_konan_env_env_kniBridge0"
     val fullLibraryName = System.mapLibraryName(libraryName)
     val paths = initializePath()
     for (dir in paths) {
