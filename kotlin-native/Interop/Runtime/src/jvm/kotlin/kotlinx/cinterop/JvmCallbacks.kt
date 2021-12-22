@@ -540,6 +540,7 @@ private external fun deleteGlobalRef(ref: Long)
 private external fun dlopen(libName: Long): Long
 private external fun dlclose(libHandle: Long)
 private external fun dlsym(libHandle: Long, symName: Long): Long
+private external fun dlerror(buf: Long, bufLen: Int)
 
 // This is J2K of ClassLoader::initializePath.
 private fun initializePath(): Array<String> {
@@ -580,8 +581,11 @@ private fun initializePath(): Array<String> {
 private fun test(libPath: String, symName: String) {
     memScoped {
         val libHandle = dlopen(libPath.cstr.getPointer(memScope).rawValue)
-        if (libHandle == 0L)
-            throw IllegalStateException("Unable to load $libPath")
+        if (libHandle == 0L) {
+            val buf = memScope.allocArray<ByteVar>(1024)
+            dlerror(buf.rawValue, 1024)
+            throw IllegalStateException("Unable to load $libPath: ${buf.toKStringFromUtf8()}")
+        }
         val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
         dlclose(libHandle)
         throw IllegalStateException("ZZZ: 0x${symPtr.toString(16)}")
