@@ -26,10 +26,12 @@ import org.jetbrains.kotlin.types.AbstractTypeChecker
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.contract
 
+typealias MembersByScope<D> = List<Pair<FirTypeScope, List<D>>>
+
 class FirTypeIntersectionScopeContext(
     val session: FirSession,
     val overrideChecker: FirOverrideChecker,
-    @property:PrivateForInline val scopes: List<FirTypeScope>,
+    val scopes: List<FirTypeScope>,
     private val dispatchReceiverType: ConeSimpleKotlinType,
 ) {
     private val typeCheckerState = session.typeContext.newTypeCheckerState(
@@ -90,12 +92,16 @@ class FirTypeIntersectionScopeContext(
         return result
     }
 
+    fun collectFunctions(name: Name): List<ResultOfIntersection<FirNamedFunctionSymbol>> {
+        return collectCallables(name, FirScope::processFunctionsByName)
+    }
+
     @OptIn(PrivateForInline::class)
-    inline fun <D : FirCallableSymbol<*>> collectCallables(
+    inline fun <D : FirCallableSymbol<*>> collectMembersByScope(
         name: Name,
         processCallables: FirScope.(Name, (D) -> Unit) -> Unit
-    ): List<ResultOfIntersection<D>> {
-        val membersByScope = scopes.mapNotNull { scope ->
+    ): MembersByScope<D> {
+        return scopes.mapNotNull { scope ->
             val resultForScope = mutableListOf<D>()
             scope.processCallables(name) {
                 if (it !is FirConstructorSymbol) {
@@ -107,12 +113,18 @@ class FirTypeIntersectionScopeContext(
                 scope to it
             }
         }
-        return collectCallablesImpl(membersByScope)
     }
 
-    @PrivateForInline
+    @OptIn(PrivateForInline::class)
+    inline fun <D : FirCallableSymbol<*>> collectCallables(
+        name: Name,
+        processCallables: FirScope.(Name, (D) -> Unit) -> Unit
+    ): List<ResultOfIntersection<D>> {
+        return collectCallablesImpl(collectMembersByScope(name, processCallables))
+    }
+
     fun <D : FirCallableSymbol<*>> collectCallablesImpl(
-        membersByScope: List<Pair<FirTypeScope, MutableList<D>>>
+        membersByScope: List<Pair<FirTypeScope, List<D>>>
     ): List<ResultOfIntersection<D>> {
         if (membersByScope.isEmpty()) {
             return emptyList()

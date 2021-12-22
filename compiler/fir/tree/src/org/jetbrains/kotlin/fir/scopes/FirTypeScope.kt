@@ -63,28 +63,6 @@ abstract class FirTypeScope : FirContainingNamesAwareScope() {
             return "Empty scope"
         }
     }
-
-    protected companion object {
-        fun <S : FirCallableSymbol<*>> doProcessDirectOverriddenCallables(
-            callableSymbol: S,
-            processor: (S, FirTypeScope) -> ProcessorAction,
-            directOverriddenMap: Map<S, Collection<S>>,
-            baseScope: FirTypeScope,
-            processDirectOverriddenCallables: FirTypeScope.(S, (S, FirTypeScope) -> ProcessorAction) -> ProcessorAction
-        ): ProcessorAction {
-            val directOverridden = directOverriddenMap[callableSymbol]?.takeIf { it.isNotEmpty() }
-                ?: return baseScope.processDirectOverriddenCallables(callableSymbol, processor)
-
-            for (overridden in directOverridden) {
-                if (overridden.fir.isIntersectionOverride) {
-                    if (!baseScope.processDirectOverriddenCallables(overridden, processor)) return ProcessorAction.STOP
-                }
-                if (!processor(overridden, baseScope)) return ProcessorAction.STOP
-            }
-
-            return ProcessorAction.NONE
-        }
-    }
 }
 
 typealias ProcessOverriddenWithBaseScope<D> = FirTypeScope.(D, (D, FirTypeScope) -> ProcessorAction) -> ProcessorAction
@@ -100,6 +78,18 @@ fun FirTypeScope.processOverriddenFunctions(
         mutableSetOf()
     )
 
+private fun FirTypeScope.processOverriddenFunctionsWithVisited(
+    functionSymbol: FirNamedFunctionSymbol,
+    visited: MutableSet<FirNamedFunctionSymbol>,
+    processor: (FirNamedFunctionSymbol) -> ProcessorAction
+): ProcessorAction =
+    doProcessAllOverriddenCallables(
+        functionSymbol,
+        processor,
+        FirTypeScope::processDirectOverriddenFunctionsWithBaseScope,
+        visited
+    )
+
 fun FirTypeScope.processOverriddenProperties(
     propertySymbol: FirPropertySymbol,
     processor: (FirPropertySymbol) -> ProcessorAction
@@ -110,6 +100,40 @@ fun FirTypeScope.processOverriddenProperties(
         FirTypeScope::processDirectOverriddenPropertiesWithBaseScope,
         mutableSetOf()
     )
+
+private fun FirTypeScope.processOverriddenPropertiesWithVisited(
+    propertySymbol: FirPropertySymbol,
+    visited: MutableSet<FirPropertySymbol> = mutableSetOf(),
+    processor: (FirPropertySymbol) -> ProcessorAction
+): ProcessorAction =
+    doProcessAllOverriddenCallables(
+        propertySymbol,
+        processor,
+        FirTypeScope::processDirectOverriddenPropertiesWithBaseScope,
+        visited
+    )
+
+fun List<FirTypeScope>.processOverriddenFunctions(
+    functionSymbol: FirNamedFunctionSymbol,
+    processor: (FirNamedFunctionSymbol) -> ProcessorAction
+) {
+    val visited = mutableSetOf<FirNamedFunctionSymbol>()
+    for (scope in this) {
+        visited.remove(functionSymbol)
+        if (!scope.processOverriddenFunctionsWithVisited(functionSymbol, visited, processor)) return
+    }
+}
+
+fun List<FirTypeScope>.processOverriddenProperties(
+    propertySymbol: FirPropertySymbol,
+    processor: (FirPropertySymbol) -> ProcessorAction
+) {
+    val visited = mutableSetOf<FirPropertySymbol>()
+    for (scope in this) {
+        visited.remove(propertySymbol)
+        if (!scope.processOverriddenPropertiesWithVisited(propertySymbol, visited, processor)) return
+    }
+}
 
 private fun <S : FirCallableSymbol<*>> FirTypeScope.doProcessAllOverriddenCallables(
     callableSymbol: S,

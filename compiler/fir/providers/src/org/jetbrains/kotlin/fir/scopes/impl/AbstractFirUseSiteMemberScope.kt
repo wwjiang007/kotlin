@@ -27,10 +27,10 @@ abstract class AbstractFirUseSiteMemberScope(
     private val functions: MutableMap<Name, Collection<FirNamedFunctionSymbol>> = hashMapOf()
 
     private val properties: MutableMap<Name, Collection<FirVariableSymbol<*>>> = hashMapOf()
-    private val directOverriddenFunctions: MutableMap<FirNamedFunctionSymbol, List<ResultOfIntersection<FirNamedFunctionSymbol>>> = hashMapOf()
+    protected val directOverriddenFunctions: MutableMap<FirNamedFunctionSymbol, List<ResultOfIntersection<FirNamedFunctionSymbol>>> = hashMapOf()
     protected val directOverriddenProperties: MutableMap<FirPropertySymbol, List<ResultOfIntersection<FirPropertySymbol>>> = hashMapOf()
 
-    private val functionsFromSupertypes: MutableMap<Name, List<ResultOfIntersection<FirNamedFunctionSymbol>>> = mutableMapOf()
+    protected val functionsFromSupertypes: MutableMap<Name, List<ResultOfIntersection<FirNamedFunctionSymbol>>> = mutableMapOf()
     protected val propertiesFromSupertypes: MutableMap<Name, List<ResultOfIntersection<FirPropertySymbol>>> = mutableMapOf()
 
     private val absentClassifiersFromSupertypes = mutableSetOf<Name>()
@@ -49,7 +49,7 @@ abstract class AbstractFirUseSiteMemberScope(
         }
     }
 
-    override fun processFunctionsByName(name: Name, processor: (FirNamedFunctionSymbol) -> Unit) {
+    final override fun processFunctionsByName(name: Name, processor: (FirNamedFunctionSymbol) -> Unit) {
         functions.getOrPut(name) {
             collectFunctions(name)
         }.forEach {
@@ -57,23 +57,37 @@ abstract class AbstractFirUseSiteMemberScope(
         }
     }
 
-    private fun collectFunctions(
+    protected open fun collectFunctions(
         name: Name
     ): Collection<FirNamedFunctionSymbol> = mutableListOf<FirNamedFunctionSymbol>().apply {
-        val explicitlyDeclaredFunctions = mutableSetOf<FirFunctionSymbol<*>>()
+        collectDeclaredFunctions(name, this)
+        val explicitlyDeclaredFunctions = this.toSet()
+        collectFunctionsFromSupertypes(name, this, explicitlyDeclaredFunctions)
+    }
+
+    protected fun collectDeclaredFunctions(name: Name, destination: MutableList<FirNamedFunctionSymbol>) {
         declaredMemberScope.processFunctionsByName(name) { symbol ->
             if (symbol.isStatic) return@processFunctionsByName
+            if (!symbol.isVisibleInCurrentClass()) return@processFunctionsByName
             val directOverridden = computeDirectOverriddenForDeclaredFunction(symbol)
             directOverriddenFunctions[symbol] = directOverridden
-            explicitlyDeclaredFunctions += symbol
-            add(symbol)
+            destination += symbol
         }
+    }
 
+    protected abstract fun FirNamedFunctionSymbol.isVisibleInCurrentClass(): Boolean
+
+    protected fun collectFunctionsFromSupertypes(
+        name: Name,
+        destination: MutableList<FirNamedFunctionSymbol>,
+        explicitlyDeclaredFunctions: Set<FirNamedFunctionSymbol>
+    ) {
         for ((chosenSymbolFromSupertype, _, _) in getFunctionsFromSupertypesByName(name)) {
             val superSymbol = chosenSymbolFromSupertype.extractSomeSymbolFromSuperType()
+            if (!superSymbol.isVisibleInCurrentClass()) continue
             val overriddenBy = superSymbol.getOverridden(explicitlyDeclaredFunctions)
             if (overriddenBy == null) {
-                add(chosenSymbolFromSupertype.symbol)
+                destination += chosenSymbolFromSupertype.symbol
             }
         }
     }
@@ -146,11 +160,11 @@ abstract class AbstractFirUseSiteMemberScope(
         )
     }
 
-    private inline fun <D : FirCallableSymbol<*>> processDirectOverriddenPropertiesWithBaseScopeImpl(
+    private /*inline*/ fun <D : FirCallableSymbol<*>> processDirectOverriddenPropertiesWithBaseScopeImpl(
         directOverriddenMap: Map<D, List<ResultOfIntersection<D>>>,
         callablesFromSupertypes: Map<Name, List<ResultOfIntersection<D>>>,
         callableSymbol: D,
-        noinline processor: (D, FirTypeScope) -> ProcessorAction,
+        /*noinline*/ processor: (D, FirTypeScope) -> ProcessorAction,
         processDirectOverriddenCallables: FirTypeScope.(D, (D, FirTypeScope) -> ProcessorAction) -> ProcessorAction
     ): ProcessorAction {
         when (val directOverridden = directOverriddenMap[callableSymbol]) {

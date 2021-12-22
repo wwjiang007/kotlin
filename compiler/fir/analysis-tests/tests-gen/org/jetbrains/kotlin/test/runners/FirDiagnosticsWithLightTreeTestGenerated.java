@@ -3514,6 +3514,30 @@ public class FirDiagnosticsWithLightTreeTestGenerated extends AbstractFirDiagnos
             public void testNoIntersectionOverrideOfTwoMembers_java() throws Exception {
                 runTest("compiler/fir/analysis-tests/testData/resolve/scopes/noIntersectionOverrideOfTwoMembers_java.kt");
             }
+
+            @Test
+            @TestMetadata("specialFunctionInJava_1.kt")
+            public void testSpecialFunctionInJava_1() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/scopes/specialFunctionInJava_1.kt");
+            }
+
+            @Test
+            @TestMetadata("specialFunctionInJava_2.kt")
+            public void testSpecialFunctionInJava_2() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/scopes/specialFunctionInJava_2.kt");
+            }
+
+            @Test
+            @TestMetadata("specialFunctionInJava_3.kt")
+            public void testSpecialFunctionInJava_3() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/scopes/specialFunctionInJava_3.kt");
+            }
+
+            @Test
+            @TestMetadata("specialFunctionInJava_4.kt")
+            public void testSpecialFunctionInJava_4() throws Exception {
+                runTest("compiler/fir/analysis-tests/testData/resolve/scopes/specialFunctionInJava_4.kt");
+            }
         }
 
         @Nested

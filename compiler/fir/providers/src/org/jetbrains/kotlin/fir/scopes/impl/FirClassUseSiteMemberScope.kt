@@ -74,6 +74,10 @@ class FirClassUseSiteMemberScope(
         }
     }
 
+    override fun FirNamedFunctionSymbol.isVisibleInCurrentClass(): Boolean {
+        return true
+    }
+
     override fun toString(): String {
         return "Use site scope of $classId"
     }
