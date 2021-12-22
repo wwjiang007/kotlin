@@ -34,7 +34,7 @@ import org.jetbrains.kotlin.util.profile
 import org.jetbrains.kotlin.utils.KotlinPaths
 
 private class K2NativeCompilerPerformanceManager: CommonCompilerPerformanceManager("Kotlin to Native Compiler")
-class K2Native : CLICompiler<K2NativeCompilerArguments>() {
+class K2Native(val runFromDaemon: Boolean) : CLICompiler<K2NativeCompilerArguments>() {
 
     override fun MutableList<String>.addPlatformOptions(arguments: K2NativeCompilerArguments) {}
 
@@ -78,7 +78,7 @@ class K2Native : CLICompiler<K2NativeCompilerArguments>() {
         try {
             val konanConfig = KonanConfig(project, configuration)
             ensureModuleName(konanConfig, environment)
-            runTopLevelPhases(konanConfig, environment)
+            runTopLevelPhases(konanConfig, environment, runFromDaemon)
         } catch (e: Throwable) {
             if (e is KonanCompilationException || e is CompilationErrorException)
                 return ExitCode.COMPILATION_ERROR
@@ -400,12 +400,12 @@ class K2Native : CLICompiler<K2NativeCompilerArguments>() {
     companion object {
         @JvmStatic fun main(args: Array<String>) {
             profile("Total compiler main()") {
-                doMain(K2Native(), args)
+                doMain(K2Native(false), args)
             }
         }
         @JvmStatic fun mainNoExit(args: Array<String>) {
             profile("Total compiler main()") {
-                if (doMainNoExit(K2Native(), args) != ExitCode.OK) {
+                if (doMainNoExit(K2Native(false), args) != ExitCode.OK) {
                     throw KonanCompilationException("Compilation finished with errors")
                 }
             }
@@ -413,7 +413,7 @@ class K2Native : CLICompiler<K2NativeCompilerArguments>() {
 
         @JvmStatic fun mainNoExitWithGradleRenderer(args: Array<String>) {
             profile("Total compiler main()") {
-                if (doMainNoExit(K2Native(), args, MessageRenderer.GRADLE_STYLE) != ExitCode.OK) {
+                if (doMainNoExit(K2Native(true), args, MessageRenderer.GRADLE_STYLE) != ExitCode.OK) {
                     throw KonanCompilationException("Compilation finished with errors")
                 }
             }

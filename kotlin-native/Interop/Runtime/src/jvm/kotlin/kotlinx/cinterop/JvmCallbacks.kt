@@ -16,9 +16,13 @@
 
 package kotlinx.cinterop
 
+import org.jetbrains.kotlin.konan.util.KonanHomeProvider
 import org.jetbrains.kotlin.konan.util.NativeMemoryAllocator
 import org.jetbrains.kotlin.konan.util.ThreadSafeDisposableHelper
 import sun.misc.Unsafe
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.LongConsumer
 import kotlin.reflect.KClass
@@ -532,3 +536,68 @@ private val unsafe = with(Unsafe::class.java.getDeclaredField("theUnsafe")) {
 private external fun newGlobalRef(any: Any): Long
 private external fun derefGlobalRef(ref: Long): Any
 private external fun deleteGlobalRef(ref: Long)
+
+private external fun dlopen(libName: Long): Long
+private external fun dlclose(libHandle: Long)
+private external fun dlsym(libHandle: Long, symName: Long): Long
+
+// This is J2K of ClassLoader::initializePath.
+private fun initializePath(): Array<String> {
+    val ldpath = System.getProperty("java.library.path", "")
+    val ps = File.pathSeparator
+    val ldlen = ldpath.length
+    var i: Int
+    var j: Int
+    var n: Int
+    // Count the separators in the path
+    i = ldpath.indexOf(ps)
+    n = 0
+    while (i >= 0) {
+        n++
+        i = ldpath.indexOf(ps, i + 1)
+    }
+
+    // allocate the array of paths - n :'s = n + 1 path elements
+    val paths = Array(n + 1) { "" }
+
+    // Fill the array with paths from the ldpath
+    i = 0
+    n = i
+    j = ldpath.indexOf(ps)
+    while (j >= 0) {
+        if (j - i > 0) {
+            paths[n++] = ldpath.substring(i, j)
+        } else if (j - i == 0) {
+            paths[n++] = "."
+        }
+        i = j + 1
+        j = ldpath.indexOf(ps, i)
+    }
+    paths[n] = ldpath.substring(i, ldlen)
+    return paths
+}
+
+private fun test(libPath: String, symName: String) {
+    memScoped {
+        val libHandle = dlopen(libPath.cstr.getPointer(memScope).rawValue)
+        if (libHandle == 0L)
+            throw IllegalStateException("Unable to load $libPath")
+        val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
+        dlclose(libHandle)
+        throw IllegalStateException("ZZZ: 0x${symPtr.toString(16)}")
+    }
+}
+
+fun testManualLibLoad() {
+    val fullLibraryName = System.mapLibraryName("callbacks")
+    val paths = initializePath()
+    for (dir in paths) {
+        if (Files.exists(Paths.get(dir, fullLibraryName))) {
+            test("$dir/$fullLibraryName", "Java_kotlinx_cinterop_JvmCallbacksKt_ffiTypeVoid")
+            return
+        }
+    }
+    val defaultNativeLibsDir = "${KonanHomeProvider.determineKonanHome()}/konan/nativelib"
+    if (Files.exists(Paths.get(defaultNativeLibsDir, fullLibraryName)))
+        test("$defaultNativeLibsDir/$fullLibraryName", "Java_kotlinx_cinterop_JvmCallbacksKt_ffiTypeVoid")
+}

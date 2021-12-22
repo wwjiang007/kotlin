@@ -4,6 +4,52 @@
 #include <jni.h>
 #include <ffi.h>
 
+#ifdef __APPLE__
+
+JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlopen(JNIEnv *env, long libPath) {
+    return 0;
+}
+
+JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlclose(JNIEnv *env, long libHandle) {
+    return;
+}
+
+JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlsym(JNIEnv *env, long libHandle, long symName) {
+    return 0;
+}
+
+#elif _WIN32
+
+JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlopen(JNIEnv *env, long libPath) {
+    return 0;
+}
+
+JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlclose(JNIEnv *env, long libHandle) {
+    return;
+}
+
+JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlsym(JNIEnv *env, long libHandle, long symName) {
+    return 0;
+}
+
+#else
+
+#include <dlfcn.h>
+
+JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlopen(JNIEnv *env, long libPath) {
+    return (jlong)dlopen((const char*)libPath, RTLD_LAZY);
+}
+
+JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlclose(JNIEnv *env, long libHandle) {
+    dlclose((void*)libHandle);
+}
+
+JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlsym(JNIEnv *env, long libHandle, long symName) {
+    return (jlong)dlsym((void*)libHandle, (const char*)symName);
+}
+
+#endif
+
 /*
  * Class:     kotlinx_cinterop_JvmCallbacksKt
  * Method:    ffiTypeVoid

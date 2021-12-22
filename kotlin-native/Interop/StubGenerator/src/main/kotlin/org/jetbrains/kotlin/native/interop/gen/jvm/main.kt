@@ -16,6 +16,7 @@
 
 package org.jetbrains.kotlin.native.interop.gen.jvm
 
+import kotlinx.cinterop.testManualLibLoad
 import kotlinx.cinterop.usingJvmCInteropCallbacks
 import org.jetbrains.kotlin.konan.TempFiles
 import org.jetbrains.kotlin.konan.exec.Command

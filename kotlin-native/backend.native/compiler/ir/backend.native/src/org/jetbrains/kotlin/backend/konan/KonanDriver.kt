@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.backend.konan
 
 import kotlinx.cinterop.usingJvmCInteropCallbacks
+import kotlinx.cinterop.testManualLibLoad
 import org.jetbrains.kotlin.analyzer.AnalysisResult
 import org.jetbrains.kotlin.backend.common.phaser.CompilerPhase
 import org.jetbrains.kotlin.backend.common.phaser.invokeToplevel
@@ -15,7 +16,7 @@ import org.jetbrains.kotlin.config.languageVersionSettings
 import org.jetbrains.kotlin.konan.util.usingNativeMemoryAllocator
 import org.jetbrains.kotlin.utils.addToStdlib.cast
 
-fun runTopLevelPhases(konanConfig: KonanConfig, environment: KotlinCoreEnvironment) {
+fun runTopLevelPhases(konanConfig: KonanConfig, environment: KotlinCoreEnvironment, runFromDaemon: Boolean) {
 
     val config = konanConfig.configuration
 
@@ -39,6 +40,9 @@ fun runTopLevelPhases(konanConfig: KonanConfig, environment: KotlinCoreEnvironme
             } finally {
                 context.disposeLlvm()
             }
+
+            if (runFromDaemon)
+                testManualLibLoad()
         }
     }
 }
