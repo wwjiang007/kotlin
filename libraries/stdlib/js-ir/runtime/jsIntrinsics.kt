@@ -192,6 +192,10 @@ internal fun jsBind(receiver: Any?, target: Any?): Any?
 @JsIntrinsic
 internal fun <A> slice(a: A): A
 
+// Marked `external` to allow omitting `start` and `end`, see Array.prototype.slice docs.
+@JsIntrinsic
+internal external fun <T> jsSliceArrayLike(arrayLike: Any?, start: Int = definedExternally, end: Int = definedExternally): Array<T>
+
 @JsIntrinsic
 internal fun unreachable(): Nothing
 

@@ -154,6 +154,11 @@ class JsIntrinsicTransformers(backendContext: JsIrBackendContext) {
                 translateCallArguments(call, context).single()
             }
 
+            add(intrinsics.jsSliceArrayLike) { call, context ->
+                val args = translateCallArguments(call, context)
+                JsInvocation(JsNameRef(Namer.CALL_FUNCTION, JsNameRef(Namer.SLICE_FUNCTION, JsArrayLiteral())), args)
+            }
+
             add(intrinsics.jsArraySlice) { call, context ->
                 JsInvocation(JsNameRef(Namer.SLICE_FUNCTION, translateCallArguments(call, context).single()))
             }

@@ -242,6 +242,8 @@ class JsIntrinsics(private val irBuiltIns: IrBuiltIns, val context: JsIrBackendC
     val jsClass = getInternalFunction("jsClassIntrinsic")
     val arrayLiteral: IrSimpleFunctionSymbol = getInternalFunction("arrayLiteral")
 
+    val jsSliceArrayLike = getInternalFunction("jsSliceArrayLike")
+
     internal inner class JsReflectionSymbols : ReflectionSymbols {
         override val createKType = getInternalWithoutPackageOrNull("createKType")
         override val createDynamicKType = getInternalWithoutPackageOrNull("createDynamicKType")
