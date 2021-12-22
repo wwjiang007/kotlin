@@ -102,7 +102,6 @@ abstract class AbstractManyCandidatesInferenceSession(
         fixedTypeVariables: Map<TypeConstructorMarker, KotlinTypeMarker>
     ): InitialConstraint {
         val substituted = substitute(substitutor)
-        if (substitutor !is NotFixedTypeToVariableSubstitutorForDelegateInference) return substituted
         val a = a
         // In situation when some type variable _T is fixed to Stub(_T)?,
         // we are not allowed just to substitute Stub(_T) with T because nullabilities are different here!
