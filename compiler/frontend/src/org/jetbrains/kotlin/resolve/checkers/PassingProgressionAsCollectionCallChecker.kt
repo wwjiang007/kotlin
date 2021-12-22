@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.diagnostics.Errors.PROGRESSIONS_CHANGING_RESOLVE
 import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.resolve.calls.KotlinCallResolver
+import org.jetbrains.kotlin.resolve.calls.checkers.CallCheckerWithAdditionalResolve
 import org.jetbrains.kotlin.resolve.calls.components.KotlinResolutionCallbacks
 import org.jetbrains.kotlin.resolve.calls.context.BasicCallResolutionContext
 import org.jetbrains.kotlin.resolve.calls.model.KotlinCallArgument
@@ -33,7 +34,7 @@ import org.jetbrains.kotlin.types.typeUtil.isTypeParameter
  Please don't use similar logic for other checkers
  */
 @OptIn(ClassicTypeCheckerStateInternals::class)
-class PassingProgressionAsCollectionCallChecker(private val kotlinCallResolver: KotlinCallResolver) {
+class PassingProgressionAsCollectionCallChecker(private val kotlinCallResolver: KotlinCallResolver) : CallCheckerWithAdditionalResolve {
     private val typeCheckerState = ClassicTypeCheckerState(isErrorTypeEqualsToAnything = false)
 
     private val iterableProgressions = listOf(
@@ -129,7 +130,7 @@ class PassingProgressionAsCollectionCallChecker(private val kotlinCallResolver: 
         }
     }
 
-    fun check(
+    override fun check(
         overloadResolutionResults: OverloadResolutionResults<*>,
         scopeTower: ImplicitScopeTower,
         resolutionCallbacks: KotlinResolutionCallbacks,

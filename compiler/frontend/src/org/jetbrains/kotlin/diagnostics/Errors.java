@@ -842,8 +842,8 @@ public interface Errors {
 
     DiagnosticFactory1<PsiElement, Collection<? extends ResolvedCall<?>>> OVERLOAD_RESOLUTION_AMBIGUITY = DiagnosticFactory1.create(ERROR);
     DiagnosticFactory1<PsiElement, Collection<? extends ResolvedCall<?>>> OVERLOAD_RESOLUTION_AMBIGUITY_BECAUSE_OF_STUB_TYPES = DiagnosticFactory1.create(ERROR);
-    DiagnosticFactory2<PsiElement, KotlinType, Collection<? extends KotlinType>> STUB_TYPE_IN_ARGUMENT_CAUSES_AMBIGUITY = DiagnosticFactory2.create(ERROR);
-    DiagnosticFactory3<PsiElement, KotlinType, Collection<? extends KotlinType>, BuilderLambdaLabelingInfo> STUB_TYPE_IN_RECEIVER_CAUSES_AMBIGUITY = DiagnosticFactory3.create(ERROR);
+    DiagnosticFactory2<PsiElement, KotlinType, KotlinType> STUB_TYPE_IN_ARGUMENT_CAUSES_AMBIGUITY = DiagnosticFactory2.create(ERROR);
+    DiagnosticFactory3<PsiElement, KotlinType, KotlinType, BuilderLambdaLabelingInfo> STUB_TYPE_IN_RECEIVER_CAUSES_AMBIGUITY = DiagnosticFactory3.create(ERROR);
     DiagnosticFactory1<PsiElement, Collection<? extends ResolvedCall<?>>> NONE_APPLICABLE = DiagnosticFactory1.create(ERROR);
     DiagnosticFactory1<PsiElement, Collection<? extends ResolvedCall<?>>> CANNOT_COMPLETE_RESOLVE = DiagnosticFactory1.create(ERROR);
     DiagnosticFactory1<PsiElement, Collection<? extends ResolvedCall<?>>> UNRESOLVED_REFERENCE_WRONG_RECEIVER =

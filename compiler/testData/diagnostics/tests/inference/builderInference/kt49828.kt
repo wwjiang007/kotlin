@@ -46,18 +46,18 @@ fun main() {
         add("one")
 
         val secondParameter = get(1)
-        <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE, OVERLOAD_RESOLUTION_AMBIGUITY_BECAUSE_OF_STUB_TYPES!>println<!>(<!STUB_TYPE_IN_ARGUMENT_CAUSES_AMBIGUITY("TypeVariable(E); Any?, Boolean, Byte, Char, CharArray, Double, Float, Int, Long, Short")!>secondParameter<!>) // ERROR: [OVERLOAD_RESOLUTION_AMBIGUITY] Overload resolution ambiguity. All these functions match.
+        <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE, OVERLOAD_RESOLUTION_AMBIGUITY_BECAUSE_OF_STUB_TYPES!>println<!>(<!STUB_TYPE_IN_ARGUMENT_CAUSES_AMBIGUITY("TypeVariable(E); String")!>secondParameter<!>) // ERROR: [OVERLOAD_RESOLUTION_AMBIGUITY] Overload resolution ambiguity. All these functions match.
     }
     val list2 = buildList {
         add("one")
 
-        <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE, OVERLOAD_RESOLUTION_AMBIGUITY_BECAUSE_OF_STUB_TYPES!>println<!>(<!STUB_TYPE_IN_ARGUMENT_CAUSES_AMBIGUITY("TypeVariable(E); Any?, Boolean, Byte, Char, CharArray, Double, Float, Int, Long, Short")!>get(1)<!>) // ERROR: [OVERLOAD_RESOLUTION_AMBIGUITY] Overload resolution ambiguity. All these functions match.
+        <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE, OVERLOAD_RESOLUTION_AMBIGUITY_BECAUSE_OF_STUB_TYPES!>println<!>(<!STUB_TYPE_IN_ARGUMENT_CAUSES_AMBIGUITY("TypeVariable(E); String")!>get(1)<!>) // ERROR: [OVERLOAD_RESOLUTION_AMBIGUITY] Overload resolution ambiguity. All these functions match.
     }
     val list3 = buildList {
         add("one")
 
         val secondParameter = Inv(get(1))
-        <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE, OVERLOAD_RESOLUTION_AMBIGUITY_BECAUSE_OF_STUB_TYPES!>foo<!>(<!STUB_TYPE_IN_ARGUMENT_CAUSES_AMBIGUITY("Inv<TypeVariable(E)>; Inv<String>, Inv<Int>")!>secondParameter<!>)
+        <!DEBUG_INFO_ELEMENT_WITH_ERROR_TYPE, OVERLOAD_RESOLUTION_AMBIGUITY_BECAUSE_OF_STUB_TYPES!>foo<!>(<!STUB_TYPE_IN_ARGUMENT_CAUSES_AMBIGUITY("Inv<TypeVariable(E)>; Inv<String>")!>secondParameter<!>)
     }
     val list4 = buildList {
         add("one")

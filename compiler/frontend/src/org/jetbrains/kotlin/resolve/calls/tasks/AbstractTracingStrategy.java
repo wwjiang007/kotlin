@@ -135,9 +135,9 @@ public abstract class AbstractTracingStrategy implements TracingStrategy {
             Boolean isReceiver
     ) {
         if (isReceiver) {
-            trace.report(STUB_TYPE_IN_RECEIVER_CAUSES_AMBIGUITY.on(psiArgument, argumentType, types, lambdaToLabel));
+            //trace.report(STUB_TYPE_IN_RECEIVER_CAUSES_AMBIGUITY.on(psiArgument, argumentType, types, lambdaToLabel));
         } else {
-            trace.report(STUB_TYPE_IN_ARGUMENT_CAUSES_AMBIGUITY.on(psiArgument, argumentType, types));
+            //trace.report(STUB_TYPE_IN_ARGUMENT_CAUSES_AMBIGUITY.on(psiArgument, argumentType, types));
         }
     }
 

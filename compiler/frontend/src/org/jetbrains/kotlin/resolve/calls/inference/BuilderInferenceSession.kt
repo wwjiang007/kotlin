@@ -78,8 +78,15 @@ class BuilderInferenceSession(
     private val oldDoubleColonExpressionCalls = arrayListOf<KtExpression>()
 
     private var hasInapplicableCall = false
+    private var stage = BuilderInferenceSessionStage.ANALYSING_CALLS
 
     override val parentSession = topLevelCallContext.inferenceSession
+
+    private fun checkStage(stage: BuilderInferenceSessionStage) {
+        require(this.stage == stage) { "The current builder inference session stage isn't matched to required" }
+    }
+
+    fun getStage(): BuilderInferenceSessionStage = stage
 
     override fun shouldRunCompletion(candidate: ResolutionCandidate): Boolean {
         val system = candidate.getSystem() as NewConstraintSystemImpl
@@ -233,6 +240,10 @@ class BuilderInferenceSession(
         completionMode: ConstraintSystemCompletionMode,
         diagnosticsHolder: KotlinDiagnosticsHolder,
     ): Map<TypeConstructor, UnwrappedType>? {
+        checkStage(BuilderInferenceSessionStage.ANALYSING_CALLS)
+
+        stage = BuilderInferenceSessionStage.INFERRING_VARIABLES
+
         initializeLambda(lambda)
 
         fun getResultingSubstitutor(): NewTypeSubstitutor {
@@ -260,6 +271,8 @@ class BuilderInferenceSession(
         if (isTopLevelBuilderInferenceCall()) {
             updateAllCalls(getResultingSubstitutor())
         }
+
+        stage = BuilderInferenceSessionStage.COMPLETED
 
         return commonSystem.fixedTypeVariables.cast() // TODO: SUB
     }
@@ -632,3 +645,5 @@ class ComposedSubstitutor(val left: NewTypeSubstitutor, val right: NewTypeSubsti
 }
 
 class BuilderInferenceExpectedTypeConstraintPosition(callElement: KtExpression) : ExpectedTypeConstraintPosition<KtExpression>(callElement)
+
+enum class BuilderInferenceSessionStage { ANALYSING_CALLS, INFERRING_VARIABLES, COMPLETED }

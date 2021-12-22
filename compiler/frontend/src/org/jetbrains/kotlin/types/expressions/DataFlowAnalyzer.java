@@ -259,7 +259,7 @@ public class DataFlowAnalyzer {
     }
 
     @Nullable
-    public KotlinType checkType(@Nullable KotlinType expressionType, @NotNull KtExpression expression, @NotNull ResolutionContext context) {
+    public KotlinType checkType(@Nullable KotlinType expressionType, @NotNull KtExpression expression, @NotNull ResolutionContext<?> context) {
         return checkType(expressionType, expression, context, null, true);
     }
 
@@ -267,14 +267,14 @@ public class DataFlowAnalyzer {
     public KotlinType checkType(
             @Nullable KotlinType expressionType,
             @NotNull KtExpression expression,
-            @NotNull ResolutionContext context,
+            @NotNull ResolutionContext<?> context,
             boolean reportErrorForTypeMismatch
     ) {
         return checkType(expressionType, expression, context, null, reportErrorForTypeMismatch);
     }
 
     @NotNull
-    public KotlinTypeInfo checkType(@NotNull KotlinTypeInfo typeInfo, @NotNull KtExpression expression, @NotNull ResolutionContext context) {
+    public KotlinTypeInfo checkType(@NotNull KotlinTypeInfo typeInfo, @NotNull KtExpression expression, @NotNull ResolutionContext<?> context) {
         return typeInfo.replaceType(checkType(typeInfo.getType(), expression, context));
     }
 
@@ -282,7 +282,7 @@ public class DataFlowAnalyzer {
     private KotlinType checkTypeInternal(
             @NotNull KotlinType expressionType,
             @NotNull KtExpression expression,
-            @NotNull ResolutionContext c,
+            @NotNull ResolutionContext<?> c,
             @NotNull Ref<Boolean> hasError,
             boolean reportErrorForTypeMismatch
     ) {
@@ -318,17 +318,25 @@ public class DataFlowAnalyzer {
         if (reportErrorForTypeMismatch &&
             !DiagnosticUtilsKt.reportTypeMismatchDueToTypeProjection(c, expression, c.expectedType, expressionType) &&
             !DiagnosticUtilsKt.reportTypeMismatchDueToScalaLikeNamedFunctionSyntax(c, expression, c.expectedType, expressionType)) {
-            c.trace.report(TYPE_MISMATCH.on(expression, c.expectedType, expressionType));
+            reportTypeMismatchError(c, expression, expressionType);
         }
         hasError.set(true);
         return expressionType;
+    }
+
+    private void reportTypeMismatchError(
+            @NotNull ResolutionContext<?> c,
+            @NotNull KtExpression expression,
+            @NotNull KotlinType expressionType
+    ) {
+        c.trace.report(TYPE_MISMATCH.on(expression, c.expectedType, expressionType));
     }
 
     @Nullable
     public KotlinType checkType(
             @Nullable KotlinType expressionType,
             @NotNull KtExpression expressionToCheck,
-            @NotNull ResolutionContext c,
+            @NotNull ResolutionContext<?> c,
             @Nullable Ref<Boolean> hasError,
             boolean reportErrorForTypeMismatch
     ) {
@@ -358,7 +366,7 @@ public class DataFlowAnalyzer {
     public SmartCastResult checkPossibleCast(
             @NotNull KotlinType expressionType,
             @NotNull KtExpression expression,
-            @NotNull ResolutionContext c
+            @NotNull ResolutionContext<?> c
     ) {
         DataFlowValue dataFlowValue = dataFlowValueFactory.createDataFlowValue(expression, expressionType, c);
 
@@ -373,7 +381,7 @@ public class DataFlowAnalyzer {
     }
 
     @Nullable
-    public KotlinType checkStatementType(@NotNull KtExpression expression, @NotNull ResolutionContext context) {
+    public KotlinType checkStatementType(@NotNull KtExpression expression, @NotNull ResolutionContext<?> context) {
         if (!noExpectedType(context.expectedType) && !KotlinBuiltIns.isUnit(context.expectedType) &&
             !KotlinTypeKt.isError(context.expectedType)) {
             context.trace.report(EXPECTED_TYPE_MISMATCH.on(expression, context.expectedType));
@@ -396,7 +404,7 @@ public class DataFlowAnalyzer {
     public static Collection<KotlinType> getAllPossibleTypes(
             @NotNull KtExpression expression,
             @NotNull KotlinType type,
-            @NotNull ResolutionContext c
+            @NotNull ResolutionContext<?> c
     ) {
         DataFlowValue dataFlowValue = c.dataFlowValueFactory.createDataFlowValue(expression, type, c);
         return getAllPossibleTypes(type, c, dataFlowValue, c.languageVersionSettings);
@@ -405,7 +413,7 @@ public class DataFlowAnalyzer {
     @NotNull
     public static Collection<KotlinType> getAllPossibleTypes(
             @NotNull KotlinType type,
-            @NotNull ResolutionContext c,
+            @NotNull ResolutionContext<?> c,
             @NotNull DataFlowValue dataFlowValue,
             @NotNull LanguageVersionSettings languageVersionSettings
     ) {

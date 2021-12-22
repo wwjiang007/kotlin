@@ -917,8 +917,8 @@ public class DefaultErrorMessages {
 
         MAP.put(OVERLOAD_RESOLUTION_AMBIGUITY, "Overload resolution ambiguity: {0}", AMBIGUOUS_CALLS);
         MAP.put(OVERLOAD_RESOLUTION_AMBIGUITY_BECAUSE_OF_STUB_TYPES, "Overload resolution ambiguity because of passing not yet fixed type variables (see errors on arguments): {0}", AMBIGUOUS_CALLS);
-        MAP.put(STUB_TYPE_IN_ARGUMENT_CAUSES_AMBIGUITY, "Type of an argument is {0} which hasn't fixed yet, it causes overload resolution ambiguity. Please use explicit cast to one of the following types: {1}", RENDER_TYPE, RENDER_COLLECTION_OF_TYPES);
-        MAP.put(STUB_TYPE_IN_RECEIVER_CAUSES_AMBIGUITY, "Type of a receiver is {0} which hasn't fixed yet, it causes overload resolution ambiguity. Please use explicit cast to one of the following types: {1}", RENDER_TYPE, RENDER_COLLECTION_OF_TYPES, null);
+        MAP.put(STUB_TYPE_IN_ARGUMENT_CAUSES_AMBIGUITY, "Type of an argument is {0} which hasn't fixed yet, it causes overload resolution ambiguity. Please use explicit cast to one of the following types: {1}", RENDER_TYPE, RENDER_TYPE);
+        MAP.put(STUB_TYPE_IN_RECEIVER_CAUSES_AMBIGUITY, "Type of a receiver is {0} which hasn't fixed yet, it causes overload resolution ambiguity. Please use explicit cast to one of the following types: {1}", RENDER_TYPE, RENDER_TYPE, null);
         MAP.put(NONE_APPLICABLE, "None of the following functions can be called with the arguments supplied: {0}", AMBIGUOUS_CALLS);
         MAP.put(CANNOT_COMPLETE_RESOLVE, "Cannot choose among the following candidates without completing type inference: {0}", AMBIGUOUS_CALLS);
         MAP.put(UNRESOLVED_REFERENCE_WRONG_RECEIVER, "Unresolved reference. None of the following candidates is applicable because of receiver type mismatch: {0}", AMBIGUOUS_CALLS);
