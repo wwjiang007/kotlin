@@ -593,15 +593,19 @@ private fun test(libPath: String, symName: String) {
 }
 
 fun testManualLibLoad() {
-    val fullLibraryName = System.mapLibraryName("callbacks")
+//    val libraryName = "callbacks"
+//    val symbolName = "Java_kotlinx_cinterop_JvmCallbacksKt_ffiTypeVoid"
+    val libraryName = "orgjetbrainskotlinbackendkonanenvstubs"
+    val symbolName = "setEnv"
+    val fullLibraryName = System.mapLibraryName(libraryName)
     val paths = initializePath()
     for (dir in paths) {
         if (Files.exists(Paths.get(dir, fullLibraryName))) {
-            test("$dir/$fullLibraryName", "Java_kotlinx_cinterop_JvmCallbacksKt_ffiTypeVoid")
+            test("$dir/$fullLibraryName", symbolName)
             return
         }
     }
     val defaultNativeLibsDir = "${KonanHomeProvider.determineKonanHome()}/konan/nativelib"
     if (Files.exists(Paths.get(defaultNativeLibsDir, fullLibraryName)))
-        test("$defaultNativeLibsDir/$fullLibraryName", "Java_kotlinx_cinterop_JvmCallbacksKt_ffiTypeVoid")
+        test("$defaultNativeLibsDir/$fullLibraryName", symbolName)
 }
