@@ -596,7 +596,7 @@ fun testManualLibLoad() {
 //    val libraryName = "callbacks"
 //    val symbolName = "Java_kotlinx_cinterop_JvmCallbacksKt_ffiTypeVoid"
     val libraryName = "orgjetbrainskotlinbackendkonanenvstubs"
-    val symbolName = "setEnv"
+    val symbolName = "_setEnv"
     val fullLibraryName = System.mapLibraryName(libraryName)
     val paths = initializePath()
     for (dir in paths) {
