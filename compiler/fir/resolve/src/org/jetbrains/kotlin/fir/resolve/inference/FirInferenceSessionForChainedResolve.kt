@@ -13,7 +13,6 @@ import org.jetbrains.kotlin.fir.resolve.calls.ResolutionContext
 import org.jetbrains.kotlin.fir.resolve.calls.candidate
 import org.jetbrains.kotlin.fir.resolve.inference.model.ConeBuilderInferenceSubstitutionConstraintPosition
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
-import org.jetbrains.kotlin.fir.resolve.substitution.NotFixedTypeToVariableSubstitutorForDelegateInference
 import org.jetbrains.kotlin.fir.types.*
 import org.jetbrains.kotlin.resolve.calls.inference.components.ConstraintSystemCompletionContext
 import org.jetbrains.kotlin.resolve.calls.inference.model.ConstraintKind
@@ -106,7 +105,7 @@ abstract class FirInferenceSessionForChainedResolve(
         // In situation when some type variable _T is fixed to Stub(_T)?,
         // we are not allowed just to substitute Stub(_T) with T because nullabilities are different here!
         // To compensate this, we have to substitute Stub(_T) <: SomeType constraint with T <: SomeType? adding nullability to upper type
-        if (a is ConeStubTypeForChainInference) {
+        if (a is ConeStubTypeForChainInference && substituted.a !is ConeStubTypeForChainInference) {
             val constructor = a.constructor
             val fixedTypeVariableType = fixedTypeVariables[constructor.variable.typeConstructor]
             if (fixedTypeVariableType is ConeStubTypeForChainInference &&
