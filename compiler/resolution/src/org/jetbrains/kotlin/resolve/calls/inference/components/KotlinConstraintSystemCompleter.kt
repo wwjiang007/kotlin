@@ -317,8 +317,9 @@ class KotlinConstraintSystemCompleter(
         postponedArguments: List<PostponedResolvedAtom>
     ) = postponedArguments.firstOrNull { argument -> argument.inputTypes.all { containsOnlyFixedOrPostponedVariables(it) } }
 
-    private fun ConstraintSystemCompletionContext.findPostponedArgumentWithFixedInputTypes(postponedArguments: List<PostponedResolvedAtom>) =
-        postponedArguments.firstOrNull { argument -> argument.inputTypes.all { containsOnlyFixedVariables(it) } }
+    private fun ConstraintSystemCompletionContext.findPostponedArgumentWithFixedInputTypes(
+        postponedArguments: List<PostponedResolvedAtom>
+    ) = postponedArguments.firstOrNull { argument -> argument.inputTypes.all { containsOnlyFixedVariables(it) } }
 
     private fun fixVariable(
         c: ConstraintSystemCompletionContext,
