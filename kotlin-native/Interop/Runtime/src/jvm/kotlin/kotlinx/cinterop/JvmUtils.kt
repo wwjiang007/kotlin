@@ -144,7 +144,7 @@ private fun initializePath(): Array<String> {
 private fun tryLoadKonanLibrary(libraryDir: String, fullLibraryName: String): Boolean {
     if (!Files.exists(Paths.get(libraryDir, fullLibraryName))) return false
 
-    val dir = if (!fullLibraryName.contains("orgjetbrainskotlinbackendkonanenvstubs"))
+    val dir = if (fullLibraryName.contains("orgjetbrainskotlinbackendkonanenvstubs"))
         libraryDir
     else {
         val tempDir = Files.createTempDirectory(null).toAbsolutePath().toString()
