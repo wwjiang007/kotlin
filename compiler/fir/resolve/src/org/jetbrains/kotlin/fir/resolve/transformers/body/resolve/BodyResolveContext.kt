@@ -348,6 +348,7 @@ class BodyResolveContext(
             containingClass = this@BodyResolveContext.containingClass
             replaceTowerDataContext(this@BodyResolveContext.towerDataContext)
             anonymousFunctionsAnalyzedInDependentContext.addAll(this@BodyResolveContext.anonymousFunctionsAnalyzedInDependentContext)
+            inferenceSession = this@BodyResolveContext.inferenceSession
         }
 
     // withElement PUBLIC API
