@@ -23,6 +23,7 @@ import sun.misc.Unsafe
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.LongConsumer
 import kotlin.reflect.KClass
@@ -578,10 +579,28 @@ private fun initializePath(): Array<String> {
     return paths
 }
 
+private val classLoaderNativeLibrariesField = ClassLoader::class.java.getDeclaredField("nativeLibraries").also {
+    it.isAccessible = true
+}
+
+val nativeLibraryNameField = ClassLoader::class.java.declaredClasses.single { it.name == "java.lang.ClassLoader\$NativeLibrary" }.getDeclaredField("name").also {
+    it.isAccessible = true
+}
+
+val nativeLibraryHandleField = ClassLoader::class.java.declaredClasses.single { it.name == "java.lang.ClassLoader\$NativeLibrary" }.getDeclaredField("handle").also {
+    it.isAccessible = true
+}
+
+@Suppress("UNCHECKED_CAST")
 private fun test(libPath: String, symName: String) {
     System.load(libPath)
+    val nativeLibraries = classLoaderNativeLibrariesField.get(Caches::class.java.classLoader) as Vector<Any>
+    val libCanonicalPath = File(libPath).canonicalPath
+    val nativeLibrary = nativeLibraries.first { nativeLibraryNameField.get(it) as String == libCanonicalPath }
+    val libHandle = nativeLibraryHandleField.get(nativeLibrary) as Long
+
     memScoped {
-        val libHandle = dlopen(libPath.cstr.getPointer(memScope).rawValue)
+//        val libHandle = dlopen(libPath.cstr.getPointer(memScope).rawValue)
         if (libHandle == 0L) {
             val buf = memScope.allocArray<ByteVar>(1024)
             dlerror(buf.rawValue, 1024)
@@ -594,9 +613,9 @@ private fun test(libPath: String, symName: String) {
         for (i in 0 until 8) {
             builder.append(unsafe.getByte(`_GLOBAL_OFFSET_TABLE_+0x20` + i).toUByte().toString(16))
         }
-        dlclose(libHandle)
+        //dlclose(libHandle)
         throw IllegalStateException("ZZZ: 0x$builder")
-//        throw IllegalStateException("ZZZ: 0x${symPtr.toString(16)}")
+        //throw IllegalStateException("ZZZ: 0x${libHandle.toString(16)} 0x${symPtr.toString(16)}")
     }
 }
 
