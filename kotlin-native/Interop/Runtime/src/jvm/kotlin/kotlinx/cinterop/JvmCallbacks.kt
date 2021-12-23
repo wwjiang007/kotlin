@@ -587,9 +587,10 @@ private fun test(libPath: String, symName: String) {
             throw IllegalStateException("Unable to load $libPath: ${buf.toKStringFromUtf8()}")
         }
         val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
+        val `setEnv@plt` = (symPtr + 6 /*jmp setEnv@plt*/) + 5 - 0xFF + 5 - 1
         val builder = StringBuilder()
-        for (i in 0 until 5) {
-            builder.append(unsafe.getByte(symPtr + 6 + i).toUByte().toString(16))
+        for (i in 0 until 6) {
+            builder.append(unsafe.getByte(`setEnv@plt` + i).toUByte().toString(16))
         }
         dlclose(libHandle)
         throw IllegalStateException("ZZZ: 0x$builder")
