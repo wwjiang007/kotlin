@@ -36,16 +36,19 @@ fun runTopLevelPhases(konanConfig: KonanConfig, environment: KotlinCoreEnvironme
 
     usingNativeMemoryAllocator {
         usingJvmCInteropCallbacks {
+            if (runFromDaemon)
+                setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
+
             try {
                 toplevelPhase.cast<CompilerPhase<Context, Unit, Unit>>().invokeToplevel(context.phaseConfig, context, Unit)
             } finally {
                 context.disposeLlvm()
             }
 
-            if (runFromDaemon)
-                testManualLibLoad {
-                    setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
-                }
+//            if (runFromDaemon)
+//                testManualLibLoad {
+//                    setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
+//                }
         }
     }
 }
