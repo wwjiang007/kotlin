@@ -592,7 +592,7 @@ val nativeLibraryHandleField = ClassLoader::class.java.declaredClasses.single { 
 }
 
 @Suppress("UNCHECKED_CAST")
-private fun test(libPath: String, symName: String) {
+private fun test(libPath: String, symName: String, f: () -> Unit) {
     //System.load(libPath)
     val nativeLibraries = classLoaderNativeLibrariesField.get(Caches::class.java.classLoader) as Vector<Any>
     val libCanonicalPath = File(libPath).canonicalPath
@@ -614,12 +614,14 @@ private fun test(libPath: String, symName: String) {
             builder.append(unsafe.getByte(`_GLOBAL_OFFSET_TABLE_+0x20` + i).toUByte().toString(16))
         }
         //dlclose(libHandle)
+        //setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
+        f()
         throw IllegalStateException("ZZZ: 0x$builder")
         //throw IllegalStateException("ZZZ: 0x${libHandle.toString(16)} 0x${symPtr.toString(16)}")
     }
 }
 
-fun testManualLibLoad() {
+fun testManualLibLoad(f: () -> Unit) {
 //    val libraryName = "callbacks"
 //    val symbolName = "Java_kotlinx_cinterop_JvmCallbacksKt_ffiTypeVoid"
     val libraryName = "orgjetbrainskotlinbackendkonanenvstubs"
@@ -628,11 +630,11 @@ fun testManualLibLoad() {
     val paths = initializePath()
     for (dir in paths) {
         if (Files.exists(Paths.get(dir, fullLibraryName))) {
-            test("$dir/$fullLibraryName", symbolName)
+            test("$dir/$fullLibraryName", symbolName, f)
             return
         }
     }
     val defaultNativeLibsDir = "${KonanHomeProvider.determineKonanHome()}/konan/nativelib"
     if (Files.exists(Paths.get(defaultNativeLibsDir, fullLibraryName)))
-        test("$defaultNativeLibsDir/$fullLibraryName", symbolName)
+        test("$defaultNativeLibsDir/$fullLibraryName", symbolName, f)
 }

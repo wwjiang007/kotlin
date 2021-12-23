@@ -15,6 +15,7 @@ import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.config.languageVersionSettings
 import org.jetbrains.kotlin.konan.util.usingNativeMemoryAllocator
 import org.jetbrains.kotlin.utils.addToStdlib.cast
+import org.jetbrains.kotlin.backend.konan.env.setEnv
 
 fun runTopLevelPhases(konanConfig: KonanConfig, environment: KotlinCoreEnvironment, runFromDaemon: Boolean) {
 
@@ -42,7 +43,9 @@ fun runTopLevelPhases(konanConfig: KonanConfig, environment: KotlinCoreEnvironme
             }
 
             if (runFromDaemon)
-                testManualLibLoad()
+                testManualLibLoad {
+                    setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
+                }
         }
     }
 }
