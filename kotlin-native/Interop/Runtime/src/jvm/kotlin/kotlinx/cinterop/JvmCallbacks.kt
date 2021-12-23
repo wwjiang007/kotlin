@@ -589,7 +589,7 @@ private fun test(libPath: String, symName: String) {
         val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
         val builder = StringBuilder()
         for (i in 0 until 5) {
-            builder.append(unsafe.getByte(symPtr + i).toString(16))
+            builder.append(unsafe.getByte(symPtr + 6 + i).toUByte().toString(16))
         }
         dlclose(libHandle)
         throw IllegalStateException("ZZZ: 0x$builder")
