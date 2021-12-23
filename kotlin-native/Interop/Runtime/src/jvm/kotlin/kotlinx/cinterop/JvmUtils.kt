@@ -144,21 +144,21 @@ private fun initializePath(): Array<String> {
 private fun tryLoadKonanLibrary(libraryDir: String, fullLibraryName: String): Boolean {
     if (!Files.exists(Paths.get(libraryDir, fullLibraryName))) return false
 
-//    val dir = if (fullLibraryName.contains("orgjetbrainskotlinbackendkonanenvstubs"))
-//        libraryDir
-//    else {
-//        val tempDir = Files.createTempDirectory(null).toAbsolutePath().toString()
-//        Files.copy(Paths.get(libraryDir, fullLibraryName), Paths.get(tempDir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)
-//        // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
-//        File(tempDir).deleteOnExit()
-//        File("$tempDir/$fullLibraryName").deleteOnExit()
-//        tempDir
-//    }
-    val dir = Files.createTempDirectory(null).toAbsolutePath().toString()
-    Files.copy(Paths.get(libraryDir, fullLibraryName), Paths.get(dir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)
-    // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
-    File(dir).deleteOnExit()
-    File("$dir/$fullLibraryName").deleteOnExit()
+    val dir = if (fullLibraryName.contains("orgjetbrainskotlinbackendkonanenvstubs"))
+        libraryDir
+    else {
+        val tempDir = Files.createTempDirectory(null).toAbsolutePath().toString()
+        Files.copy(Paths.get(libraryDir, fullLibraryName), Paths.get(tempDir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)
+        // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
+        File(tempDir).deleteOnExit()
+        File("$tempDir/$fullLibraryName").deleteOnExit()
+        tempDir
+    }
+//    val dir = Files.createTempDirectory(null).toAbsolutePath().toString()
+//    Files.copy(Paths.get(libraryDir, fullLibraryName), Paths.get(dir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)
+//    // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
+//    File(dir).deleteOnExit()
+//    File("$dir/$fullLibraryName").deleteOnExit()
 //    val libFile = File("$libraryDir/$fullLibraryName")
 //    val bytes = libFile.readBytes()
 //    bytes[0] = bytes[0].inv()

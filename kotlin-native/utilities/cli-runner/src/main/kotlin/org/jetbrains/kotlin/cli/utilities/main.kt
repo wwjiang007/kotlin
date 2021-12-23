@@ -62,7 +62,7 @@ private fun mainImpl(args: Array<String>, runFromDaemon: Boolean, konancMain: (A
 fun main(args: Array<String>) = mainImpl(args, false, ::konancMain)
 
 private fun setupClangEnv() {
-    setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
+    //setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
 }
 
 fun daemonMain(args: Array<String>) = usingNativeMemoryAllocator {
