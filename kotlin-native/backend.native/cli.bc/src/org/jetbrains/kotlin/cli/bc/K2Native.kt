@@ -6,6 +6,7 @@
 package org.jetbrains.kotlin.cli.bc
 
 import com.intellij.openapi.Disposable
+import kotlinx.cinterop.loadKonanLibrary
 import org.jetbrains.annotations.NotNull
 import org.jetbrains.annotations.Nullable
 import org.jetbrains.kotlin.analyzer.CompilationErrorException
@@ -35,6 +36,11 @@ import org.jetbrains.kotlin.utils.KotlinPaths
 
 private class K2NativeCompilerPerformanceManager: CommonCompilerPerformanceManager("Kotlin to Native Compiler")
 class K2Native(val runFromDaemon: Boolean) : CLICompiler<K2NativeCompilerArguments>() {
+
+    init {
+        if (runFromDaemon)
+            loadKonanLibrary("orgjetbrainskotlinbackendkonanenvstubs")
+    }
 
     override fun MutableList<String>.addPlatformOptions(arguments: K2NativeCompilerArguments) {}
 
