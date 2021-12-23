@@ -590,7 +590,7 @@ private fun test(libPath: String, symName: String) {
         val `setEnv@plt` = (symPtr + 6 /*jmp setEnv@plt*/) + 5 - 0xFF + 5 - 1
         val `_GLOBAL_OFFSET_TABLE_+0x20` = `setEnv@plt` + 6 /* jmp *(_GLOBAL_OFFSET_TABLE_+0x20) */ + 0x2FCA
         val builder = StringBuilder()
-        for (i in 0 until 4) {
+        for (i in 0 until 8) {
             builder.append(unsafe.getByte(`_GLOBAL_OFFSET_TABLE_+0x20` + i).toUByte().toString(16))
         }
         dlclose(libHandle)
