@@ -65,7 +65,7 @@ class JavaClassUseSiteMemberScope(
     fun someMapContainsKey(name: Name) = myScope("SomeMap", "containsKey", name)
     fun someMapRemove(name: Name) = myScope("SomeMap", "remove", name)
 
-    fun myMapContainsKey(name: Name) = myScope("MyMap", "containsKey", name)
+    fun javaLinkedListSize(name: Name) = myScope("java/util/LinkedList", "size", name)
     fun myBaseMapContainsKey(name: Name) = myScope("MyBaseMap", "containsKey", name)
 
     private val typeParameterStack = klass.javaTypeParameterStack
@@ -150,12 +150,10 @@ class JavaClassUseSiteMemberScope(
         val overriddenProperty = propertiesFromSupertypes.firstOrNull() as ResultOfIntersection<FirPropertySymbol>? ?: return result
         val (chosenSymbolFromSupertype, overriddenMembers, _) = overriddenProperty
 
-        val propertyFromSupertype = chosenSymbolFromSupertype.extractSomeSymbolFromSuperType()
-        val overrideInClass =
-            propertyFromSupertype.createOverridePropertyIfExists(declaredMemberScope, takeModalityFromGetter = true)
-                ?: superTypeScopes.firstNotNullOfOrNull {
-                    propertyFromSupertype.createOverridePropertyIfExists(it, takeModalityFromGetter = false)
-                }
+        val overrideInClass = overriddenProperty.overriddenMembers.firstNotNullOfOrNull { (symbol, scope) ->
+            symbol.createOverridePropertyIfExists(declaredMemberScope, takeModalityFromGetter = true)
+                ?: symbol.createOverridePropertyIfExists(scope, takeModalityFromGetter = false)
+        }
 
         val chosenSymbol = overrideInClass ?: chosenSymbolFromSupertype.symbol
         directOverriddenProperties[chosenSymbol] = listOf(overriddenProperty)
@@ -245,13 +243,14 @@ class JavaClassUseSiteMemberScope(
 
     override fun FirNamedFunctionSymbol.isVisibleInCurrentClass(): Boolean {
         val potentialPropertyNames = getPropertyNamesCandidatesByAccessorName(name)
-        potentialPropertyNames.any { propertyName ->
+        val hasCorrespondingProperty = potentialPropertyNames.any { propertyName ->
             getProperties(propertyName).any l@{ propertySymbol ->
                 // TODO: add magic overrides from LazyJavaClassMemberScope.isVisibleAsFunctionInCurrentClass
                 if (propertySymbol !is FirPropertySymbol) return@l false
                 propertySymbol.isOverriddenInClassBy(this)
             }
         }
+        if (hasCorrespondingProperty) return false
 
         return !doesOverrideRenamedBuiltins() &&
                 !shouldBeVisibleAsOverrideOfBuiltInWithErasedValueParameters() &&
@@ -395,7 +394,6 @@ class JavaClassUseSiteMemberScope(
 
             if (overriddenMemberWithErasedValueParameters != null) {
                 // processOverridesForFunctionsWithErasedValueParameter
-                require(explicitlyDeclaredFunctionWithNaturalName == null) // ??????????
                 val originalDeclaredFunction = declaredMemberScope.getFunctions(naturalName).firstOrNull {
                     overrideChecker.isOverriddenFunction(it, someSymbolWithNaturalNameFromSuperType) && !it.isVisibleInCurrentClass()
                 }
@@ -417,7 +415,10 @@ class JavaClassUseSiteMemberScope(
                     destination += renamedDeclaredFunction
                     directOverriddenFunctions[renamedDeclaredFunction] = listOf(resultOfIntersectionWithNaturalName)
                     for (overriddenMember in overriddenMembers) {
-                        overrideByBase[overriddenMember.member] = explicitlyDeclaredFunctionWithNaturalName
+                        overrideByBase[overriddenMember.member] = renamedDeclaredFunction
+                    }
+                    if (explicitlyDeclaredFunctionWithNaturalName != null) {
+                        destination += explicitlyDeclaredFunctionWithNaturalName
                     }
                     continue
                 }
@@ -462,11 +463,13 @@ class JavaClassUseSiteMemberScope(
         }
 
         val declaredFunction = explicitlyDeclaredFunctionWithNaturalName ?: explicitlyDeclaredFunctionWithBuiltinJvmName?.let {
-            buildJavaMethodCopy(it.fir as FirJavaMethod) {
+            val original = it.fir as FirJavaMethod
+            buildJavaMethodCopy(original) {
                 name = naturalName
                 symbol = FirNamedFunctionSymbol(it.callableId.copy(callableName = naturalName))
+                status = original.status.copy(isOperator = true)
             }.apply {
-                initialSignatureAttr = it.fir
+                initialSignatureAttr = original
             }.symbol
         }
 
