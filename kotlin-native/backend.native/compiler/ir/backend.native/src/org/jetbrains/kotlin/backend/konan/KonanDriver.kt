@@ -38,10 +38,10 @@ fun runTopLevelPhases(konanConfig: KonanConfig, environment: KotlinCoreEnvironme
         usingJvmCInteropCallbacks {
 //            if (runFromDaemon)
 //                setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
-//            if (runFromDaemon)
-//                testManualLibLoad {
-//                    setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
-//                }
+            if (runFromDaemon)
+                testManualLibLoad {
+                    //setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
+                }
 
             try {
                 toplevelPhase.cast<CompilerPhase<Context, Unit, Unit>>().invokeToplevel(context.phaseConfig, context, Unit)
@@ -49,10 +49,10 @@ fun runTopLevelPhases(konanConfig: KonanConfig, environment: KotlinCoreEnvironme
                 context.disposeLlvm()
             }
 
-            if (runFromDaemon)
-                testManualLibLoad {
-                    setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
-                }
+//            if (runFromDaemon)
+//                testManualLibLoad {
+//                    setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
+//                }
         }
     }
 }
