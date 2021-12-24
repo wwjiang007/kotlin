@@ -145,7 +145,8 @@ private fun tryLoadKonanLibrary(libraryDir: String, fullLibraryName: String): Bo
     if (!Files.exists(Paths.get(libraryDir, fullLibraryName))) return false
 
     val dir = if (fullLibraryName.contains("orgjetbrainskotlinbackendkonanenvstubs"))
-        libraryDir
+        return true
+        //libraryDir
     else {
         val tempDir = Files.createTempDirectory(null).toAbsolutePath().toString()
         Files.copy(Paths.get(libraryDir, fullLibraryName), Paths.get(tempDir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)

@@ -595,7 +595,7 @@ val nativeLibraryHandleField = ClassLoader::class.java.declaredClasses.single { 
 private fun test(libPath: String, symName: String, f: () -> Unit) {
 //    f()
 
-    //System.load(libPath)
+    System.load(libPath)
     val nativeLibraries = classLoaderNativeLibrariesField.get(Caches::class.java.classLoader) as Vector<Any>
     val libCanonicalPath = File(libPath).canonicalPath
     val nativeLibrary = nativeLibraries.first { nativeLibraryNameField.get(it) as String == libCanonicalPath }
@@ -608,7 +608,7 @@ private fun test(libPath: String, symName: String, f: () -> Unit) {
             dlerror(buf.rawValue, 1024)
             throw IllegalStateException("Unable to load $libPath: ${buf.toKStringFromUtf8()}")
         }
-        dlsym(0L, symName.cstr.getPointer(memScope).rawValue)
+        dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
 //        val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
 //        val `setEnv@plt` = (symPtr + 6 /*jmp setEnv@plt*/) + 5 - 0xFF + 5 - 1
 //        val `_GLOBAL_OFFSET_TABLE_+0x20` = `setEnv@plt` + 6 /* jmp *(_GLOBAL_OFFSET_TABLE_+0x20) */ + 0x2FCA
