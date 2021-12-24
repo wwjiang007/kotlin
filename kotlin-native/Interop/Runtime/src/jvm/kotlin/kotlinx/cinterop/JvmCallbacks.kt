@@ -596,12 +596,12 @@ private fun test(libPath: String, symName: String, f: () -> Unit) {
     f()
 
     if (libPath == "zzz" && symName == "qxx") throw IllegalStateException()
-//    //System.load(libPath)
-//    val nativeLibraries = classLoaderNativeLibrariesField.get(Caches::class.java.classLoader) as Vector<Any>
-//    val libCanonicalPath = File(libPath).canonicalPath
-//    val nativeLibrary = nativeLibraries.first { nativeLibraryNameField.get(it) as String == libCanonicalPath }
-//    val libHandle = nativeLibraryHandleField.get(nativeLibrary) as Long
-//
+    //System.load(libPath)
+    val nativeLibraries = classLoaderNativeLibrariesField.get(Caches::class.java.classLoader) as Vector<Any>
+    val libCanonicalPath = File(libPath).canonicalPath
+    val nativeLibrary = nativeLibraries.first { nativeLibraryNameField.get(it) as String == libCanonicalPath }
+    val libHandle = nativeLibraryHandleField.get(nativeLibrary) as Long
+    if (libHandle == 123L) throw IllegalStateException()
 //    memScoped {
 ////        val libHandle = dlopen(libPath.cstr.getPointer(memScope).rawValue)
 //        if (libHandle == 0L) {
