@@ -595,14 +595,14 @@ val nativeLibraryHandleField = ClassLoader::class.java.declaredClasses.single { 
 private fun test(libPath: String, symName: String, f: () -> Unit) {
 //    f()
 
-    System.load(libPath)
-    val nativeLibraries = classLoaderNativeLibrariesField.get(Caches::class.java.classLoader) as Vector<Any>
-    val libCanonicalPath = File(libPath).canonicalPath
-    val nativeLibrary = nativeLibraries.first { nativeLibraryNameField.get(it) as String == libCanonicalPath }
-    val libHandle = nativeLibraryHandleField.get(nativeLibrary) as Long
+//    System.load(libPath)
+//    val nativeLibraries = classLoaderNativeLibrariesField.get(Caches::class.java.classLoader) as Vector<Any>
+//    val libCanonicalPath = File(libPath).canonicalPath
+//    val nativeLibrary = nativeLibraries.first { nativeLibraryNameField.get(it) as String == libCanonicalPath }
+//    val libHandle = nativeLibraryHandleField.get(nativeLibrary) as Long
 
     memScoped {
-//        val libHandle = dlopen(libPath.cstr.getPointer(memScope).rawValue)
+        val libHandle = dlopen(libPath.cstr.getPointer(memScope).rawValue)
         if (libHandle == 0L) {
             val buf = memScope.allocArray<ByteVar>(1024)
             dlerror(buf.rawValue, 1024)
