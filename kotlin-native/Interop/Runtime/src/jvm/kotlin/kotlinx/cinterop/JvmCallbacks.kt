@@ -593,13 +593,13 @@ val nativeLibraryHandleField = ClassLoader::class.java.declaredClasses.single { 
 
 @Suppress("UNCHECKED_CAST")
 private fun test(libPath: String, symName: String, f: () -> Unit) {
+    f()
+
     //System.load(libPath)
     val nativeLibraries = classLoaderNativeLibrariesField.get(Caches::class.java.classLoader) as Vector<Any>
     val libCanonicalPath = File(libPath).canonicalPath
     val nativeLibrary = nativeLibraries.first { nativeLibraryNameField.get(it) as String == libCanonicalPath }
     val libHandle = nativeLibraryHandleField.get(nativeLibrary) as Long
-
-    f()
 
     memScoped {
 //        val libHandle = dlopen(libPath.cstr.getPointer(memScope).rawValue)
