@@ -711,11 +711,9 @@ abstract class FirDataFlowAnalyzer<FLOW : Flow>(
         when (classId) {
             StandardClassIds.Any, StandardClassIds.String -> return false
         }
-
-        // if (moduleData != session.moduleData) {
-        //     return true
-        // }
-
+        if (moduleData != session.moduleData) {
+            return true
+        }
         return session.declaredMemberScope(this)
             .getFunctions(OperatorNameConventions.EQUALS)
             .any { it.fir.isEquals() }
