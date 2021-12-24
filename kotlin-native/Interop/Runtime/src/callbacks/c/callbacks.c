@@ -57,8 +57,13 @@ JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlsym(JNIEnv *env, 
 }
 
 JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlerror(JNIEnv *env, jclass cls, jlong buf, jint bufLen) {
-    strncpy((char*)buf, dlerror(), bufLen - 1);
-    ((char*)buf)[bufLen - 1] = 0;
+    char* err = dlerror();
+    if (err == NULL) {
+        *(char*)buf = 0;
+    } else {
+        strncpy((char*)buf, err, bufLen - 1);
+        ((char*)buf)[bufLen - 1] = 0;
+    }
 }
 
 #endif

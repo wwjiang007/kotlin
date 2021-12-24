@@ -611,7 +611,7 @@ private fun test(libPath: String, symName: String, f: () -> Unit) {
         dlerror(buf.rawValue, 1024)
         val errAfter = buf.toKStringFromUtf8()
 
-        //println("ZZZ: 0x${libHandle.toString(16)}. Before: $errBefore. After: $errAfter")
+        println("ZZZ: 0x${libHandle.toString(16)}. Before: $errBefore. After: $errAfter")
 
         if (libHandle == 0L) {
 //            val buf = memScope.allocArray<ByteVar>(1024)
@@ -619,8 +619,8 @@ private fun test(libPath: String, symName: String, f: () -> Unit) {
 //            throw IllegalStateException("Unable to load $libPath: ${buf.toKStringFromUtf8()}")
             throw IllegalStateException("Unable to load $libPath: $errAfter")
         }
-        if (libHandle != 123L)
-            throw IllegalStateException("0x${libHandle.toString(16)}. Before: $errBefore. After: $errAfter")
+//        if (libHandle != 123L)
+//            throw IllegalStateException("0x${libHandle.toString(16)}. Before: $errBefore. After: $errAfter")
         dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
 //        val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
 //        val `setEnv@plt` = (symPtr + 6 /*jmp setEnv@plt*/) + 5 - 0xFF + 5 - 1
