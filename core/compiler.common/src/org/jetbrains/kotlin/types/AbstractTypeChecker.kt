@@ -62,6 +62,23 @@ open class TypeCheckerState(
         isFromNullabilityConstraint: Boolean = false
     ): Boolean? = null
 
+    open fun atForkPoint(block: ForkPointContext.() -> Unit): Boolean = with(ForkPointContext.Default()) {
+        block()
+        result
+    }
+
+    interface ForkPointContext {
+        fun fork(block: () -> Boolean)
+
+        class Default : ForkPointContext {
+            var result: Boolean = false
+            override fun fork(block: () -> Boolean) {
+                if (result) return
+                result = block()
+            }
+        }
+    }
+
     enum class LowerCapturedTypePolicy {
         CHECK_ONLY_LOWER,
         CHECK_SUBTYPE_AND_LOWER,
@@ -338,11 +355,11 @@ object AbstractTypeChecker {
         if (areEqualTypeConstructors(subType.typeConstructor(), superConstructor) && superConstructor.parametersCount() == 0) return true
         if (superType.typeConstructor().isAnyConstructor()) return true
 
-        val supertypesWithSameConstructor = findCorrespondingSupertypes(state, subType, superConstructor)
+        val subTypesWithSameConstructors = findCorrespondingSupertypes(state, subType, superConstructor)
             .map { state.prepareType(it).asSimpleType() ?: it }
-        when (supertypesWithSameConstructor.size) {
+        when (subTypesWithSameConstructors.size) {
             0 -> return hasNothingSupertype(state, subType) // todo Nothing & Array<Number> <: Array<String>
-            1 -> return state.isSubtypeForSameConstructor(supertypesWithSameConstructor.first().asArgumentList(), superType)
+            1 -> return state.isSubtypeForSameConstructor(subTypesWithSameConstructors.first().asArgumentList(), superType)
 
             else -> { // at least 2 supertypes with same constructors. Such case is rare
                 val newArguments = ArgumentList(superConstructor.parametersCount())
@@ -350,7 +367,7 @@ object AbstractTypeChecker {
                 for (index in 0 until superConstructor.parametersCount()) {
                     anyNonOutParameter = anyNonOutParameter || superConstructor.getParameter(index).getVariance() != TypeVariance.OUT
                     if (anyNonOutParameter) continue
-                    val allProjections = supertypesWithSameConstructor.map {
+                    val allProjections = subTypesWithSameConstructors.map {
                         it.getArgumentOrNull(index)?.takeIf { it.getVariance() == TypeVariance.INV }?.getType()
                             ?: error("Incorrect type: $it, subType: $subType, superType: $superType")
                     }
@@ -362,8 +379,22 @@ object AbstractTypeChecker {
 
                 if (!anyNonOutParameter && state.isSubtypeForSameConstructor(newArguments, superType)) return true
 
-                // TODO: rethink this; now components order in intersection type affects semantic due to run subtyping (which can add constraints) only until the first successful candidate
-                return supertypesWithSameConstructor.any { state.isSubtypeForSameConstructor(it.asArgumentList(), superType) }
+                // Handling cases like A<Int> & A<T> <: A<F_var>
+                // There are two possible solutions for F_var (Int and T) and both of them may work well or not with other constrains
+                // Effectively, we need to fork constraint system to two copies: one with F_var=Int and the other with F_var=T
+                // and then maintain them both until we find some contradiction with one of the versions.
+                //
+                // But that might lead to the exponential size of CS, thus we use the following heuristics:
+                // we accumulate forks data until the last stage of the candidate resolution and then try to apply back then
+                // until some of the constrains set has no contradiction.
+                //
+                // `atForkPoint` works trivially in non-inference context and for FE1.0:
+                // it just run basic subtyping mechanism for each subTypeArguments component until the first success
+                return state.atForkPoint {
+                    for (subTypeArguments in subTypesWithSameConstructors) {
+                        fork { state.isSubtypeForSameConstructor(subTypeArguments.asArgumentList(), superType) }
+                    }
+                }
             }
         }
     }
