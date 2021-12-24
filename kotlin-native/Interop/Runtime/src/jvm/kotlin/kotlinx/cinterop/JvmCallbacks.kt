@@ -602,12 +602,23 @@ private fun test(libPath: String, symName: String, f: () -> Unit) {
 //    val libHandle = nativeLibraryHandleField.get(nativeLibrary) as Long
 
     memScoped {
+        val buf = memScope.allocArray<ByteVar>(1024)
+        dlerror(buf.rawValue, 1024)
+        val errBefore = buf.toKStringFromUtf8()
+
         val libHandle = dlopen(libPath.cstr.getPointer(memScope).rawValue)
+
+        dlerror(buf.rawValue, 1024)
+        val errAfter = buf.toKStringFromUtf8()
+
         if (libHandle == 0L) {
-            val buf = memScope.allocArray<ByteVar>(1024)
-            dlerror(buf.rawValue, 1024)
-            throw IllegalStateException("Unable to load $libPath: ${buf.toKStringFromUtf8()}")
+//            val buf = memScope.allocArray<ByteVar>(1024)
+//            dlerror(buf.rawValue, 1024)
+//            throw IllegalStateException("Unable to load $libPath: ${buf.toKStringFromUtf8()}")
+            throw IllegalStateException("Unable to load $libPath: $errAfter")
         }
+        //throw IllegalStateException("0x${libHandle.toString(16)}. Before: $errBefore. After: $errAfter")
+        println("ZZZ: 0x${libHandle.toString(16)}. Before: $errBefore. After: $errAfter")
         dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
 //        val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
 //        val `setEnv@plt` = (symPtr + 6 /*jmp setEnv@plt*/) + 5 - 0xFF + 5 - 1
