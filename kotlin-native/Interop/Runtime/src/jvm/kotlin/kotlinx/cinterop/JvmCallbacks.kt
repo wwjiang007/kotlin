@@ -608,17 +608,18 @@ private fun test(libPath: String, symName: String, f: () -> Unit) {
             dlerror(buf.rawValue, 1024)
             throw IllegalStateException("Unable to load $libPath: ${buf.toKStringFromUtf8()}")
         }
-        val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
-        val `setEnv@plt` = (symPtr + 6 /*jmp setEnv@plt*/) + 5 - 0xFF + 5 - 1
-        val `_GLOBAL_OFFSET_TABLE_+0x20` = `setEnv@plt` + 6 /* jmp *(_GLOBAL_OFFSET_TABLE_+0x20) */ + 0x2FCA
-        val builder = StringBuilder()
-        for (i in 0 until 8) {
-            builder.append(unsafe.getByte(`_GLOBAL_OFFSET_TABLE_+0x20` + i).toUByte().toString(16))
-        }
-        //dlclose(libHandle)
-        //setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
-        if (unsafe.getLong(`_GLOBAL_OFFSET_TABLE_+0x20`) < 1000000)
-            throw IllegalStateException("ZZZ: 0x$builder")
+        dlsym(0L, symName.cstr.getPointer(memScope).rawValue)
+//        val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
+//        val `setEnv@plt` = (symPtr + 6 /*jmp setEnv@plt*/) + 5 - 0xFF + 5 - 1
+//        val `_GLOBAL_OFFSET_TABLE_+0x20` = `setEnv@plt` + 6 /* jmp *(_GLOBAL_OFFSET_TABLE_+0x20) */ + 0x2FCA
+//        val builder = StringBuilder()
+//        for (i in 0 until 8) {
+//            builder.append(unsafe.getByte(`_GLOBAL_OFFSET_TABLE_+0x20` + i).toUByte().toString(16))
+//        }
+//        //dlclose(libHandle)
+//        //setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
+//        if (unsafe.getLong(`_GLOBAL_OFFSET_TABLE_+0x20`) < 1000000)
+//            throw IllegalStateException("ZZZ: 0x$builder")
         f()
         //throw IllegalStateException("ZZZ: 0x$builder")
         //throw IllegalStateException("ZZZ: 0x${libHandle.toString(16)} 0x${symPtr.toString(16)}")
