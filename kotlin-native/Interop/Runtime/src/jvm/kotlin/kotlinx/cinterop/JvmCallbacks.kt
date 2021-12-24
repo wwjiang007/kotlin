@@ -595,32 +595,33 @@ val nativeLibraryHandleField = ClassLoader::class.java.declaredClasses.single { 
 private fun test(libPath: String, symName: String, f: () -> Unit) {
     f()
 
-    //System.load(libPath)
-    val nativeLibraries = classLoaderNativeLibrariesField.get(Caches::class.java.classLoader) as Vector<Any>
-    val libCanonicalPath = File(libPath).canonicalPath
-    val nativeLibrary = nativeLibraries.first { nativeLibraryNameField.get(it) as String == libCanonicalPath }
-    val libHandle = nativeLibraryHandleField.get(nativeLibrary) as Long
-
-    memScoped {
-//        val libHandle = dlopen(libPath.cstr.getPointer(memScope).rawValue)
-        if (libHandle == 0L) {
-            val buf = memScope.allocArray<ByteVar>(1024)
-            dlerror(buf.rawValue, 1024)
-            throw IllegalStateException("Unable to load $libPath: ${buf.toKStringFromUtf8()}")
-        }
-        val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
-        val `setEnv@plt` = (symPtr + 6 /*jmp setEnv@plt*/) + 5 - 0xFF + 5 - 1
-        val `_GLOBAL_OFFSET_TABLE_+0x20` = `setEnv@plt` + 6 /* jmp *(_GLOBAL_OFFSET_TABLE_+0x20) */ + 0x2FCA
-        val builder = StringBuilder()
-        for (i in 0 until 8) {
-            builder.append(unsafe.getByte(`_GLOBAL_OFFSET_TABLE_+0x20` + i).toUByte().toString(16))
-        }
-        //dlclose(libHandle)
-        //setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
-        //f()
-        throw IllegalStateException("ZZZ: 0x$builder")
-        //throw IllegalStateException("ZZZ: 0x${libHandle.toString(16)} 0x${symPtr.toString(16)}")
-    }
+    if (libPath == "zzz" && symName == "qxx") throw IllegalStateException()
+//    //System.load(libPath)
+//    val nativeLibraries = classLoaderNativeLibrariesField.get(Caches::class.java.classLoader) as Vector<Any>
+//    val libCanonicalPath = File(libPath).canonicalPath
+//    val nativeLibrary = nativeLibraries.first { nativeLibraryNameField.get(it) as String == libCanonicalPath }
+//    val libHandle = nativeLibraryHandleField.get(nativeLibrary) as Long
+//
+//    memScoped {
+////        val libHandle = dlopen(libPath.cstr.getPointer(memScope).rawValue)
+//        if (libHandle == 0L) {
+//            val buf = memScope.allocArray<ByteVar>(1024)
+//            dlerror(buf.rawValue, 1024)
+//            throw IllegalStateException("Unable to load $libPath: ${buf.toKStringFromUtf8()}")
+//        }
+//        val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
+//        val `setEnv@plt` = (symPtr + 6 /*jmp setEnv@plt*/) + 5 - 0xFF + 5 - 1
+//        val `_GLOBAL_OFFSET_TABLE_+0x20` = `setEnv@plt` + 6 /* jmp *(_GLOBAL_OFFSET_TABLE_+0x20) */ + 0x2FCA
+//        val builder = StringBuilder()
+//        for (i in 0 until 8) {
+//            builder.append(unsafe.getByte(`_GLOBAL_OFFSET_TABLE_+0x20` + i).toUByte().toString(16))
+//        }
+//        //dlclose(libHandle)
+//        //setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
+//        //f()
+//        throw IllegalStateException("ZZZ: 0x$builder")
+//        //throw IllegalStateException("ZZZ: 0x${libHandle.toString(16)} 0x${symPtr.toString(16)}")
+//    }
 }
 
 fun testManualLibLoad(f: () -> Unit) {
