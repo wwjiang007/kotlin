@@ -23,6 +23,7 @@ import sun.misc.Unsafe
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.function.LongConsumer
@@ -592,7 +593,7 @@ val nativeLibraryHandleField = ClassLoader::class.java.declaredClasses.single { 
 }
 
 @Suppress("UNCHECKED_CAST")
-private fun test(libPath: String, symName: String, f: () -> Unit) {
+private fun test(libDir: String, fullLibName: String, symName: String, f: () -> Unit) {
 //    f()
 
 //    System.load(libPath)
@@ -600,6 +601,13 @@ private fun test(libPath: String, symName: String, f: () -> Unit) {
 //    val libCanonicalPath = File(libPath).canonicalPath
 //    val nativeLibrary = nativeLibraries.first { nativeLibraryNameField.get(it) as String == libCanonicalPath }
 //    val libHandle = nativeLibraryHandleField.get(nativeLibrary) as Long
+
+    val dir = Files.createTempDirectory(null).toAbsolutePath().toString()
+    Files.copy(Paths.get(libDir, fullLibName), Paths.get(dir, fullLibName), StandardCopyOption.REPLACE_EXISTING)
+    // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
+    File(dir).deleteOnExit()
+    File("$dir/$fullLibName").deleteOnExit()
+    val libPath = "$dir/$fullLibName"
 
     memScoped {
         val buf = memScope.allocArray<ByteVar>(1024)
@@ -648,11 +656,11 @@ fun testManualLibLoad(f: () -> Unit) {
     val paths = initializePath()
     for (dir in paths) {
         if (Files.exists(Paths.get(dir, fullLibraryName))) {
-            test("$dir/$fullLibraryName", symbolName, f)
+            test(dir, fullLibraryName, symbolName, f)
             return
         }
     }
     val defaultNativeLibsDir = "${KonanHomeProvider.determineKonanHome()}/konan/nativelib"
     if (Files.exists(Paths.get(defaultNativeLibsDir, fullLibraryName)))
-        test("$defaultNativeLibsDir/$fullLibraryName", symbolName, f)
+        test(defaultNativeLibsDir, fullLibraryName, symbolName, f)
 }

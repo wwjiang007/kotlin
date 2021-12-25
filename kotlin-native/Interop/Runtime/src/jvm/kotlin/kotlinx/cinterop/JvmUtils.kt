@@ -160,7 +160,8 @@ private fun tryLoadKonanLibrary(libraryDir: String, fullLibraryName: String): Bo
     // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
     File(dir).deleteOnExit()
     File("$dir/$fullLibraryName").deleteOnExit()
-    println("QZZ: $dir/$fullLibraryName")
+//    println("QZZ: $dir/$fullLibraryName")
+
 //    val libFile = File("$libraryDir/$fullLibraryName")
 //    val bytes = libFile.readBytes()
 //    bytes[0] = bytes[0].inv()
