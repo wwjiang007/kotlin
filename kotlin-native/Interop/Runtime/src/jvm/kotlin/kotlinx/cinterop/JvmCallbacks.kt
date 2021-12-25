@@ -641,6 +641,7 @@ private fun test(libDir: String, fullLibName: String, symName: String, f: () -> 
 //        //setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
 //        if (unsafe.getLong(`_GLOBAL_OFFSET_TABLE_+0x20`) < 1000000)
 //            throw IllegalStateException("ZZZ: 0x$builder")
+        dlclose(libHandle)
         f()
         //throw IllegalStateException("ZZZ: 0x$builder")
         //throw IllegalStateException("ZZZ: 0x${libHandle.toString(16)} 0x${symPtr.toString(16)}")
