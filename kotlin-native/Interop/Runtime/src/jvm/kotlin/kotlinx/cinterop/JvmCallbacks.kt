@@ -602,12 +602,14 @@ private fun test(libDir: String, fullLibName: String, symName: String, f: () -> 
 //    val nativeLibrary = nativeLibraries.first { nativeLibraryNameField.get(it) as String == libCanonicalPath }
 //    val libHandle = nativeLibraryHandleField.get(nativeLibrary) as Long
 
-    val dir = Files.createTempDirectory(null).toAbsolutePath().toString()
-    Files.copy(Paths.get(libDir, fullLibName), Paths.get(dir, fullLibName), StandardCopyOption.REPLACE_EXISTING)
-    // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
-    File(dir).deleteOnExit()
-    File("$dir/$fullLibName").deleteOnExit()
-    val libPath = "$dir/$fullLibName"
+//    val dir = Files.createTempDirectory(null).toAbsolutePath().toString()
+//    Files.copy(Paths.get(libDir, fullLibName), Paths.get(dir, fullLibName), StandardCopyOption.REPLACE_EXISTING)
+//    // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
+//    File(dir).deleteOnExit()
+//    File("$dir/$fullLibName").deleteOnExit()
+//    val libPath = "$dir/$fullLibName"
+
+    val libPath = "$libDir/$fullLibName"
 
     memScoped {
         val buf = memScope.allocArray<ByteVar>(1024)

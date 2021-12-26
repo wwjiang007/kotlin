@@ -45,7 +45,7 @@ JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlerror(JNIEnv *env,
 #include <dlfcn.h>
 
 JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlopen(JNIEnv *env, jclass cls, jlong libPath) {
-    return (jlong)dlopen((const char*)libPath, RTLD_LAZY);
+    return (jlong)dlopen((const char*)libPath, RTLD_NOW);
 }
 
 JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlclose(JNIEnv *env, jclass cls, jlong libHandle) {
