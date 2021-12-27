@@ -34,6 +34,7 @@ import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.impl.IrVariableSymbolImpl
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
+import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 import org.jetbrains.kotlin.load.java.JvmAnnotationNames
 import org.jetbrains.kotlin.name.Name
@@ -46,11 +47,21 @@ internal val functionReferencePhase = makeIrFilePhase(
     description = "Construct instances of anonymous KFunction subclasses for function references"
 )
 
+internal val functionReferencePhase2 = makeIrFilePhase<JvmBackendContext>(
+    { FunctionReferenceLowering(it).apply { second = true } },
+    name = "FunctionReference2",
+    description = "Construct instances of anonymous KFunction subclasses for function references"
+)
+
 internal class FunctionReferenceLowering(private val context: JvmBackendContext) : FileLoweringPass, IrElementTransformerVoidWithContext() {
     private val crossinlineLambdas = HashSet<IrSimpleFunction>()
+    public var second = false
 
     private val IrFunctionReference.isIgnored: Boolean
         get() = (!type.isFunctionOrKFunction() && !isSuspendFunctionReference()) || origin == JvmLoweredStatementOrigin.INLINE_LAMBDA
+
+    private val IrFunctionReference.isIgnored2: Boolean
+        get() = (!type.isFunctionOrKFunction() && !isSuspendFunctionReference())
 
     // `suspend` function references are the same as non-`suspend` ones, just with an extra continuation parameter;
     // however, suspending lambdas require different generation implemented in SuspendLambdaLowering
@@ -80,6 +91,14 @@ internal class FunctionReferenceLowering(private val context: JvmBackendContext)
             return super.visitBlock(expression)
 
         val reference = expression.statements.last() as IrFunctionReference
+        if (second) {
+            expression.statements.dropLast(1).forEach { it.transform(this, null) }
+            reference.transformChildrenVoid(this)
+            val temp = FunctionReferenceBuilder(reference).build() as IrBlock
+            temp.statements.add(0, expression.statements[0] as IrFunction)
+            return temp
+        }
+
         if (reference.isIgnored)
             return super.visitBlock(expression)
 
@@ -214,11 +233,32 @@ internal class FunctionReferenceLowering(private val context: JvmBackendContext)
 
     override fun visitFunctionReference(expression: IrFunctionReference): IrExpression {
         expression.transformChildrenVoid(this)
+//        if (second) {
+//            return if (expression.isIgnored2)
+//                expression
+//            else
+//                FunctionReferenceBuilder(expression).build()
+//        }
         return if (expression.isIgnored)
             expression
         else
             FunctionReferenceBuilder(expression).build()
     }
+
+//    override fun visitConstructorCall(expression: IrConstructorCall): IrExpression {
+//        if (!second) return super.visitConstructorCall(expression)
+//
+//        for (i in 0 until expression.valueArgumentsCount) {
+//            val arg = expression.getValueArgument(i)
+//            if (arg is IrFunctionReference) {
+//                arg.transformChildrenVoid(this)
+//                val temp = FunctionReferenceBuilder(arg).build()
+//                expression.putValueArgument(i, temp)
+//            }
+//        }
+//
+//        return super.visitConstructorCall(expression)
+//    }
 
     private fun getDeclarationParentForDelegatingLambda(): IrDeclarationParent {
         for (s in allScopes.asReversed()) {

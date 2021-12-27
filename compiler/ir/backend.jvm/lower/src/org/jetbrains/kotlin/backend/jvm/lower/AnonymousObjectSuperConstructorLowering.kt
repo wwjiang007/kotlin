@@ -66,6 +66,7 @@ private class AnonymousObjectSuperConstructorLowering(val context: JvmBackendCon
             return super.visitBlock(expression)
 
         val objectConstructorCall = expression.statements.last() as? IrConstructorCall
+            ?: (expression.statements.last() as? IrBlock)?.statements?.singleOrNull() as? IrConstructorCall
             ?: throw AssertionError("object literal does not end in a constructor call")
         val objectConstructor = objectConstructorCall.symbol.owner
         val objectConstructorBody = objectConstructor.body as? IrBlockBody

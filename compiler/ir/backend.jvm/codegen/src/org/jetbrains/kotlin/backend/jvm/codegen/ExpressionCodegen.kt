@@ -381,6 +381,20 @@ class ExpressionCodegen(
         }
         if (expression.isTransparentScope)
             return super.visitBlock(expression, data)
+
+//        val inlineLambda = expression.unwrapInlineLambda()
+//        if (inlineLambda != null) {
+//            val lambdaInfo = IrExpressionLambdaImpl(this, inlineLambda)
+//            rememberClosure(parameterType, irValueParameter.index, lambdaInfo)
+//            lambdaInfo.generateLambdaBody(callGenerator)
+//            lambdaInfo.reference.getArgumentsWithIr().forEachIndexed { index, (_, ir) ->
+//                val param = lambdaInfo.capturedVars[index]
+//                val onStack = this.genOrGetLocal(ir, param.type, ir.type, BlockInfo())
+//                putCapturedToLocalVal(onStack, param, ir.type.toIrBasedKotlinType())
+//            }
+//            FunctionCodegen(lambdaInfo.function, classCodegen).generate(this, lambdaInfo.reifiedTypeParametersUsages)
+//        }
+
         val info = BlockInfo(data)
         // Force materialization to avoid reading from out-of-scope variables.
         val value = super.visitBlock(expression, info).materialized().also {

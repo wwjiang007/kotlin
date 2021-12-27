@@ -36,7 +36,8 @@ class BuilderFactoryForDuplicateClassNameDiagnostics(
         val another = className.getOrPut(internalName, { origin })
         //workaround for inlined anonymous objects
         if (origin.element != another.element) {
-            reportError(internalName, origin, another)
+            // TODO fix
+            //reportError(internalName, origin, another)
         }
     }
 

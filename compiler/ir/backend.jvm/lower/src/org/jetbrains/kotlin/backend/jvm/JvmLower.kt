@@ -5,9 +5,12 @@
 
 package org.jetbrains.kotlin.backend.jvm
 
+import org.jetbrains.kotlin.backend.common.BackendContext
 import org.jetbrains.kotlin.backend.common.CommonBackendContext
 import org.jetbrains.kotlin.backend.common.FileLoweringPass
+import org.jetbrains.kotlin.backend.common.lower
 import org.jetbrains.kotlin.backend.common.lower.*
+import org.jetbrains.kotlin.backend.common.lower.inline.*
 import org.jetbrains.kotlin.backend.common.lower.loops.forLoopsPhase
 import org.jetbrains.kotlin.backend.common.lower.optimizations.foldConstantLoweringPhase
 import org.jetbrains.kotlin.backend.common.phaser.*
@@ -18,10 +21,12 @@ import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.descriptors.DescriptorVisibility
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.*
+import org.jetbrains.kotlin.ir.symbols.IrFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.IrValueSymbol
 import org.jetbrains.kotlin.ir.util.PatchDeclarationParentsVisitor
 import org.jetbrains.kotlin.ir.util.isAnonymousObject
 import org.jetbrains.kotlin.ir.util.parentAsClass
+import org.jetbrains.kotlin.ir.util.resolveFakeOverride
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
 import org.jetbrains.kotlin.ir.visitors.acceptChildrenVoid
 import org.jetbrains.kotlin.ir.visitors.acceptVoid
@@ -60,11 +65,13 @@ private val stripTypeAliasDeclarationsPhase = makeIrFilePhase<CommonBackendConte
 
 // TODO make all lambda-related stuff work with IrFunctionExpression and drop this phase
 private val provisionalFunctionExpressionPhase = makeIrFilePhase<CommonBackendContext>(
+//private val provisionalFunctionExpressionPhase = makeIrModulePhase<CommonBackendContext>(
     { ProvisionalFunctionExpressionLowering() },
     name = "FunctionExpression",
     description = "Transform IrFunctionExpression to a local function reference"
 )
 
+//private val arrayConstructorPhase = makeIrModulePhase(
 private val arrayConstructorPhase = makeIrFilePhase(
     ::ArrayConstructorLowering,
     name = "ArrayConstructor",
@@ -77,18 +84,21 @@ internal val expectDeclarationsRemovingPhase = makeIrModulePhase(
     description = "Remove expect declaration from module fragment"
 )
 
+//private val lateinitNullableFieldsPhase = makeIrModulePhase(
 private val lateinitNullableFieldsPhase = makeIrFilePhase(
     ::NullableFieldsForLateinitCreationLowering,
     name = "LateinitNullableFields",
     description = "Create nullable fields for lateinit properties"
 )
 
+//private val lateinitDeclarationLoweringPhase = makeIrModulePhase(
 private val lateinitDeclarationLoweringPhase = makeIrFilePhase(
     ::NullableFieldsDeclarationLowering,
     name = "LateinitDeclarations",
     description = "Reference nullable fields from properties and getters + insert checks"
 )
 
+//private val lateinitUsageLoweringPhase = makeIrModulePhase(
 private val lateinitUsageLoweringPhase = makeIrFilePhase(
     ::LateinitUsageLowering,
     name = "LateinitUsage",
@@ -111,6 +121,7 @@ internal val IrClass.isGeneratedLambdaClass: Boolean
             origin == JvmLoweredDeclarationOrigin.GENERATED_PROPERTY_REFERENCE
 
 internal val localDeclarationsPhase = makeIrFilePhase(
+//internal val localDeclarationsPhase = makeIrModulePhase(
     { context ->
         LocalDeclarationsLowering(
             context,
@@ -148,9 +159,54 @@ internal val localDeclarationsPhase = makeIrFilePhase(
     prerequisite = setOf(functionReferencePhase, sharedVariablesPhase)
 )
 
+internal val localDeclarationsPhase2 = makeIrFilePhase(
+//internal val localDeclarationsPhase = makeIrModulePhase(
+    { context ->
+        LocalDeclarationsLowering(
+            context,
+            object : LocalNameProvider {
+                override fun localName(declaration: IrDeclarationWithName): String =
+                    NameUtils.sanitizeAsJavaIdentifier(super.localName(declaration))
+            },
+            object : VisibilityPolicy {
+                // Note: any condition that results in non-`LOCAL` visibility here should be duplicated in `JvmLocalClassPopupLowering`,
+                // else it won't detect the class as local.
+                override fun forClass(declaration: IrClass, inInlineFunctionScope: Boolean): DescriptorVisibility =
+                    if (declaration.isGeneratedLambdaClass) {
+                        scopedVisibility(inInlineFunctionScope)
+                    } else {
+                        declaration.visibility
+                    }
+
+                override fun forConstructor(declaration: IrConstructor, inInlineFunctionScope: Boolean): DescriptorVisibility =
+                    if (declaration.parentAsClass.isAnonymousObject)
+                        scopedVisibility(inInlineFunctionScope)
+                    else
+                        declaration.visibility
+
+                override fun forCapturedField(value: IrValueSymbol): DescriptorVisibility =
+                    JavaDescriptorVisibilities.PACKAGE_VISIBILITY // avoid requiring a synthetic accessor for it
+
+                private fun scopedVisibility(inInlineFunctionScope: Boolean): DescriptorVisibility =
+                    if (inInlineFunctionScope) DescriptorVisibilities.PUBLIC else JavaDescriptorVisibilities.PACKAGE_VISIBILITY
+            },
+            forceFieldsForInlineCaptures = true
+        )
+    },
+    name = "JvmLocalDeclarations2",
+    description = "Move local declarations to classes",
+    prerequisite = setOf(functionReferencePhase, sharedVariablesPhase)
+)
+
 private val jvmLocalClassExtractionPhase = makeIrFilePhase(
     ::JvmLocalClassPopupLowering,
     name = "JvmLocalClassExtraction",
+    description = "Move local classes from field initializers and anonymous init blocks into the containing class"
+)
+
+private val jvmLocalClassExtractionPhase2 = makeIrFilePhase(
+    ::JvmLocalClassPopupLowering,
+    name = "JvmLocalClassExtraction2",
     description = "Move local classes from field initializers and anonymous init blocks into the containing class"
 )
 
@@ -256,6 +312,14 @@ private val returnableBlocksPhase = makeIrFilePhase(
     prerequisite = setOf(arrayConstructorPhase, assertionPhase)
 )
 
+private val returnableBlocksPhase2 = makeIrFilePhase(
+    ::ReturnableBlockLowering,
+    name = "ReturnableBlock2",
+    description = "Replace returnable blocks with do-while(false) loops",
+//    prerequisite = setOf(functionInliningPhase)
+)
+
+
 private val syntheticAccessorPhase = makeIrFilePhase(
     ::SyntheticAccessorLowering,
     name = "SyntheticAccessor",
@@ -273,6 +337,56 @@ private val kotlinNothingValueExceptionPhase = makeIrFilePhase<CommonBackendCont
     { context -> KotlinNothingValueExceptionLowering(context) { it is IrFunction && !it.shouldContainSuspendMarkers() } },
     name = "KotlinNothingValueException",
     description = "Throw proper exception for calls returning value of type 'kotlin.Nothing'"
+)
+
+//private val localClassesInInlineLambdasPhase = makeIrModulePhase(
+private val localClassesInInlineLambdasPhase = makeIrFilePhase(
+    ::LocalClassesInInlineLambdasLowering,
+    name = "LocalClassesInInlineLambdasPhase",
+    description = "Extract local classes from inline lambdas",
+//    prerequisite = setOf(inventNamesForLocalClassesPhase)
+)
+
+//private val localClassesInInlineFunctionsPhase = makeIrModulePhase(
+private val localClassesInInlineFunctionsPhase = makeIrFilePhase(
+    ::LocalClassesInInlineFunctionsLowering,
+    name = "LocalClassesInInlineFunctionsPhase",
+    description = "Extract local classes from inline functions",
+//    prerequisite = setOf(inventNamesForLocalClassesPhase)
+)
+
+//private val localClassesExtractionFromInlineFunctionsPhase = makeIrModulePhase(
+private val localClassesExtractionFromInlineFunctionsPhase = makeIrFilePhase(
+    ::LocalClassesExtractionFromInlineFunctionsLowering,
+    name = "localClassesExtractionFromInlineFunctionsPhase",
+    description = "Move local classes from inline functions into nearest declaration container",
+//    prerequisite = setOf(localClassesInInlineFunctionsPhase)
+)
+
+private val functionInliningPhase = makeIrFilePhase<JvmBackendContext>(
+//private val functionInliningPhase = makeIrModulePhase<JvmBackendContext>(
+    { context ->
+        class JvmInlineFunctionResolver : InlineFunctionResolver {
+            override fun getFunctionDeclaration(symbol: IrFunctionSymbol): IrFunction {
+                return (symbol.owner as? IrSimpleFunction)?.resolveFakeOverride() ?: symbol.owner
+            }
+        }
+        FunctionInlining(context, JvmInlineFunctionResolver(), context.innerClassesSupport)
+    },
+    name = "FunctionInliningPhase",
+    description = "Perform function inlining",
+    prerequisite = setOf(
+        expectDeclarationsRemovingPhase,
+//        sharedVariablesPhase,
+//        localDeclarationsPhase
+
+
+//        sharedVariablesLoweringPhase,
+//        localClassesInInlineLambdasPhase,
+//        localClassesExtractionFromInlineFunctionsPhase,
+//        syntheticAccessorLoweringPhase,
+//        wrapInlineDeclarationsWithReifiedTypeParametersLowering
+    )
 )
 
 private val jvmFilePhases = listOf(
@@ -294,6 +408,7 @@ private val jvmFilePhases = listOf(
     lateinitDeclarationLoweringPhase,
     lateinitUsageLoweringPhase,
 
+//    functionInliningPhase, // not working because it will copy local class before local lowering => name clash
     inlineCallableReferenceToLambdaPhase,
     functionReferencePhase,
     suspendLambdaPhase,
@@ -325,10 +440,26 @@ private val jvmFilePhases = listOf(
     assertionPhase,
     returnableBlocksPhase,
     sharedVariablesPhase,
+
+//    localClassesInInlineLambdasPhase,
+//    localClassesInInlineFunctionsPhase,
+//    localClassesExtractionFromInlineFunctionsPhase,
+
+    functionInliningPhase,
+    returnableBlocksPhase2,
+    functionReferencePhase2,
+
     localDeclarationsPhase,
     makePatchParentsPhase(2),
 
     jvmLocalClassExtractionPhase,
+
+//    inlineFunctionReferenceLowering,
+
+//    inlineCallableReferenceToLambdaPhase2,
+//    localDeclarationsPhase2,
+//    jvmLocalClassExtractionPhase2,
+
     staticCallableReferencePhase,
 
     jvmDefaultConstructorPhase,

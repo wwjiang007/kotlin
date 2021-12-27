@@ -10,13 +10,19 @@ import org.jetbrains.kotlin.backend.jvm.codegen.BlockInfo
 import org.jetbrains.kotlin.backend.jvm.codegen.ExpressionCodegen
 import org.jetbrains.kotlin.backend.jvm.codegen.MaterialValue
 import org.jetbrains.kotlin.backend.jvm.codegen.PromisedValue
+import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
+import org.jetbrains.kotlin.ir.expressions.IrBlock
+import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrFunctionAccessExpression
 import org.jetbrains.kotlin.ir.expressions.IrFunctionReference
 import org.jetbrains.kotlin.ir.util.collectRealOverrides
 import org.jetbrains.kotlin.ir.util.isSuspend
+import org.jetbrains.kotlin.ir.util.statements
+import org.jetbrains.kotlin.name.SpecialNames
 import org.jetbrains.kotlin.resolve.jvm.AsmTypes
+import org.jetbrains.kotlin.util.OperatorNameConventions
 import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
 
 /**
@@ -25,7 +31,15 @@ import org.jetbrains.org.objectweb.asm.commons.InstructionAdapter
  */
 object SignatureString : IntrinsicMethod() {
     override fun invoke(expression: IrFunctionAccessExpression, codegen: ExpressionCodegen, data: BlockInfo): PromisedValue {
-        val function = (expression.getValueArgument(0) as IrFunctionReference).symbol.owner
+        val arg = expression.getValueArgument(0)
+        val function = if (arg is IrBlock) {
+            val clazz = arg.statements[0] as IrClass
+            val invokeFun = clazz.declarations.filterIsInstance<IrFunction>().first { it.name == OperatorNameConventions.INVOKE }
+            (invokeFun.body!!.statements.single() as IrCall).symbol.owner
+        } else {
+            (expression.getValueArgument(0) as IrFunctionReference).symbol.owner
+        }
+
         generateSignatureString(codegen.mv, function, codegen.context)
         return MaterialValue(codegen, AsmTypes.JAVA_STRING_TYPE, codegen.context.irBuiltIns.stringType)
     }

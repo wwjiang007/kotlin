@@ -36,6 +36,11 @@ internal val inlineCallableReferenceToLambdaPhase = makeIrFilePhase(
     description = "Transform callable reference to inline lambdas, mark inline lambdas for later passes"
 )
 
+internal val inlineCallableReferenceToLambdaPhase2 = makeIrFilePhase<JvmBackendContext>(
+    { InlineCallableReferenceToLambdaPhase(it).apply { second = true } },
+    name = "InlineCallableReferenceToLambdaPhase2",
+    description = "Transform callable reference to inline lambdas, mark inline lambdas for later passes"
+)
 // This lowering transforms CR passed to inline function to lambda which would be inlined
 //
 //      inline fun foo(inlineParameter: (A) -> B): B {
@@ -45,13 +50,17 @@ internal val inlineCallableReferenceToLambdaPhase = makeIrFilePhase(
 //      foo(::smth) -> foo { a -> smth(a) }
 //
 internal class InlineCallableReferenceToLambdaPhase(val context: JvmBackendContext) : FileLoweringPass {
+    var second = false
+
     override fun lower(irFile: IrFile) =
-        irFile.accept(InlineCallableReferenceToLambdaVisitor(context), null)
+        irFile.accept(InlineCallableReferenceToLambdaVisitor(context).apply { this@apply.second = this@InlineCallableReferenceToLambdaPhase.second }, null)
 }
 
 const val STUB_FOR_INLINING = "stub_for_inlining"
 
 private class InlineCallableReferenceToLambdaVisitor(val context: JvmBackendContext) : IrElementVisitor<Unit, IrDeclaration?> {
+    var second = false
+
     override fun visitElement(element: IrElement, data: IrDeclaration?) =
         element.acceptChildren(this, element as? IrDeclaration ?: data)
 
@@ -66,6 +75,13 @@ private class InlineCallableReferenceToLambdaVisitor(val context: JvmBackendCont
             }
         }
     }
+
+//    override fun visitBlock(expression: IrBlock, data: IrDeclaration?) {
+//        if (!second || !expression.origin.isInlinable) return super.visitBlock(expression, data)
+//        val statements = expression.statements
+//        val reference = statements.last() as IrFunctionReference
+//        statements[statements.lastIndex] = reference.wrapFunction(reference.symbol.owner).toLambda(reference, data!!)
+//    }
 
     private fun IrExpression.transform(scope: IrDeclaration?) = when {
         this is IrBlock && origin.isInlinable -> apply {

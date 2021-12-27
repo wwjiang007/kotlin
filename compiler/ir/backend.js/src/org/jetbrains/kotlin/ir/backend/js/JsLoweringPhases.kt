@@ -832,6 +832,7 @@ val loweringList = listOf<Lowering>(
     syntheticAccessorLoweringPhase,
     wrapInlineDeclarationsWithReifiedTypeParametersLowering,
     functionInliningPhase,
+
     copyInlineFunctionBodyLoweringPhase,
     removeInlineDeclarationsWithReifiedTypeParametersLoweringPhase,
     createScriptFunctionsPhase,
