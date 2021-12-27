@@ -631,7 +631,9 @@ private fun test(libDir: String, fullLibName: String, symName: String, f: () -> 
         }
 //        if (libHandle != 123L)
 //            throw IllegalStateException("0x${libHandle.toString(16)}. Before: $errBefore. After: $errAfter")
-        dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
+        //dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
+        val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
+        println("QXX: 0x${symPtr.toString(16)}")
 //        val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
 //        val `setEnv@plt` = (symPtr + 6 /*jmp setEnv@plt*/) + 5 - 0xFF + 5 - 1
 //        val `_GLOBAL_OFFSET_TABLE_+0x20` = `setEnv@plt` + 6 /* jmp *(_GLOBAL_OFFSET_TABLE_+0x20) */ + 0x2FCA
@@ -643,7 +645,7 @@ private fun test(libDir: String, fullLibName: String, symName: String, f: () -> 
 //        //setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
 //        if (unsafe.getLong(`_GLOBAL_OFFSET_TABLE_+0x20`) < 1000000)
 //            throw IllegalStateException("ZZZ: 0x$builder")
-        dlclose(libHandle)
+        //dlclose(libHandle)
         f()
         //throw IllegalStateException("ZZZ: 0x$builder")
         //throw IllegalStateException("ZZZ: 0x${libHandle.toString(16)} 0x${symPtr.toString(16)}")
