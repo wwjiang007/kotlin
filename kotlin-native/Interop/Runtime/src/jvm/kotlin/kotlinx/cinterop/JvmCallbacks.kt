@@ -621,7 +621,7 @@ private fun test(libDir: String, fullLibName: String, symName: String, f: () -> 
         dlerror(buf.rawValue, 1024)
         val errAfter = buf.toKStringFromUtf8()
 
-        println("ZZZ: 0x${libHandle.toString(16)}. Before: $errBefore. After: $errAfter")
+        println("QZZ: 0x${libHandle.toString(16)}. Before: $errBefore. After: $errAfter")
 
         if (libHandle == 0L) {
 //            val buf = memScope.allocArray<ByteVar>(1024)
