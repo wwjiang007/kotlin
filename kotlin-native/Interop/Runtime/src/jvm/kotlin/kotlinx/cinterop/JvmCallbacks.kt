@@ -593,68 +593,69 @@ val nativeLibraryHandleField = ClassLoader::class.java.declaredClasses.single { 
     it.isAccessible = true
 }
 
-@Suppress("UNCHECKED_CAST")
+//@Suppress("UNCHECKED_CAST")
 private fun test(libDir: String, fullLibName: String, symName: String, f: () -> Unit) {
-//    f()
-
-//    System.load(libPath)
-//    val nativeLibraries = classLoaderNativeLibrariesField.get(Caches::class.java.classLoader) as Vector<Any>
-//    val libCanonicalPath = File(libPath).canonicalPath
-//    val nativeLibrary = nativeLibraries.first { nativeLibraryNameField.get(it) as String == libCanonicalPath }
-//    val libHandle = nativeLibraryHandleField.get(nativeLibrary) as Long
-
-//    val dir = Files.createTempDirectory(null).toAbsolutePath().toString()
-//    Files.copy(Paths.get(libDir, fullLibName), Paths.get(dir, fullLibName), StandardCopyOption.REPLACE_EXISTING)
-//    // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
-//    File(dir).deleteOnExit()
-//    File("$dir/$fullLibName").deleteOnExit()
-//    val libPath = "$dir/$fullLibName"
-
-    val libPath = "$libDir/$fullLibName"
-
-    memScoped {
-        val buf = memScope.allocArray<ByteVar>(1024)
-        dlerror(buf.rawValue, 1024)
-        val errBefore = buf.toKStringFromUtf8()
-
-        val libHandle = dlopen(libPath.cstr.getPointer(memScope).rawValue)
-
-        dlerror(buf.rawValue, 1024)
-        val errAfter = buf.toKStringFromUtf8()
-
-        val chmod = chmod(libPath.cstr.getPointer(memScope).rawValue)
-
-        // 493 = 111 101 101
-        //       rwx rwx rwx
-        println("QZZ: 0x${libHandle.toString(16)}, chmod=$chmod. Before: $errBefore. After: $errAfter")
-
-        if (libHandle == 0L) {
-//            val buf = memScope.allocArray<ByteVar>(1024)
-//            dlerror(buf.rawValue, 1024)
-//            throw IllegalStateException("Unable to load $libPath: ${buf.toKStringFromUtf8()}")
-            throw IllegalStateException("Unable to load $libPath: $errAfter")
-        }
-//        if (libHandle != 123L)
-//            throw IllegalStateException("0x${libHandle.toString(16)}. Before: $errBefore. After: $errAfter")
-        //dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
-        val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
-        println("QXX: 0x${symPtr.toString(16)}")
-//        val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
-//        val `setEnv@plt` = (symPtr + 6 /*jmp setEnv@plt*/) + 5 - 0xFF + 5 - 1
-//        val `_GLOBAL_OFFSET_TABLE_+0x20` = `setEnv@plt` + 6 /* jmp *(_GLOBAL_OFFSET_TABLE_+0x20) */ + 0x2FCA
-//        val builder = StringBuilder()
-//        for (i in 0 until 8) {
-//            builder.append(unsafe.getByte(`_GLOBAL_OFFSET_TABLE_+0x20` + i).toUByte().toString(16))
+    if (libDir == fullLibName + symName) f()
+////    f()
+//
+////    System.load(libPath)
+////    val nativeLibraries = classLoaderNativeLibrariesField.get(Caches::class.java.classLoader) as Vector<Any>
+////    val libCanonicalPath = File(libPath).canonicalPath
+////    val nativeLibrary = nativeLibraries.first { nativeLibraryNameField.get(it) as String == libCanonicalPath }
+////    val libHandle = nativeLibraryHandleField.get(nativeLibrary) as Long
+//
+////    val dir = Files.createTempDirectory(null).toAbsolutePath().toString()
+////    Files.copy(Paths.get(libDir, fullLibName), Paths.get(dir, fullLibName), StandardCopyOption.REPLACE_EXISTING)
+////    // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
+////    File(dir).deleteOnExit()
+////    File("$dir/$fullLibName").deleteOnExit()
+////    val libPath = "$dir/$fullLibName"
+//
+//    val libPath = "$libDir/$fullLibName"
+//
+//    memScoped {
+//        val buf = memScope.allocArray<ByteVar>(1024)
+//        dlerror(buf.rawValue, 1024)
+//        val errBefore = buf.toKStringFromUtf8()
+//
+//        val libHandle = dlopen(libPath.cstr.getPointer(memScope).rawValue)
+//
+//        dlerror(buf.rawValue, 1024)
+//        val errAfter = buf.toKStringFromUtf8()
+//
+//        val chmod = chmod(libPath.cstr.getPointer(memScope).rawValue)
+//
+//        // 493 = 111 101 101
+//        //       rwx rwx rwx
+//        println("QZZ: 0x${libHandle.toString(16)}, chmod=$chmod. Before: $errBefore. After: $errAfter")
+//
+//        if (libHandle == 0L) {
+////            val buf = memScope.allocArray<ByteVar>(1024)
+////            dlerror(buf.rawValue, 1024)
+////            throw IllegalStateException("Unable to load $libPath: ${buf.toKStringFromUtf8()}")
+//            throw IllegalStateException("Unable to load $libPath: $errAfter")
 //        }
-//        //dlclose(libHandle)
-//        //setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
-//        if (unsafe.getLong(`_GLOBAL_OFFSET_TABLE_+0x20`) < 1000000)
-//            throw IllegalStateException("ZZZ: 0x$builder")
-        dlclose(libHandle)
-        f()
-        //throw IllegalStateException("ZZZ: 0x$builder")
-        //throw IllegalStateException("ZZZ: 0x${libHandle.toString(16)} 0x${symPtr.toString(16)}")
-    }
+////        if (libHandle != 123L)
+////            throw IllegalStateException("0x${libHandle.toString(16)}. Before: $errBefore. After: $errAfter")
+//        //dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
+//        val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
+//        println("QXX: 0x${symPtr.toString(16)}")
+////        val symPtr = dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
+////        val `setEnv@plt` = (symPtr + 6 /*jmp setEnv@plt*/) + 5 - 0xFF + 5 - 1
+////        val `_GLOBAL_OFFSET_TABLE_+0x20` = `setEnv@plt` + 6 /* jmp *(_GLOBAL_OFFSET_TABLE_+0x20) */ + 0x2FCA
+////        val builder = StringBuilder()
+////        for (i in 0 until 8) {
+////            builder.append(unsafe.getByte(`_GLOBAL_OFFSET_TABLE_+0x20` + i).toUByte().toString(16))
+////        }
+////        //dlclose(libHandle)
+////        //setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
+////        if (unsafe.getLong(`_GLOBAL_OFFSET_TABLE_+0x20`) < 1000000)
+////            throw IllegalStateException("ZZZ: 0x$builder")
+//        dlclose(libHandle)
+//        f()
+//        //throw IllegalStateException("ZZZ: 0x$builder")
+//        //throw IllegalStateException("ZZZ: 0x${libHandle.toString(16)} 0x${symPtr.toString(16)}")
+//    }
 }
 
 fun testManualLibLoad(f: () -> Unit) {
