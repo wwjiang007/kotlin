@@ -110,6 +110,21 @@ gc::ConcurrentMarkAndSweep::~ConcurrentMarkAndSweep() {
     gcThread_.join();
 }
 
+void gc::ConcurrentMarkAndSweep::StartFinalizerThreadIfNeeded() noexcept {
+    ThreadStateGuard guard(ThreadState::kNative, true);
+    finalizerProcessor_->StartFinalizerThreadIfNone();
+    finalizerProcessor_->WaitFinalizerThreadInitialized();
+}
+
+void gc::ConcurrentMarkAndSweep::StopFinalizerThreadIfRunning() noexcept {
+    ThreadStateGuard guard(ThreadState::kNative, true);
+    finalizerProcessor_->StopFinalizerThread();
+}
+
+bool gc::ConcurrentMarkAndSweep::FinalizersThreadIsRunning() noexcept {
+    return finalizerProcessor_->IsRunning();
+}
+
 bool gc::ConcurrentMarkAndSweep::PerformFullGC(int64_t epoch) noexcept {
     RuntimeLogDebug({kTagGC}, "Attempt to suspend threads by thread %d", konan::currentThreadId());
     auto timeStartUs = konan::getTimeMicros();
