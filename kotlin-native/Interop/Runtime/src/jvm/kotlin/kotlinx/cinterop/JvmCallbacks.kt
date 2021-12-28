@@ -645,27 +645,6 @@ private fun test(libDir: String, fullLibName: String, symName: String, f: () -> 
 //        //setEnv("LIBCLANG_DISABLE_CRASH_RECOVERY", "1")
 //        if (unsafe.getLong(`_GLOBAL_OFFSET_TABLE_+0x20`) < 1000000)
 //            throw IllegalStateException("ZZZ: 0x$builder")
-
-        val libHandle2 = dlopen(libPath.cstr.getPointer(memScope).rawValue)
-
-        dlerror(buf.rawValue, 1024)
-        val errAfter2 = buf.toKStringFromUtf8()
-
-        println("QZZ2: 0x${libHandle.toString(16)}. Before: $errBefore. After: $errAfter2")
-
-        if (libHandle2 == 0L) {
-//            val buf = memScope.allocArray<ByteVar>(1024)
-//            dlerror(buf.rawValue, 1024)
-//            throw IllegalStateException("Unable to load $libPath: ${buf.toKStringFromUtf8()}")
-            throw IllegalStateException("Unable to load $libPath: $errAfter2")
-        }
-//        if (libHandle != 123L)
-//            throw IllegalStateException("0x${libHandle.toString(16)}. Before: $errBefore. After: $errAfter")
-        //dlsym(libHandle, symName.cstr.getPointer(memScope).rawValue)
-        val symPtr2 = dlsym(libHandle2, symName.cstr.getPointer(memScope).rawValue)
-        println("QXX: 0x${symPtr2.toString(16)}")
-        dlclose(libHandle2)
-
         dlclose(libHandle)
         f()
         //throw IllegalStateException("ZZZ: 0x$builder")
