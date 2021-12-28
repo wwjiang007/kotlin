@@ -624,6 +624,8 @@ private fun test(libDir: String, fullLibName: String, symName: String, f: () -> 
 
         val chmod = chmod(libPath.cstr.getPointer(memScope).rawValue)
 
+        // 493 = 111 101 101
+        //       rwx rwx rwx
         println("QZZ: 0x${libHandle.toString(16)}, chmod=$chmod. Before: $errBefore. After: $errAfter")
 
         if (libHandle == 0L) {

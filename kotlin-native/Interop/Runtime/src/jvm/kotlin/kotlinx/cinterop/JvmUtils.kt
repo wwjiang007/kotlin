@@ -22,6 +22,7 @@ import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
+import java.util.*
 import kotlin.experimental.inv
 
 private fun decodeFromUtf8(bytes: ByteArray) = String(bytes)
@@ -141,8 +142,28 @@ private fun initializePath(): Array<String> {
     return paths
 }
 
+private val classLoaderLoadedLibraryNamesField = ClassLoader::class.java.getDeclaredField("loadedLibraryNames").also {
+    it.isAccessible = true
+}
+
+@Suppress("UNCHECKED_CAST")
 private fun tryLoadKonanLibrary(libraryDir: String, fullLibraryName: String): Boolean {
     if (!Files.exists(Paths.get(libraryDir, fullLibraryName))) return false
+
+    val loadedLibraryNames = classLoaderLoadedLibraryNamesField.get(null) as Vector<String>
+    synchronized(loadedLibraryNames) {
+        val dir = if (!loadedLibraryNames.contains(File(libraryDir, fullLibraryName).canonicalPath))
+            libraryDir
+        else {
+            val tempDir = Files.createTempDirectory(null).toAbsolutePath().toString()
+            Files.copy(Paths.get(libraryDir, fullLibraryName), Paths.get(tempDir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)
+            // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
+            File(tempDir).deleteOnExit()
+            File("$tempDir/$fullLibraryName").deleteOnExit()
+            tempDir
+        }
+        System.load("$dir/$fullLibraryName")
+    }
 
 //    val dir = if (fullLibraryName.contains("orgjetbrainskotlinbackendkonanenvstubs"))
 //        return true
@@ -155,11 +176,11 @@ private fun tryLoadKonanLibrary(libraryDir: String, fullLibraryName: String): Bo
 //        File("$tempDir/$fullLibraryName").deleteOnExit()
 //        tempDir
 //    }
-    val dir = Files.createTempDirectory(null).toAbsolutePath().toString()
-    Files.copy(Paths.get(libraryDir, fullLibraryName), Paths.get(dir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)
-    // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
-    File(dir).deleteOnExit()
-    File("$dir/$fullLibraryName").deleteOnExit()
+//    val dir = Files.createTempDirectory(null).toAbsolutePath().toString()
+//    Files.copy(Paths.get(libraryDir, fullLibraryName), Paths.get(dir, fullLibraryName), StandardCopyOption.REPLACE_EXISTING)
+//    // TODO: Does not work on Windows. May be use FILE_FLAG_DELETE_ON_CLOSE?
+//    File(dir).deleteOnExit()
+//    File("$dir/$fullLibraryName").deleteOnExit()
 //    println("QZZ: $dir/$fullLibraryName")
 
 //    val libFile = File("$libraryDir/$fullLibraryName")
@@ -189,22 +210,22 @@ private fun tryLoadKonanLibrary(libraryDir: String, fullLibraryName: String): Bo
 //    } catch (e: SecurityException) {
 //    }
 
-    try {
-        System.load("$dir/$fullLibraryName")
-    } catch (e: UnsatisfiedLinkError) {
-        if (fullLibraryName.endsWith(".dylib") && e.message?.contains("library load disallowed by system policy") == true) {
-            throw UnsatisfiedLinkError("""
-                    |Library $libraryDir/$fullLibraryName can't be loaded.
-                    |${'\t'}This can happen because library file is marked as untrusted (e.g because it was downloaded from browser).
-                    |${'\t'}You can trust libraries in distribution by running
-                    |${'\t'}${'\t'}xattr -d com.apple.quarantine '$libraryDir'/*
-                    |${'\t'}command in terminal
-                    |${'\t'}Original exception message:
-                    |${'\t'}${e.message}
-                    """.trimMargin())
-        }
-        throw e
-    }
+//    try {
+//        System.load("$dir/$fullLibraryName")
+//    } catch (e: UnsatisfiedLinkError) {
+//        if (fullLibraryName.endsWith(".dylib") && e.message?.contains("library load disallowed by system policy") == true) {
+//            throw UnsatisfiedLinkError("""
+//                    |Library $libraryDir/$fullLibraryName can't be loaded.
+//                    |${'\t'}This can happen because library file is marked as untrusted (e.g because it was downloaded from browser).
+//                    |${'\t'}You can trust libraries in distribution by running
+//                    |${'\t'}${'\t'}xattr -d com.apple.quarantine '$libraryDir'/*
+//                    |${'\t'}command in terminal
+//                    |${'\t'}Original exception message:
+//                    |${'\t'}${e.message}
+//                    """.trimMargin())
+//        }
+//        throw e
+//    }
 
     return true
 }
