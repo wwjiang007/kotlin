@@ -543,6 +543,7 @@ private external fun dlopen(libName: Long): Long
 private external fun dlclose(libHandle: Long)
 private external fun dlsym(libHandle: Long, symName: Long): Long
 private external fun dlerror(buf: Long, bufLen: Int)
+private external fun chmod(path: Long): Int
 
 // This is J2K of ClassLoader::initializePath.
 private fun initializePath(): Array<String> {
@@ -621,7 +622,9 @@ private fun test(libDir: String, fullLibName: String, symName: String, f: () -> 
         dlerror(buf.rawValue, 1024)
         val errAfter = buf.toKStringFromUtf8()
 
-        println("QZZ: 0x${libHandle.toString(16)}. Before: $errBefore. After: $errAfter")
+        val chmod = chmod(libPath.cstr.getPointer(memScope).rawValue)
+
+        println("QZZ: 0x${libHandle.toString(16)}, chmod=$chmod. Before: $errBefore. After: $errAfter")
 
         if (libHandle == 0L) {
 //            val buf = memScope.allocArray<ByteVar>(1024)

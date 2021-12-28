@@ -22,6 +22,10 @@ JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlerror(JNIEnv *env,
     *(char*)buf = 0;
 }
 
+JNIEXPORT jint JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_chmod(JNIEnv *env, jclass cls, jlong path) {
+    return -1;
+}
+
 #elif _WIN32
 
 JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlopen(JNIEnv *env, jclass cls, jlong libPath) {
@@ -40,9 +44,15 @@ JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlerror(JNIEnv *env,
     *(char*)buf = 0;
 }
 
+JNIEXPORT jint JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_chmod(JNIEnv *env, jclass cls, jlong path) {
+    return -1;
+}
+
 #else
 
 #include <dlfcn.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 JNIEXPORT jlong JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlopen(JNIEnv *env, jclass cls, jlong libPath) {
     return (jlong)dlopen((const char*)libPath, RTLD_LAZY);
@@ -64,6 +74,16 @@ JNIEXPORT void JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_dlerror(JNIEnv *env,
         strncpy((char*)buf, err, bufLen - 1);
         ((char*)buf)[bufLen - 1] = 0;
     }
+}
+
+JNIEXPORT jint JNICALL Java_kotlinx_cinterop_JvmCallbacksKt_chmod(JNIEnv *env, jclass cls, jlong path) {
+    struct stat ret;
+    if (stat(path, &ret) == -1)
+        return -1;
+
+    return (ret.st_mode & S_IRUSR)|(ret.st_mode & S_IWUSR)|(ret.st_mode & S_IXUSR)|/*owner*/
+        (ret.st_mode & S_IRGRP)|(ret.st_mode & S_IWGRP)|(ret.st_mode & S_IXGRP)|/*group*/
+        (ret.st_mode & S_IROTH)|(ret.st_mode & S_IWOTH)|(ret.st_mode & S_IXOTH);/*other*/
 }
 
 #endif
