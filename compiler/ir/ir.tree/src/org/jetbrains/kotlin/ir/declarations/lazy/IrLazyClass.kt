@@ -34,6 +34,7 @@ class IrLazyClass(
     override val isData: Boolean,
     override val isExternal: Boolean,
     override val isInline: Boolean,
+    override val isValue: Boolean,
     override val isExpect: Boolean,
     override val isFun: Boolean,
     override val stubGenerator: DeclarationStubGenerator,
@@ -41,6 +42,7 @@ class IrLazyClass(
 ) : IrClass(), IrLazyDeclarationBase, DeserializableClass {
     init {
         symbol.bind(this)
+        require(!isValue || !isInline)
     }
 
     override var parent: IrDeclarationParent by createLazyParent()
