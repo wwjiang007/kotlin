@@ -13,6 +13,8 @@ import java.nio.channels.FileChannel
 import java.nio.file.Paths
 import java.nio.file.StandardOpenOption
 import java.util.*
+import kotlin.system.measureTimeMillis
+import kotlin.time.measureTime
 
 class MetricsContainer : IStatisticsValuesConsumer {
     data class MetricDescriptor(val name: String, val projectHash: String?) : Comparable<MetricDescriptor> {
@@ -97,24 +99,36 @@ class MetricsContainer : IStatisticsValuesConsumer {
         if (subprojectName == null) null else processProjectName(subprojectName, perProject)
 
     override fun report(metric: BooleanMetrics, value: Boolean, subprojectName: String?) {
-        val projectHash = getProjectHash(metric.perProject, subprojectName)
-        val metricContainer = booleanMetrics[MetricDescriptor(metric.name, projectHash)] ?: metric.type.newMetricContainer()
-            .also { booleanMetrics[MetricDescriptor(metric.name, projectHash)] = it }
-        metricContainer.addValue(metric.anonymization.anonymize(value))
+        val reportTime = measureTimeMillis {
+            val projectHash = getProjectHash(metric.perProject, subprojectName)
+            println("$subprojectName: report $metric = $value, booleanMetrics.size = ${booleanMetrics.size}")
+            val metricContainer = booleanMetrics[MetricDescriptor(metric.name, projectHash)] ?: metric.type.newMetricContainer()
+                .also { booleanMetrics[MetricDescriptor(metric.name, projectHash)] = it }
+            metricContainer.addValue(metric.anonymization.anonymize(value))
+        }
+        println("Report time = $reportTime ms")
     }
 
     override fun report(metric: NumericalMetrics, value: Long, subprojectName: String?) {
-        val projectHash = getProjectHash(metric.perProject, subprojectName)
-        val metricContainer = numericalMetrics[MetricDescriptor(metric.name, projectHash)] ?: metric.type.newMetricContainer()
-            .also { numericalMetrics[MetricDescriptor(metric.name, projectHash)] = it }
-        metricContainer.addValue(metric.anonymization.anonymize(value))
+        val reportTime = measureTimeMillis {
+            val projectHash = getProjectHash(metric.perProject, subprojectName)
+            println("$subprojectName: report $metric = $value, numericalMetrics.size = ${numericalMetrics.size}")
+            val metricContainer = numericalMetrics[MetricDescriptor(metric.name, projectHash)] ?: metric.type.newMetricContainer()
+                .also { numericalMetrics[MetricDescriptor(metric.name, projectHash)] = it }
+            metricContainer.addValue(metric.anonymization.anonymize(value))
+        }
+        println("Report time = $reportTime ms")
     }
 
     override fun report(metric: StringMetrics, value: String, subprojectName: String?) {
-        val projectHash = if (subprojectName == null) null else processProjectName(subprojectName, metric.perProject)
-        val metricContainer = stringMetrics[MetricDescriptor(metric.name, projectHash)] ?: metric.type.newMetricContainer()
-            .also { stringMetrics[MetricDescriptor(metric.name, projectHash)] = it }
-        metricContainer.addValue(metric.anonymization.anonymize(value))
+        val reportTime = measureTimeMillis {
+            val projectHash = if (subprojectName == null) null else processProjectName(subprojectName, metric.perProject)
+            println("$subprojectName: report $metric = $value, stringMetrics.size = ${stringMetrics.size}")
+            val metricContainer = stringMetrics[MetricDescriptor(metric.name, projectHash)] ?: metric.type.newMetricContainer()
+                .also { stringMetrics[MetricDescriptor(metric.name, projectHash)] = it }
+            metricContainer.addValue(metric.anonymization.anonymize(value))
+        }
+        println("Report time = $reportTime ms")
     }
 
     fun flush(trackingFile: IRecordLogger?) {
@@ -123,6 +137,7 @@ class MetricsContainer : IStatisticsValuesConsumer {
         allMetrics.putAll(numericalMetrics)
         allMetrics.putAll(booleanMetrics)
         allMetrics.putAll(stringMetrics)
+        println("all metrics size = ${allMetrics.size}")
         for (entry in allMetrics.entries) {
             val suffix = if (entry.key.projectHash == null) "" else ".${entry.key.projectHash}"
             trackingFile.append("${entry.key.name}$suffix=${entry.value.toStringRepresentation()}")
